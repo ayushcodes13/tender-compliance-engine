@@ -1,0 +1,50 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+dist/
+build/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local data / uploads
+.local/
+uploads/
+data/
+*.sqlite3
+
+# Generated exports
+exports/
+*.xlsx
+*.docx
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json
