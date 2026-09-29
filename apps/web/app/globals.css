@@ -740,6 +740,7 @@ button {
 }
 
 .review-layout {
+  position: relative;
   display: grid;
   min-height: 0;
   flex: 1;

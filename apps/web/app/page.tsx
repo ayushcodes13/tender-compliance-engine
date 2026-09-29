@@ -99,14 +99,9 @@ export default function Home() {
                   <span className="document-glyph">
                     <FileText size={18} strokeWidth={1.8} aria-hidden="true" />
                   </span>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={"More options for " + project.name}
-                    onClick={(event) => event.preventDefault()}
-                  >
-                    <MoreHorizontal size={17} aria-hidden="true" />
-                  </button>
+                  <span className="icon-button" aria-hidden="true">
+                    <MoreHorizontal size={17} />
+                  </span>
                 </div>
 
                 <div className="project-card-copy">

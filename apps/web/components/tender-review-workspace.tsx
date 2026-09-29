@@ -183,10 +183,7 @@ export function TenderReviewWorkspace() {
     [requirements],
   );
 
-  const reviewIndex = Math.max(
-    0,
-    reviewQueue.findIndex((item) => item.id === selected?.id),
-  );
+  const reviewIndex = reviewQueue.findIndex((item) => item.id === selected?.id);
 
   useEffect(() => {
     if (!selected) return;
@@ -196,7 +193,7 @@ export function TenderReviewWorkspace() {
       sourceRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [selectedId, selected]);
+  }, [selectedId]);
 
   if (!selected) return null;
 
@@ -289,7 +286,11 @@ export function TenderReviewWorkspace() {
             Needs review
           </span>
           <strong>
-            {reviewQueue.length === 0 ? "0 of 0" : String(reviewIndex + 1) + " of " + reviewQueue.length}
+            {reviewQueue.length === 0
+              ? "0 of 0"
+              : reviewIndex >= 0
+                ? String(reviewIndex + 1) + " of " + reviewQueue.length
+                : "— of " + reviewQueue.length}
           </strong>
           <button type="button" onClick={() => goReview(-1)} disabled={reviewQueue.length === 0} aria-label="Previous requirement needing review">
             <ChevronLeft size={14} aria-hidden="true" />
