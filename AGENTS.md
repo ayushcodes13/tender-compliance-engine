@@ -52,6 +52,36 @@ Phase 2 includes OEM document ingestion, retrieval, compliance assessment, contr
 - Avoid large rewrites when a local change is sufficient.
 - Add tests for every behavior that affects extraction, citations, review state, or deterministic comparison.
 
+## Git workflow — mandatory
+
+All substantive repository changes must go through a pull request.
+
+1. Start from the latest `main`.
+2. Create a focused branch using a descriptive prefix such as `feat/`, `fix/`, `chore/`, `docs/`, or `test/`.
+3. Make only changes that belong to that PR's stated scope.
+4. Add or update tests when behavior changes.
+5. Run the relevant checks before requesting merge.
+6. Open a PR into `main` with a complete description of why the change exists, what changed, how it was verified, and any known risks or limitations.
+7. Do not merge while required CI is failing.
+8. Prefer squash merge so `main` stays milestone-oriented and readable.
+9. Do not push feature, fix, documentation, configuration, or refactor work directly to `main`.
+10. Do not create empty, placeholder, or artificial PRs. Every PR must contain one coherent, reviewable change.
+
+The only historical exception is the repository's unavoidable first bootstrap commit, which had to exist before branches and pull requests could be created.
+
+### PR quality bar
+
+A good PR should make review possible without reconstructing intent from the diff. Include:
+
+- **Why:** the user/product/engineering problem being solved.
+- **What changed:** behavior and important implementation details.
+- **Scope:** what is intentionally included and excluded.
+- **Evidence/provenance impact:** especially for parsing, OCR, citations, extraction, normalization, and review state.
+- **Verification:** exact tests/checks run and relevant manual checks.
+- **Risks / limitations:** anything incomplete, deferred, approximate, or needing follow-up.
+- **UI proof:** screenshots or clear manual-verification steps for user-facing changes when practical.
+- **Data/migration notes:** schema, migration, compatibility, or rollback considerations when persistence changes.
+
 ## Suggested boundaries
 
 ```text
