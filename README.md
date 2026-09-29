@@ -185,6 +185,12 @@ For Phase 1, the analogous safety bar is **false extraction/citation**: a requir
 
 ## Development rules
 
+### Pull-request workflow
+
+All substantive changes use a branch and pull request. Do not push feature, fix, documentation, configuration, or refactor work directly to `main`.
+
+Each PR should be one coherent review unit, explain **why** it exists, describe **what changed**, identify scope and provenance/data impact, list verification performed, and state known risks or limitations. Required CI should pass before merge; squash merge is the default.
+
 Before implementing a milestone:
 
 1. State the milestone and scope.
