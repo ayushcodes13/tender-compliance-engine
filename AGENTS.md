@@ -56,6 +56,8 @@ Phase 2 includes OEM document ingestion, retrieval, compliance assessment, contr
 
 All substantive repository changes must go through a pull request.
 
+**For every new change, create a branch and open a pull request. Never commit or push the change directly to `main`.**
+
 1. Start from the latest `main`.
 2. Create a focused branch using a descriptive prefix such as `feat/`, `fix/`, `chore/`, `docs/`, or `test/`.
 3. Make only changes that belong to that PR's stated scope.
