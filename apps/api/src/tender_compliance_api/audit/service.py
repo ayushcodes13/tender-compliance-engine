@@ -40,17 +40,19 @@ class AuditService:
         actor_type: str = "USER",
         entity_type: str | None = None,
         entity_id: uuid.UUID | None = None,
+        project_id: uuid.UUID | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> AuditLog:
         """Create and persist (flush) a single audit-log entry.
 
         Args:
             organization_id: Tenant scope — drives every audit query.
-            action: Short verb describing the event (e.g. ``"org.create"``).
+            action: Short verb describing the event (e.g. ``"project.create"``).
             actor_id: The actor's user UUID, or ``None`` for system events.
             actor_type: ``"USER"`` or ``"SYSTEM"`` (default ``"USER"``).
             entity_type: The kind of entity affected (e.g. ``"project"``).
             entity_id: The UUID of the affected entity, if applicable.
+            project_id: Optional project scope (added in CP09).
             metadata: Small, non-confidential structured context.
 
         Returns:
@@ -58,6 +60,7 @@ class AuditService:
         """
         entry = AuditLog(
             organization_id=organization_id,
+            project_id=project_id,
             actor_type=actor_type,
             actor_id=actor_id,
             action=action,
@@ -77,6 +80,7 @@ async def write_audit_event(
     *,
     entity_type: str | None = None,
     entity_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> AuditLog:
     """Convenience wrapper: log an event attributed to *auth*'s actor."""
@@ -87,5 +91,6 @@ async def write_audit_event(
         actor_id=auth.actor_id,
         entity_type=entity_type,
         entity_id=entity_id,
+        project_id=project_id,
         metadata=metadata,
     )

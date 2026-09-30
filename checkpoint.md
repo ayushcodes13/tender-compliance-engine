@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP09 — Project model, lifecycle service, and migrations**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP10 — Project API**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -114,7 +114,7 @@ Phase 2 evaluation + production release
 - [x] ~~CP06 — Database connection and SQLAlchemy foundation~~
 - [x] ~~CP07 — Alembic migrations and schema discipline~~
 - [x] ~~CP08 — Organization, identity, authorization, and audit foundation~~
-- [ ] CP09 — Project model, lifecycle service, and migrations
+- [x] ~~CP09 — Project model, lifecycle service, and migrations~~
 - [ ] CP10 — Project API
 - [ ] CP11 — Real project dashboard and project progress
 
@@ -520,9 +520,9 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 - Never trust an organization ID supplied by the browser without verifying membership.
 
-**Implementation note (PR #12):** Added `Organization`, `User`, `Membership`, and `AuditLog` models (`db/models.py`) via Alembic migration `0002_organization_identity_audit`. Auth boundary lives in `auth/` (`AuthContext`, `resolve_auth_context` dev-mode resolver, `get_auth_context` FastAPI dependency — deny-by-default 401). Audit path in `audit/` (`AuditService` + `write_audit_event`). Dev identity mode reads `X-Dev-User-Id` / `X-Dev-Organization-Id` headers, auto-creates User/Organization but verifies Membership (no auto-membership). Tests use file-based SQLite with `alembic upgrade head` so the real migration schema is exercised. `project_id` on AuditLog is deferred to CP09 (no Project table yet).## ⬜ Checkpoint 09 — Project model, lifecycle service, and migrations
+**Implementation note (PR #12):** Added `Organization`, `User`, `Membership`, and `AuditLog` models (`db/models.py`) via Alembic migration `0002_organization_identity_audit`. Auth boundary lives in `auth/` (`AuthContext`, `resolve_auth_context` dev-mode resolver, `get_auth_context` FastAPI dependency — deny-by-default 401). Audit path in `audit/` (`AuditService` + `write_audit_event`). Dev identity mode reads `X-Dev-User-Id` / `X-Dev-Organization-Id` headers, auto-creates User/Organization but verifies Membership (no auto-membership). Tests use file-based SQLite with `alembic upgrade head` so the real migration schema is exercised. `project_id` on AuditLog is deferred to CP09 (no Project table yet).## ✅ ~~Checkpoint 09 — Project model, lifecycle service, and migrations~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #13.
 
 **Plain-English outcome:** A tender-response workspace becomes a real persisted entity.
 
@@ -547,6 +547,8 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 ### Guardrail
 
 - Do not encode compliance meaning into project status.
+
+**Implementation note (PR #13):** Added `Project` model and `ProjectStatus` enum (`db/models.py`; `str`/enum.StrEnum stored via `sa.Enum`). Workflow statuses (`draft`, `tender_uploaded`, `documents_processing`, `requirements_extracted`, `review_in_progress`, `matrix_ready`, `exported`, `archived`) describe processing/review progress only — not vendor compliance. Added `project_id` (nullable FK) to `AuditLog`. Created `project/` package with `ProjectService` (create/get/list/rename/archive/reopen), tenant-scoped via `AuthContext.organization_id`, with lifecycle guards (`ProjectArchivedError`, `StateTransitionError`). `index=True` on `Project.organization_id` plus composite `ix_projects_org_status` index. Migration `0003_project_model` is hand-written (autogenerate produced false-positive UUID type changes from SQLite's NUMERIC affinity). `audit_logs.project_id` added via `batch_alter_table` (SQLite limitation). `session_cm` fixture added to conftest.py. Tests use file-based SQLite with `alembic upgrade head`.
 
 ## ⬜ Checkpoint 10 — Project API
 

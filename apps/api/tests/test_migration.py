@@ -22,10 +22,10 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0002_organization_identity_audit"
+_HEAD_REV = "0003_project_model"
 
-# Tables introduced by the CP08 migration.
-_APP_TABLES = {"organizations", "users", "memberships", "audit_logs"}
+# Tables introduced by the CP08 + CP09 migrations.
+_APP_TABLES = {"organizations", "users", "memberships", "audit_logs", "projects"}
 
 
 def _make_config(db_url: str) -> Config:
