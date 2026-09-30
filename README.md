@@ -209,6 +209,7 @@ Work should follow [Canonical checkpoint plan](checkpoint.md) from the first unc
 ## Documentation
 
 - [Canonical checkpoint plan](checkpoint.md)
+- [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
 
 - [Phase 1 PRD](docs/PRD.md)
 - [Architecture](docs/ARCHITECTURE.md)

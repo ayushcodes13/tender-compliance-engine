@@ -95,6 +95,7 @@ A good PR should make review possible without reconstructing intent from the dif
 - In the same PR that completes a checkpoint, update `checkpoint.md`: check it off, strike through its title, and keep any useful implementation/PR note.
 - If a new requirement changes the sequence, update `checkpoint.md` explicitly in a PR before or alongside implementation.
 - `planning.md` is a symlink alias to the same canonical file; do not maintain a second divergent plan.
+- `docs/BYND-REUSE-AUDIT.md` is a reference catalog of reusable Bynd patterns. Use it for design/test ideas, but do not copy private/unlicensed code or introduce Bynd-internal dependencies without an explicit decision.
 ## Suggested boundaries
 
 ```text
