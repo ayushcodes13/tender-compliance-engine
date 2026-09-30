@@ -112,7 +112,7 @@ Phase 2 evaluation + production release
 ### Stage B — Real persistence, tenancy, audit, and projects
 
 - [x] ~~CP06 — Database connection and SQLAlchemy foundation~~
-- [ ] CP07 — Alembic migrations and schema discipline
+- [x] ~~CP07 — Alembic migrations and schema discipline~~
 - [ ] CP08 — Organization, identity, authorization, and audit foundation
 - [ ] CP09 — Project model, lifecycle service, and migrations
 - [ ] CP10 — Project API
@@ -426,9 +426,9 @@ Turn the static skeleton into a durable multi-tenant application where real proj
   - `ruff check`, `ruff format --check`, `mypy --strict`, and `pytest` all pass.
 
 
-## ⬜ Checkpoint 07 — Alembic migrations and schema discipline
+## ✅ ~~Checkpoint 07 — Alembic migrations and schema discipline~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — implemented and tested.
 
 **Plain-English outcome:** Every database change can be reproduced from an empty database.
 
@@ -460,6 +460,28 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 ### Guardrail
 
 - Do not rewrite released migrations casually.
+
+### Implementation / PR note
+
+- **Branch:** `cp07/alembic-migrations`
+- **Dependency:** Added `alembic>=1.13,<2.0` to runtime dependencies (needed for
+  deploy-time migrate jobs and the CI smoke test).
+- **Files:** `pyproject.toml`, `src/tender_compliance_api/db/base.py`,
+  `alembic.ini`, `alembic/env.py`, `alembic/script.py.mako`,
+  `alembic/versions/0001_initial_baseline.py`, `tests/test_migration.py`, `Makefile`.
+- **Design:** `env.py` is async-aware (`async_engine_from_config` + `asyncio.run`) and
+  tied to `Base.metadata` from `db/base.py` (the single declarative registry). The
+  database URL resolves from the Alembic config (test/CLI override) first, then the
+  `DATABASE_URL` application setting; it refuses to proceed if neither is set.
+- **Baseline:** The initial migration (`0001_initial_baseline`) is intentionally
+  empty — it creates no application tables, only Alembic's version-tracking. First
+  real tables arrive in CP08+.
+- **Commands documented** via Makefile: `api-migrate` (upgrade head),
+  `api-migrate-down` (downgrade -1), `api-migrate-new` (revision).
+- **Verified:** `alembic upgrade head`, `alembic current`, `alembic history`, and
+  `alembic downgrade -1` all succeed against a fresh SQLite DB; `get_heads()` returns a
+  single deterministic head; pytest smoke tests pass (upgrade, version check, head
+  count, and upgrade→downgrade→upgrade roundtrip).
 
 ## ⬜ Checkpoint 08 — Organization, identity, authorization, and audit foundation
 
