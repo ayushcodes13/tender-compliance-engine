@@ -202,7 +202,13 @@ Before implementing a milestone:
 
 See `AGENTS.md` for the full project instructions.
 
+## Canonical execution plan
+
+Work should follow [Canonical checkpoint plan](checkpoint.md) from the first unchecked checkpoint. Completed checkpoints are crossed out there, and the plan is updated through PRs whenever product requirements or architecture change.
+
 ## Documentation
+
+- [Canonical checkpoint plan](checkpoint.md)
 
 - [Phase 1 PRD](docs/PRD.md)
 - [Architecture](docs/ARCHITECTURE.md)

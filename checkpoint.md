@@ -1,0 +1,2035 @@
+# Tender Compliance Engine — Canonical Checkpoint Plan
+
+> **This file is the execution source of truth for building the product from the current repository state to the complete evidence-backed tender compliance workflow.**
+>
+> Follow the checkpoints in order unless a new requirement, bug, security issue, or architectural fact requires the plan to change. When that happens, update this file in the same PR that changes the direction.
+
+## Current position
+
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP06 — Database connection and SQLAlchemy foundation**.
+
+The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
+
+## How every human or coding agent must use this file
+
+1. Read `AGENTS.md` first.
+2. Read this file and find the first unchecked checkpoint.
+3. Work on that checkpoint before jumping ahead unless a discovered dependency forces a plan update.
+4. Start from latest `main` and create a focused branch.
+5. Open a PR for every change. Never directly commit/push substantive work to `main`.
+6. Keep a PR focused on one checkpoint or one coherent sub-part of one checkpoint.
+7. Put the checkpoint ID in the PR description and explain why, what changed, scope, provenance/data impact, tests, manual verification, risks, and limitations.
+8. Do not mark a checkpoint complete because an interface, mock, table, or stub exists.
+9. Complete every item under **This checkpoint is complete only when**.
+10. In the same PR that completes a checkpoint: change `[ ]` to `[x]`, strike through the title, change its status to DONE, and optionally add the PR/implementation note.
+11. If new work appears, insert it at the correct dependency point instead of silently doing unplanned work.
+12. If new information makes part of this plan wrong, update the plan explicitly through a PR.
+13. Conservative unresolved states are preferable to fabricated certainty.
+14. This file is planning, not implementation evidence. Only shipped/tested code counts.
+
+## Global rules that apply to every checkpoint
+
+- Never fabricate a tender requirement, OEM specification, citation, page, clause, bounding box, evidence item, test result, or compliance status.
+- Preserve immutable source versions.
+- Preserve provenance through extraction, review, comparison, approval, and export.
+- Unknown source metadata stays unknown.
+- Ambiguous OCR stays visible and reviewable.
+- Missing evidence is not contradictory evidence.
+- Human review is a first-class state.
+- Deterministic code owns IDs, ordering, hashes, state transitions, lineage, exports, and numerical/unit comparisons.
+- LLMs only interpret language inside schema-validated, source-bounded workflows.
+- Uploaded documents are hostile/untrusted data and cannot override system/application instructions.
+- Every tenant-owned query is organization-scoped and deny-by-default.
+- Confidential document bodies do not belong in normal logs.
+- Phase 1 must not claim vendor/OEM compliance.
+- A feature is done only when persistence, provenance, failure states, tests, truthful UI behavior, and observability exist where relevant.
+
+## End-to-end destination
+
+```text
+Create project
+  ↓
+Upload tender document(s)
+  ↓
+Immutable source versions
+  ↓
+Parse pages / render / detect scans / OCR
+  ↓
+Source-preserving pages
+  ↓
+Extract explicit technical requirements
+  ↓
+Validate + anchor every requirement to source
+  ↓
+Conservative normalization
+  ↓
+Human review / edit / split / merge / organize
+  ↓
+Phase 1 matrix + Excel
+  ↓
+Phase 1 evaluation / security / deployment gate
+  ↓
+Upload and process OEM/vendor documents
+  ↓
+Retrieve and review source evidence
+  ↓
+Extract source-backed vendor specifications
+  ↓
+Deterministic unit and numeric comparison
+  ↓
+Evidence-backed qualitative reasoning
+  ↓
+Conflict / missing evidence / clarification / deviation workflow
+  ↓
+Human compliance review and approval
+  ↓
+Final evidence-backed XLSX / DOCX / PDF submission
+  ↓
+Phase 2 evaluation + production release
+```
+
+## Master checklist
+
+### Stage A — Product contract and existing foundation
+
+- [x] ~~CP00 — Product contract and trust rules~~
+- [x] ~~CP01 — Repository and application skeleton~~
+- [x] ~~CP02 — Local development services~~
+- [x] ~~CP03 — CI baseline and API health check~~
+- [x] ~~CP04 — Frontend review prototype~~
+- [x] ~~CP05 — PR-first engineering workflow~~
+
+### Stage B — Real persistence, tenancy, audit, and projects
+
+- [ ] CP06 — Database connection and SQLAlchemy foundation
+- [ ] CP07 — Alembic migrations and schema discipline
+- [ ] CP08 — Organization, identity, authorization, and audit foundation
+- [ ] CP09 — Project model, lifecycle service, and migrations
+- [ ] CP10 — Project API
+- [ ] CP11 — Real project dashboard and project progress
+
+### Stage C — Tender upload, immutable storage, versions, and background jobs
+
+- [ ] CP12 — Object-storage adapter
+- [ ] CP13 — Upload validation and hostile-file controls
+- [ ] CP14 — TenderDocument and immutable DocumentVersion models
+- [ ] CP15 — Tender upload API, versioning, and duplicate semantics
+- [ ] CP16 — Upload UI and document list
+- [ ] CP17 — Document-processing state machine
+- [ ] CP18 — Redis-backed worker and idempotent job execution
+
+### Stage D — Source-preserving parsing, rendering, OCR, and document pages
+
+- [ ] CP19 — PDF parser adapter
+- [ ] CP20 — Rendered page assets and real visual source
+- [ ] CP21 — Scanned-page detection and OCR
+- [ ] CP22 — DOCX adapter and format-appropriate provenance
+- [ ] CP23 — DocumentPage persistence and structural cleanup
+- [ ] CP24 — Processing retry, idempotency, and partial failure
+
+### Stage E — Conservative technical requirement extraction and provenance
+
+- [ ] CP25 — Structured extraction schema and trusted source-window contract
+- [ ] CP26 — LLM extraction adapter, prompt versions, and run metadata
+- [ ] CP27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
+- [ ] CP28 — Requirement candidate extraction, splitting, grouping, and abstention
+- [ ] CP29 — Duplicate/header/footer/overlap reconciliation
+- [ ] CP30 — Exact/approximate source anchors and Requirement persistence
+- [ ] CP31 — Extraction diagnostics and reconciliation history
+
+### Stage F — Conservative normalization and structured constraints
+
+- [ ] CP32 — RequirementConstraint model and normalization states
+- [ ] CP33 — Deterministic numeric/operator/unit parsing
+- [ ] CP34 — Qualitative normalization and ambiguity escalation
+
+### Stage G — Persistent human review and real source verification
+
+- [ ] CP35 — Requirement list/detail API
+- [ ] CP36 — Real PDF/source viewer with trustworthy highlights
+- [ ] CP37 — Wire the three-pane review UI to real APIs
+- [ ] CP38 — Requirement edit and immutable revision history
+- [ ] CP39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes
+- [ ] CP40 — Review-state machine, audit timeline, and real progress counts
+
+### Stage H — Phase 1 matrix and export
+
+- [ ] CP41 — Canonical Phase 1 matrix projection and screen
+- [ ] CP42 — XLSX export, history, download, and failure handling
+
+### Stage I — Phase 1 evaluation, security, operations, deployment, and release
+
+- [ ] CP43 — Curated Phase 1 benchmark dataset
+- [ ] CP44 — Automated evaluation harness and quality gates
+- [ ] CP45 — Adversarial documents, tenant security, upload security, and prompt-injection tests
+- [ ] CP46 — Observability, performance, resource, cost, retention, backup, and deletion
+- [ ] CP47 — Deployment configuration and runbook
+- [ ] CP48 — Phase 1 end-to-end acceptance and release gate
+
+### Stage J — OEM evidence, deterministic comparison, compliance review, and final submissions
+
+- [ ] CP49 — OEM document ingestion and provenance
+- [ ] CP50 — Evidence model, retrieval/indexing, and retrieval evaluation
+- [ ] CP51 — Evidence review UI and evidence curation
+- [ ] CP52 — Vendor specification extraction
+- [ ] CP53 — Deterministic unit normalization and specification comparison engine
+- [ ] CP54 — ComplianceAssessment model and status semantics
+- [ ] CP55 — Evidence-backed qualitative reasoning
+- [ ] CP56 — Conflict and contradiction detection
+- [ ] CP57 — Missing evidence, clarification questions, and deviations
+- [ ] CP58 — Human compliance review and audit
+- [ ] CP59 — Final compliance matrix and submission projection
+- [ ] CP60 — Final XLSX, DOCX, and PDF outputs
+- [ ] CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
+
+---
+
+# Stage A — Product contract and existing foundation
+
+What already exists and the rules every later checkpoint must preserve.
+
+## ✅ ~~Checkpoint 00 — Product contract and trust rules~~
+
+**Status:** DONE — already present in the repository.
+
+**Plain-English outcome:** The repository clearly defines what the product does, what Phase 1 is, and what the system must never fabricate.
+
+### What we will do
+
+1. Keep the current PRD, architecture, data model, evaluation, security, roadmap, and engineering rules aligned.
+2. Phase 1 remains: tender upload → parsing/OCR → requirement extraction → conservative normalization → human review → matrix → Excel.
+3. Vendor/OEM compliance remains outside Phase 1 until the evidence architecture exists.
+4. Never fabricate requirements, specifications, citations, pages, clauses, coordinates, evidence, test results, or compliance states.
+5. Treat missing evidence, contradictory evidence, and uncertain OCR as different conditions.
+6. Use deterministic code for IDs, hashes, ordering, state transitions, lineage, exports, and later numeric/unit comparison.
+
+### How we will verify it
+
+- Docs agree on the same product boundary.
+- No current endpoint or UI claims OEM/vendor compliance.
+
+### This checkpoint is complete only when
+
+- A new engineer can explain the intended end-to-end workflow and the trust model from repository docs.
+
+### Guardrail
+
+- Planning text is not proof that a capability is implemented.
+
+## ✅ ~~Checkpoint 01 — Repository and application skeleton~~
+
+**Status:** DONE — already present in the repository.
+
+**Plain-English outcome:** The API, web app, docs, CI, and infrastructure have clear homes.
+
+### What we will do
+
+1. Maintain the monorepo with `apps/api`, `apps/web`, `docs`, `infra`, root tooling, and GitHub workflows.
+2. Keep FastAPI and Next.js as the current application foundations.
+3. Keep `AGENTS.md` canonical and `CLAUDE.md` linked to it.
+4. Use small modules and provider adapters rather than one large service.
+5. Keep frontend installs reproducible with the committed lockfile.
+
+### How we will verify it
+
+- Repository tree contains the expected API/web/docs/infra surfaces.
+- Frontend and backend dependencies install in CI.
+
+### This checkpoint is complete only when
+
+- A contributor can clone the repository and know where new work belongs.
+
+### Guardrail
+
+- Do not create empty Phase 2 modules or tables just to make the repo look complete.
+
+## ✅ ~~Checkpoint 02 — Local development services~~
+
+**Status:** DONE — already present in the repository.
+
+**Plain-English outcome:** PostgreSQL, Redis, and MinIO are available as the local infrastructure seams.
+
+### What we will do
+
+1. Keep PostgreSQL for relational metadata and audit data.
+2. Keep Redis as the queue/broker seam.
+3. Keep MinIO as local S3-compatible object storage.
+4. Keep local volumes and health checks.
+5. Keep local-only credentials out of production configuration.
+
+### How we will verify it
+
+- Docker Compose defines all three services and health checks.
+- Environment variable names remain consistent with app configuration.
+
+### This checkpoint is complete only when
+
+- The planned persistence, queue, and object-storage dependencies can be started locally.
+
+### Guardrail
+
+- Do not store real secrets or customer documents in committed fixtures.
+
+## ✅ ~~Checkpoint 03 — CI baseline and API health check~~
+
+**Status:** DONE — already present in the repository.
+
+**Plain-English outcome:** Every PR can be checked automatically before merge.
+
+### What we will do
+
+1. Keep `GET /health`.
+2. Keep API lint and tests in CI.
+3. Keep frontend typecheck and production build in CI.
+4. Run CI on pull requests and on `main`.
+
+### How we will verify it
+
+- API and web jobs pass on a healthy branch.
+
+### This checkpoint is complete only when
+
+- A test/type/build regression is visible before merge.
+
+### Guardrail
+
+- A health endpoint only proves the API process boots; it does not prove the real product pipeline exists.
+
+## ✅ ~~Checkpoint 04 — Frontend review prototype~~
+
+**Status:** DONE — already present in the repository.
+
+**Plain-English outcome:** The product has a clear visual target for project and requirement review.
+
+### What we will do
+
+1. Keep the compact app shell and project dashboard.
+2. Keep the three-pane review workspace: requirements, source, review/evidence.
+3. Keep search, filters, review navigation, source chips/popovers, source highlighting, OCR warning, edit, notes, and mark-reviewed/reopen interactions.
+4. Keep demo/local state explicitly labeled until replaced by APIs.
+5. Preserve the quiet enterprise visual system while backend work lands.
+
+### How we will verify it
+
+- Dashboard and demo review workspace render and interact.
+- No vendor-compliance verdicts appear in the Phase 1 prototype.
+
+### This checkpoint is complete only when
+
+- The intended user workflow is visually understandable and ready to be connected to real data.
+
+### Guardrail
+
+- Do not spend the next milestones redesigning the prototype instead of building the real data path.
+
+## ✅ ~~Checkpoint 05 — PR-first engineering workflow~~
+
+**Status:** DONE — already present in the repository.
+
+**Plain-English outcome:** Every meaningful change is made on a branch, reviewed in a PR, checked by CI, and then merged.
+
+### What we will do
+
+1. Start every change from current `main`.
+2. Create a focused branch.
+3. Never commit/push a feature, fix, docs change, migration, config change, or refactor directly to `main`.
+4. Write a meaningful PR description with why/what/scope/provenance/data impact/tests/manual verification/risks.
+5. Merge only after relevant CI is green.
+6. Prefer squash merge.
+
+### How we will verify it
+
+- `AGENTS.md` and PR template state these rules.
+- Recent planned changes are represented by PRs.
+
+### This checkpoint is complete only when
+
+- Any agent can follow the repository workflow without needing verbal instructions.
+
+### Guardrail
+
+- Do not create empty or artificial PRs.
+
+# Stage B — Real persistence, tenancy, audit, and projects
+
+Turn the static skeleton into a durable multi-tenant application where real projects survive refresh/restart.
+
+## ⬜ Checkpoint 06 — Database connection and SQLAlchemy foundation
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** FastAPI can use PostgreSQL through a clean persistence layer.
+
+### What we will do
+
+1. Add database URL/settings to configuration.
+2. Use SQLAlchemy 2.x unless a new explicit architecture decision replaces it.
+3. Create engine/session factories outside routes.
+4. Inject sessions into application services.
+5. Add a test-database strategy.
+6. Fail clearly on invalid database configuration.
+
+### How we will verify it
+
+- Tests can open/close a session.
+- No route owns raw DB connection setup.
+
+### This checkpoint is complete only when
+
+- Application services can persist data through a reusable session boundary.
+
+### Guardrail
+
+- Do not create every future table in this checkpoint.
+
+## ⬜ Checkpoint 07 — Alembic migrations and schema discipline
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Every database change can be reproduced from an empty database.
+
+### What we will do
+
+1. Add Alembic tied to application metadata.
+2. Create the migration directory/config.
+3. Create the initial migration baseline.
+4. Document upgrade/downgrade/current/history commands.
+5. Add a migration smoke test or CI check.
+6. Require later schema changes to ship as new migrations.
+
+### How we will verify it
+
+- `alembic upgrade head` works against a fresh database.
+- Migration history is deterministic.
+
+### This checkpoint is complete only when
+
+- No developer needs to manually create tables.
+
+### Guardrail
+
+- Do not rewrite released migrations casually.
+
+## ⬜ Checkpoint 08 — Organization, identity, authorization, and audit foundation
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Every tenant-owned action knows who the actor is and which organization owns the data.
+
+### What we will do
+
+1. Add `Organization` and product-relevant user/membership records.
+2. Create an auth/request-context boundary that resolves actor ID, organization ID, and permissions.
+3. Support a clearly development-only local identity mode.
+4. Deny protected requests without a valid actor.
+5. Scope every tenant query by organization.
+6. Add `AuditLog` with actor/action/entity/project/minimal metadata/timestamp.
+7. Create a reusable audit service.
+8. Write cross-tenant denial tests before project/document APIs expand.
+
+### How we will verify it
+
+- Org A cannot read/write Org B records even with guessed UUIDs.
+- Audit events are organization-scoped and avoid confidential bodies.
+
+### This checkpoint is complete only when
+
+- There is one reusable authorization context and one audit path for later services.
+
+### Guardrail
+
+- Never trust an organization ID supplied by the browser without verifying membership.
+
+## ⬜ Checkpoint 09 — Project model, lifecycle service, and migrations
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** A tender-response workspace becomes a real persisted entity.
+
+### What we will do
+
+1. Add `Project` with UUID, organization, name, optional external tender ID, status, creator, timestamps.
+2. Define workflow statuses that describe processing/review progress, not vendor compliance.
+3. Create service methods for create/get/list/rename/archive/reopen.
+4. Guard impossible lifecycle transitions.
+5. Write audit events for mutations.
+6. Index organization/status lookups.
+
+### How we will verify it
+
+- Service tests cover lifecycle transitions and tenant isolation.
+- Projects survive restart.
+
+### This checkpoint is complete only when
+
+- Project business rules live in services/domain code, not scattered across routes.
+
+### Guardrail
+
+- Do not encode compliance meaning into project status.
+
+## ⬜ Checkpoint 10 — Project API
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The frontend can create and manage real projects.
+
+### What we will do
+
+1. Add `POST /projects`.
+2. Add `GET /projects`.
+3. Add `GET /projects/{id}`.
+4. Add rename/update plus archive/reopen actions.
+5. Return stable response schemas.
+6. Return explicit 400/403/404 errors.
+7. Paginate/list deterministically where needed.
+
+### How we will verify it
+
+- API tests cover happy paths, validation, missing records, and cross-tenant access.
+
+### This checkpoint is complete only when
+
+- A client can perform the complete project lifecycle through supported API behavior.
+
+### Guardrail
+
+- Do not expose an endpoint before its backing service behavior exists.
+
+## ⬜ Checkpoint 11 — Real project dashboard and project progress
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Hard-coded dashboard data is replaced by persisted projects and trustworthy workflow summaries.
+
+### What we will do
+
+1. Create a frontend API-client boundary.
+2. Load project cards from the API.
+3. Connect 'New tender' to real project creation.
+4. Support rename/archive/reopen UI where appropriate.
+5. Use stable project IDs in routes.
+6. Show explicit loading/empty/error states.
+7. Compute document/requirement/review counts from real data as later checkpoints add them.
+8. Never invent a percentage or count while data is unavailable.
+
+### How we will verify it
+
+- Create project → refresh → project remains.
+- Archived/reopened state remains after refresh.
+
+### This checkpoint is complete only when
+
+- The dashboard contains no fake project records in the real workflow.
+
+### Guardrail
+
+- Do not fall back to demo cards when an API request fails.
+
+# Stage C — Tender upload, immutable storage, versions, and background jobs
+
+Accept real tender files safely and create the processing handoff without doing heavy work inside HTTP requests.
+
+## ⬜ Checkpoint 12 — Object-storage adapter
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Original/derived files are stored outside PostgreSQL behind a provider-agnostic interface.
+
+### What we will do
+
+1. Define put/get/head/delete/read-access operations.
+2. Implement S3-compatible MinIO locally.
+3. Scope object keys by organization/project/document/version.
+4. Persist checksums and metadata in PostgreSQL, not raw document bytes.
+5. Add test/fake storage support.
+6. Keep cloud-vendor details inside the adapter.
+
+### How we will verify it
+
+- Write/read/checksum round-trip passes.
+- Objects from two organizations cannot collide by key.
+
+### This checkpoint is complete only when
+
+- Application services do not call MinIO/S3 SDKs directly.
+
+### Guardrail
+
+- Storage paths are not a substitute for authorization.
+
+## ⬜ Checkpoint 13 — Upload validation and hostile-file controls
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Unsafe, unsupported, or unreadable files are rejected before parsing.
+
+### What we will do
+
+1. Start with PDF as the first primary source format.
+2. Validate extension, MIME, file signature, size, and resource/page limits.
+3. Detect password-protected/unreadable PDFs.
+4. Add a production malware-scanner adapter/interface.
+5. Never execute embedded PDF JavaScript/macros/instructions.
+6. Return explicit failure reasons.
+7. Audit rejected uploads when appropriate.
+
+### How we will verify it
+
+- Tests cover MIME mismatch, malformed files, oversize files, and protected PDFs.
+
+### This checkpoint is complete only when
+
+- Rejected files never enter normal processing as READY/processable documents.
+
+### Guardrail
+
+- Do not trust the browser-provided MIME type alone.
+
+## ⬜ Checkpoint 14 — TenderDocument and immutable DocumentVersion models
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Every citation can target one exact uploaded source version.
+
+### What we will do
+
+1. Add `TenderDocument` linked to a project.
+2. Add immutable `DocumentVersion` with version number, object key, SHA-256, MIME, size, processing status, parser/OCR metadata, timestamps.
+3. Enforce unique `(document_id, version_number)`.
+4. Never overwrite an old version's source object/checksum.
+5. Add lookup indexes.
+
+### How we will verify it
+
+- Uploading a later version creates a new record.
+- Old version metadata stays queryable.
+
+### This checkpoint is complete only when
+
+- The logical document and its exact immutable versions are distinct.
+
+### Guardrail
+
+- Filename is display metadata, not identity.
+
+## ⬜ Checkpoint 15 — Tender upload API, versioning, and duplicate semantics
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** A project can receive real tender bytes and get durable document/version IDs.
+
+### What we will do
+
+1. Add a project-scoped upload endpoint.
+2. Authorize project access before reading/storing the file.
+3. Validate the file.
+4. Calculate SHA-256.
+5. Store immutable bytes.
+6. Create document/version records.
+7. Define exact-duplicate behavior deterministically: reject, reuse bytes, or create a new provenance version as documented.
+8. Clean up partial storage/DB failures.
+9. Return IDs/status.
+10. Write audit events.
+
+### How we will verify it
+
+- API tests cover valid upload, invalid project, unsafe file, duplicate content, and storage failure.
+- Stored checksum matches uploaded bytes.
+
+### This checkpoint is complete only when
+
+- A PDF uploaded through the API is durable and versioned after restart.
+
+### Guardrail
+
+- Do not parse/extract synchronously inside the upload request.
+
+## ⬜ Checkpoint 16 — Upload UI and document list
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Users can add a real tender and understand what was accepted.
+
+### What we will do
+
+1. Add Documents/upload UI to a real project.
+2. Support drag/drop and file chooser.
+3. Show filename, version, size, upload status, and explicit errors.
+4. List persisted documents/versions.
+5. Refresh using returned IDs.
+6. Avoid fake progress percentages.
+
+### How we will verify it
+
+- Upload → refresh → document remains listed.
+- Invalid files show specific user-facing errors.
+
+### This checkpoint is complete only when
+
+- A user can create a project and attach a real tender without developer tools.
+
+### Guardrail
+
+- Do not suppress server-side validation errors.
+
+## ⬜ Checkpoint 17 — Document-processing state machine
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The product can always explain where an uploaded version is in processing.
+
+### What we will do
+
+1. Define states such as UPLOADED/QUEUED/PROCESSING/PARTIAL/READY/FAILED with final names documented.
+2. Track current stage and failure reason separately.
+3. Record timestamps and retry/attempt counts.
+4. Guard invalid transitions.
+5. Expose processing status API.
+6. Derive project workflow status from document state where appropriate.
+
+### How we will verify it
+
+- Impossible transitions fail tests.
+- Page/worker failure does not look like successful empty output.
+
+### This checkpoint is complete only when
+
+- Users/operators can tell whether processing is queued, running, partial, ready, failed, or retryable.
+
+### Guardrail
+
+- Never promote partial processing to READY without an explicit policy.
+
+## ⬜ Checkpoint 18 — Redis-backed worker and idempotent job execution
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Parsing/extraction runs in a background worker instead of blocking API requests.
+
+### What we will do
+
+1. Define a job-runner interface.
+2. Use a small Redis-backed queue implementation.
+3. Create a worker entrypoint.
+4. Put identifiers—not full confidential document bodies—on the queue.
+5. Add correlation/job IDs.
+6. Add bounded retries.
+7. Make processing safe to retry.
+8. Record permanent vs retryable failures.
+
+### How we will verify it
+
+- Upload/enqueue returns promptly.
+- Worker retry does not duplicate final page/requirement state.
+
+### This checkpoint is complete only when
+
+- Background processing can be tested independently of FastAPI.
+
+### Guardrail
+
+- Do not introduce agents or complex distributed orchestration.
+
+# Stage D — Source-preserving parsing, rendering, OCR, and document pages
+
+Turn source files into trustworthy page/segment representations while keeping uncertainty visible.
+
+## ⬜ Checkpoint 19 — PDF parser adapter
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Digitally generated PDFs produce page-scoped text behind a replaceable parser interface.
+
+### What we will do
+
+1. Define parser input/output contracts.
+2. Use a mature PDF parser implementation such as PyMuPDF unless tests justify another choice.
+3. Preserve page number/order.
+4. Return page-level warnings/errors.
+5. Record parser name/version.
+6. Never collapse all pages into one untraceable text blob.
+
+### How we will verify it
+
+- Digital fixtures return correct page counts/order/text.
+- Malformed/partial PDFs produce explicit failure information.
+
+### This checkpoint is complete only when
+
+- Every parsed fragment retains document-version/page identity.
+
+### Guardrail
+
+- Do not discard page boundaries.
+
+## ⬜ Checkpoint 20 — Rendered page assets and real visual source
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Every PDF page has a visual representation reviewers can inspect.
+
+### What we will do
+
+1. Render pages to a stable image representation/resolution.
+2. Store derived page images in object storage.
+3. Persist asset keys.
+4. Record render failures per page.
+5. Keep source version identity attached.
+6. Choose settings that balance readability and storage.
+
+### How we will verify it
+
+- Rendered page count matches source page count for normal PDFs.
+- Stored image for a page can be retrieved.
+
+### This checkpoint is complete only when
+
+- The system has a stable visual source even when text extraction is imperfect.
+
+### Guardrail
+
+- Rendered images are derived assets, not new source versions.
+
+## ⬜ Checkpoint 21 — Scanned-page detection and OCR
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Image-only/mixed pages are routed to OCR and OCR uncertainty is preserved.
+
+### What we will do
+
+1. Detect scan-like pages using deterministic signals such as native text density/image coverage.
+2. Support mixed PDFs where only some pages use OCR.
+3. Define an OCR provider interface.
+4. Persist OCR text, confidence, geometry when available, provider/version, and OCR-used flag.
+5. Flag low-confidence/meaning-sensitive symbols.
+6. Preserve raw OCR output separately when cleanup could change meaning.
+
+### How we will verify it
+
+- Digital, scan-only, and mixed fixtures choose the expected path.
+- OCR tests include `≥`, `≤`, `µ`, decimals, units, and common confusions.
+
+### This checkpoint is complete only when
+
+- Each page has an inspectable native-text or OCR path and uncertainty metadata.
+
+### Guardrail
+
+- Never silently correct meaning-bearing OCR.
+
+## ⬜ Checkpoint 22 — DOCX adapter and format-appropriate provenance
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** DOCX can enter the same pipeline without fake PDF metadata.
+
+### What we will do
+
+1. Validate DOCX separately.
+2. Parse paragraphs, headings, lists, and tables while preserving order.
+3. Define source locations using paragraph/table/section coordinates.
+4. Create a preview/derived representation if needed.
+5. Keep exact/approximate location honesty.
+6. Feed downstream extraction through a generic document-page/segment abstraction.
+
+### How we will verify it
+
+- DOCX fixtures preserve paragraphs and tables.
+- No fabricated page number is created when unavailable.
+
+### This checkpoint is complete only when
+
+- DOCX can use the downstream requirement pipeline with trustworthy source references.
+
+### Guardrail
+
+- Do not pretend converted page numbers are original-source pages unless that representation is explicitly defined.
+
+## ⬜ Checkpoint 23 — DocumentPage persistence and structural cleanup
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Page-level source text/assets/metadata survive processing and can support extraction/citations.
+
+### What we will do
+
+1. Add `DocumentPage` with version, page/segment number, text, OCR flag/confidence, rendered asset key, limited structural metadata.
+2. Enforce unique version/page identity where appropriate.
+3. Keep raw source text retrievable.
+4. Detect repeated headers/footers deterministically.
+5. Preserve headings, numbered clauses, nested bullets, table context.
+6. Keep raw vs cleaned representations separate when useful.
+7. Index page lookup.
+
+### How we will verify it
+
+- Reprocessing does not duplicate page rows.
+- Cleanup removes repeated noise without deleting real requirement text.
+
+### This checkpoint is complete only when
+
+- Downstream code can load exact source pages/segments and structure from durable storage.
+
+### Guardrail
+
+- Do not perform semantic rewriting in cleanup.
+
+## ⬜ Checkpoint 24 — Processing retry, idempotency, and partial failure
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Reprocessing a document is safe and incomplete work remains visible.
+
+### What we will do
+
+1. Give each processing run an ID.
+2. Use deterministic page reconciliation/upserts.
+3. Bound provider/network retries.
+4. Separate retryable/permanent errors.
+5. Represent partial page success.
+6. Add retry API/action for eligible failures.
+7. Do not destroy prior immutable source bytes during reprocessing.
+
+### How we will verify it
+
+- Run the same document twice without duplicate pages.
+- Single-page failure stays visible instead of disappearing inside success.
+
+### This checkpoint is complete only when
+
+- Operators can explain what retry will do and why it is safe.
+
+### Guardrail
+
+- Retry is not a new source version.
+
+# Stage E — Conservative technical requirement extraction and provenance
+
+Extract explicit obligations only, validate every model response, and persist source-backed requirements.
+
+## ⬜ Checkpoint 25 — Structured extraction schema and trusted source-window contract
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The LLM can only propose candidates in a strict schema tied to trusted source metadata.
+
+### What we will do
+
+1. Create Pydantic candidate schemas.
+2. Require raw source fragment, proposed normalized text, uncertainty flags, parent/group hints, and observed clause/section when available.
+3. Carry trusted version/page/window metadata outside model control.
+4. Use nullable/tri-state mandatory values.
+5. Reject malformed enums/structures.
+6. Prevent model-provided page data from overriding trusted source context.
+
+### How we will verify it
+
+- Schema tests reject missing sources, invalid states, and malformed values.
+- A model cannot move a candidate to a different page.
+
+### This checkpoint is complete only when
+
+- There is a machine-enforced boundary between model suggestion and persistable requirement.
+
+### Guardrail
+
+- Never persist free-form model prose as a valid requirement.
+
+## ⬜ Checkpoint 26 — LLM extraction adapter, prompt versions, and run metadata
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Model calls are controlled, provider-agnostic, and auditable.
+
+### What we will do
+
+1. Define a structured-extraction adapter.
+2. Keep system instructions separate from untrusted document text.
+3. Use structured output/schema enforcement where supported.
+4. Record provider, model, prompt version, schema version, run ID.
+5. Add timeouts and bounded retries.
+6. Minimize source payloads to relevant windows.
+7. Support a deterministic fake provider for tests.
+
+### How we will verify it
+
+- Test adapter drives extraction without network calls.
+- Stored run metadata identifies the exact extraction configuration.
+
+### This checkpoint is complete only when
+
+- Changing providers does not require rewriting document services.
+
+### Guardrail
+
+- Document text can never invoke tools or override application instructions.
+
+## ⬜ Checkpoint 27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Extraction sees enough context to understand complicated tender structure without losing provenance.
+
+### What we will do
+
+1. Chunk by trusted page/section/clause/table boundaries before token count.
+2. Use bounded overlap for cross-boundary requirements.
+3. Carry stable chunk IDs and trusted metadata.
+4. Preserve nested bullet hierarchy and parent-child context.
+5. Preserve table row/column headers.
+6. Allow multiple source fragments for multi-page requirements.
+7. Keep overlap small enough that duplicates are manageable.
+
+### How we will verify it
+
+- Fixtures cover boundary-spanning requirements, nested bullets, tables, and multi-page clauses.
+
+### This checkpoint is complete only when
+
+- A requirement can span source fragments without being detached from each location.
+
+### Guardrail
+
+- Do not flatten structure in a way that changes table or clause meaning.
+
+## ⬜ Checkpoint 28 — Requirement candidate extraction, splitting, grouping, and abstention
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Explicit technical obligations become reviewable candidate rows without invented meaning.
+
+### What we will do
+
+1. Extract explicit requirements only.
+2. Preserve all numbers, units, conditions, scope, and modal language.
+3. Split independent obligations.
+4. Keep coupled conditions together when split would change meaning.
+5. Support parent/child relationships.
+6. Allow abstention on ambiguous/non-requirement text.
+7. Flag OCR/structure uncertainty.
+8. Validate output before reconciliation.
+
+### How we will verify it
+
+- Benchmark covers one sentence→many requirements and many sentences→one requirement.
+- Invented requirement rate is measured.
+
+### This checkpoint is complete only when
+
+- Every candidate has supporting source text and safe structure for review.
+
+### Guardrail
+
+- Do not optimize recall by inferring requirements that are not stated.
+
+## ⬜ Checkpoint 29 — Duplicate/header/footer/overlap reconciliation
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Repeated source windows do not flood the matrix with duplicate rows.
+
+### What we will do
+
+1. Use deterministic source fingerprints before fuzzy/semantic similarity.
+2. Compare overlapping source spans.
+3. Remove chunk-overlap duplicates predictably.
+4. Keep repeated but materially distinct obligations.
+5. Record reconciliation decisions.
+6. Prefer a possible duplicate for review over silently deleting a distinct requirement.
+
+### How we will verify it
+
+- Overlap duplicates collapse.
+- Repeated headers/footers never become requirements.
+
+### This checkpoint is complete only when
+
+- Duplicate rate is controlled without aggressive semantic merging.
+
+### Guardrail
+
+- Similar wording alone is not proof two requirements are the same.
+
+## ⬜ Checkpoint 30 — Exact/approximate source anchors and Requirement persistence
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Only validated requirements are stored, each with the strongest source location actually known.
+
+### What we will do
+
+1. Add `Requirement` and `RequirementSource`.
+2. Resolve exact source text back to stored page text deterministically where possible.
+3. Store offsets and bounding boxes when reliable.
+4. Mark location precision EXACT/APPROXIMATE.
+5. Keep clause/section nullable when unknown.
+6. Persist multiple source fragments when needed.
+7. Transactionally persist validated candidates.
+8. Quarantine/record invalid model output.
+9. Design reprocessing so human-reviewed rows are never silently overwritten.
+
+### How we will verify it
+
+- Exact anchors round-trip to expected source text.
+- Approximate anchors stay labeled.
+- Reprocessing does not duplicate unchanged rows.
+
+### This checkpoint is complete only when
+
+- Every normal persisted requirement has trustworthy provenance and stable identity.
+
+### Guardrail
+
+- Never fabricate missing coordinates/page/clause metadata.
+
+## ⬜ Checkpoint 31 — Extraction diagnostics and reconciliation history
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** A bad extraction can be reproduced and explained.
+
+### What we will do
+
+1. Store parser/OCR/model/prompt/schema versions and processing-run ID.
+2. Record candidate/accepted/rejected/duplicate/warning counts.
+3. Track validation errors without logging full confidential bodies.
+4. Correlate API→queue→worker→provider calls.
+5. Record reconciliation changes when reprocessing system-generated output.
+
+### How we will verify it
+
+- One run ID traces the whole processing flow.
+- Diagnostics distinguish parser, OCR, model, validation, and persistence failures.
+
+### This checkpoint is complete only when
+
+- Developers can debug why a document produced its requirement set.
+
+### Guardrail
+
+- Do not expose provider internals/sensitive content to unauthorized users.
+
+# Stage F — Conservative normalization and structured constraints
+
+Turn safe pieces of requirements into typed constraints without changing their meaning.
+
+## ⬜ Checkpoint 32 — RequirementConstraint model and normalization states
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Structured values live in typed records alongside their raw fragments.
+
+### What we will do
+
+1. Add `RequirementConstraint`.
+2. Support parameter, operator, numeric value, lower/upper bounds, unit, tolerance, qualitative condition, normalization status, raw fragment.
+3. Allow more than one constraint per requirement.
+4. Define SAFE/PARTIAL/NEEDS_REVIEW-style statuses.
+5. Keep raw source fragment beside normalized fields.
+
+### How we will verify it
+
+- Schema covers exact/min/max/range/tolerance/percentage/qualitative cases.
+
+### This checkpoint is complete only when
+
+- Every structured value can be audited against its source fragment.
+
+### Guardrail
+
+- No guessed value is required just to satisfy the schema.
+
+## ⬜ Checkpoint 33 — Deterministic numeric/operator/unit parsing
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Obvious mathematical structure is parsed in code and ambiguous values escalate.
+
+### What we will do
+
+1. Parse `=`, `<`, `≤`, `>`, `≥`, min/max, ranges, percentages, scientific notation.
+2. Handle decimal/thousands separators conservatively.
+3. Preserve lexical source form.
+4. Parse units and tolerances without converting them yet.
+5. Keep distinctions such as accuracy/resolution/precision/repeatability/sensitivity/range separate.
+6. Escalate ambiguous OCR/operator/unit cases.
+
+### How we will verify it
+
+- Tests cover boundary operators, negatives, decimals, ranges, percentages, unit-bearing values, OCR-corrupted symbols.
+
+### This checkpoint is complete only when
+
+- Accepted numeric normalization is deterministic and reproducible.
+
+### Guardrail
+
+- Do not use an LLM as the final authority for simple math parsing.
+
+## ⬜ Checkpoint 34 — Qualitative normalization and ambiguity escalation
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Wording becomes easier to review without becoming broader/stronger than the source.
+
+### What we will do
+
+1. Generate conservative normalized wording.
+2. Preserve subject, obligation, conditions, scope, and negation.
+3. Extract qualitative conditions only when explicit.
+4. Propagate OCR/structure uncertainty.
+5. Set OCR_WARNING/NEEDS_CLARIFICATION where meaning is unsafe.
+6. Version normalization rules/prompts separately.
+
+### How we will verify it
+
+- Examples cover certifications, environmental conditions, interfaces, documentation, and qualitative performance.
+- Meaning-changing OCR cases escalate.
+
+### This checkpoint is complete only when
+
+- Normalized text is useful but every unsafe rewrite is visibly unresolved.
+
+### Guardrail
+
+- Do not turn descriptive prose into a mandatory obligation.
+
+# Stage G — Persistent human review and real source verification
+
+Replace demo state with auditable review actions against the actual tender source.
+
+## ⬜ Checkpoint 35 — Requirement list/detail API
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The frontend can load real requirements, filters, constraints, and sources.
+
+### What we will do
+
+1. Add project-scoped requirement list.
+2. Add detail endpoint.
+3. Support stable ordering and pagination.
+4. Support review/category/document/search filters as needed.
+5. Return sources/constraints/revision summary in appropriate detail responses.
+6. Authorize every query by organization/project.
+
+### How we will verify it
+
+- API tests cover ordering, filtering, empty lists, pagination, and tenant isolation.
+
+### This checkpoint is complete only when
+
+- The review UI no longer requires `seedRequirements` for real projects.
+
+### Guardrail
+
+- Do not return whole document bodies in every list response.
+
+## ⬜ Checkpoint 36 — Real PDF/source viewer with trustworthy highlights
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Clicking a citation opens the actual uploaded source page and shows the known source location.
+
+### What we will do
+
+1. Use PDF.js or equivalent for actual PDF rendering.
+2. Open the exact immutable document version/page.
+3. Overlay exact bounding boxes when available.
+4. Fallback to approximate text/page highlighting when geometry is unavailable and label it.
+5. Support zoom and asynchronous render.
+6. Re-center the active finding after layout/render changes.
+
+### How we will verify it
+
+- Selecting requirements on different pages navigates correctly.
+- Exact/approximate locations are visibly distinct.
+
+### This checkpoint is complete only when
+
+- A reviewer can visually verify a requirement against the original tender.
+
+### Guardrail
+
+- Do not present reconstructed text as the original PDF image.
+
+## ⬜ Checkpoint 37 — Wire the three-pane review UI to real APIs
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The existing interaction model becomes the real product instead of a demo.
+
+### What we will do
+
+1. Remove demo seed data from real project routes.
+2. Load project, requirements, counts, selected requirement, and source metadata from APIs.
+3. Persist selection/deep-link state where useful.
+4. Show loading/error/processing/partial/no-requirement states.
+5. Use real document/version/page labels.
+6. Keep a separate isolated demo fixture only if helpful for UI development.
+
+### How we will verify it
+
+- Refresh preserves server-backed state.
+- API failure never causes fake fallback requirements.
+
+### This checkpoint is complete only when
+
+- Every source chip and requirement in a real project comes from persistence.
+
+### Guardrail
+
+- Never hide backend failure by rendering demo data.
+
+## ⬜ Checkpoint 38 — Requirement edit and immutable revision history
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Reviewers can correct normalized text without erasing how it changed.
+
+### What we will do
+
+1. Add `RequirementRevision`.
+2. Create edit service/API.
+3. Create a revision for material edits.
+4. Keep raw source unchanged when editing normalized text.
+5. Handle stale/concurrent edits explicitly.
+6. Write audit events.
+7. Show history metadata in the UI.
+
+### How we will verify it
+
+- Edit→refresh persists new wording and previous revision.
+- Concurrent update behavior is tested.
+
+### This checkpoint is complete only when
+
+- A reviewer can answer what changed, when, and by whom.
+
+### Guardrail
+
+- Editing normalized wording must not overwrite evidence/source text.
+
+## ⬜ Checkpoint 39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** A reviewer can repair extraction structure and organize the final matrix without losing lineage.
+
+### What we will do
+
+1. Add `RequirementRelation` for SPLIT_INTO/MERGED_INTO/SUPERSEDES.
+2. Split with explicit source assignment.
+3. Merge while preserving all contributing sources.
+4. Treat mistaken extractions as superseded/deleted auditable state rather than erasing history where required.
+5. Add category hierarchy/assignment.
+6. Persist stable sort order.
+7. Keep mandatory tri-state/nullable unless source supports true/false.
+8. Persist reviewer notes separately from source.
+9. Audit every material mutation.
+
+### How we will verify it
+
+- Split/merge tests preserve provenance.
+- Reorder/category/notes/mandatory survive refresh.
+- Superseded rows are excluded from normal matrix output but auditable.
+
+### This checkpoint is complete only when
+
+- The user can correct extraction granularity and organization entirely inside the product.
+
+### Guardrail
+
+- Never merge multiple source fragments into one fake contiguous citation.
+
+## ⬜ Checkpoint 40 — Review-state machine, audit timeline, and real progress counts
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The review queue and dashboard accurately reflect outstanding human work.
+
+### What we will do
+
+1. Implement UNREVIEWED/REVIEWED/NEEDS_CLARIFICATION/OCR_WARNING transitions.
+2. Define initial/system transition rules.
+3. Define mark-reviewed/reopen/escalate behavior.
+4. Prevent review completion when required uncertainty remains unless an explicit audited override exists.
+5. Add project/requirement audit query APIs.
+6. Render a lightweight audit/history timeline.
+7. Compute real processed/reviewed/unresolved counts.
+8. Make next/previous unresolved navigation use persisted state.
+
+### How we will verify it
+
+- Transition tests cover allowed/forbidden paths.
+- Dashboard counts match database queries.
+- Audit timeline reconstructs edits/splits/reviews.
+
+### This checkpoint is complete only when
+
+- 'Needs review' is a trustworthy queue, not a UI-only flag.
+
+### Guardrail
+
+- These are review states, not compliance states.
+
+# Stage H — Phase 1 matrix and export
+
+Produce the clean, auditable tender requirement deliverable.
+
+## ⬜ Checkpoint 41 — Canonical Phase 1 matrix projection and screen
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** One deterministic projection powers both the matrix UI and export.
+
+### What we will do
+
+1. Project columns: S.No., Requirement ID, Tender Requirement, Category, Clause, Source Page, Mandatory, User Notes, Review Status.
+2. Use current non-superseded requirement state.
+3. Preserve explicit ordering.
+4. Represent missing source fields honestly.
+5. Add Matrix tab using this projection.
+6. Link rows back to requirement/source review.
+7. Highlight unresolved statuses.
+8. Do not add vendor compliance columns.
+
+### How we will verify it
+
+- Projection tests cover null metadata, ordering, multi-source rows, superseded rows.
+- UI values match API/projection values.
+
+### This checkpoint is complete only when
+
+- Users can inspect exactly what will be exported.
+
+### Guardrail
+
+- Do not duplicate matrix business logic in frontend and export separately.
+
+## ⬜ Checkpoint 42 — XLSX export, history, download, and failure handling
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Reviewed requirements become a professional, versioned Excel deliverable.
+
+### What we will do
+
+1. Use server-side `openpyxl`.
+2. Use the canonical matrix projection.
+3. Add project/tender ID and generation timestamp.
+4. Apply readable widths/wrapping/frozen headers/filters.
+5. Preserve source references and ordering.
+6. Store export metadata and artifact.
+7. Add create/list/download endpoints.
+8. Record actor/source state/version/time.
+9. Keep multiple historical exports.
+10. Surface failures and safe retry.
+11. Indicate when project requirements changed after an older export.
+
+### How we will verify it
+
+- Workbook opens in common spreadsheet tools.
+- Structural/golden tests verify columns, ordering, values, source references.
+- Failed export never appears successful.
+
+### This checkpoint is complete only when
+
+- A reviewed project can produce/download a clean XLSX without manual spreadsheet assembly.
+
+### Guardrail
+
+- Do not add formulas/conversions that modify tender meaning.
+
+# Stage I — Phase 1 evaluation, security, operations, deployment, and release
+
+Prove the product is trustworthy under realistic tenders before starting vendor compliance.
+
+## ⬜ Checkpoint 43 — Curated Phase 1 benchmark dataset
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Extraction quality has a repeatable ground truth.
+
+### What we will do
+
+1. Collect safe representative tender fixtures.
+2. Annotate gold requirements, source page/region, split/grouping, safe normalization, expected review state.
+3. Include min/max/exact/ranges/tolerances/percentages/units.
+4. Include tables, nested clauses, multi-page requirements, scans, repeated headers, duplicates, missing coordinates.
+5. Include OCR symbol corruption and ambiguous terminology.
+6. Version source identity and annotator notes.
+
+### How we will verify it
+
+- Every benchmark item has expected outputs/provenance.
+- Dataset includes hard/adversarial cases.
+
+### This checkpoint is complete only when
+
+- Parser/model changes can be compared on the same ground truth.
+
+### Guardrail
+
+- Do not use confidential customer material without permission.
+
+## ⬜ Checkpoint 44 — Automated evaluation harness and quality gates
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Release decisions use measured precision/recall/provenance fidelity instead of screenshots.
+
+### What we will do
+
+1. Measure requirement precision/recall.
+2. Measure split/group accuracy and duplicate rate.
+3. Measure invented-requirement rate.
+4. Measure page/clause/source-text/location accuracy.
+5. Measure numeric/unit/operator/range fidelity and false normalization.
+6. Measure OCR warning/escalation behavior.
+7. Record parser/OCR/model/prompt/schema versions for every eval.
+8. Create human-readable and machine-readable reports.
+9. Put a small regression set in CI and run full evals on controlled changes.
+10. Set conservative release thresholds.
+
+### How we will verify it
+
+- A deliberately broken extractor causes expected metric regression.
+- Same config/dataset is reproducible within known model variance.
+
+### This checkpoint is complete only when
+
+- High-risk false extraction/citation regressions block release.
+
+### Guardrail
+
+- Do not hide false positives inside one average score.
+
+## ⬜ Checkpoint 45 — Adversarial documents, tenant security, upload security, and prompt-injection tests
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Known dangerous inputs fail safely instead of becoming confident wrong output.
+
+### What we will do
+
+1. Test comparison symbols, decimal points, units, Greek symbols, rotated pages, merged tables, page breaks, duplicated headers.
+2. Test malformed/protected PDFs and resource abuse cases.
+3. Test prompt-injection content inside source documents.
+4. Run cross-tenant API tests for every tenant-owned resource.
+5. Enforce production malware scanning and worker isolation/resource limits.
+6. Review LLM provider retention/training/confidentiality settings.
+7. Use secret management in deployment.
+8. Add dependency/security scanning as appropriate.
+
+### How we will verify it
+
+- Document instructions cannot override system rules or invoke tools.
+- Org A cannot access Org B resources.
+- Malicious/unsupported files do not enter normal processing.
+
+### This checkpoint is complete only when
+
+- The security model has tested controls, not only documentation.
+
+### Guardrail
+
+- Frontend hiding is never authorization.
+
+## ⬜ Checkpoint 46 — Observability, performance, resource, cost, retention, backup, and deletion
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The system can be operated, debugged, cost-controlled, restored, and safely deleted.
+
+### What we will do
+
+1. Standardize structured logs with request/job correlation IDs.
+2. Record stage duration, provider/version, retries, validation failures, counts, export outcomes.
+3. Add metrics for queue depth/failures/latency/review backlog.
+4. Avoid full confidential document bodies in normal logs.
+5. Set upload/page/time/memory/concurrency limits.
+6. Track LLM token/cost metadata when available.
+7. Profile large tenders and requirement lists.
+8. Define retention for originals, rendered assets, OCR/parser output, exports, later embeddings.
+9. Implement authorized hard deletion.
+10. Keep audit retention policy separate when needed.
+11. Define database/object-storage backup strategy.
+12. Test restore with non-production data.
+
+### How we will verify it
+
+- A failed job is traceable end to end by IDs.
+- Hard-delete removes the expected tenant content only.
+- Backup restore yields consistent metadata/object references.
+
+### This checkpoint is complete only when
+
+- Operators can explain failure, performance, cost, retention, deletion, and recovery behavior.
+
+### Guardrail
+
+- Do not promise provider-side deletion/retention behavior that is not actually configured.
+
+## ⬜ Checkpoint 47 — Deployment configuration and runbook
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** API, web, worker, migrations, storage, queue, and database can be deployed reproducibly.
+
+### What we will do
+
+1. Define production environment configuration.
+2. Define API/web/worker process commands and health checks.
+3. Run migrations explicitly during deployment.
+4. Configure secure Postgres/Redis/object storage/TLS/CORS/secrets.
+5. Document rollback for app/schema changes.
+6. Document failed-job recovery and worker scaling.
+7. Add deployment smoke tests.
+8. Keep application provider abstractions even if the first deployment uses one cloud.
+
+### How we will verify it
+
+- A clean environment can be deployed from the documented runbook.
+- Rollback/recovery paths are testable.
+
+### This checkpoint is complete only when
+
+- Deployment no longer depends on manual database edits or the original developer's laptop.
+
+### Guardrail
+
+- Do not hide manual undocumented steps in release operations.
+
+## ⬜ Checkpoint 48 — Phase 1 end-to-end acceptance and release gate
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The exact PRD journey works from a clean environment and meets conservative quality thresholds.
+
+### What we will do
+
+1. Create project.
+2. Upload real digital and scanned tenders.
+3. Process pages/OCR.
+4. Extract requirements with source anchors.
+5. Normalize safely.
+6. Review/edit/split/merge/categorize/reorder/resolve warnings.
+7. Open representative cited sources.
+8. Generate matrix.
+9. Export XLSX.
+10. Inspect audit history and failure states.
+11. Run benchmark/eval thresholds.
+12. Review open high-severity bugs/security findings.
+13. Verify deployment/backup/retention runbooks.
+14. Document released component versions and known limitations.
+
+### How we will verify it
+
+- Acceptance needs no database intervention.
+- No Phase 1 step claims OEM/vendor compliance.
+- False extraction/citation metrics meet the release bar.
+
+### This checkpoint is complete only when
+
+- Phase 1 is a trustworthy end-to-end product loop, not a set of disconnected components.
+
+### Guardrail
+
+- Do not waive wrong-citation/invented-requirement issues merely to declare Phase 1 done.
+
+# Stage J — OEM evidence, deterministic comparison, compliance review, and final submissions
+
+Extend the proven source-preserving pipeline to vendor/OEM evidence and produce conservative, human-approved compliance outputs.
+
+## ⬜ Checkpoint 49 — OEM document ingestion and provenance
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Datasheets, brochures, manuals, certificates, proposals, test reports, quotations, and other OEM material use immutable source versioning.
+
+### What we will do
+
+1. Add OEM document/version entities only when this checkpoint begins.
+2. Reuse organization/project authorization and object storage.
+3. Add OEM document type/product/vendor metadata.
+4. Reuse upload validation, status, queue, parsing, rendering, OCR, pages, retries, and audit patterns.
+5. Add OEM upload/document UI separated from tender source documents.
+6. Keep exact version identity for every later evidence citation.
+
+### How we will verify it
+
+- OEM documents process without corrupting tender entities.
+- Versions remain immutable and tenant-scoped.
+
+### This checkpoint is complete only when
+
+- A project can hold both tender requirements and source-preserving OEM materials.
+
+### Guardrail
+
+- Tender and OEM sources must remain distinguishable.
+
+## ⬜ Checkpoint 50 — Evidence model, retrieval/indexing, and retrieval evaluation
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The system can find likely OEM evidence while treating retrieval failure as missing evidence, not non-compliance.
+
+### What we will do
+
+1. Add `Evidence` and `EvidenceLocation` with immutable OEM document version/page/source text/offset/bbox/location precision/OCR confidence.
+2. Allow multiple evidence locations per requirement.
+3. Create searchable OEM text segments tied to locations.
+4. Start with deterministic metadata/text search; add embeddings/hybrid retrieval only when evaluation shows value.
+5. If embeddings are needed, prefer a simple Postgres/pgvector-style approach before a separate vector platform.
+6. Record retrieval query/config/version/ranking signals.
+7. Return several evidence candidates with source metadata.
+8. Build retrieval benchmark precision/recall.
+9. Define zero/weak retrieval as missing evidence.
+
+### How we will verify it
+
+- Every candidate opens its actual OEM source.
+- Retrieval precision/recall is measurable.
+- No-result cases never become automatic NON_COMPLIANT.
+
+### This checkpoint is complete only when
+
+- The system can propose source-linked evidence candidates for a requirement.
+
+### Guardrail
+
+- Semantic similarity is not proof.
+
+## ⬜ Checkpoint 51 — Evidence review UI and evidence curation
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Humans can inspect, accept, reject, add, or remove evidence before assessment.
+
+### What we will do
+
+1. Show tender requirement beside OEM source viewer and evidence candidates.
+2. Show document version/page/location precision/OCR warnings.
+3. Allow accept/reject/add/remove.
+4. Keep retrieval score visually secondary to source content.
+5. Audit curation.
+6. Make assessment inputs use the curated evidence set or clearly label unreviewed system candidates.
+
+### How we will verify it
+
+- Every accepted evidence item is viewable in context.
+- Changing evidence set deterministically changes assessment inputs.
+
+### This checkpoint is complete only when
+
+- There is no hidden evidence candidate being treated as approved proof.
+
+### Guardrail
+
+- High retrieval score must never be shown as compliant.
+
+## ⬜ Checkpoint 52 — Vendor specification extraction
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Accepted OEM evidence becomes structured vendor facts without losing its supporting source.
+
+### What we will do
+
+1. Add vendor-spec schema for parameter/concept, value/range, unit, tolerance/qualitative statement, entity/model, conditions, evidence IDs.
+2. Use deterministic parsing for explicit numbers/operators.
+3. Use structured LLM interpretation only for language/context not safely handled by rules.
+4. Preserve distinctions such as resolution vs accuracy.
+5. Require every persisted vendor fact to point to evidence.
+6. Escalate OCR/ambiguity.
+
+### How we will verify it
+
+- Benchmark includes same number/different metric/entity/scope cases.
+- Unsupported values cannot persist without evidence.
+
+### This checkpoint is complete only when
+
+- A structured vendor fact can always be traced back to OEM source material.
+
+### Guardrail
+
+- Do not infer a missing specification from marketing language.
+
+## ⬜ Checkpoint 53 — Deterministic unit normalization and specification comparison engine
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Comparable tender/vendor values are evaluated in code with explicit rules.
+
+### What we will do
+
+1. Use a tested unit library such as Pint behind a domain interface.
+2. Map safe aliases while keeping original text.
+3. Check dimensional compatibility before conversion.
+4. Handle prefixes, percentages, temperature, compound units, tolerances carefully.
+5. Implement exact/min/max/inclusive-exclusive/range containment-overlap/tolerance comparisons.
+6. Require matching parameter/concept, entity/model, scope, and operating condition before comparing.
+7. Return typed outcomes and conversion/comparison reasons.
+8. Keep qualitative cases out of numeric math.
+9. Add boundary-equality and wrong-metric same-number adversarial tests.
+
+### How we will verify it
+
+- Unit-conversion benchmark passes supported units.
+- Incompatible dimensions are rejected.
+- Accuracy vs resolution cannot pass because a number happens to match.
+
+### This checkpoint is complete only when
+
+- Every supported numeric outcome explains operands, conversions, comparison rule, and result.
+
+### Guardrail
+
+- An LLM may not overrule deterministic math.
+
+## ⬜ Checkpoint 54 — ComplianceAssessment model and status semantics
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Compliance states exist only after evidence and deterministic comparison are real.
+
+### What we will do
+
+1. Add `ComplianceAssessment` tied to requirement/evidence/comparison/assessment version/reviewer state.
+2. Use `COMPLIANT`, `NON_COMPLIANT`, `PARTIAL`, `NOT_DEMONSTRATED`, `CONFLICT`, `HUMAN_REVIEW_REQUIRED` unless the product contract is explicitly changed.
+3. Document precise criteria.
+4. Separate system suggestion from final human approval where needed.
+5. Version assessments when evidence/specifications change.
+6. Audit transitions/overrides.
+
+### How we will verify it
+
+- Status criteria are testable.
+- Missing evidence maps to NOT_DEMONSTRATED/HUMAN_REVIEW according to rules, not NON_COMPLIANT.
+
+### This checkpoint is complete only when
+
+- Two engineers can interpret every status consistently and trace it to inputs.
+
+### Guardrail
+
+- Do not replace evidence with a generic confidence score.
+
+## ⬜ Checkpoint 55 — Evidence-backed qualitative reasoning
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Language reasoning is limited to cited facts and cannot invent support.
+
+### What we will do
+
+1. Provide only the tender requirement plus cited/accepted facts needed for judgment.
+2. Use strict structured labels for support/mismatch/unsupported/conflict/insufficient evidence.
+3. Require every material explanation claim to come from supplied evidence.
+4. Keep deterministic numeric results authoritative.
+5. Record model/prompt/version/evidence IDs.
+6. Prefer HUMAN_REVIEW_REQUIRED/NOT_DEMONSTRATED when evidence is incomplete.
+7. Evaluate attribution/scope/time/entity mismatch and source contradiction.
+
+### How we will verify it
+
+- Model cannot cite a source not supplied.
+- Evaluation includes quantitative mismatch, attribution mismatch, source contradiction, unsupported claims, insufficient evidence.
+
+### This checkpoint is complete only when
+
+- Qualitative assessments are source-bounded and auditable.
+
+### Guardrail
+
+- Never ask an unconstrained model 'does this product comply?' and accept the answer.
+
+## ⬜ Checkpoint 56 — Conflict and contradiction detection
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Conflicting vendor claims are surfaced instead of silently choosing the convenient one.
+
+### What we will do
+
+1. Compare facts for same parameter/entity/condition across OEM sources.
+2. Detect tender-vendor concept mismatches and OEM-OEM contradictions.
+3. Preserve both/all conflicting sources.
+4. Set CONFLICT/HUMAN_REVIEW according to rules.
+5. Show conflicts side by side.
+6. Cover cases where a compliance sheet says YES but a datasheet reports a different technical metric/value.
+
+### How we will verify it
+
+- Fixtures include same-number/different-claim and different-number/same-parameter conflicts.
+- System never resolves conflict by discarding inconvenient evidence.
+
+### This checkpoint is complete only when
+
+- Reviewers can see exactly what conflicts and where each value came from.
+
+### Guardrail
+
+- Conflict is not automatically non-compliance.
+
+## ⬜ Checkpoint 57 — Missing evidence, clarification questions, and deviations
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Unresolved gaps become precise workflow items instead of false compliance/non-compliance.
+
+### What we will do
+
+1. Represent missing/insufficient evidence explicitly.
+2. Generate clarification only for a specific gap, ambiguity, or conflict.
+3. Reference exact requirement and missing/conflicting fact.
+4. Add `ClarificationRequest` lifecycle.
+5. Add `Deviation` records for known departures with evidence/notes.
+6. Allow human editing/approval of generated clarification text.
+7. Audit lifecycle changes.
+
+### How we will verify it
+
+- No-evidence case produces a precise clarification/not-demonstrated path.
+- Clarification is not a generic 'please confirm compliance' message.
+
+### This checkpoint is complete only when
+
+- Every unresolved requirement has a specific, reviewable next action.
+
+### Guardrail
+
+- Do not turn missing evidence into a negative technical claim.
+
+## ⬜ Checkpoint 58 — Human compliance review and audit
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** A reviewer controls the final assessment state and can see all evidence/comparison history.
+
+### What we will do
+
+1. Allow accept/reject system assessment.
+2. Allow status override with reason.
+3. Allow add/remove evidence.
+4. Allow comments and reopen.
+5. Show deterministic comparison details.
+6. Show conflict/clarification/deviation state.
+7. Version material assessment changes.
+8. Audit every approval/override.
+
+### How we will verify it
+
+- Assessment history survives refresh and evidence changes.
+- Override reason/actor/time are queryable.
+
+### This checkpoint is complete only when
+
+- Final status is an auditable human-reviewed decision, not an opaque model result.
+
+### Guardrail
+
+- Never erase the original system assessment/evidence when a human overrides it.
+
+## ⬜ Checkpoint 59 — Final compliance matrix and submission projection
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** The matrix expands from tender requirements into evidence-backed vendor-response rows while preserving original source columns.
+
+### What we will do
+
+1. Keep original tender columns.
+2. Add vendor response/specification fields.
+3. Add evidence citations.
+4. Add assessment status.
+5. Add deviation and clarification state.
+6. Add reviewer/approval metadata where appropriate.
+7. Use one canonical final projection for UI and exports.
+8. Keep unresolved requirements visible.
+
+### How we will verify it
+
+- Final matrix rows trace to tender source plus OEM evidence/assessment versions.
+- UI and export use the same projection.
+
+### This checkpoint is complete only when
+
+- The matrix is the authoritative submission view, not a separate manually edited spreadsheet.
+
+### Guardrail
+
+- Do not hide unresolved/not-demonstrated/conflict rows.
+
+## ⬜ Checkpoint 60 — Final XLSX, DOCX, and PDF outputs
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** Approved submission data can be exported into deliverables without losing evidence/version metadata.
+
+### What we will do
+
+1. Extend XLSX export using the final projection.
+2. Add DOCX export only after the final data model is stable.
+3. Add PDF generation from a controlled template/render path.
+4. Include evidence references and source document/version metadata.
+5. Preserve ordering and approved wording.
+6. Store every generated artifact immutably with metadata.
+7. Never mutate an older generated submission in place.
+
+### How we will verify it
+
+- Outputs open correctly and contain expected traceability fields.
+- Export tests compare key values/status/evidence/version metadata.
+
+### This checkpoint is complete only when
+
+- A reviewer can generate all required submission formats from approved product state.
+
+### Guardrail
+
+- Do not let document templates invent or recompute compliance facts.
+
+## ⬜ Checkpoint 61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
+
+**Status:** NOT STARTED unless a merged PR updates this file.
+
+**Plain-English outcome:** A signed-off submission becomes immutable, measurable, and safe to release.
+
+### What we will do
+
+1. Add approval/lock state for a submission version.
+2. After lock, later changes create a new submission version.
+3. Record approver/time/source assessment versions.
+4. Build Phase 2 benchmark data.
+5. Measure evidence retrieval precision/recall, unit conversion, numeric comparison, classification, citation correctness, conflict recall, hallucination, false non-compliance, and especially false compliance.
+6. Give false compliance the highest release severity.
+7. Run OEM security/tenant/provider/retention review.
+8. Run end-to-end acceptance: tender → requirements → OEM docs → evidence → comparisons/reasoning → conflicts/gaps → human approval → final exports.
+9. Review performance/cost/observability at production scale.
+10. Release only when quality/security thresholds and known high-severity issues are acceptable.
+
+### How we will verify it
+
+- Locked submissions cannot silently change.
+- Every final compliance statement traces to evidence or is explicitly unresolved.
+- False-compliance metric is reported separately and gates release.
+
+### This checkpoint is complete only when
+
+- The complete product workflow is evidence-backed, human-approved, versioned, exportable, evaluated, and production-operable.
+
+### Guardrail
+
+- Never trade false compliance for a better-looking completion rate.
+
+# Plan completion rule
+
+The plan is complete only when CP00 through CP61 are checked and crossed out, the relevant end-to-end acceptance tests pass, release gates meet conservative quality/security thresholds, and every final compliance statement is either evidence-backed or explicitly unresolved.
+
+If the product direction changes, update this file through a focused PR, explain why, and continue from the new first unchecked checkpoint.
