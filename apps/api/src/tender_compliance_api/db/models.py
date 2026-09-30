@@ -1,15 +1,15 @@
-"""ORM models for tenant identity and audit entities (CP08).
+"""ORM models for tenant identity, project, and audit entities (CP08–CP09).
 
 All models register onto the shared ``Base`` (db/base.py) so that Alembic
-autogenerate keeps migrations in sync.  These are the first application
-tables; the baseline migration (0001) created none.
+autogenerate keeps migrations in sync.
 
-Phase 1 scope — only the identity/audit foundation.  No vendor-compliance
-or OEM-evidence tables (those are Phase 2).
+Phase 1 scope — identity, project, audit.  No vendor-compliance or
+OEM-evidence tables (those are Phase 2).
 """
 
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import datetime
 from typing import Any
@@ -17,7 +17,9 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     DateTime,
+    Enum,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     func,
@@ -26,6 +28,23 @@ from sqlalchemy import UUID as SaUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from tender_compliance_api.db.base import Base
+
+
+class ProjectStatus(enum.StrEnum):
+    """Workflow statuses for a project lifecycle (CP09).
+
+    These describe **processing / review progress only** — never vendor/OEM
+    compliance.  Compliance assessment is a Phase 2 concern.
+    """
+
+    DRAFT = "draft"
+    TENDER_UPLOADED = "tender_uploaded"
+    DOCUMENTS_PROCESSING = "documents_processing"
+    REQUIREMENTS_EXTRACTED = "requirements_extracted"
+    REVIEW_IN_PROGRESS = "review_in_progress"
+    MATRIX_READY = "matrix_ready"
+    EXPORTED = "exported"
+    ARCHIVED = "archived"
 
 
 class Organization(Base):
@@ -128,9 +147,8 @@ class AuditLog(Base):
     """Cross-cutting, organization-scoped audit event.
 
     Stores identifiers and action metadata — never confidential document
-    bodies (per SECURITY.md).  ``project_id`` is intentionally omitted here
-    (no Project table yet); it will be added in CP09 alongside the Project
-    model.
+    bodies (per SECURITY.md).  ``project_id`` is nullable so org-level
+    events (e.g. membership changes) can still be recorded.
     """
 
     __tablename__ = "audit_logs"
@@ -142,6 +160,12 @@ class AuditLog(Base):
         SaUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -164,4 +188,55 @@ class AuditLog(Base):
     def __repr__(self) -> str:  # pragma: no cover - convenience
         return (
             f"AuditLog(org={self.organization_id!r}, action={self.action!r})"
+        )
+
+
+class Project(Base):
+    """A tender-response workspace owned by a single organization.
+
+    ``status`` tracks the processing / review workflow, **not** vendor
+    compliance.  Phase 2 compliance assessment does not exist yet.
+    """
+
+    __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_org_status", "organization_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    external_tender_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    status: Mapped[ProjectStatus] = mapped_column(
+        Enum(ProjectStatus, name="project_status"),
+        nullable=False,
+        default=ProjectStatus.DRAFT,
+        server_default=ProjectStatus.DRAFT.value,
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False,
+        server_default=func.now(), onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Project(id={self.id!r}, org={self.organization_id!r}, "
+            f"status={self.status!r})"
         )
