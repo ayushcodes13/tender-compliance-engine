@@ -27,6 +27,16 @@ The repository already has the product/architecture docs, monorepo skeleton, loc
 13. Conservative unresolved states are preferable to fabricated certainty.
 14. This file is planning, not implementation evidence. Only shipped/tested code counts.
 
+## Bynd reference reuse policy
+
+The project may use patterns learned from the Bynd repository audit in `docs/BYND-REUSE-AUDIT.md`, but that audit is a reference catalog—not a dependency manifest.
+
+- Reuse architecture ideas, invariants, tests, and interaction patterns only when they fit this product's requirements.
+- Do not copy private/unlicensed Bynd source code, proprietary assets, prompts, secrets, deployment identifiers, or internal customer data.
+- License-check any repository before copying code. Compatible licenses still require their attribution/notice obligations.
+- Do not introduce a private Bynd package/service as a runtime dependency without an explicit ownership/access/product decision.
+- Where Tender Compliance has stricter trust rules—especially OCR correction and compliance—the stricter rule wins.
+- Prefer fresh implementation behind this repository's adapters over coupling the product to historical experiments.
 ## Global rules that apply to every checkpoint
 
 - Never fabricate a tender requirement, OEM specification, citation, page, clause, bounding box, evidence item, test result, or compliance status.
@@ -378,6 +388,12 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 - Application services can persist data through a reusable session boundary.
 
+### Bynd reuse notes
+
+- **Reference:** `Bynd-ai/company-reports-backend/app/db/session.py` demonstrates a clean async SQLAlchemy/SQLModel session boundary. Reuse the architecture idea, not the file.
+- Prefer an async engine/session if our FastAPI request path benefits from it; keep the choice explicit rather than copying a framework default.
+- Do **not** copy its `metadata.create_all()` startup behavior into production. Our schema source of truth remains Alembic.
+
 ### Guardrail
 
 - Do not create every future table in this checkpoint.
@@ -405,6 +421,13 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 ### This checkpoint is complete only when
 
 - No developer needs to manually create tables.
+
+### Bynd reuse notes
+
+- **Reference:** `Bynd-ai/bynd-devops-system/docs/migrations-and-seeding.md`.
+- Treat migrations as an explicit deployment step: **migrate before the new image is deployed**.
+- Never run production migrations automatically during application startup; multiple replicas can race and a failed migration can break every boot.
+- If production Postgres is private/VNet-only, run migrations as a one-off job inside that environment instead of weakening database network controls for CI.
 
 ### Guardrail
 
@@ -435,6 +458,13 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 ### This checkpoint is complete only when
 
 - There is one reusable authorization context and one audit path for later services.
+
+### Bynd reuse notes
+
+- **References:** `Bynd-ai/company-reports-backend` organization/membership/auth services and `Bynd-ai/universal-auth-service`.
+- Reuse the tenant pattern: explicit membership rows, uniqueness on `(organization_id, user_id)`, constrained roles, and provider-identity consistency checks.
+- At the web/auth boundary add request IDs, production-vs-development origin separation, redirect allowlisting, route-appropriate rate limiting, and security headers/CSP.
+- Keep our own provider-neutral auth boundary; do not couple this repo to Bynd's deployed auth service or private configuration.
 
 ### Guardrail
 
@@ -727,6 +757,14 @@ Accept real tender files safely and create the processing handoff without doing 
 
 - Background processing can be tested independently of FastAPI.
 
+### Bynd reuse notes
+
+- **References:** `Bynd-ai/final-final-chunking-pipeline`, `metric-search-backend`, and `finance-data-ingestion-service`.
+- Model one document-version processing request as one durable job identity. Use bounded worker concurrency/prefetch so one worker does not reserve many expensive documents at once.
+- Carry the same `job_id` / correlation ID through API acceptance, queue wait, worker stages, provider calls, persistence, and final state.
+- Give retries an explicit budget and classify retryable vs permanent provider failures; never retry forever.
+- Record per-stage timings so parsing/OCR/model/persistence bottlenecks can be diagnosed independently.
+
 ### Guardrail
 
 - Do not introduce agents or complex distributed orchestration.
@@ -758,6 +796,13 @@ Turn source files into trustworthy page/segment representations while keeping un
 ### This checkpoint is complete only when
 
 - Every parsed fragment retains document-version/page identity.
+
+### Bynd reuse notes
+
+- **Reference:** `Bynd-ai/metric-search/backend/app/services/fin_extract/pdf_gate.py`.
+- Native text existence is **not** enough to trust a PDF text layer. Inspect structural signals for full-page rasters, invisible OCR text, broken character mapping, concealed/occluded text, duplicated text, and unreadable geometry.
+- Use typed page findings such as BLOCK/WARN/INFO (or equivalent reason-coded states). Route proven-untrustworthy native text to OCR while preserving non-blocking warnings.
+- Adopt the corpus-driven rule: block when there is evidence extracted text **is wrong**, not merely because a PDF declares something unusual.
 
 ### Guardrail
 
@@ -815,6 +860,13 @@ Turn source files into trustworthy page/segment representations while keeping un
 
 - Each page has an inspectable native-text or OCR path and uncertainty metadata.
 
+### Bynd reuse notes
+
+- **References:** `metric-search` PDF text-trust gate and `validation-service` OCR handling.
+- Detect hidden OCR layers as well as image-only pages. Selectable text can itself be OCR and therefore non-authoritative.
+- When source quality is too damaged to support a strong negative conclusion, emit an unresolved/review state rather than pretending absence was proven.
+- Record why OCR was selected and whether OCR output replaced an untrusted native layer.
+
 ### Guardrail
 
 - Never silently correct meaning-bearing OCR.
@@ -842,6 +894,12 @@ Turn source files into trustworthy page/segment representations while keeping un
 ### This checkpoint is complete only when
 
 - DOCX can use the downstream requirement pipeline with trustworthy source references.
+
+### Bynd reuse notes
+
+- **Reference:** `Bynd-ai/table_grid` uses Docling for high-fidelity PDF/DOCX structural conversion.
+- Benchmark Docling against our chosen DOCX/PDF path on tender fixtures before adopting it.
+- Compare heading/list/table preservation, source-location fidelity, runtime, memory, and failure behavior. Our benchmark decides the adapter.
 
 ### Guardrail
 
@@ -872,6 +930,13 @@ Turn source files into trustworthy page/segment representations while keeping un
 
 - Downstream code can load exact source pages/segments and structure from durable storage.
 
+### Bynd reuse notes
+
+- **References:** `table_grid`, `ocr-table-fixes-discovery`, and Bynd table/OCR experiments.
+- When tables matter, preserve optional cell-level structure: row/column position, original cell text, confidence, and bounding box.
+- Keep `original_text` separately from any cleaned representation so later normalization can always be audited.
+- Structured table metadata supplements raw source text; it never replaces it.
+
 ### Guardrail
 
 - Do not perform semantic rewriting in cleanup.
@@ -900,6 +965,14 @@ Turn source files into trustworthy page/segment representations while keeping un
 ### This checkpoint is complete only when
 
 - Operators can explain what retry will do and why it is safe.
+
+### Bynd reuse notes
+
+- **Reference:** `Bynd-ai/validation-engine` source cache.
+- Cache authoritative extraction by **document content hash + physical page/segment + parser/extractor version**, never URL or filename alone.
+- Version the cache schema, verify cached coverage for requested pages, and invalidate on content/version mismatch.
+- Cache source material/derived extraction for speed; never treat cached semantic verdicts/compliance decisions as source truth.
+- Persist long-running stage artifacts/checkpoints incrementally where that makes retry/debugging safer.
 
 ### Guardrail
 
@@ -962,6 +1035,13 @@ Extract explicit obligations only, validate every model response, and persist so
 
 - Changing providers does not require rewriting document services.
 
+### Bynd reuse notes
+
+- **References:** `engineering-docs/llm-cost-logging-sop.md` and `validation-service` provider telemetry.
+- Every LLM call must log its processing `run_id`, call site, model, provider-reported input/output/cache tokens when available, elapsed time, and best-effort cost.
+- Unknown model pricing is null/unknown, never zero. Do not fabricate token counts.
+- Emit one run summary even when the run fails.
+
 ### Guardrail
 
 - Document text can never invoke tools or override application instructions.
@@ -989,6 +1069,13 @@ Extract explicit obligations only, validate every model response, and persist so
 ### This checkpoint is complete only when
 
 - A requirement can span source fragments without being detached from each location.
+
+### Bynd reuse notes
+
+- **References:** `validation-engine/pdf/page_authority.py` and `pdf/windows.py`.
+- Pass trusted source authority (document version/page/window) into chunking instead of letting deep matching/model code choose source pages.
+- For cross-page windows, use conservative deterministic continuation signals and retain every contributing page.
+- URL fragments/search strings are navigation hints, never provenance authority.
 
 ### Guardrail
 
@@ -1080,6 +1167,13 @@ Extract explicit obligations only, validate every model response, and persist so
 
 - Every normal persisted requirement has trustworthy provenance and stable identity.
 
+### Bynd reuse notes
+
+- **References:** `validation-engine`, `industry-report-agentic`, and Bynd citation viewers.
+- Source authority comes from immutable document/page records, never a citation URL fragment or an LLM-provided page number.
+- Search/fuzzy text may help locate a span **inside an already-authorized page**, but may not silently broaden source scope.
+- Preserve EXACT vs APPROXIMATE as a first-class property; never upgrade precision just because a plausible fuzzy match exists.
+
 ### Guardrail
 
 - Never fabricate missing coordinates/page/clause metadata.
@@ -1106,6 +1200,13 @@ Extract explicit obligations only, validate every model response, and persist so
 ### This checkpoint is complete only when
 
 - Developers can debug why a document produced its requirement set.
+
+### Bynd reuse notes
+
+- **References:** `validation-service` worker runner and telemetry.
+- Compute a canonical input fingerprint over everything a stage actually reads. If source/content/config changes, rerun rather than serve a stale result.
+- Prefer over-processing to returning a result for the wrong input.
+- Enforce a one-target-one-result invariant: every expected item gets a typed result or explicit missing/error state; duplicate/foreign results fail closed.
 
 ### Guardrail
 
@@ -1163,6 +1264,12 @@ Turn safe pieces of requirements into typed constraints without changing their m
 ### This checkpoint is complete only when
 
 - Accepted numeric normalization is deterministic and reproducible.
+
+### Bynd reuse notes
+
+- **Reference:** `ocr-table-fixes-discovery`.
+- High-confidence neighboring cells may provide formatting context for ambiguous table numbers, but only as supporting context.
+- Any ambiguous decimal/thousands/glyph interpretation must retain original text and be flagged. Tender Compliance is intentionally stricter than that fixer: diagnostic suggestions are allowed; silent correction is not.
 
 ### Guardrail
 
@@ -1250,6 +1357,14 @@ Replace demo state with auditable review actions against the actual tender sourc
 ### This checkpoint is complete only when
 
 - A reviewer can visually verify a requirement against the original tender.
+
+### Bynd reuse notes
+
+- **References:** `industry-report-agentic`, `table_grid`, `one-pager-backend`, and `chat` citation viewers.
+- Standardize viewer inputs around immutable document version + page + one-or-more source spans/quotes/bboxes.
+- Re-center the selected highlight after render, zoom, resize, or late-loading content so the active evidence remains visible.
+- If exact highlighting fails but the page is trusted, navigate to the page and show an explicit approximate/no-highlight state rather than inventing a box.
+- `chat` describes itself as AGPL-3.0-only; reuse the interaction idea only, not its implementation code.
 
 ### Guardrail
 
@@ -1439,6 +1554,13 @@ Produce the clean, auditable tender requirement deliverable.
 
 - A reviewed project can produce/download a clean XLSX without manual spreadsheet assembly.
 
+### Bynd reuse notes
+
+- **References:** `ExcelTableCreator` and `metric-search` workbook review/export patterns.
+- Keep export formatting deterministic and config-driven where practical.
+- Consider Excel notes/highlights for unresolved review states or reviewer/source context only when they improve the deliverable and come from the canonical matrix projection.
+- Presentation must never mutate values, infer compliance, or become a second business-logic implementation.
+
 ### Guardrail
 
 - Do not add formulas/conversions that modify tender meaning.
@@ -1470,6 +1592,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 ### This checkpoint is complete only when
 
 - Parser/model changes can be compared on the same ground truth.
+
+### Bynd reuse notes
+
+- **References:** `validation-engine/evals`, `validation-service/evals`, and `Evals_dataset`.
+- Layer the benchmark into real/golden positives, real/golden negatives, mutation-generated negatives, historical regressions, broad stress/adversarial cases, and small public-API/invariant contracts.
+- Generate meaning-bearing mutations for numbers, units, operators, years, entities/scope, OCR characters, and source/page authority rather than hand-authoring every negative.
+- Every confirmed production failure should become a regression case.
 
 ### Guardrail
 
@@ -1503,6 +1632,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 - High-risk false extraction/citation regressions block release.
 
+### Bynd reuse notes
+
+- **Reference:** `validation-engine/evals`.
+- Add before-vs-after eval comparison and a compact correctness report/dashboard with case category, expected vs actual, reason code, and regression delta.
+- Optimize for coverage of failure classes, not a vanity test count.
+- Keep hard invariants as separate gates so a severe false-positive class cannot be averaged away by a good aggregate score.
+
 ### Guardrail
 
 - Do not hide false positives inside one average score.
@@ -1533,6 +1669,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 ### This checkpoint is complete only when
 
 - The security model has tested controls, not only documentation.
+
+### Bynd reuse notes
+
+- **Reference:** `universal-auth-service`.
+- Add explicit security headers/CSP, trusted-origin rules, open-redirect protection, request IDs, and rate limiting where the deployed surface needs them.
+- Development localhost allowances must never leak into production origin/redirect configuration.
+- Security middleware must not log bearer tokens, secrets, or document content.
 
 ### Guardrail
 
@@ -1569,6 +1712,14 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 - Operators can explain failure, performance, cost, retention, deletion, and recovery behavior.
 
+### Bynd reuse notes
+
+- **References:** `validation-service/telemetry.py`, `engineering-docs/llm-cost-logging-sop.md`, and `finance-data-ingestion-service`.
+- Use privacy-safe telemetry allowlists: IDs, stage, timing, counts, model/provider metadata, retry category, token usage, and status are allowed; prompts, source text, URLs, provider payloads, and raw exception messages are not normal log fields.
+- Classify provider failures into stable categories such as timeout, rate-limit/quota, authentication, billing, malformed response, and unavailable provider; retry only known transient classes.
+- Detect provider/schema drift explicitly rather than silently dropping renamed/new fields.
+- Every LLM run gets per-call usage plus one run summary so cost can be answered from logs without rerunning work.
+
 ### Guardrail
 
 - Do not promise provider-side deletion/retention behavior that is not actually configured.
@@ -1598,6 +1749,15 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 ### This checkpoint is complete only when
 
 - Deployment no longer depends on manual database edits or the original developer's laptop.
+
+### Bynd reuse notes
+
+- **References:** `bynd-devops-system` and deployed Bynd job services.
+- Prefer GitHub OIDC/workload identity over long-lived cloud credentials when supported.
+- Deploy immutable environment + git-SHA image tags; `latest` is only a convenience alias.
+- Separate staging/production config and secrets.
+- Run migrations before new API deployment. Use an environment-local migration job for private databases.
+- Long-running APIs/web map naturally to Container Apps; one-document queue workers may later map to Container Apps Jobs/KEDA when measured load justifies it. Keep the MVP queue adapter provider-neutral.
 
 ### Guardrail
 
@@ -1699,6 +1859,12 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 ### This checkpoint is complete only when
 
 - The system can propose source-linked evidence candidates for a requirement.
+
+### Bynd reuse notes
+
+- **References:** `validation-service` and `validation-engine`.
+- Retrieval/evidence output needs typed outcomes and stable reason codes, not a boolean. Distinguish evidence found, source unavailable, out of scope, malformed input, retrieval failure, and genuinely absent/contradictory evidence.
+- Every requested requirement gets a result or explicit missing/error record; silence is never a verdict.
 
 ### Guardrail
 
@@ -1816,6 +1982,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Two engineers can interpret every status consistently and trace it to inputs.
 
+### Bynd reuse notes
+
+- **Reference:** `validation-service/docs/OUTPUT_CONTRACT.md`.
+- Keep the six product statuses, but pair each system assessment with a stable machine-readable `reason_code` plus explanatory text.
+- A negative status is allowed only when evidence supports a negative conclusion. If the engine cannot honestly evaluate, use `HUMAN_REVIEW_REQUIRED` / `NOT_DEMONSTRATED` according to the product rule—not `NON_COMPLIANT`.
+- Engine/provider failures should degrade to typed unresolved assessments rather than fabricated verdicts wherever the workflow can safely continue.
+
 ### Guardrail
 
 - Do not replace evidence with a generic confidence score.
@@ -1845,6 +2018,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Qualitative assessments are source-bounded and auditable.
 
+### Bynd reuse notes
+
+- **Reference:** `validation-service` visual/judge contracts.
+- A model asserting a mismatch/unsupported claim must return source-grounded observed evidence or a structured exact mismatch; otherwise downgrade to unresolved review.
+- Preserve explicit `cannot_tell`/abstention as a first-class safe outcome.
+- Deterministic numeric/comparison results remain authoritative and cannot be overridden by model confidence.
+
 ### Guardrail
 
 - Never ask an unconstrained model 'does this product comply?' and accept the answer.
@@ -1872,6 +2052,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 ### This checkpoint is complete only when
 
 - Reviewers can see exactly what conflicts and where each value came from.
+
+### Bynd reuse notes
+
+- **Reference:** `industry-report-agentic` multi-lane verdict merging.
+- Merge multiple evidence/comparison/reasoning lanes by stable requirement ID.
+- If authoritative lanes disagree, surface CONFLICT; never silently pick by priority, set union, or arrival order.
+- Do not take irreversible actions on contradictory signals.
 
 ### Guardrail
 
@@ -1901,6 +2088,12 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 ### This checkpoint is complete only when
 
 - Every unresolved requirement has a specific, reviewable next action.
+
+### Bynd reuse notes
+
+- **Reference:** `validation-service` typed abstention model.
+- 'Could not evaluate' describes the checker, not the product.
+- Pass stable reason codes such as missing source, ambiguous value/unit/entity, conflicting sources, and unreadable evidence into clarification generation so questions are specific.
 
 ### Guardrail
 
