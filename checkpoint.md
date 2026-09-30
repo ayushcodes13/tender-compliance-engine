@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP10 — Project API**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP11 — Real project dashboard and project progress**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -115,7 +115,7 @@ Phase 2 evaluation + production release
 - [x] ~~CP07 — Alembic migrations and schema discipline~~
 - [x] ~~CP08 — Organization, identity, authorization, and audit foundation~~
 - [x] ~~CP09 — Project model, lifecycle service, and migrations~~
-- [ ] CP10 — Project API
+- [x] ~~CP10 — Project API~~
 - [ ] CP11 — Real project dashboard and project progress
 
 ### Stage C — Tender upload, immutable storage, versions, and background jobs
@@ -550,11 +550,11 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 **Implementation note (PR #13):** Added `Project` model and `ProjectStatus` enum (`db/models.py`; `str`/enum.StrEnum stored via `sa.Enum`). Workflow statuses (`draft`, `tender_uploaded`, `documents_processing`, `requirements_extracted`, `review_in_progress`, `matrix_ready`, `exported`, `archived`) describe processing/review progress only — not vendor compliance. Added `project_id` (nullable FK) to `AuditLog`. Created `project/` package with `ProjectService` (create/get/list/rename/archive/reopen), tenant-scoped via `AuthContext.organization_id`, with lifecycle guards (`ProjectArchivedError`, `StateTransitionError`). `index=True` on `Project.organization_id` plus composite `ix_projects_org_status` index. Migration `0003_project_model` is hand-written (autogenerate produced false-positive UUID type changes from SQLite's NUMERIC affinity). `audit_logs.project_id` added via `batch_alter_table` (SQLite limitation). `session_cm` fixture added to conftest.py. Tests use file-based SQLite with `alembic upgrade head`.
 
-## ⬜ Checkpoint 10 — Project API
+## ✅ ~~Checkpoint 10 — Project API~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #14.
 
-**Plain-English outcome:** The frontend can create and manage real projects.
+**Plain-English outcome:** A client can perform the complete project lifecycle through supported API behavior.
 
 ### What we will do
 
@@ -577,6 +577,8 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 ### Guardrail
 
 - Do not expose an endpoint before its backing service behavior exists.
+
+**Implementation note (PR #14):** Added `ProjectCreate`, `ProjectRename`, and `ProjectResponse` Pydantic schemas (with `ConfigDict(from_attributes=True)`) in `routes/projects.py`. Routes: `POST /projects` (201), `GET /projects`, `GET /projects/{id}`, `PATCH /projects/{id}` (rename), `POST /projects/{id}/archive`, `POST /projects/{id}/reopen`. All routes use `Depends(get_auth_context)` (deny-by-default 401) and `Depends(get_session)` for the session, delegating to `ProjectService`. Domain errors (`ProjectNotFoundError` → 404, `ProjectArchivedError`/`StateTransitionError` → 400) are mapped via an inline `_to_http` helper and `except _ProjectErrors` blocks. Mutating routes call `session.refresh(project)` before `model_validate` to avoid SQLAlchemy async-lazy-load errors on server-defaulted columns (e.g. `updated_at`), then `session.commit()`. Router registered in `main.py`. API tests (18 tests) cover create/list/get/rename/archive/reopen, auth-required, validation (422), not-found (404), cross-tenant (404), state-transition guards (400), and audit events.
 
 ## ⬜ Checkpoint 11 — Real project dashboard and project progress
 
