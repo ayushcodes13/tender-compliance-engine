@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import close_engine, init_engine
 from tender_compliance_api.routes.health import router as health_router
+from tender_compliance_api.routes.projects import router as projects_router
 
 
 @asynccontextmanager
@@ -27,3 +28,4 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(projects_router)
