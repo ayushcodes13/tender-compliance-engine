@@ -111,7 +111,7 @@ Phase 2 evaluation + production release
 
 ### Stage B — Real persistence, tenancy, audit, and projects
 
-- [ ] CP06 — Database connection and SQLAlchemy foundation
+- [x] ~~CP06 — Database connection and SQLAlchemy foundation~~
 - [ ] CP07 — Alembic migrations and schema discipline
 - [ ] CP08 — Organization, identity, authorization, and audit foundation
 - [ ] CP09 — Project model, lifecycle service, and migrations
@@ -364,9 +364,9 @@ What already exists and the rules every later checkpoint must preserve.
 
 Turn the static skeleton into a durable multi-tenant application where real projects survive refresh/restart.
 
-## ⬜ Checkpoint 06 — Database connection and SQLAlchemy foundation
+## ✅ ~~Checkpoint 06 — Database connection and SQLAlchemy foundation~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — implemented and tested.
 
 **Plain-English outcome:** FastAPI can use PostgreSQL through a clean persistence layer.
 
@@ -397,6 +397,34 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 ### Guardrail
 
 - Do not create every future table in this checkpoint.
+
+### Implementation / PR note
+
+- **Branch:** `cp06/database-sqlalchemy-foundation`
+- **Files:** `pyproject.toml`, `src/tender_compliance_api/db/__init__.py`,
+  `src/tender_compliance_api/db/session.py`, `src/tender_compliance_api/config.py`,
+  `src/tender_compliance_api/main.py`, `tests/conftest.py`, `tests/test_db.py`,
+  `.env.example`.
+- **Async engine decision:** Declared `sqlalchemy[asyncio]` (rather than
+  `sqlalchemy`) plus the `asyncpg` driver. The `[asyncio]` extra pulls in
+  `greenlet` — required by SQLAlchemy's asyncio extension at runtime — and
+  `DATABASE_URL` in `.env.example` uses the `postgresql+asyncpg://` scheme to
+  match. This is an explicit async-first choice, not a framework default.
+- **Lifecycle:** `main.py` gained an `asynccontextmanager` lifespan that calls
+  `init_engine()` on startup (only when `DATABASE_URL` is set) and `close_engine()`
+  on shutdown. No route constructs its own engine/session.
+- **Test strategy:** `conftest.py` installs a session-scoped autouse fixture that
+  initializes an in-memory `sqlite+aiosqlite` engine (via `StaticPool`) so the test
+  suite is self-contained and does not require Postgres.
+- **Verified behaviors:**
+  - `init_engine("")` raises `ValueError` (clear configuration failure).
+  - `get_session()` yields a real `AsyncSession` through which a query can run.
+  - `get_session()` raises `RuntimeError` when the engine is uninitialized.
+  - On context exit, the transaction is cleanly closed (verified via
+    `in_transaction()`, since SQLAlchemy 2.0+ `Session.is_active` only tracks
+    partial-rollback state, not open/closed state).
+  - `ruff check`, `ruff format --check`, `mypy --strict`, and `pytest` all pass.
+
 
 ## ⬜ Checkpoint 07 — Alembic migrations and schema discipline
 
