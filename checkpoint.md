@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP08 — Organization, identity, authorization, and audit foundation**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP09 — Project model, lifecycle service, and migrations**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -113,7 +113,7 @@ Phase 2 evaluation + production release
 
 - [x] ~~CP06 — Database connection and SQLAlchemy foundation~~
 - [x] ~~CP07 — Alembic migrations and schema discipline~~
-- [ ] CP08 — Organization, identity, authorization, and audit foundation
+- [x] ~~CP08 — Organization, identity, authorization, and audit foundation~~
 - [ ] CP09 — Project model, lifecycle service, and migrations
 - [ ] CP10 — Project API
 - [ ] CP11 — Real project dashboard and project progress
@@ -483,9 +483,9 @@ Turn the static skeleton into a durable multi-tenant application where real proj
   single deterministic head; pytest smoke tests pass (upgrade, version check, head
   count, and upgrade→downgrade→upgrade roundtrip).
 
-## ⬜ Checkpoint 08 — Organization, identity, authorization, and audit foundation
+## ✅ ~~Checkpoint 08 — Organization, identity, authorization, and audit foundation~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #12.
 
 **Plain-English outcome:** Every tenant-owned action knows who the actor is and which organization owns the data.
 
@@ -520,7 +520,7 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 - Never trust an organization ID supplied by the browser without verifying membership.
 
-## ⬜ Checkpoint 09 — Project model, lifecycle service, and migrations
+**Implementation note (PR #12):** Added `Organization`, `User`, `Membership`, and `AuditLog` models (`db/models.py`) via Alembic migration `0002_organization_identity_audit`. Auth boundary lives in `auth/` (`AuthContext`, `resolve_auth_context` dev-mode resolver, `get_auth_context` FastAPI dependency — deny-by-default 401). Audit path in `audit/` (`AuditService` + `write_audit_event`). Dev identity mode reads `X-Dev-User-Id` / `X-Dev-Organization-Id` headers, auto-creates User/Organization but verifies Membership (no auto-membership). Tests use file-based SQLite with `alembic upgrade head` so the real migration schema is exercised. `project_id` on AuditLog is deferred to CP09 (no Project table yet).## ⬜ Checkpoint 09 — Project model, lifecycle service, and migrations
 
 **Status:** NOT STARTED unless a merged PR updates this file.
 

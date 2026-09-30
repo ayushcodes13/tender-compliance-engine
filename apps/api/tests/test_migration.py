@@ -1,12 +1,12 @@
-"""Migration smoke tests (CP07).
+"""Migration smoke tests (CP07, extended by CP08).
 
 Verifies that Alembic migrations reproduce the schema from scratch against a
 fresh database.  A file-based SQLite database is used so that no external
 Postgres dependency is required in CI.
 
 The tests exercise the full env.py path: config loading, URL resolution,
-async engine creation, and the baseline migration (intentionally empty —
-no application tables, only Alembic's version-tracking table).
+async engine creation, the baseline migration (intentionally empty —
+no application tables), and subsequent schema migrations.
 """
 
 from pathlib import Path
@@ -22,6 +22,10 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
+_HEAD_REV = "0002_organization_identity_audit"
+
+# Tables introduced by the CP08 migration.
+_APP_TABLES = {"organizations", "users", "memberships", "audit_logs"}
 
 
 def _make_config(db_url: str) -> Config:
@@ -44,8 +48,20 @@ def test_upgrade_head_creates_version_table(tmp_path):
     engine.dispose()
 
 
-def test_upgrade_head_records_baseline_revision(tmp_path):
-    """After ``upgrade head`` the baseline revision is the recorded version."""
+def test_upgrade_head_creates_app_tables(tmp_path):
+    """``alembic upgrade head`` creates all application tables on a fresh DB."""
+    db_path = tmp_path / "migrate.db"
+    config = _make_config(f"sqlite+aiosqlite:///{db_path}")
+    command.upgrade(config, "head")
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    tables = set(inspect(engine).get_table_names())
+    assert _APP_TABLES.issubset(tables)
+    engine.dispose()
+
+
+def test_upgrade_head_records_head_revision(tmp_path):
+    """After ``upgrade head`` the head revision is the recorded version."""
     db_path = tmp_path / "migrate.db"
     config = _make_config(f"sqlite+aiosqlite:///{db_path}")
     command.upgrade(config, "head")
@@ -53,7 +69,7 @@ def test_upgrade_head_records_baseline_revision(tmp_path):
     engine = create_engine(f"sqlite:///{db_path}")
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == _BASELINE_REV
+    assert version == _HEAD_REV
     engine.dispose()
 
 
@@ -62,7 +78,7 @@ def test_migration_history_has_single_head():
     config = Config(str(ALEMBIC_INI))
     config.set_main_option("script_location", str(ALEMBIC_DIR))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == [_BASELINE_REV]
+    assert script.get_heads() == [_HEAD_REV]
 
 
 def test_upgrade_downgrade_upgrade_roundtrip(tmp_path):
@@ -80,5 +96,5 @@ def test_upgrade_downgrade_upgrade_roundtrip(tmp_path):
     engine = create_engine(f"sqlite:///{db_path}")
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == _BASELINE_REV
+    assert version == _HEAD_REV
     engine.dispose()

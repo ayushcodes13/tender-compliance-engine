@@ -10,20 +10,17 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import pytest
+
+# Reuse the session-scoped test database URL from conftest so the engine
+# restored in the uninitialized test matches the one the fixture initialised.
+from conftest import TEST_DATABASE_URL
 from sqlalchemy import text
-from sqlalchemy.pool import StaticPool
 
 from tender_compliance_api.db.session import (
     close_engine,
     get_session,
     init_engine,
 )
-
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-TEST_ENGINE_KWARGS = {
-    "connect_args": {"check_same_thread": False},
-    "poolclass": StaticPool,
-}
 
 
 def test_init_engine_rejects_empty_url():
@@ -71,7 +68,7 @@ def test_get_session_raises_when_uninitialized():
             asyncio.run(_raise_if_session_unavailable())
     finally:
         # Restore the engine for any subsequent tests.
-        init_engine(TEST_DATABASE_URL, **TEST_ENGINE_KWARGS)
+        init_engine(TEST_DATABASE_URL)
 
 
 async def _raise_if_session_unavailable():

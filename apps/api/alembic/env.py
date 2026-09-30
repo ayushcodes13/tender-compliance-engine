@@ -35,6 +35,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from tender_compliance_api.config import get_settings  # noqa: E402
+from tender_compliance_api.db import models  # noqa: E402,F401
 from tender_compliance_api.db.base import Base  # noqa: E402
 
 # this is the Alembic Config object, which provides
@@ -46,7 +47,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Application model metadata.  Alembic uses this for autogenerate.
-# Currently empty (no models registered yet) — first tables arrive in CP08+.
+# All models register onto the Base in db/models.py (CP08+).
 target_metadata = Base.metadata
 
 

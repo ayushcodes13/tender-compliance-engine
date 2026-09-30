@@ -1,30 +1,42 @@
 """Shared pytest fixtures for the API test suite."""
 
 import asyncio
+from pathlib import Path
 
 import pytest
-from sqlalchemy.pool import StaticPool
+from alembic.config import Config
 
+from alembic import command
 from tender_compliance_api.db.session import close_engine, init_engine
 
-# SQLite in-memory database for fast, self-contained session tests.
-# StaticPool + check_same_thread=False ensures a single shared connection
-# so all sessions see the same in-memory database.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-TEST_ENGINE_KWARGS = {
-    "connect_args": {"check_same_thread": False},
-    "poolclass": StaticPool,
-}
+API_ROOT = Path(__file__).resolve().parent.parent
+ALEMBIC_INI = API_ROOT / "alembic.ini"
+ALEMBIC_DIR = API_ROOT / "alembic"
+
+# File-based SQLite so that the Alembic migration engine and the application's
+# session engine share the same on-disk database.  In-memory SQLite gives each
+# connection its own database, making migrations invisible to the app engine.
+TEST_DB_PATH = API_ROOT / "test.db"
+TEST_DATABASE_URL = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def test_database():
-    """Initialize the test database engine for the entire test session.
+    """Initialize the test database engine and apply migrations for the
+    entire test session.
 
-    This guarantees a clean engine regardless of whether any prior test
-    or app startup initialized one (e.g. via TestClient lifespan).
+    Migrations are applied via Alembic (``alembic upgrade head``) so tests
+    run against the real migration-produced schema, not
+    ``metadata.create_all()`` (per AGENTS.md / BYND-REUSE-AUDIT.md).
+    The database file is removed at session end.
     """
     asyncio.run(close_engine())
-    init_engine(TEST_DATABASE_URL, **TEST_ENGINE_KWARGS)
+    TEST_DB_PATH.unlink(missing_ok=True)
+    init_engine(TEST_DATABASE_URL)
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+    config.set_main_option("script_location", str(ALEMBIC_DIR))
+    command.upgrade(config, "head")
     yield
     asyncio.run(close_engine())
+    TEST_DB_PATH.unlink(missing_ok=True)
