@@ -21,7 +21,11 @@ from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import init_engine
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.ocr.tesseract import TesseractOcrAdapter
-from tender_compliance_api.parser import PypdfParserAdapter
+from tender_compliance_api.parser import (
+    CompositeParserAdapter,
+    DocxParserAdapter,
+    PypdfParserAdapter,
+)
 from tender_compliance_api.parser.adapter import ParserAdapter
 from tender_compliance_api.queue import (
     DEFAULT_QUEUE,
@@ -158,8 +162,10 @@ def create_worker(
 
     Uses :class:`RedisQueueAdapter` when ``REDIS_URL`` is configured;
     otherwise falls back to :class:`FakeQueueAdapter`.  Defaults:
-    :class:`PypdfParserAdapter` (CP19), :class:`PymupdfRendererAdapter`
-    (CP20), and :class:`TesseractOcrAdapter` (CP21).
+    :class:`CompositeParserAdapter` dispatching to
+    :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
+    (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
+    :class:`TesseractOcrAdapter` (CP21).
     """
     settings = get_settings()
     if queue is None:
@@ -173,7 +179,13 @@ def create_worker(
     session_factory = _get_session_factory()
 
     if parser is None:
-        parser = PypdfParserAdapter()
+        parser = CompositeParserAdapter(
+            {
+                "application/pdf": PypdfParserAdapter(),
+                "application/vnd.openxmlformats-officedocument."
+                "wordprocessingml.document": DocxParserAdapter(),
+            }
+        )
 
     if renderer is None:
         renderer = PymupdfRendererAdapter()

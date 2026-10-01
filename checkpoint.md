@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP20 — Rendered page assets and real visual source**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP23 — DocumentPage persistence and structural cleanup**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -1044,35 +1044,89 @@ Page **detection** was already in place from CP19 (`pypdf` sets `ocr_needed=True
 
 - Never silently correct meaning-bearing OCR. OCR uncertainty (confidence, no-text pages) is recorded as a review state, not silently treated as "recognized".
 
-## ⬜ Checkpoint 22 — DOCX adapter and format-appropriate provenance
+## ✅ Checkpoint 22 — DOCX adapter and format-appropriate provenance
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #27
 
 **Plain-English outcome:** DOCX can enter the same pipeline without fake PDF metadata.
 
-### What we will do
+### What we did
 
-1. Validate DOCX separately.
-2. Parse paragraphs, headings, lists, and tables while preserving order.
-3. Define source locations using paragraph/table/section coordinates.
-4. Create a preview/derived representation if needed.
-5. Keep exact/approximate location honesty.
-6. Feed downstream extraction through a generic document-page/segment abstraction.
+1. `python-docx` adapter added under the existing `parser/` port, returning the
+   same `ParseResult`/`PageResult` contract so DOCX documents flow through
+   PARSE → OCR → EXTRACT unchanged.
+2. DOCX is walked in body order (`w:p` and `w:tbl` children of
+   `<w:body>`), so headings, paragraphs, lists, and table cells are
+   preserved in source order as a single text segment per document.
+3. Source locations: because `.docx` carries **no inherent page count**
+   (page numbers are a renderer-side artifact), the document is surfaced as
+   one `PageResult` (`page_number=1`, `page_count=1`) — *no fabricated
+   page numbers*. A per-page warning makes the limitation explicit. This is
+   the honest, format-appropriate provenance the guardrail requires.
+4. Native `.docx` text is authoritative, so `ocr_needed=False` on the page
+   (DOCX is never OCR'd in Phase 1; no rendered image is requested).
+5. A new `CompositeParserAdapter` dispatches by MIME type, so a single
+   `JobProcessor` accepts both PDF and DOCX. The processor was changed to
+   record `version.parser_name`/`parser_version` from the **sub-adapter**
+   (`parse_result.parser_name`), so a DOCX version records `"python-docx"`
+   and a PDF `"pypdf"` — provenance is the real parser that ran, not a
+   generic dispatcher label. On the unknown-MIME path the composite records
+   its own identity and a fatal `ParseResult`.
+6. `create_worker` now injects the composite (`application/pdf` →
+   `PypdfParserAdapter`, `application/vnd...wordprocessingml.document` →
+   `DocxParserAdapter`). DOCX-to-PDF preview/derivation deferred (not
+   needed: DOCX has native text) — see CP23/CP36 for source rendering.
 
-### How we will verify it
+### How we verified it
 
-- DOCX fixtures preserve paragraphs and tables.
-- No fabricated page number is created when unavailable.
+- `tests/test_docx.py` (9 tests): `DocxParserAdapter` preserves heading +
+  paragraphs + table cells in order; native text → `ocr_needed=False`; warns
+  about no inherent page count; corrupt bytes → fatal `ParseResult` (never
+  raised); unsupported MIME → fatal; empty DOCX → one empty page.
+  `CompositeParserAdapter` dispatches PDF→pdf-adapter, DOCX→docx-adapter,
+  records the sub-adapter identity on the `ParseResult`, and fatals on
+  unknown MIME; `supported_mime_types` property. End-to-end worker test:
+  a DOCX version reaches `PARSED` with `parser_name="python-docx"`, one
+  `DocumentPage` (page 1, `ocr_needed=0`) carrying the extracted text and
+  the provenance warning, and 4 COMPLETED stage runs.
+- `ruff check .` ✅ · `mypy src/` ✅ (56 files) · `alembic upgrade head` ✅
+  (no new migration — CP22 is logic only) · `pytest` ✅ (194 passed, 1
+  skipped real-Tesseract) · `apps/web` `npx tsc --noEmit` ✅ (unchanged).
 
 ### This checkpoint is complete only when
 
-- DOCX can use the downstream requirement pipeline with trustworthy source references.
+- [x] DOCX can use the downstream requirement pipeline with trustworthy source references.
+- [x] No fabricated page number is created when unavailable.
+- [x] DOCX fixtures preserve paragraphs and tables (in source order).
+
+### Implementation / PR note
+
+- **Branch:** `cp22/docx-adapter`
+- **New:** `tender_compliance_api/parser/docx.py` (`DocxParserAdapter`).
+- **New:** `tender_compliance_api/parser/composite.py` (`CompositeParserAdapter`).
+- **`tender_compliance_api/parser/__init__.py`:** export both adapters.
+- **`tender_compliance_worker/processor.py`:** record
+  `version.parser_name`/`parser_version` from `parse_result` inside
+  `_do_parse` (covers success + fatal-parse paths); removed the
+  post-stage composite-name assignment so the real sub-parser identity is
+  preserved. Storage-missing path intentionally leaves parser identity NULL
+  (parse never ran).
+- **`tender_compliance_worker/worker.py`:** `create_worker` default parser is
+  the composite (PDF + DOCX).
+- **`pyproject.toml`:** added `python-docx>=1.2,<2.0`.
+- **No new migration** — parses into the existing `DocumentPage` table.
 
 ### Bynd reuse notes
 
-- **Reference:** `Bynd-ai/table_grid` uses Docling for high-fidelity PDF/DOCX structural conversion.
-- Benchmark Docling against our chosen DOCX/PDF path on tender fixtures before adopting it.
-- Compare heading/list/table preservation, source-location fidelity, runtime, memory, and failure behavior. Our benchmark decides the adapter.
+- **Reference:** `Bynd-ai/table_grid` uses Docling for high-fidelity PDF/DOCX
+  structural conversion.
+- Decision for Phase 1: adopted `python-docx` (pure-Python, no native build)
+  rather than Docling. Docling remains the candidate for higher-fidelity
+  heading/list/table + page-boundary reconstruction; a CP22-range benchmark
+  on tender fixtures (heading/list/table preservation, source-location
+  fidelity, runtime, memory, failure behaviour) will decide whether to
+  switch before CP23/CP36. Until then the single-segment DOCX representation
+  is honest (no fabricated pages).
 
 ### Guardrail
 
