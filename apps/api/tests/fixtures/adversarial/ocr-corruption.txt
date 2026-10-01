@@ -1,0 +1,8 @@
+OCR Corruption Page 1
+The max operating temp is 8O °C (zero replaced by letter O).
+The min storage temp is -1O °C.
+Pressure: 5S0 bar (S replaces 5).
+Tolerance: ±2,5 °C (comma decimal).
+The voltage shall be 2K0 V (K replaces 0).
+Flow rate 1K,5 m\u00b3/h to 5K,5 m\u00b3/h.
+The resistance is 50 Ω ±5%.

@@ -43,6 +43,13 @@ jobs:
         with:
           name: benchmark-eval-report
           path: eval-report.txt
+      - name: Dependency audit
+        run: |
+          pip install pip-audit
+          pip-audit --requirement requirements.txt --requirement requirements-dev.txt 2>&1 || true
+          # In CI, scan the installed project + all transitive deps:
+          pip-audit 2>&1 || true
+        continue-on-error: true
 
   web:
     runs-on: ubuntu-latest

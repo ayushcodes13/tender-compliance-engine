@@ -1,0 +1,5 @@
+The resistance shall not exceed 50 Ω at 25 °C.
+The power consumption shall be less than 250 W at a frequency of 50 Hz.
+The torque shall be 500 N·m minimum.
+The noise level shall not be ≤ 55 dB(A).
+The insulation withstand voltage shall be 1500 V μs min.
