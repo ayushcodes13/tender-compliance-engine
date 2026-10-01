@@ -463,6 +463,160 @@ class DocumentVersion(Base):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 2 — OEM document ingestion and provenance (CP49)
+# ---------------------------------------------------------------------------
+
+
+class OemDocumentType(enum.StrEnum):
+    """Logical classification of an OEM/source document.
+
+    These are vendor-supplied materials (datasheets, brochures, manuals,
+    certificates, test reports, quotations, proposals) that later serve
+    as evidence for compliance assessment.  They are kept strictly separate
+    from tender documents (AGENTS.md: "Tender and OEM sources must remain
+    distinguishable").
+    """
+
+    DATASHEET = "datasheet"
+    BROCHURE = "brochure"
+    MANUAL = "manual"
+    CERTIFICATE = "certificate"
+    TEST_REPORT = "test_report"
+    QUOTATION = "quotation"
+    PROPOSAL = "proposal"
+    OTHER = "other"
+
+
+class OemDocument(Base):
+    """Logical OEM document — a named container for immutable OEM versions.
+
+    Mirrors :class:`TenderDocument` but lives in its own table so that
+    tender sources and OEM sources are always distinguishable in queries
+    (AGENTS.md guardrail for CP49).
+
+    Carries vendor/product metadata so that downstream evidence retrieval
+    (CP50) can filter by vendor or product without joining arbitrary
+    JSON.
+    """
+
+    __tablename__ = "oem_documents"
+    __table_args__ = (
+        Index("ix_oem_documents_project", "project_id"),
+        Index("ix_oem_documents_vendor", "vendor_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    display_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    document_type: Mapped[OemDocumentType] = mapped_column(
+        Enum(OemDocumentType, name="oem_document_type"),
+        nullable=False,
+        default=OemDocumentType.DATASHEET,
+        server_default=OemDocumentType.DATASHEET.value,
+    )
+    # Vendor / product metadata for downstream evidence filtering.
+    vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    product_sku: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Flexible, auditable metadata (revision, issue date, language, etc.).
+    # Never stores document bodies.
+    document_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"OemDocument(id={self.id!r}, project={self.project_id!r}, "
+            f"vendor={self.vendor_name!r}, name={self.display_name!r})"
+        )
+
+
+class OemDocumentVersion(Base):
+    """Immutable uploaded version of an :class:`OemDocument`.
+
+    Structurally mirrors :class:`DocumentVersion` but references
+    ``oem_documents`` instead of ``tender_documents``.  The source
+    ``StoredObject``, checksum, MIME, and size are written once and never
+    updated — only ``processing_status`` and ``updated_at`` advance through
+    the pipeline.
+    """
+
+    __tablename__ = "oem_document_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id", "version_number", name="uq_oem_versions_doc_ver"
+        ),
+        Index("ix_oem_versions_document", "document_id"),
+        Index("ix_oem_versions_stored_object", "stored_object_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("oem_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    stored_object_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("stored_objects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    # Denormalized copy of stored-object metadata for deterministic
+    # comparisons without joining stored_objects every time.
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    processing_status: Mapped[DocumentProcessingStatus] = mapped_column(
+        Enum(DocumentProcessingStatus, name="oem_doc_processing_status"),
+        nullable=False,
+        default=DocumentProcessingStatus.UPLOADED,
+        server_default=DocumentProcessingStatus.UPLOADED.value,
+    )
+    parser_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ocr_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ocr_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retention_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"OemDocumentVersion(id={self.id!r}, document={self.document_id!r}, "
+            f"v={self.version_number!r})"
+        )
+
+
 class ProcessingStage(enum.StrEnum):
     """Ordered sub-stages within a single processing run."""
 
