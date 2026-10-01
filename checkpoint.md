@@ -8,7 +8,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP29 — Duplicate/header/footer/overlap candidate reconciliation**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP30 — Exact/approximate source anchors and Requirement persistence**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -1523,9 +1523,9 @@ extraction adapter on the CP27 source windows.
 
 **Gate (run from `apps/api`):** `pytest` 273 passed / 2 skipped; `ruff check .` All checks passed; `mypy src/` Success (65 files); `alembic upgrade head` → `0010_extraction_candidates`; `npx tsc --noEmit` (apps/web) clean.
 
-## ⬜ Checkpoint 29 — Duplicate/header/footer/overlap reconciliation
+## ✅ ~~Checkpoint 29 — Duplicate/header/footer/overlap reconciliation~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #34 merged.
 
 **Plain-English outcome:** Repeated source windows do not flood the matrix with duplicate rows.
 
@@ -1550,6 +1550,82 @@ extraction adapter on the CP27 source windows.
 ### Guardrail
 
 - Similar wording alone is not proof two requirements are the same.
+
+### Completion summary (PR #34)
+
+**Why:** With CP28 emitting one candidate per window, a requirement that spans a
+chunk boundary (or a document header/footer re-emitted as a "requirement" across
+pages) produces duplicate candidate rows. This would inflate the compliance
+matrix and corrupt any downstream count. CP29 deduplicates these
+deterministically **without aggressive semantic merging** — the AGENTS guardrail
+("similar wording alone is not proof two requirements are the same") is
+respected by deduping only on whitespace-normalized text + shared/overlapping
+source pages, and by **flagging** rather than silently deleting identical-text
+on distinct pages.
+
+**What changed:**
+- `extraction/reconcile.py` (new): pure `reconcile(candidates -> ReconciliationResult)`.
+  Buckets candidates by whitespace-normalized `normalized_text` (deterministic
+  `sha256[:16]` group id). Per fingerprint bucket:
+    - **one member** → `singleton` (kept).
+    - **multiple members sharing ≥1 source page** → `dedup_exact` (keep first in
+      stable `(chunk_id, candidate_id)` order; the rest are `deduped=True` — audit-only,
+      not promotable). Catches chunk-overlap duplicates and verbatim re-emission.
+    - **multiple members on disjoint pages** → `flagged_review` (keep ALL, none
+      deleted) — header/footer bleed flagged for human review, never silently merged.
+  Idempotent and order-independent (stable sort first).
+- `db/models.py`: `ExtractionCandidate.reconciliation_group_id`/`deduped`/
+  `reconciliation_decision` columns + new `ExtractionReconciliation` audit table
+  (one row per pass, `summary` JSON of counts). Tenant-scoped via
+  `document_version_id` FK (CASCADE). Phase 1 only — no vendor-compliance columns.
+- `alembic/versions/0011_extraction_reconciliation.py`: `ALTER extraction_candidates`
+  (add 3 columns + index) + `CREATE extraction_reconciliations`. Head → `0011`.
+- `document/service.py`: `reconcile_version_candidates(auth, document_id, version_number, *, run_id)` —
+  loads persistable+source-validated candidates (tenant-scoped), runs `reconcile`,
+  bulk-updates each candidate's reconciliation columns, writes one audit row.
+  Re-runnable (idempotent).
+- `worker/processor.py`: `_do_extract` now calls `reconcile_version_candidates`
+  after `store_extraction_candidates` (best-effort — never strands the version).
+- `extraction/__init__.py`: re-exports reconcile symbols.
+
+**Scope:** Deduplication reconciliation only. Does **not** promote candidates to
+refined `Requirement` objects (CP30), nor perform fuzzy/semantic dedup, nor any
+Phase-2/vendor work.
+
+**Evidence / provenance impact:** Every persisted candidate now carries a stable
+`reconciliation_group_id` and a `reconciliation_decision`. Deduped duplicates keep
+their source provenance (`sources_json`) and remain queryable for the invented-requirement
+and duplicate rate audits; flagged-review groups stay promotable and grouped for CP35
+human review. A single `extraction_reconciliations` audit row records the pass
+(provider/run/time implicit via FK + summary counts).
+
+**Verification:**
+- `tests/test_extraction_reconcile.py` (new, 11 pure-logic cases): empty,
+  singleton, overlap-dedup (same page + partial-page overlap), identical-text-
+  distinct-pages flagged-not-deleted, mixed document (dedup+singleton+flagged),
+  determinism under reordering, content-addressed group id, whitespace
+  fingerprinting, no-source-fragment flagging, and distinct-requirements-same-page
+  kept as separate singletons.
+- `tests/test_extraction_pipeline.py` (+3 cases): end-to-end
+  `store_extraction_candidates` → `reconcile_version_candidates` → DB read-back
+  (deduped=True on duplicate, shared group_id, audit row summary; flagged-review
+  keeps both rows, shared group_id; idempotent double-run yields identical columns).
+- `tests/test_migration.py`: head bumped to `0011_extraction_reconciliation`;
+  `extraction_reconciliations` added to `_APP_TABLES`.
+
+**Risks / limitations:**
+- Dedup is text+source-page based only (no semantic similarity). Two materially
+  distinct obligations that happen to share verbatim wording on the same page are
+  treated as duplicates (first kept) — this is the intended conservative behavior
+  for overlap duplicates; truly distinct same-text requirements should live on
+  distinct pages (→ `flagged_review`) or differ in clause/scope (out of CP29 scope;
+  CP30/CP34 normalize scope).
+- Reconciliation runs once per EXTRACT pass; CP31 will add explicit retry/re-run
+  semantics and a reconciliation history.
+
+**Gate (run from `apps/api`):** `pytest` 287 passed / 2 skipped; `ruff check .` All
+checks passed; `mypy src/` Success (66 files); `alembic upgrade head` →
+`0011_extraction_reconciliation`; `npx tsc --noEmit` (apps/web) clean.
 
 ## ⬜ Checkpoint 30 — Exact/approximate source anchors and Requirement persistence
 

@@ -481,6 +481,21 @@ class JobProcessor:
                 run_id=run_id,
                 candidates=outcome.candidates,
             )
+            # Dedup the freshly-extracted candidates (CP29).  Reconciliation is
+            # best-effort: if it fails, candidates are still persisted (CP30
+            # can re-reconcile); the EXTRACT run still completes.
+            try:
+                await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=version.document_id,
+                    version_number=version.version_number,
+                    run_id=run.id,
+                )
+            except Exception as rec_exc:  # noqa: BLE001
+                logger.warning(
+                    "EXTRACT reconciliation failed for version %s: %s",
+                    version.id, rec_exc,
+                )
         except Exception as exc:  # noqa: BLE001 — never strand the version
             logger.warning(
                 "EXTRACT stage failed for version %s: %s", version.id, exc

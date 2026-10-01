@@ -31,6 +31,15 @@ from tender_compliance_api.extraction.prompts import (
     SCHEMA_VERSION,
     ExtractionResponse,
 )
+from tender_compliance_api.extraction.reconcile import (
+    DECISION_DEDUP,
+    DECISION_FLAGGED,
+    DECISION_SINGLETON,
+    ReconciliationGroup,
+    ReconciliationInput,
+    ReconciliationResult,
+    reconcile,
+)
 from tender_compliance_api.extraction.schema import (
     CandidateValidationError,
     LocationType,
@@ -47,6 +56,9 @@ if TYPE_CHECKING:  # pragma: no cover - re-export only
 __all__ = [
     "CandidateRecord",
     "CandidateValidationError",
+    "DECISION_DEDUP",
+    "DECISION_FLAGGED",
+    "DECISION_SINGLETON",
     "EXTRACTION_SYSTEM_PROMPT",
     "ExtractResult",
     "ExtractionOutcome",
@@ -59,13 +71,17 @@ __all__ = [
     "LocationType",
     "OpenAiLlmAdapter",
     "PROMPT_VERSION",
+    "ReconciliationGroup",
+    "ReconciliationInput",
+    "ReconciliationResult",
     "RequirementCandidate",
     "RequirementType",
     "SCHEMA_VERSION",
     "SourceWindow",
     "SourcedRequirementCandidate",
-    "build_source_windows",
-    "extract_from_windows",
     "TrustedSourceContext",
     "UncertaintyLevel",
+    "build_source_windows",
+    "extract_from_windows",
+    "reconcile",
 ]

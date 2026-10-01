@@ -726,6 +726,16 @@ class ExtractionCandidate(Base):
     rejection_reason: Mapped[str | None] = mapped_column(
         String(1024), nullable=True
     )
+    # CP29 reconciliation of these candidates against this version.
+    reconciliation_group_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    deduped: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    reconciliation_decision: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -735,4 +745,56 @@ class ExtractionCandidate(Base):
             f"ExtractionCandidate(chunk={self.chunk_id!r}, "
             f"type={self.requirement_type!r}, uncertainty={self.uncertainty!r}, "
             f"persistable={self.persistable!r})"
+        )
+
+
+class ExtractionReconciliation(Base):
+    """Audit record of a single candidate-reconciliation pass for a version (CP29).
+
+    One row is written when :meth:`DocumentService.reconcile_version_candidates`
+    runs for a version.  ``summary`` captures the deterministic counts
+    (deduped / flagged_review / singleton) so duplicate rate and reconciliation
+    decisions are auditable without re-deriving them.  Per-candidate decisions
+    live on :class:`ExtractionCandidate` (``reconciliation_group_id`` /
+    ``deduped`` / ``reconciliation_decision``).
+
+    Phase 1 only: no vendor-compliance verdicts and no evidence columns.
+    """
+
+    __tablename__ = "extraction_reconciliations"
+    __table_args__ = (
+        Index(
+            "ix_extraction_reconciliations_version", "document_version_id"
+        ),
+        Index(
+            "ix_extraction_reconciliations_run",
+            "processing_run_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    processing_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("processing_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ExtractionReconciliation(version={self.document_version_id!r}, "
+            f"groups={len(self.summary)} entries)"
         )
