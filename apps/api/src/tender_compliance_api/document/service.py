@@ -83,6 +83,7 @@ from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
 
 if TYPE_CHECKING:
+    from tender_compliance_api.matrix.projection import MatrixRow
     from tender_compliance_api.ocr.adapter import OcrAdapter
     from tender_compliance_api.parser.adapter import ParseResult
     from tender_compliance_api.renderer.adapter import RenderResult
@@ -1321,6 +1322,28 @@ class DocumentService:
             "ocr_warning": counts.get("ocr_warning", 0),
             "superseded": (total - active),
         }
+
+    # ------------------------------------------------------------------
+    # Matrix projection (CP41)
+    # ------------------------------------------------------------------
+
+    async def get_matrix_rows(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> list[MatrixRow]:
+        """Return the canonical Phase 1 matrix projection (CP41).
+
+        Delegates to :func:`project_matrix_rows` so that the matrix UI
+        and the XLSX exporter share one code path.
+        """
+        from tender_compliance_api.matrix.projection import (  # noqa: PLC0415
+            project_matrix_rows,
+        )
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        return await project_matrix_rows(self._session, version.id)
 
     # ------------------------------------------------------------------
     # Source viewer (CP36)

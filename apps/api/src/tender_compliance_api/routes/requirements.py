@@ -945,3 +945,59 @@ async def get_review_counts(
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return ReviewCountsResponse(**counts)
+
+
+# ---------------------------------------------------------------------------
+# Matrix projection (CP41)
+# ---------------------------------------------------------------------------
+
+
+class MatrixRowResponse(BaseModel):
+    """A single matrix row — the canonical Phase 1 projection (CP41).
+
+    Columns: S.No., Requirement ID, Tender Requirement, Category, Clause,
+    Source Page, Mandatory, User Notes, Review Status.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    serial: int
+    requirement_id: UUID
+    tender_requirement: str
+    category: str | None
+    clause: str | None
+    source_page: int | None
+    mandatory: bool | None
+    user_notes: str | None
+    review_status: str
+
+    normalized_text: str
+    raw_source: str
+    uncertainty: str
+    ocr_warning: bool
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/matrix",
+    response_model=list[MatrixRowResponse],
+    response_model_exclude_none=True,
+)
+async def get_matrix(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> list[MatrixRowResponse]:
+    """Return the canonical Phase 1 matrix projection (CP41).
+
+    Excludes superseded requirements.  Preserves explicit ``display_order``
+    (NULLs sort last), falling back to ``created_at`` desc then ``id``.
+    Missing source fields are represented honestly as null.
+    """
+    svc = DocumentService(session)
+    try:
+        rows = await svc.get_matrix_rows(auth, document_id, version_number)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [MatrixRowResponse.model_validate(r) for r in rows]

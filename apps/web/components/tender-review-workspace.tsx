@@ -32,19 +32,19 @@ import {
 import { SourceViewer } from "@/components/source-viewer";
 
 /** Status for the local UI state (mirrors backend RequirementReviewState). */
-type RequirementStatus = "UNREVIEWED" | "REVIEWED" | "NEEDS_CLARIFICATION" | "OCR_WARNING";
+type RequirementStatus = "unreviewed" | "reviewed" | "needs_clarification" | "ocr_warning";
 
 const statusLabel = (status: RequirementStatus): string => {
-  if (status === "REVIEWED") return "Reviewed";
-  if (status === "NEEDS_CLARIFICATION") return "Needs clarification";
-  if (status === "OCR_WARNING") return "OCR warning";
+  if (status === "reviewed") return "Reviewed";
+  if (status === "needs_clarification") return "Needs clarification";
+  if (status === "ocr_warning") return "OCR warning";
   return "Unreviewed";
 };
 
 const statusClass = (status: RequirementStatus): string => {
-  if (status === "REVIEWED") return "review-status review-status-reviewed";
-  if (status === "OCR_WARNING") return "review-status review-status-ocr";
-  if (status === "NEEDS_CLARIFICATION") return "review-status review-status-warning";
+  if (status === "reviewed") return "review-status review-status-reviewed";
+  if (status === "ocr_warning") return "review-status review-status-ocr";
+  if (status === "needs_clarification") return "review-status review-status-warning";
   return "review-status review-status-neutral";
 };
 
@@ -75,7 +75,7 @@ function useRequirements(
         if (filter === "review") {
           review_state = undefined; // includes UNREVIEWED, NEEDS_CLARIFICATION, OCR_WARNING
         } else if (filter === "reviewed") {
-          review_state = "REVIEWED";
+          review_state = "reviewed";
         }
 
         const resp = await api.fetchRequirements(
@@ -181,7 +181,7 @@ export function TenderReviewWorkspace(props: {
 
   const reviewQueue = useMemo(() => {
     if (!reqList?.items) return [];
-    return reqList.items.filter((item) => item.review_state !== "REVIEWED");
+    return reqList.items.filter((item) => item.review_state !== "reviewed");
   }, [reqList]);
 
   const reviewIndex = reviewQueue.findIndex((item) => item.id === selected?.id);
@@ -308,7 +308,7 @@ export function TenderReviewWorkspace(props: {
   // The detailed view (with constraints and sources) for the selected requirement.
   const detail = selectedDetail ?? null;
   const selectedStatus: RequirementStatus = (selectedSummary?.review_state ??
-    "UNREVIEWED") as RequirementStatus;
+    "unreviewed") as RequirementStatus;
   // Use the first source anchor's page for source viewer navigation, if available.
   const selectedSources = detail?.sources ?? [];
   const sourcePage = selectedSources[0]?.page_number ?? 1;
@@ -447,13 +447,13 @@ export function TenderReviewWorkspace(props: {
                     <p>{item.normalized_text}</p>
                     <div className="requirement-card-bottom">
                       <span className={statusClass(itemStatus)}>
-                        {itemStatus === "REVIEWED" ? (
+                        {itemStatus === "reviewed" ? (
                           <Check size={11} aria-hidden="true" />
                         ) : null}
-                        {itemStatus === "OCR_WARNING" ? (
+                        {itemStatus === "ocr_warning" ? (
                           <CircleAlert size={11} aria-hidden="true" />
                         ) : null}
-                        {itemStatus === "NEEDS_CLARIFICATION" ? (
+                        {itemStatus === "needs_clarification" ? (
                           <TriangleAlert size={11} aria-hidden="true" />
                         ) : null}
                         {statusLabel(itemStatus)}
@@ -803,7 +803,7 @@ export function TenderReviewWorkspace(props: {
           </div>
 
           <div className="evidence-footer">
-            {selectedStatus === "REVIEWED" ? (
+            {selectedStatus === "reviewed" ? (
               <>
                 <span className="reviewed-message">
                   <Check size={14} aria-hidden="true" /> Reviewed
