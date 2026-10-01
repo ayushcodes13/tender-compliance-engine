@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP13 — Document model and upload route**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP14 — Document model and upload route**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -125,7 +125,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP12 — Object-storage adapter~~
   - Status: DONE — PR #16
   - Branch: `cp12/object-storage-adapter`
-- [ ] CP13 — Upload validation and hostile-file controls
+- [x] ✅ ~~CP13 — Upload validation and hostile-file controls~~
+  - Status: DONE — PR #17
+  - Branch: `cp13/upload-validation`
 - [ ] CP14 — TenderDocument and immutable DocumentVersion models
 - [ ] CP15 — Tender upload API, versioning, and duplicate semantics
 - [ ] CP16 — Upload UI and document list
@@ -642,33 +644,36 @@ Accept real tender files safely and create the processing handoff without doing 
 
 - Storage paths are not a substitute for authorization.
 
-## ⬜ Checkpoint 13 — Upload validation and hostile-file controls
+## ✅ ~~Checkpoint 13 — Upload validation and hostile-file controls~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #17
 
 **Plain-English outcome:** Unsafe, unsupported, or unreadable files are rejected before parsing.
 
-### What we will do
+### What we did
 
-1. Start with PDF as the first primary source format.
-2. Validate extension, MIME, file signature, size, and resource/page limits.
-3. Detect password-protected/unreadable PDFs.
-4. Add a production malware-scanner adapter/interface.
-5. Never execute embedded PDF JavaScript/macros/instructions.
-6. Return explicit failure reasons.
-7. Audit rejected uploads when appropriate.
+1. Created `validation/` package:
+   - `models.py` — `FileFormat` enum, `ValidationResult` dataclass, `FileValidationError`, magic-byte/MIME/extension maps
+   - `rules.py` — `ExtensionRule`, `FileSignatureRule`, `FileSizeRule` (abstract `FileValidationRule` base)
+   - `pdf.py` — `PdfValidationRule` using `pypdf` to detect malformed PDFs, password protection, and excessive page counts
+   - `service.py` — `ValidationService` orchestrates all rules and infers format from file signature (not browser MIME)
+2. Created `scan/` package:
+   - `adapter.py` — Abstract `MalwareScanner` + `ScanResult`
+   - `fake.py` — `FakeScanner` with `TEST_INFECTED_SIGNATURE` for test malware detection
+3. Created `POST /projects/{project_id}/upload` route that validates → scans → stores → creates StoredObject → transitions project to TENDER_UPLOADED → audits
+4. Added `ProjectService.mark_uploaded()` for DRAFT→TENDER_UPLOADED transition
+5. Added `pypdf>=4.0,<5.0` and `python-multipart>=0.0.12,<1.0` dependencies
+6. Storage/scanner dependencies injected via FastAPI (overridable in tests)
 
-### How we will verify it
+### How we verified it
 
-- Tests cover MIME mismatch, malformed files, oversize files, and protected PDFs.
-
-### This checkpoint is complete only when
-
-- Rejected files never enter normal processing as READY/processable documents.
-
-### Guardrail
-
-- Do not trust the browser-provided MIME type alone.
+- `ruff check .` ✅, `mypy src/` ✅ (32 source files)
+- `alembic upgrade head` ✅ (0001→0004)
+- 27 new tests: 10 validation + 7 upload endpoint + 10 existing = 90 total pass
+- Rejected files return 422 with explicit error reasons
+- Audit events logged for rejected uploads
+- Cross-tenant access denied (404)
+- PDF JavaScript/macros never executed — pypdf only reads structural metadata
 
 ## ⬜ Checkpoint 14 — TenderDocument and immutable DocumentVersion models
 
