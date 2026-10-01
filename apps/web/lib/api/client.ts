@@ -119,9 +119,11 @@ export type ConstraintSummary = {
 /** A source anchor for a requirement. */
 export type RequirementSourceSummary = {
   id: string;
+  requirement_id: string;
   page_number: number;
   clause_number: string | null;
   location_type: string;
+  source_text: string | null;
   ocr_confidence: number | null;
 };
 

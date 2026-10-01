@@ -308,9 +308,21 @@ export default function ProjectPage() {
             href={`/projects/${project.id}/review`}
             className="icon-button"
             aria-label="Open review workspace"
-            style={{ display: "none" }}
           >
-            {/* Review workspace will be wired in a later checkpoint */}
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s9-7 20-0v0" />
+              <path d="M2 12v0" />
+            </svg>
           </Link>
         </div>
       </header>
