@@ -40,6 +40,12 @@ from tender_compliance_api.extraction.prompts import (
     SCHEMA_VERSION,
     ExtractionResponse,
 )
+from tender_compliance_api.extraction.qualitative import (
+    NORMALIZATION_VERSION,
+    QualitativeCondition,
+    conservative_normalized_text,
+    parse_qualitative_conditions,
+)
 from tender_compliance_api.extraction.reconcile import (
     DECISION_DEDUP,
     DECISION_FLAGGED,
@@ -90,8 +96,10 @@ __all__ = [
     "LocationType",
     "OpenAiLlmAdapter",
     "PROMPT_VERSION",
+    "NORMALIZATION_VERSION",
     "ParsedConstraint",
     "PromotionInput",
+    "QualitativeCondition",
     "ReconciliationGroup",
     "ReconciliationInput",
     "ReconciliationResult",
@@ -104,8 +112,10 @@ __all__ = [
     "TrustedSourceContext",
     "UncertaintyLevel",
     "build_source_windows",
+    "conservative_normalized_text",
     "extract_from_windows",
     "parse_constraint",
+    "parse_qualitative_conditions",
     "promotion_key",
     "reconcile",
     "resolve_sources",

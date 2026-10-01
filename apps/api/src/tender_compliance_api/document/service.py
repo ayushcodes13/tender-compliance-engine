@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
+    ConstraintNormalizationState,
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
@@ -29,6 +30,7 @@ from tender_compliance_api.db.models import (
     ProcessingStage,
     Project,
     Requirement,
+    RequirementConstraint,
     RequirementReviewState,
     RequirementSource,
     RunStatus,
@@ -42,6 +44,12 @@ from tender_compliance_api.extraction.constraint_parser import (
 )
 from tender_compliance_api.extraction.diagnostics import compute_diagnostics
 from tender_compliance_api.extraction.extractor import CandidateRecord, ExtractionOutcome
+from tender_compliance_api.extraction.qualitative import (
+    NORMALIZATION_VERSION,
+    QualitativeCondition,
+    conservative_normalized_text,
+    parse_qualitative_conditions,
+)
 from tender_compliance_api.extraction.reconcile import (
     DECISION_DEDUP,
     DECISION_SINGLETON,
@@ -224,17 +232,21 @@ class DocumentService:
         requirement_id: uuid.UUID,
     ) -> list[ParsedConstraint]:
         """Parse the verbatim ``raw_source`` of a requirement into structured
-        numeric constraints (CP33).
+        constraints and **persist** them (CP33 + CP34).
 
-        The requirement is loaded tenant-scoped (via the document version) so the
-        caller cannot read another organization's data.  Returns zero or more
-        :class:`ParsedConstraint` records, each anchored to the requirement's
-        verbatim ``raw_source``.  This is a read-only parse: persistence of the
-        resulting constraints (and their normalization-state transitions) is the
-        responsibility of CP34.
+        Numeric constraints (CP33) and qualitative conditions (CP34) are
+        parsed from the requirement's verbatim ``raw_source`` and written as
+        :class:`RequirementConstraint` rows in a single transaction.  The
+        requirement's ``normalization_state`` is derived from the worst
+        constraint state, and the ``review_state`` is escalated to
+        ``OCR_WARNING`` when the source is OCR-derived.
 
-        Deterministic & reproducible: the same ``raw_source`` always yields the
-        same output.
+        Idempotent: existing constraints for the requirement are replaced
+        on each call so reprocessing yields the same persisted state.
+
+        Deterministic & reproducible: the same ``raw_source`` always yields
+        the same output.  Every persisted constraint carries its verbatim
+        ``raw_fragment``.
         """
         version = await self.get_version_or_raise(auth, document_id, version_number)
         result = await self._session.execute(
@@ -250,10 +262,106 @@ class DocumentService:
                 f"document {document_id} v{version_number}"
             )
         raw_source = requirement.raw_source or ""
-        return parse_constraint(
-            raw_source,
-            ocr_warning=bool(requirement.ocr_warning),
+        ocr_warning = bool(requirement.ocr_warning)
+
+        # Clear existing constraints for idempotency — reprocessing the same
+        # requirement should not accumulate stale rows.
+        await self._session.execute(
+            delete(RequirementConstraint).where(
+                RequirementConstraint.requirement_id == requirement_id
+            )
         )
+
+        parsed: list[ParsedConstraint] = parse_constraint(
+            raw_source, ocr_warning=ocr_warning
+        )
+        qualitative: list[QualitativeCondition] = parse_qualitative_conditions(
+            raw_source, ocr_warning=ocr_warning
+        )
+
+        # Persist numeric constraints.
+        for pc in parsed:
+            row = RequirementConstraint(
+                requirement_id=requirement_id,
+                document_version_id=version.id,
+                parameter=pc.parameter,
+                operator=pc.operator,
+                numeric_value=pc.numeric_value,
+                lower_bound=pc.lower_bound,
+                upper_bound=pc.upper_bound,
+                unit=pc.unit,
+                tolerance=pc.tolerance,
+                qualitative_condition=None,
+                normalization_state=pc.normalization_state,
+                raw_fragment=pc.raw_fragment,
+            )
+            self._session.add(row)
+
+        # Persist qualitative conditions.
+        for qc in qualitative:
+            row = RequirementConstraint(
+                requirement_id=requirement_id,
+                document_version_id=version.id,
+                parameter=qc.parameter,
+                operator=None,
+                numeric_value=None,
+                lower_bound=None,
+                upper_bound=None,
+                unit=None,
+                tolerance=None,
+                qualitative_condition=qc.condition,
+                normalization_state=qc.normalization_state,
+                raw_fragment=qc.raw_fragment,
+            )
+            self._session.add(row)
+
+        # Determine the worst normalization state across all constraints.
+        all_states = [c.normalization_state for c in parsed] + [
+            c.normalization_state for c in qualitative
+        ]
+        if all_states:
+            if ConstraintNormalizationState.NEEDS_REVIEW in all_states:
+                worst = ConstraintNormalizationState.NEEDS_REVIEW
+            elif ConstraintNormalizationState.PARTIAL in all_states:
+                worst = ConstraintNormalizationState.PARTIAL
+            else:
+                worst = ConstraintNormalizationState.SAFE
+        else:
+            worst = ConstraintNormalizationState.UNNORMALIZED
+
+        # Propagate OCR warning to the requirement's review state.
+        if requirement.ocr_warning:
+            requirement.review_state = RequirementReviewState.OCR_WARNING
+        elif requirement.review_state == RequirementReviewState.UNREVIEWED:
+            # Requirements with any constraint needing review stay unreviewed
+            # for human attention.  Otherwise leave the existing state.
+            if worst is ConstraintNormalizationState.NEEDS_REVIEW:
+                requirement.review_state = RequirementReviewState.NEEDS_CLARIFICATION
+
+        # Apply conservative normalized text (whitespace-only normalisation,
+        # never a semantic rewrite).
+        requirement.normalized_text = conservative_normalized_text(raw_source)
+
+        # Record which normalisation ruleset version produced these constraints.
+        # Stored via audit log so reprocessing with a new version is traceable.
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.normalize_constraints",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=await self._project_id_for(version.document_id),
+            metadata={
+                "normalization_version": NORMALIZATION_VERSION,
+                "ocr_warning": ocr_warning,
+                "numeric_constraints": len(parsed),
+                "qualitative_conditions": len(qualitative),
+                "worst_normalization_state": worst.value if worst else None,
+            },
+        )
+
+        await self._session.flush()
+        return parsed
 
     async def get_runs(
         self,
