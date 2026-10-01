@@ -25,6 +25,7 @@ from tender_compliance_api.db.models import (
     TenderDocument,
 )
 from tender_compliance_api.project.service import ProjectNotFoundError
+from tender_compliance_api.queue import make_job_id
 
 
 class DocumentNotFoundError(Exception):
@@ -285,6 +286,52 @@ class DocumentService:
 
         await self._session.flush()
         return run
+
+    # ------------------------------------------------------------------
+    # Enqueue (CP18)
+    # ------------------------------------------------------------------
+
+    async def enqueue_processing(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> uuid.UUID:
+        """Transition a version from ``UPLOADED`` to ``QUEUED``.
+
+        Returns a deterministic ``run_id`` (derived from version + stage)
+        that the caller uses as the correlation ID for the queue job.
+        The actual :class:`ProcessingRun` row is created by the worker
+        when it calls :meth:`begin_run` with this ``run_id``.
+
+        Idempotent: if the version is already ``QUEUED`` or ``PROCESSING``,
+        the same deterministic ``run_id`` is returned (no transition).
+        """
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+
+        run_id = make_job_id(str(version.id), ProcessingStage.PARSE.value)
+
+        if version.processing_status == DocumentProcessingStatus.UPLOADED:
+            await self.transition_to(
+                auth, document_id, version_number,
+                DocumentProcessingStatus.QUEUED,
+            )
+        elif version.processing_status in (
+            DocumentProcessingStatus.QUEUED,
+            DocumentProcessingStatus.PROCESSING,
+        ):
+            # Already enqueued/processing — return existing run_id.
+            pass
+        else:
+            # Terminal state — should not enqueue.
+            raise TransitionError(
+                f"version {version.id} is {version.processing_status.value}, "
+                "cannot enqueue for processing"
+            )
+
+        return run_id
 
     # ------------------------------------------------------------------
     # Internals

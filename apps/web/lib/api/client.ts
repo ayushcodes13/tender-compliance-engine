@@ -45,8 +45,10 @@ export type ProjectRename = {
 /** Processing status of a single uploaded document version. */
 export type DocumentProcessingStatus =
   | "uploaded"
+  | "queued"
   | "processing"
   | "parsed"
+  | "partial"
   | "ocr_warning"
   | "failed";
 
@@ -60,6 +62,10 @@ export type DocumentItem = {
   mime_type: string;
   size_bytes: number;
   processing_status: DocumentProcessingStatus;
+  parser_name: string | null;
+  parser_version: string | null;
+  ocr_name: string | null;
+  ocr_version: string | null;
   created_at: string;
 };
 

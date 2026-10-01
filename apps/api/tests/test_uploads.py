@@ -25,16 +25,18 @@ from tender_compliance_api.db.models import (
     User,
 )
 from tender_compliance_api.main import app
-from tender_compliance_api.routes.uploads import get_scanner, get_storage_adapter
+from tender_compliance_api.queue.fake import FakeQueueAdapter
+from tender_compliance_api.routes.uploads import get_queue_adapter, get_scanner, get_storage_adapter
 from tender_compliance_api.scan.fake import (
     TEST_INFECTED_SIGNATURE,
     FakeScanner,
 )
 from tender_compliance_api.storage.fake import FakeStorageAdapter
 
-# Override storage and scanner dependencies for all tests in this module.
+# Override storage, scanner, and queue dependencies for all tests in this module.
 app.dependency_overrides[get_storage_adapter] = lambda: FakeStorageAdapter()
 app.dependency_overrides[get_scanner] = lambda: FakeScanner()
+app.dependency_overrides[get_queue_adapter] = lambda: FakeQueueAdapter()
 
 client = TestClient(app)
 
@@ -215,7 +217,7 @@ class TestUploadValid:
         assert items[1]["version_number"] == 2
         assert items[0]["display_name"] == "tender.pdf"
         assert items[0]["size_bytes"] == len(pdf_data)
-        assert items[0]["processing_status"] == "uploaded"
+        assert items[0]["processing_status"] == "queued"
 
     def test_list_documents_cross_tenant_denied(self, session_cm) -> None:
         """Cross-tenant users cannot list another org's documents."""

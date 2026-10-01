@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     object_storage_bucket: str = "tender-documents"
     object_storage_region: str = "us-east-1"
 
+    # Redis (queue/broker seam)
+    redis_url: str = ""
+
+    # Processing limits
+    max_retries: int = 5
+    max_concurrency: int = 4
+
 
 @lru_cache
 def get_settings() -> Settings:
