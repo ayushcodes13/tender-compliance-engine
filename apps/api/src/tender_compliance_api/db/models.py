@@ -187,6 +187,10 @@ class AuditLog(Base):
     )
     # Minimal structured metadata as JSON.  Never store confidential bodies.
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Correlation ID linking this event to a request or background job (CP46).
+    correlation_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -437,6 +441,11 @@ class DocumentVersion(Base):
     parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ocr_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     ocr_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # UTC timestamp after which this version's stored originals are eligible
+    # for hard deletion per the retention policy (CP46).  NULL = no deadline.
+    retention_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

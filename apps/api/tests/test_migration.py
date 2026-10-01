@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0017_export_artifacts"
+_HEAD_REV = "0018_observability_retention"
 
 # Tables introduced by CP08..CP48 migrations (one table per checkpoint).
 _APP_TABLES = {

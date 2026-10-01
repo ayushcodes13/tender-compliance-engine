@@ -9,21 +9,31 @@ and map domain errors to HTTP status codes.
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
-from tender_compliance_api.db.models import ProjectStatus
+from tender_compliance_api.db.models import (
+    Project,
+    ProjectStatus,
+    StoredObject,
+)
 from tender_compliance_api.db.session import get_session
+from tender_compliance_api.logs import get_correlation_id, get_logger, log_event
 from tender_compliance_api.project import (
     ProjectArchivedError,
     ProjectNotFoundError,
     ProjectService,
     StateTransitionError,
+)
+from tender_compliance_api.retention import (
+    RetentionService,
 )
 
 # Exception types raised by ProjectService that routes translate to HTTP.
@@ -182,3 +192,82 @@ async def reopen_project(
     response = ProjectResponse.model_validate(project)
     await session.commit()
     return response
+
+
+@router.delete("/{project_id}", status_code=204)
+async def hard_delete_project(
+    project_id: UUID,
+    request: Request,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> None:
+    """Permanently delete an archived project and all its data.
+
+    The project must be in ``ARCHIVED`` state.  All documents, versions,
+    pages, requirements, exports, and audit logs are removed via
+    database CASCADE.  Stored object bytes in object storage are also
+    deleted.  This action is irreversible and fully audited.
+
+    Only the owning organization can perform this operation.
+    """
+    correlation_id = get_correlation_id()
+    logger = get_logger("projects")
+
+    # Verify the project belongs to this org before attempting deletion.
+    project = await session.get(Project, project_id)
+    if project is None or project.organization_id != auth.organization_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.status != ProjectStatus.ARCHIVED:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project must be archived before hard deletion "
+            f"(current: {project.status})",
+        )
+
+    retention_svc = RetentionService(session)
+
+    # Gather storage keys before cascade deletion.
+    result = await session.execute(
+        select(StoredObject.storage_key).where(
+            StoredObject.project_id == project_id
+        )
+    )
+    storage_keys = [row[0] for row in result]
+
+    deleted_count = await retention_svc.hard_delete_project(
+        organization_id=auth.organization_id,
+        project_id=project_id,
+        actor_id=auth.actor_id,
+        correlation_id=correlation_id,
+    )
+
+    # Physically delete stored objects from object storage.
+    storage_adapter: Any = getattr(request.app.state, "storage_adapter", None)
+    if storage_adapter is not None:
+        for key in storage_keys:
+            try:
+                await storage_adapter.delete(key)
+            except Exception:  # noqa: BLE001
+                # Log but don't fail the whole deletion — the DB rows
+                # are gone; storage cleanup can be retried.
+                log_event(
+                    logger,
+                    level=40,
+                    message="storage_delete_failed",
+                    correlation_id=correlation_id,
+                    project_id=str(project_id),
+                    storage_key_prefix=key[:8] if key else None,
+                )
+
+    await session.commit()
+
+    log_event(
+        logger,
+        level=20,
+        message="project_hard_deleted_api",
+        correlation_id=correlation_id,
+        project_id=str(project_id),
+        organization_id=str(auth.organization_id),
+        stored_objects=deleted_count,
+    )
