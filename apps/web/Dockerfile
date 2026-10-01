@@ -1,8 +1,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY apps/web/package.json apps/web/package-lock.json* ./
+COPY package.json package-lock.json* ./
 RUN npm ci --no-audit --no-fund
-COPY apps/web/ ./
+COPY . .
 RUN npm run build
 
 FROM node:20-alpine AS runner

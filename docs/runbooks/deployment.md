@@ -243,3 +243,26 @@ Before cutting over:
 - [ ] Worker process running and consuming from Redis
 - [ ] Smoke tests pass
 - [ ] Rollback plan documented
+
+## Local development with docker-compose
+
+The repository-root `docker-compose.yml` provides a full local stack (postgres,
+redis, minio, api, worker, web). It uses inline environment variables matching
+the service names, so `docker-compose up --build` works out of the box:
+
+```bash
+docker compose up --build
+# API:      http://localhost:8000
+# Web:      http://localhost:3000
+# MinIO:    http://localhost:9000  (console: http://localhost:9001)
+```
+
+Before uploading real documents, apply migrations:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+For infrastructure-only (no api/worker/web containers), use the Makefile target:
+`make infra-up` (uses `infra/docker-compose.yml`). The app services are then
+started locally via `make api-dev` and `npm run dev` (apps/web).

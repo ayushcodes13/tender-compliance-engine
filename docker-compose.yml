@@ -1,5 +1,14 @@
 version: "3.9"
 
+# =============================================================================
+# Local deployment stack: postgres, redis, minio, api, worker, web.
+# -----------------------------------------------------------------------------
+# For local development only.  In production, provide environment configuration
+# through your orchestration platform's secrets/config (see docs/runbooks/deployment.md).
+# To override any value, create an `.env` file in the repository root — Docker
+# Compose reads it automatically.  See `.env.example` for a template.
+# =============================================================================
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +19,6 @@ services:
       POSTGRES_PASSWORD: tce-password
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tce -d tce"]
       interval: 10s
@@ -57,8 +65,16 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    env_file:
-      - apps/api/.env.production
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tce:tce-password@postgres:5432/tce
+      REDIS_URL: redis://redis:6379/0
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_ACCESS_KEY: tce-access-key
+      OBJECT_STORAGE_SECRET_KEY: tce-secret-key
+      OBJECT_STORAGE_BUCKET: tender-documents
+      OBJECT_STORAGE_REGION: us-east-1
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      OPENAI_API_KEY:
     ports:
       - "8000:8000"
     healthcheck:
@@ -78,8 +94,14 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    env_file:
-      - apps/api/.env.production
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tce:tce-password@postgres:5432/tce
+      REDIS_URL: redis://redis:6379/0
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_ACCESS_KEY: tce-access-key
+      OBJECT_STORAGE_SECRET_KEY: tce-secret-key
+      OBJECT_STORAGE_BUCKET: tender-documents
+      OBJECT_STORAGE_REGION: us-east-1
     restart: unless-stopped
     command: python -m tender_compliance_worker --max-concurrency 4
 
@@ -92,9 +114,10 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
       interval: 30s
       timeout: 5s
+      start-period: 10s
       retries: 3
 
 volumes:
