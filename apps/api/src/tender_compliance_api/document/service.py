@@ -32,6 +32,14 @@ from tender_compliance_api.queue import make_job_id
 
 if TYPE_CHECKING:
     from tender_compliance_api.parser.adapter import ParseResult
+    from tender_compliance_api.renderer.adapter import RenderResult
+    from tender_compliance_api.storage.adapter import ObjectStorageAdapter
+
+
+#: Deterministic namespace for rendered-image object keys, so that
+#: re-rendering the same version/page/DPI overwrites the same storage key
+#: instead of producing duplicate blobs (CP20 idempotency).
+_RENDER_KEY_NAMESPACE = uuid.UUID("00000000-0000-5000-8000-000000000042")
 
 
 class DocumentNotFoundError(Exception):
@@ -80,6 +88,20 @@ def _is_valid_transition(
 ) -> bool:
     """Return True if *target* is an allowed transition from *current*."""
     return target in _ALLOWED_TRANSITIONS.get(current, frozenset())
+
+
+def _append_page_warning(page: DocumentPage, message: str) -> None:
+    """Append a warning to a page's ``structural_metadata`` in place.
+
+    Preserves any existing non-warning metadata so cleanup/structural
+    signals from parsing are not lost when rendering later annotates the
+    page.
+    """
+    existing = dict(page.structural_metadata or {})
+    warnings = list(existing.get("warnings") or [])
+    warnings.append(message)
+    existing["warnings"] = warnings
+    page.structural_metadata = existing
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +428,99 @@ class DocumentService:
 
         await self._session.flush()
         return pages
+
+    # ------------------------------------------------------------------
+    # Rendered page assets (CP20)
+    # ------------------------------------------------------------------
+
+    async def store_rendered_pages(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        render_result: RenderResult,
+        storage: ObjectStorageAdapter,
+    ) -> list[DocumentPage]:
+        """Persist rendered page images for a document version.
+
+        For each successfully rendered page, stores the PNG in object
+        storage under a deterministic, org/project-scoped key and records
+        that key on the corresponding :class:`DocumentPage`
+        (``rendered_image_object_key``).
+
+        Pages that failed to render (empty image, ``error`` set) are left
+        with a null image key and the failure is appended to the page's
+        ``structural_metadata`` warnings.
+
+        This is intentionally **best-effort and non-fatal**: a fatal
+        render failure (``render_result.fatal_error``) or an individual
+        storage error is recorded per-page without aborting the rest.  A
+        null ``rendered_image_object_key`` simply means "no visual source
+        for this page yet" — the text path from CP19 still stands.
+
+        Source-version identity is preserved: keys are scoped to the
+        version's org/project/document/version, and the rendered asset is
+        a *derived* artifact (never treated as a new source version).
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        # Lazy import keeps a heavy storage/provider dependency out of the
+        # core service import path.
+        from tender_compliance_api.storage.keys import build_key
+
+        result = await self._session.execute(
+            select(DocumentPage).where(
+                DocumentPage.document_version_id == version.id
+            )
+        )
+        pages_by_num: dict[int, DocumentPage] = {
+            p.page_number: p for p in result.scalars().all()
+        }
+
+        # Whole-document render failure: record the reason on every page
+        # so reviewers can see the visual source is missing, then return.
+        if render_result.fatal_error is not None:
+            for existing_page in pages_by_num.values():
+                _append_page_warning(
+                    existing_page, f"render failed: {render_result.fatal_error}"
+                )
+            await self._session.flush()
+            return list(pages_by_num.values())
+
+        for page_result in render_result.pages:
+            page = pages_by_num.get(page_result.page_number)
+            if page is None:
+                continue
+
+            if page_result.error is not None or not page_result.image_bytes:
+                _append_page_warning(
+                    page, f"render failed: {page_result.error}"
+                )
+                continue
+
+            try:
+                key = build_key(
+                    org_id=auth.organization_id,
+                    project_id=project_id,
+                    document_id=document_id,
+                    version=version.version_number,
+                    object_id=uuid.uuid5(
+                        _RENDER_KEY_NAMESPACE,
+                        f"{version.id}:{page_result.page_number}"
+                        f":{render_result.render_dpi}",
+                    ),
+                    original_filename=f"page_{page_result.page_number}.png",
+                )
+                info = await storage.put(
+                    key, page_result.image_bytes, page_result.content_type
+                )
+                page.rendered_image_object_key = info.key
+            except Exception as exc:  # noqa: BLE001 — best-effort, non-fatal
+                _append_page_warning(page, f"image store failed: {exc!r}")
+
+        await self._session.flush()
+        return list(pages_by_num.values())
 
     # ------------------------------------------------------------------
     # Internals
