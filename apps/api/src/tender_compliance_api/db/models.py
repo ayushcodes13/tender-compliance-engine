@@ -21,6 +21,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     String,
     UniqueConstraint,
     func,
@@ -299,4 +300,138 @@ class StoredObject(Base):
         return (
             f"StoredObject(id={self.id!r}, org={self.organization_id!r}, "
             f"key={self.storage_key!r})"
+        )
+
+
+class DocumentProcessingStatus(enum.StrEnum):
+    """Lifecycle stage for a DocumentVersion's parsing/OCR pipeline.
+
+    Phase 1 only needs ``UPLOADED`` (bytes stored, not yet parsed) — later
+    checkpoints progress through ``PROCESSING``/``PARSED``/``FAILED``.
+    """
+
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    PARSED = "parsed"
+    FAILED = "failed"
+
+
+class TenderDocumentType(enum.StrEnum):
+    """Logical classification of a tender document within a project."""
+
+    TENDER = "tender"
+    AMENDMENT = "amendment"
+    SPECIFICATION = "specification"
+    OTHER = "other"
+
+
+class TenderDocument(Base):
+    """Logical tender document — a named container for immutable versions.
+
+    A single logical document can receive multiple ``DocumentVersion``
+    rows over time, but the *versions* themselves are append-only and
+    immutable.
+    """
+
+    __tablename__ = "tender_documents"
+    __table_args__ = (
+        Index("ix_tender_documents_project", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    display_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    document_type: Mapped[TenderDocumentType] = mapped_column(
+        Enum(TenderDocumentType, name="tender_document_type"),
+        nullable=False,
+        default=TenderDocumentType.TENDER,
+        server_default=TenderDocumentType.TENDER.value,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"TenderDocument(id={self.id!r}, project={self.project_id!r}, "
+            f"name={self.display_name!r})"
+        )
+
+
+class DocumentVersion(Base):
+    """Immutable uploaded version of a ``TenderDocument``.
+
+    Each row is append-only: the source ``StoredObject``, checksum, MIME,
+    and size are written once and never updated.  Only ``processing_status``
+    and ``updated_at`` are expected to change as the parsing pipeline
+    progresses — the *bits on disk* referenced by ``stored_object_id`` are
+    never mutated.
+    """
+
+    __tablename__ = "document_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id", "version_number", name="uq_doc_versions_doc_ver"
+        ),
+        Index("ix_doc_versions_document", "document_id"),
+        Index("ix_doc_versions_stored_object", "stored_object_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("tender_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    stored_object_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("stored_objects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    # Denormalized copy of the stored-object metadata for deterministic
+    # comparisons without joining stored_objects every time.
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    processing_status: Mapped[DocumentProcessingStatus] = mapped_column(
+        Enum(DocumentProcessingStatus, name="doc_processing_status"),
+        nullable=False,
+        default=DocumentProcessingStatus.UPLOADED,
+        server_default=DocumentProcessingStatus.UPLOADED.value,
+    )
+    parser_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ocr_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ocr_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"DocumentVersion(id={self.id!r}, document={self.document_id!r}, "
+            f"v={self.version_number!r})"
         )
