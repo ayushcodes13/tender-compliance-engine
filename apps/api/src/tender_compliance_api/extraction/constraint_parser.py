@@ -59,9 +59,12 @@ _OP_SURFACE: dict[ConstraintOperator, list[str]] = {
         "<=", "≤", "less than or equal to", "at most",
         "no more than", "not exceed", "does not exceed",
         "must not exceed", "shall not exceed",
+        "not exceeding", "does not exceed",
+        "not greater than", "no greater than",
     ],
     ConstraintOperator.GREATER_THAN_OR_EQUAL: [
         ">=", "≥", "greater than or equal to", "at least", "no less than",
+        "not less than", "no lower than",
     ],
     ConstraintOperator.LESS_THAN: [
         "<", "less than", "below", "under", "fewer than", "lower than",
@@ -316,8 +319,11 @@ _CMP_RE = re.compile(
 )
 
 # Between / from X to Y [unit] — unit may attach to either bound or trail.
+# "range of" is included so that "a temperature range of -10 °C to +55 °C"
+# is captured (the minus sign on the lower bound is preserved because the
+# number immediately follows the keyword, unlike bare _SPAN_RE which uses \b).
 _BETWEEN_RE = re.compile(
-    rf"\b(?:between|from)\s+(?P<lo>{_TOK_NUM})"
+    rf"\b(?:between|from|range\s+of)\s+(?P<lo>{_TOK_NUM})"
     rf"(?:\s*(?P<unit0>{_UnitToken.pattern}))?"
     rf"\s+(?:and|through|to|–|-|\.\.)\s+"
     rf"(?P<hi>{_TOK_NUM})"
@@ -345,6 +351,16 @@ _TOL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Standalone tolerance specification: ±N [unit] at the start of a requirement
+# (e.g. "the tolerance shall be ±2 %") with no preceding comparison operator.
+# The lookbehind prevents matching ± that is already consumed as a tolerance
+# suffix of a comparison/range constraint (those are handled by _TOL_RE above).
+_TOL_STANDALONE_RE = re.compile(
+    rf"(?<![⑊\d])(?:±|\+/-)\s*(?P<num>{_TOK_NUM})\s*"
+    rf"(?:(?P<unit>{_UnitToken.pattern}))?",
+    re.IGNORECASE,
+)
+
 
 def _canonicalize_op(surface: str) -> ConstraintOperator | None:
     """Map an operator surface form to its canonical operator."""
@@ -358,16 +374,21 @@ def _canonicalize_op(surface: str) -> ConstraintOperator | None:
 
 def _extract_tolerance(
     fragment: str, pos: int, ocr_warning: bool
-) -> _Tolerance | None:
-    """Match an optional ± tolerance immediately at ``pos``."""
+) -> tuple[_Tolerance | None, tuple[int, int] | None]:
+    """Match an optional ± tolerance immediately at ``pos``.
+
+    Returns ``(tolerance, span)`` where ``span`` is the matched region so
+    callers can register it in the ``used`` list (preventing the standalone
+    tolerance extractor from re-matching the same ± token).
+    """
 
     m = _TOL_RE.match(fragment, pos)
     if not m:
-        return None
+        return None, None
     parsed = _parse_number(m.group("tol"), ocr_warning)
     if parsed.value is None:
-        return None
-    return _Tolerance(value=parsed.value, lexical=parsed.lexical)
+        return None, None
+    return _Tolerance(value=parsed.value, lexical=parsed.lexical), m.span()
 
 
 def _resolve_state(
@@ -479,7 +500,26 @@ def parse_constraint(
                 used.pop()
                 continue
             qty = _quantity_for_unit(unit)
-            parameter = qty if qty is not None else "value"
+            # A range with a unit that is not a recognized measurement unit
+            # (e.g. "Date", "Page", "as", "T") is almost certainly a false
+            # positive from document metadata (reference numbers, page labels).
+            # Refuse to fabricate a constraint from it (AGENTS: never invent
+            # a requirement/citation).  Leave the span unconsumed.
+            if qty is None:
+                used.pop()
+                continue
+            # A hyphen-separated single-letter "unit" following a large number
+            # is almost certainly a material/grade designation (e.g. "6061-T6",
+            # "316L"), not a measurement range.  Refuse to fabricate.
+            unit1_tok = m.group("unit1")
+            sep_start = m.end("lo")
+            if unit0_tok:
+                sep_start = m.end("unit0")
+            sep_text = fragment[sep_start:m.start("hi")]
+            if unit1_tok and len(unit1_tok) == 1 and "-" in sep_text:
+                used.pop()
+                continue
+            parameter = qty
             lo_num = _parse_number(lo_tok, ocr_warning)
             hi_num = _parse_number(hi_tok, ocr_warning)
             # Pick the "worse" state of the two bounds.
@@ -501,10 +541,9 @@ def parse_constraint(
                 state=num_state,
                 issues=lo_num.issues + hi_num.issues,
             )
-            tol = _extract_tolerance(fragment, end, ocr_warning)
-            extra_issues: tuple[str, ...] = ()
-            if unit and not qty:
-                extra_issues = ("unknown_unit",)
+            tol, tol_span = _extract_tolerance(fragment, end, ocr_warning)
+            if tol_span is not None:
+                used.append(tol_span)
             c = _build(
                 parameter=parameter,
                 operator=ConstraintOperator.BETWEEN,
@@ -516,7 +555,6 @@ def parse_constraint(
                 raw_fragment=fragment,
                 raw_value_lexical=num.lexical,
                 ocr_warning=ocr_warning,
-                extra_issues=extra_issues,
             )
             out.append(c)
 
@@ -531,12 +569,70 @@ def parse_constraint(
         num_tok = m.group("num")
         unit_tok = m.group("unit")
         unit = _is_real_unit(unit_tok)
+
+        # Detect OCR corruption: a digit immediately followed by a single
+        # letter that is not a recognized unit (e.g. "8O" from "80").
+        # _TOK_NUM stops at letters, so the OCR-corrupted number is split
+        # into num="8" + unit="O".  _is_real_unit("O") returns "O" (single
+        # char is short enough to "look" like a unit), but _quantity_for_unit
+        # returns None because "O" is not a known quantity.  Re-parse the
+        # merged token to catch the corruption.
+        raw_value_lexical = num_tok
+        if (
+            unit_tok
+            and len(unit_tok) == 1
+            and unit is not None
+            and _quantity_for_unit(unit) is None
+            and m.start("unit") == m.end("num")  # no space between num and unit
+        ):
+            merged_tok = num_tok + unit_tok
+            merged = _parse_number(merged_tok, ocr_warning)
+            if merged.value is None:
+                # OCR-corrupted number.  Try to find a real unit after it.
+                after_pos = end  # end of the full _CMP_RE match (num + unit)
+                after_text = fragment[after_pos:].lstrip()
+                offset = len(fragment[after_pos:]) - len(after_text)
+                um = _UnitToken.match(after_text)
+                if um:
+                    real_unit = _is_real_unit(um.group())
+                    if real_unit is not None:
+                        unit = real_unit
+                        end = after_pos + offset + um.end()  # extend span
+                        raw_value_lexical = merged_tok
+                else:
+                    unit = None
+                    raw_value_lexical = merged_tok
+                num = merged
+                qty = _quantity_for_unit(unit)
+                parameter = qty if qty is not None else (
+                    _parameter_from_noun(fragment, m.start("num")) or "value"
+                )
+                tol, tol_span = _extract_tolerance(fragment, end, ocr_warning)
+                if tol_span is not None:
+                    used.append(tol_span)
+                c = _build(
+                    parameter=parameter,
+                    operator=op,
+                    num=num,
+                    unit=unit,
+                    tolerance=tol,
+                    raw_fragment=fragment,
+                    raw_value_lexical=raw_value_lexical,
+                    ocr_warning=ocr_warning,
+                    extra_issues=(),
+                )
+                out.append(c)
+                used.append((start, end))
+                continue
+        # Normal (non-corrupted) path
         num = _parse_number(num_tok, ocr_warning)
         qty = _quantity_for_unit(unit)
         parameter = qty if qty is not None else (
             _parameter_from_noun(fragment, m.start("num")) or "value"
         )
-        tol = _extract_tolerance(fragment, end, ocr_warning)
+        tol, tol_span = _extract_tolerance(fragment, end, ocr_warning)
+        if tol_span is not None:
+            used.append(tol_span)
         cmp_extra: tuple[str, ...] = ()
         if unit and not qty:
             cmp_extra = ("unknown_unit",)
@@ -547,12 +643,47 @@ def parse_constraint(
             unit=unit,
             tolerance=tol,
             raw_fragment=fragment,
-            raw_value_lexical=num.lexical,
+            raw_value_lexical=raw_value_lexical,
             ocr_warning=ocr_warning,
             extra_issues=cmp_extra,
         )
         out.append(c)
         used.append((start, end))
+
+    # Standalone tolerance: ±N [unit] with no preceding comparison operator.
+    # E.g. "the voltage tolerance shall be ±2 %" extracts as an exact constraint
+    # with value=2, unit="%", tolerance=2.
+    for m in _TOL_STANDALONE_RE.finditer(fragment):
+        start, end = m.span()
+        if any(s < end and e > start for s, e in used):
+            continue
+        used.append((start, end))
+        num_tok = m.group("num")
+        unit_tok = m.group("unit")
+        unit = _is_real_unit(unit_tok)
+        qty = _quantity_for_unit(unit)
+        # Only accept if the unit is recognized — otherwise this ± pattern is
+        # likely noise, not a tolerance specification.
+        if unit is not None and qty is None:
+            continue
+        num = _parse_number(num_tok, ocr_warning)
+        parameter = qty if qty is not None else (
+            _parameter_from_noun(fragment, m.start("num")) or "value"
+        )
+        tol = _Tolerance(value=num.value, lexical=num.lexical) if num.value is not None else None
+        tol_extra: tuple[str, ...] = ("tolerance",)
+        c = _build(
+            parameter=parameter,
+            operator=ConstraintOperator.EQUALS,
+            num=num,
+            unit=unit,
+            tolerance=tol,
+            raw_fragment=fragment,
+            raw_value_lexical=num.lexical,
+            ocr_warning=ocr_warning,
+            extra_issues=tol_extra,
+        )
+        out.append(c)
 
     return out
 

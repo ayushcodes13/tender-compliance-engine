@@ -447,52 +447,50 @@ class TestTextReport:
 # Known parser divergences (documented regressions)
 # ---------------------------------------------------------------------------
 
-class TestKnownParserDivergences:
-    """The current parser has known bugs that the eval harness must detect.
-    These tests document the expected behavior of the gate system, not the
-    parser itself.  They will flip to PASS when the parser is fixed."""
+class TestParserFixesVerified:
+    """The parser bugs documented in CP41–CP47 have been fixed.  These tests
+    verify that the fixes hold — the eval harness must show zero invented
+    negatives, correct operators, and matching ranges."""
 
-    def test_negative_cases_have_invented_constraints(self) -> None:
-        """negative-001 and negative-002 currently produce 1 FP each.
-        This is a known parser bug that the eval harness correctly detects."""
-        report = run_eval()
+    def test_negative_cases_have_zero_invented_constraints(self) -> None:
+        """negative-001 and negative-002 produce zero FPs after the
+        qualitative parser + range unit-validation fixes."""
+        report = run_eval(config=EvalConfig(ocr_warning=True))
 
         # Find negative cases
         dataset = load_dataset()
         neg_case_ids = {c.case_id for c in dataset.cases if c.is_gold_negative}
         for cr in report.case_results:
             if cr.case_id in neg_case_ids:
-                # Currently these fail due to parser false positives
-                assert cr.false_positives >= 0  # at least we detect them
+                assert cr.false_positives == 0
 
-    def test_invented_negative_gate_fails(self) -> None:
-        """The invented_negative_rate gate currently fails because the parser
-        produces FPs on negative cases.  This gate is a hard invariant."""
-        report = run_eval()
+    def test_invented_negative_gate_passes(self) -> None:
+        """The invented_negative_rate gate passes — zero invented constraints."""
+        report = run_eval(config=EvalConfig(ocr_warning=True))
         gate = next(g for g in report.gates if g.name == "invented_negative_rate")
-        # Currently fails — documented known parser bug
-        assert gate.passed is False
-        assert gate.value > 0
+        assert gate.passed is True
+        assert gate.value == 0
 
-    def test_numeric_005_operator_bug_detected(self) -> None:
-        """numeric-005 has 'not less than -10 °C' → parser produces '<'
-        instead of '>='.  This divergence is detected as FP+FN."""
-        report = run_eval()
+    def test_numeric_005_operators_correct(self) -> None:
+        """numeric-005 'not less than -10 °C' and 'not greater than +55 °C'
+        now produce correct '>=' and '<=' operators matching gold."""
+        report = run_eval(config=EvalConfig(ocr_warning=True))
         case_result = next(
             cr for cr in report.case_results if cr.case_id == "numeric-005-min-max"
         )
-        # The parser produces wrong operators → constraints don't match gold
-        assert case_result.false_positives >= 1
-        assert case_result.false_negatives >= 1
+        assert case_result.true_positives == 2
+        assert case_result.false_positives == 0
+        assert case_result.false_negatives == 0
 
-    def test_numeric_002_range_divergence_detected(self) -> None:
-        """numeric-002 (range) has operator divergence: parser produces
-        'greater_than' vs gold 'max'.  Detected as FP+FN."""
-        report = run_eval()
+    def test_numeric_002_range_matches(self) -> None:
+        """numeric-002 'range of -10 °C to +55 °C' now matches gold."""
+        report = run_eval(config=EvalConfig(ocr_warning=True))
         case_result = next(
             cr for cr in report.case_results if cr.case_id == "numeric-002-range"
         )
-        assert case_result.false_positives >= 1 or case_result.false_negatives >= 1
+        assert case_result.false_positives == 0
+        assert case_result.false_negatives == 0
+        assert case_result.f1 == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -579,5 +577,6 @@ class TestReportStructure:
     def test_check_quality_gates_returns_bool(self) -> None:
         result = check_quality_gates()
         assert isinstance(result, bool)
-        # Currently False due to known parser bugs
-        assert result is False
+        # Critical gates pass (invented_negative_rate=0, numeric_fidelity=0).
+        # The overall F1 gate is non-blocking (see EvalReport.critical_gates_passed).
+        assert result is True

@@ -140,6 +140,36 @@ def test_less_than_symbol() -> None:
     _assert_safe(c)
 
 
+def test_not_less_than_operator() -> None:
+    """'not less than -10 °C' → >= -10 °C (temperature)."""
+    c = _single("not less than -10 °C")
+    assert c.operator == ">="
+    assert c.numeric_value == -10.0
+    assert c.unit == "°C"
+    assert c.parameter == "temperature"
+    _assert_safe(c)
+
+
+def test_not_greater_than_operator() -> None:
+    """'not greater than +55 °C' → <= 55 °C (temperature)."""
+    c = _single("not greater than +55 °C")
+    assert c.operator == "<="
+    assert c.numeric_value == 55.0
+    assert c.unit == "°C"
+    assert c.parameter == "temperature"
+    _assert_safe(c)
+
+
+def test_not_exceeding_operator() -> None:
+    """'not exceeding 2000 m' → <= 2000 m (length)."""
+    c = _single("not exceeding 2000 m")
+    assert c.operator == "<="
+    assert c.numeric_value == 2000.0
+    assert c.unit == "m"
+    assert c.parameter == "length"
+    _assert_safe(c)
+
+
 def test_greater_than_symbol() -> None:
     c = _single("> 3 bar")
     assert c.operator == ">"
@@ -393,6 +423,50 @@ def test_range_without_unit_in_sentence_no_fabrication() -> None:
 
 def test_between_range_without_unit_no_fabrication() -> None:
     assert parse_constraint("between 5 and 10") == []
+
+
+def test_range_of_pattern() -> None:
+    """'range of -10 °C to +55 °C' is captured as a BETWEEN range with the
+    minus sign preserved on the lower bound."""
+    c = _single("range of -10 °C to +55 °C")
+    assert c.operator == "between"
+    assert c.lower_bound == -10.0
+    assert c.upper_bound == 55.0
+    assert c.unit == "°C"
+    assert c.parameter == "temperature"
+
+
+def test_range_of_pattern_with_text() -> None:
+    """'within the range of 45 % to 55 %' captures the percentage range."""
+    c = _single("within the range of 45 % to 55 %")
+    assert c.operator == "between"
+    assert c.lower_bound == 45.0
+    assert c.upper_bound == 55.0
+    assert c.unit == "%"
+
+
+def test_range_with_unrecognized_unit_not_extracted() -> None:
+    """A range with an unrecognized unit (e.g. 'T-2024-001' or 'Page 1')
+    must NOT produce a fabricated constraint."""
+    assert parse_constraint("Tender Reference: T-2024-001") == []
+    assert parse_constraint("Page 1") == []
+
+
+def test_multi_word_unrecognized_unit_in_range_not_extracted() -> None:
+    """'4.3.1 ... as specified' must not fabricate a range from the
+    clause number and the word 'as' treated as a unit."""
+    results = parse_constraint("Section 4.3.1 as specified")
+    assert results == []
+
+
+def test_standalone_tolerance() -> None:
+    """'±2 %' with no preceding comparison operator is extracted as an
+    exact constraint (value=2, unit='%', tolerance=2)."""
+    c = _single("shall be ±2 %")
+    assert c.operator == "="
+    assert c.numeric_value == 2.0
+    assert c.unit == "%"
+    assert c.tolerance == 2.0
 
 
 def test_negative_lower_bound_captured_in_between() -> None:
@@ -674,15 +748,18 @@ def _assert_safe_via_parse(result) -> None:
     assert result.state is ConstraintNormalizationState.SAFE
 
 
-def test_ocr_corrupted_number_in_fragment_escalates_unknown_unit() -> None:
-    """When '2O' appears in a fragment, the parser splits it into num='2'
-    and unit='O' (unknown).  This is conservative: no value is fabricated.
-    The state is PARTIAL (unknown_unit), not fabricated SAFE."""
-    c = _single("≤ 2O kg")
-    assert c.numeric_value == 2.0
-    assert c.unit == "O"
-    _assert_partial(c)
-    assert "unknown_unit" in c.issues
+def test_ocr_corrupted_digit_letter_merged_and_escalated() -> None:
+    """When a digit is immediately followed by a letter that is not a
+    recognized unit (e.g. '8O' where 'O' is a misread '0'), the parser
+    detects the merged token as OCR-corrupted: numeric_value is None (no
+    value fabricated), state is NEEDS_REVIEW, and the real unit following
+    the corruption ('°C') is still captured."""
+    c = _single("≤ 2O kg", ocr_warning=False)
+    assert c.numeric_value is None
+    assert c.unit == "kg"
+    assert c.normalization_state is ConstraintNormalizationState.NEEDS_REVIEW
+    assert c.raw_value_lexical == "2O"
+    assert "ocr_corrupted_number" in c.issues
 
 
 def test_ocr_warning_escalates_safe_to_partial() -> None:
@@ -702,6 +779,16 @@ def test_ocr_warning_does_not_downgrade_already_partial() -> None:
     assert len(results) == 1
     assert results[0].normalization_state is ConstraintNormalizationState.PARTIAL
     assert "ambiguous_comma_separator" in results[0].issues
+
+
+def test_unknown_unit_multiletter_not_treated_as_ocr_corruption() -> None:
+    """A multi-letter unit token that is not recognized (e.g. 'xyz') is NOT
+    treated as OCR corruption — only single-letter digit-adjacent tokens
+    trigger the OCR merge path."""
+    c = _single("≤ 5 xyz")
+    assert c.numeric_value == 5.0
+    assert c.unit == "xyz"
+    assert "unknown_unit" in c.issues
 
 
 def test_ocr_warning_on_range() -> None:
