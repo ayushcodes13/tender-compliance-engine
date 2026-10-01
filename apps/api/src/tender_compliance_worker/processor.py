@@ -491,6 +491,27 @@ class JobProcessor:
                     version_number=version.version_number,
                     run_id=run.id,
                 )
+                # Promote reconciled candidates to persisted Requirements
+                # (CP30).  Best-effort: failure here does not undo the
+                # already-persisted candidates — CP30 can be re-run.
+                try:
+                    inserted, skipped = await svc.persist_requirements(
+                        auth,
+                        document_id=version.document_id,
+                        version_number=version.version_number,
+                        run_id=run.id,
+                    )
+                    if inserted or skipped:
+                        logger.info(
+                            "EXTRACT promoted %d requirement(s) for version "
+                            "%s (%d unchanged skipped)",
+                            inserted, version.id, skipped,
+                        )
+                except Exception as prom_exc:  # noqa: BLE001
+                    logger.warning(
+                        "EXTRACT requirement promotion failed for version "
+                        "%s: %s", version.id, prom_exc,
+                    )
             except Exception as rec_exc:  # noqa: BLE001
                 logger.warning(
                     "EXTRACT reconciliation failed for version %s: %s",

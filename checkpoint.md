@@ -8,7 +8,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP30 — Exact/approximate source anchors and Requirement persistence**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP31 — Extraction diagnostics and reconciliation history**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -177,7 +177,9 @@ Phase 2 evaluation + production release
 - [ ] CP27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
 - [ ] CP28 — Requirement candidate extraction, splitting, grouping, and abstention
 - [ ] CP29 — Duplicate/header/footer/overlap reconciliation
-- [ ] CP30 — Exact/approximate source anchors and Requirement persistence
+- [x] ✅ ~~CP30 — Exact/approximate source anchors and Requirement persistence~~
+  - Status: DONE — PR #35
+  - Branch: `cp30/requirements`
 - [ ] CP31 — Extraction diagnostics and reconciliation history
 
 ### Stage F — Conservative normalization and structured constraints
@@ -1627,9 +1629,9 @@ human review. A single `extraction_reconciliations` audit row records the pass
 checks passed; `mypy src/` Success (66 files); `alembic upgrade head` →
 `0011_extraction_reconciliation`; `npx tsc --noEmit` (apps/web) clean.
 
-## ⬜ Checkpoint 30 — Exact/approximate source anchors and Requirement persistence
+## ✅ ~~Checkpoint 30 — Exact/approximate source anchors and Requirement persistence~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #35 merged.
 
 **Plain-English outcome:** Only validated requirements are stored, each with the strongest source location actually known.
 
@@ -1665,6 +1667,97 @@ checks passed; `mypy src/` Success (66 files); `alembic upgrade head` →
 ### Guardrail
 
 - Never fabricate missing coordinates/page/clause metadata.
+
+### Completion summary (PR #35)
+
+**Why:** CP28/CP29 emit validated, deduped, source-anchored candidates but keep
+them in transient `extraction_candidates` rows. There was no persisted,
+human-reviewable `Requirement` object with a stable identity and a strong
+source location. CP30 promotes the surviving candidates into
+`:class:`~tender_compliance_api.db.models.Requirement`` rows with EXACT/APPROXIMATE
+source anchors and a content-addressed `promotion_key` so reprocessing never
+silently duplicates a row or overwrites a human-reviewed state.
+
+**What changed:**
+- `db/models.py`: `Requirement` (tenant-scoped via `document_version_id`, FK to
+  `processing_runs`, `promotion_key`, `reconciliation_group_id`, verbatim
+  `normalized_text`/`raw_source`, `requirement_type`/`uncertainty`/`clause_number`/
+  `ocr_warning`, Phase-1 `review_state` enum `UNREVIEWED/REVIEWED/
+  NEEDS_CLARIFICATION/OCR_WARNING` defaulting `unreviewed`) and `RequirementSource`
+  (one row per contributing page fragment: `page_number`, `clause_number`,
+  `char_start`/`char_end`, `bbox`, `ocr_confidence`, `location_type`
+  exact/approximate, verbatim `source_text`). No Phase-2/vendor-compliance
+  columns. `RequirementReviewState` StrEnum defined alongside the other enums.
+- `alembic/versions/0012_requirements.py` (new): `CREATE TABLE requirements`
+  (incl. `uq_requirements_version_promotion_key`), `CREATE TABLE
+  requirement_sources`, indexes; `review_state`/`location_type` stored as VARCHAR
+  (SQLite-compatible, mirroring CP26 `0009`'s `status` column); the ORM
+  `Enum(..., name=...)` maps the Python enum. Head → `0012_requirements`.
+- `extraction/requirement.py` (new): pure promotion/anchor logic:
+  `promotion_key(normalized_text, requirement_type, clause_number, page_numbers)`
+  (`sha256[:16]` of whitespace-normalized text + type + clause + sorted-unique
+  pages); `to_promotion_input(row)` projects a candidate (reads page numbers from
+  the trusted `sources_json`, never fabricating them); `resolve_sources(raw_source,
+  sources_json)` returns EXACT (`raw_source` is a literal substring of the page
+  `source_text` → real `char_start`/`char_end`) or APPROXIMATE (reuses the fragment's
+  stored span, no fabricated offsets). `ResolvedSource`/`PromotionInput` frozen
+  dataclasses.
+- `document/service.py`: `persist_requirements(auth, document_id, version_number, *,
+  run_id=None) -> (inserted, skipped)` — selects candidates where
+  `is_valid AND persistable AND deduped=False`, skips any whose `promotion_key`
+  already exists (preserving that row's existing `review_state`), else inserts the
+  `Requirement` + its `RequirementSource` anchors (flush per requirement).
+- `worker/processor.py`: `_do_extract` calls `persist_requirements` after
+  `reconcile_version_candidates` (best-effort, logs on failure, never strands the
+  version); `JobProcessor(llm=None)` keeps EXTRACT a clean no-op (preserves
+  `test_worker.py`).
+- `extraction/__init__.py`: re-exports `promotion_key`, `resolve_sources`,
+  `to_promotion_input`, `PromotionInput`, `ResolvedSource`.
+
+**Scope:** Candidate → persisted `Requirement` promotion only. Does **not**
+implement human review/edit (CP35-CP40), matrix projection or export (CP41-CP42),
+normalization of numeric/unit constraints (CP32-CP34), or any Phase-2/vendor work.
+
+**Evidence/provenance impact:** Every persisted requirement is traceable to
+`document_version_id` → `RequirementSource.page_number`/`clause_number`/
+`char_start`/`char_end`/`bbox`/`ocr_confidence`/`location_type`/`source_text`,
+with `raw_source` preserved verbatim (never mutated). EXACT is only used when the
+candidate's `raw_source` is a literal substring of the trusted page text;
+otherwise APPROXIMATE is labeled and no offset is fabricated. OCR-derived
+candidates are UNCERTAIN (non-persistable since CP28) — promoted requirements carry
+`ocr_warning=False` at promotion time; `OCR_WARNING` review state is reserved for
+CP35 human review — honoring the AGENTS rule that missing evidence is not the same
+as contradictory evidence.
+
+**Verification:**
+- `tests/test_extraction_promotion.py` (new, 8 pure cases): `promotion_key`
+  determinism/changes-by-text/page/clause/type and 16-hex shape; `to_promotion_input`
+  page extraction (order preserved, missing sources → empty) and promotion-key
+  derivation; `resolve_sources` EXACT literal-substring offsets, bbox/ocr passthrough,
+  whitespace-difference → APPROXIMATE fallback (no fabricated offset), no-source-text →
+  APPROXIMATE, multi-fragment independent resolution, fragment without page_number skipped.
+- `tests/test_extraction_pipeline.py` (+4 `TestPromotionPersistence` cases):
+  exactly-anchored requirement read back with `review_state=UNREVIEWED` + correct
+  EXACT `char_start`/`char_end`; reprocess idempotency (0 inserted, 1 skipped,
+  human-set `REVIEWED` state preserved, single row); deduped candidates not promoted;
+  non-literal raw_source round-trips as APPROXIMATE with the fragment's stored span;
+  `promotion_key` matches the content-addressed formula.
+- `tests/test_migration.py`: head bumped to `0012_requirements`; `requirements` and
+  `requirement_sources` added to `_APP_TABLES`.
+
+**Risks / limitations:**
+- `promotion_key` is text/type/clause/pages only; genuinely reworded obligations
+  on the same pages get a new key (fresh row). This is intended — rewording may
+  change meaning and must be re-reviewed.
+- APPROXIMATE anchors reuse the fragment's `char_start`/`char_end` as recorded by the
+  chunker; if that span was itself approximate, the requirement is flagged
+  APPROXIMATE (never silently upgraded to EXACT). CP31/CP35 may add richer fuzzy
+  location and reviewer clarification.
+- `sources_json` is a JSON dump; richer source-location querying is deferred to CP35.
+
+**Gate (run from `apps/api`):** `pytest` 305 passed / 2 skipped; `ruff check .`
+All checks passed; `mypy src/` Success (67 files); `alembic upgrade head` →
+`0012_requirements`; `npx tsc --noEmit` (apps/web) clean.
 
 ## ⬜ Checkpoint 31 — Extraction diagnostics and reconciliation history
 
