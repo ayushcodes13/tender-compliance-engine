@@ -44,15 +44,23 @@ class QueueMessage:
     attempt: int = 1
 
 
-def make_job_id(document_version_id: str, stage: str) -> uuid.UUID:
-    """Generate a deterministic job ID from (version, stage).
+def make_job_id(
+    document_version_id: str,
+    stage: str,
+    namespace: str = "tender",
+) -> uuid.UUID:
+    """Generate a deterministic job ID from (namespace, version, stage).
 
-    Idempotency: re-enqueuing the same version+stage returns the same
-    job ID, so the queue can deduplicate.
+    Idempotency: re-enqueuing the same namespace+version+stage returns the
+    same job ID, so the queue can deduplicate.
+
+    The ``namespace`` prefix (default ``"tender"``) separates tender and
+    OEM document spaces so their job IDs never collide even if UUIDs
+    coincide.
     """
     return uuid.uuid5(
         uuid.UUID("00000000-0000-5000-8000-000000000000"),
-        f"{document_version_id}:{stage}",
+        f"{namespace}:{document_version_id}:{stage}",
     )
 
 

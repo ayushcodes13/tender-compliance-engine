@@ -39,6 +39,8 @@ from tender_compliance_api.db.models import (
     ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
+    OemDocument,
+    OemDocumentVersion,
     ProcessingRun,
     ProcessingStage,
     Project,
@@ -1851,6 +1853,98 @@ class DocumentService:
 
         return run_id
 
+    async def get_oem_version_or_raise(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> OemDocumentVersion:
+        """Return a specific OEM document version, scoped to *auth*'s org.
+
+        Raises :class:`DocumentNotFoundError` if the document is not in the
+        authenticated organization or the version does not exist.
+        """
+        result = await self._session.execute(
+            select(OemDocumentVersion)
+            .join(OemDocument)
+            .where(
+                OemDocument.id == document_id,
+                OemDocument.project_id == Project.id,
+                Project.organization_id == auth.organization_id,
+                OemDocumentVersion.document_id == document_id,
+                OemDocumentVersion.version_number == version_number,
+            )
+        )
+        version = result.scalar_one_or_none()
+        if version is None:
+            raise DocumentNotFoundError(
+                f"oem document {document_id} v{version_number} "
+                f"not found in org {auth.organization_id}"
+            )
+        return version
+
+    async def enqueue_oem_processing(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> uuid.UUID:
+        """Transition an OEM version from UPLOADED to QUEUED.
+
+        Mirrors :meth:`enqueue_processing` but operates on
+        :class:`OemDocumentVersion` instead of :class:`DocumentVersion`.
+        Returns a deterministic run_id for the queue job.
+        """
+        version = await self.get_oem_version_or_raise(
+            auth, document_id, version_number
+        )
+
+        run_id = make_job_id(
+            str(version.id), ProcessingStage.PARSE.value,
+            namespace="oem",
+        )
+
+        if version.processing_status == DocumentProcessingStatus.UPLOADED:
+            # Transition UPLOADED → QUEUED
+            from tender_compliance_api.document.service import _is_valid_transition
+            if not _is_valid_transition(
+                version.processing_status,
+                DocumentProcessingStatus.QUEUED,
+            ):
+                raise TransitionError(
+                    f"cannot transition {version.processing_status.value} "
+                    f"→ {DocumentProcessingStatus.QUEUED.value}"
+                )
+            version.processing_status = DocumentProcessingStatus.QUEUED
+            await self._audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="oem_document.status_transition",
+                entity_type="oem_document_version",
+                entity_id=version.id,
+                project_id=await self._oem_project_id_for(version.document_id),
+                metadata={
+                    "document_id": str(version.document_id),
+                    "version_number": version.version_number,
+                    "from": version.processing_status.value,
+                    "to": DocumentProcessingStatus.QUEUED.value,
+                },
+            )
+            await self._session.flush()
+        elif version.processing_status in (
+            DocumentProcessingStatus.QUEUED,
+            DocumentProcessingStatus.PROCESSING,
+        ):
+            pass
+        else:
+            raise TransitionError(
+                f"oem version {version.id} is "
+                f"{version.processing_status.value}, "
+                "cannot enqueue for processing"
+            )
+
+        return run_id
+
     async def requeue_version(
         self,
         auth: AuthContext,
@@ -2548,6 +2642,16 @@ class DocumentService:
         result = await self._session.execute(
             select(TenderDocument.project_id).where(
                 TenderDocument.id == document_id
+            )
+        )
+        return result.scalar_one()
+
+    async def _oem_project_id_for(self, document_id: uuid.UUID) -> uuid.UUID:
+        """Return the project_id for an OemDocument (no auth scoping —
+        the caller has already verified ownership)."""
+        result = await self._session.execute(
+            select(OemDocument.project_id).where(
+                OemDocument.id == document_id
             )
         )
         return result.scalar_one()

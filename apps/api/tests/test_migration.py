@@ -22,9 +22,9 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0018_observability_retention"
+_HEAD_REV = "0019_oem_document_ingestion"
 
-# Tables introduced by CP08..CP48 migrations (one table per checkpoint).
+# Tables introduced by CP08..CP49 migrations (one table per checkpoint).
 _APP_TABLES = {
     "organizations", "users", "memberships", "audit_logs", "projects",
     "stored_objects", "tender_documents", "document_versions",
@@ -34,6 +34,7 @@ _APP_TABLES = {
     "requirement_constraints", "requirement_revisions",
     "requirement_relations", "requirement_notes", "categories",
     "requirement_categories", "export_artifacts",
+    "oem_documents", "oem_document_versions",
 }
 
 

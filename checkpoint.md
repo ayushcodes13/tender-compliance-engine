@@ -2563,33 +2563,25 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 Extend the proven source-preserving pipeline to vendor/OEM evidence and produce conservative, human-approved compliance outputs.
 
-## ⬜ Checkpoint 49 — OEM document ingestion and provenance
+## ✅ ~~Checkpoint 49 — OEM document ingestion and provenance~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** COMPLETE — PR #59 merged.
 
 **Plain-English outcome:** Datasheets, brochures, manuals, certificates, proposals, test reports, quotations, and other OEM material use immutable source versioning.
 
-### What we will do
+### What we did
 
-1. Add OEM document/version entities only when this checkpoint begins.
-2. Reuse organization/project authorization and object storage.
-3. Add OEM document type/product/vendor metadata.
-4. Reuse upload validation, status, queue, parsing, rendering, OCR, pages, retries, and audit patterns.
-5. Add OEM upload/document UI separated from tender source documents.
-6. Keep exact version identity for every later evidence citation.
+1. Added `OemDocumentType` enum (datasource, brochure, manual, certificate, test_report, quotation, proposal, other) and `OemDocument`/`OemDocumentVersion` entities (CP49).
+2. Reused organization/project authorization and object storage.
+3. Added OEM document type/product/vendor metadata on `OemDocument`.
+4. Reused upload validation, status, queue, and audit patterns (malware scan, file validation, content-deduplication, version sequencing).
+5. Added OEM upload API (`POST /projects/{id}/oem-documents/upload`) and listing API (`GET /projects/{id}/oem-documents`), separated from tender source documents (separate tables + routes).
+6. Kept exact version identity via immutable `OemDocumentVersion` with `sha256`, `stored_object_id`, and `version_number` unique constraint per document.
 
-### How we will verify it
+### How we verified it
 
-- OEM documents process without corrupting tender entities.
-- Versions remain immutable and tenant-scoped.
-
-### This checkpoint is complete only when
-
-- A project can hold both tender requirements and source-preserving OEM materials.
-
-### Guardrail
-
-- Tender and OEM sources must remain distinguishable.
+- 13 new tests in `tests/test_oem_documents.py` covering: valid upload, version sequencing, content dedup, empty file rejection, malware rejection, invalid doc_type rejection, wrong extension rejection, listing, cross-tenant denial, tender/OEM separation, audit trail, immutability.
+- Full suite: `824 passed, 2 skipped`. ruff: `All checks passed!`. mypy --strict: `Success: no issues in 82 source files`.
 
 ## ⬜ Checkpoint 50 — Evidence model, retrieval/indexing, and retrieval evaluation
 

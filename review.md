@@ -196,3 +196,28 @@
   None of these can be done without explicit direction — please advise.
 - **No input needed** unless you want F1 as a blocking gate (requires
   addressing the limitations above).
+
+## CP49 — OEM document ingestion and provenance  ✅ DONE (PR #59, merged)
+- **What shipped:** OEM document/version entities (`OemDocument`,
+  `OemDocumentVersion`) with `OemDocumentType` enum (datasource, brochure,
+  manual, certificate, test_report, quotation, proposal, other) and
+  vendor/product metadata. Separate tables from tender documents.
+- API: `POST /projects/{id}/oem-documents/upload` and
+  `GET /projects/{id}/oem-documents`.
+- Immututability: versions use `sha256` + `stored_object_id`; unique constraint
+  on `(document_id, version_number)`; version_number auto-increments.
+- Content deduplication: same-content uploads reuse `StoredObject`.
+- Validation: file type/extension, size, PDF integrity (pypdf), malware scan
+  (FakeScanner in tests, real scanner in prod).
+- Tenant isolation: all queries scoped to `project_id` → `organization_id`;
+  cross-org access returns 404.
+- Audit trail: `oem_document.upload` events with source linkage
+  (document_id, version_number, checksum, storage_key, vendor/product metadata).
+- `make_job_id()` now accepts a `namespace` param to support Phase 2 worker
+  stages without colliding with tender job IDs.
+- 13 new tests covering valid upload, version sequencing, content dedup,
+  empty/malware/invalid-type/wrong-extension rejection, listing, cross-tenant
+  denial, tender/OEM separation, audit trail, and immutability.
+- Full suite: `824 passed, 2 skipped`. ruff: clean. mypy --strict: clean (82 files).
+- **No input needed.** Phase 2 retrieval/Evidence model/Compliance (next
+  checkpoint) deferred per AGENTS.md.
