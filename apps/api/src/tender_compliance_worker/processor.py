@@ -180,9 +180,8 @@ class JobProcessor:
                         session, svc, auth, version, run_id,
                     )
                     if not parse_ok:
-                        # PARSE failed — record parser identity and stop.
-                        version.parser_name = self._parser.name
-                        version.parser_version = self._parser.version
+                        # PARSE failed — identity was already recorded on the
+                        # version from parse_result inside _do_parse.
                         await session.commit()
                         return
                 elif stage == ProcessingStage.OCR:
@@ -205,14 +204,12 @@ class JobProcessor:
                         error_message=None,
                     )
 
-            # Record parser identity on the version.  OCR identity
-            # (ocr_name/ocr_version) is recorded within _do_ocr when OCR
-            # actually runs; leaving the columns NULL when OCR was not
-            # used is intentional (avoids claiming text is OCR-derived
-            # when it was read natively).
-            version.parser_name = self._parser.name
-            version.parser_version = self._parser.version
-
+            # Parser identity was recorded inside _do_parse from the
+            # ParseResult (so a composite dispatch surfaces the real
+            # sub-parser name).  OCR identity (ocr_name/ocr_version) is
+            # recorded within _do_ocr when OCR actually runs; leaving the
+            # columns NULL when OCR was not used is intentional (avoids
+            # claiming text is OCR-derived when it was read natively).
             await session.commit()
 
     async def _do_parse(
@@ -249,8 +246,14 @@ class JobProcessor:
         # Read the original document bytes.
         data = await self._storage.get(storage_key)
 
-        # Parse the PDF.
+        # Parse the document.  Record the parser that *actually* produced
+        # this result on the version — if a composite adapter dispatched to
+        # a sub-adapter, parse_result.parser_name is the sub-adapter's
+        # identity ("pypdf" / "python-docx"), not the composite's.
         parse_result = await self._parser.parse(data, version.mime_type)
+
+        version.parser_name = parse_result.parser_name
+        version.parser_version = parse_result.parser_version
 
         if parse_result.fatal_error is not None:
             # Fatal parse error — mark the run as failed.
