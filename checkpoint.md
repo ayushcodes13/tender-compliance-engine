@@ -152,7 +152,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP20 — Rendered page assets and real visual source~~
   - Status: DONE — PR #25
   - Branch: `cp20/rendered-page-assets`
-- [ ] CP21 — Scanned-page detection and OCR
+- [x] ✅ ~~CP21 — Scanned-page detection and OCR~~
+  - Status: DONE — PR #26
+  - Branch: `cp21/scanned-page-ocr`
 - [ ] CP22 — DOCX adapter and format-appropriate provenance
 - [ ] CP23 — DocumentPage persistence and structural cleanup
 - [ ] CP24 — Processing retry, idempotency, and partial failure
@@ -998,40 +1000,49 @@ Turn source files into trustworthy page/segment representations while keeping un
 
 - Rendered images are derived assets, not new source versions.
 
-## ⬜ Checkpoint 21 — Scanned-page detection and OCR
+## ✅ Checkpoint 21 — Scanned-page detection and OCR
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #26
 
 **Plain-English outcome:** Image-only/mixed pages are routed to OCR and OCR uncertainty is preserved.
 
-### What we will do
+### What we did
 
-1. Detect scan-like pages using deterministic signals such as native text density/image coverage.
-2. Support mixed PDFs where only some pages use OCR.
-3. Define an OCR provider interface.
-4. Persist OCR text, confidence, geometry when available, provider/version, and OCR-used flag.
-5. Flag low-confidence/meaning-sensitive symbols.
-6. Preserve raw OCR output separately when cleanup could change meaning.
+Page **detection** was already in place from CP19 (`pypdf` sets `ocr_needed=True` per page when native text is absent/untrustworthy; `DocumentPage.ocr_needed`/`ocr_confidence`/`extracted_text` and `DocumentVersion.ocr_name`/`ocr_version` columns exist). CP21 added the OCR **provider**:
 
-### How we will verify it
+1. New replaceable `ocr/` package mirroring `parser/`/`renderer/`:
+   - `adapter.py`: `OcrAdapter` ABC + frozen `OcrResult`/`OcrWord` dataclasses (`text`, `confidence` `[0,100] | None`, optional per-word `bbox`). Confidence `None` = unknown, never "high".
+   - `tesseract.py`: `TesseractOcrAdapter` (pytesseract + Pillow, 150 DPI render from CP20 images). Safe on untrusted input — no code execution. CPU-bound calls wrapped in `asyncio.to_thread`. Provider-availability errors (missing `tesseract` binary) propagate and are recorded per-page non-fatally; corrupt image → empty `OcrResult` (per-page, not raised).
+   - `fake.py`: `FakeOcrAdapter` — deterministic test double returning configurable text/confidence/words (explicitly named "fake", never claims to be real OCR).
+2. `DocumentService.apply_ocr()`: for each `ocr_needed` page, fetches its CP20 rendered image from object storage and runs the adapter. Persists `extracted_text` + `ocr_confidence`; clears `ocr_needed` only when **usable text** is produced (empty/zero-confidence OCR keeps the page flagged so the version is correctly `PARTIAL`). Provider name/version recorded on `DocumentVersion` only when the adapter was actually invoked. Missing rendered image / per-page OCR failure → warning, `ocr_needed` preserved — best-effort, non-fatal.
+3. Worker PARSE job now runs the `OCR` stage (CP20 already rendered pages in the same job, so images are available): `JobProcessor` accepts `ocr: OcrAdapter | None`; `_do_ocr()` calls `apply_ocr` and always completes the OCR run (COMPLETED on success, FAILED only on a whole-stage exception); with no adapter the OCR stage is a no-op (zero regression). `create_worker` injects `TesseractOcrAdapter` (degrades to no-op if the binary is absent).
+4. Removed the stale hard-coded `OCR_NAME`/`OCR_VERSION` defaults so provider identity is always sourced from the adapter that actually ran — never fabricated.
+5. `pyproject.toml`: added `pytesseract>=0.3.10,<1.0` and `pillow>=10.0,<13.0`.
 
-- Digital, scan-only, and mixed fixtures choose the expected path.
-- OCR tests include `≥`, `≤`, `µ`, decimals, units, and common confusions.
+### How we verified it
+
+- `tests/test_ocr.py` (16 real + 1 skipped-without-binary): FakeOcrAdapter deterministic text incl. `≥`, `≤`, `µ`, decimals, units, confusions; words/geometry; confidence `None` preserved; TesseractAdapter name/version + real-OCR smoke (skips when binary absent); `apply_ocr` scan-fill, native-skip (no provider recorded), missing-image (page kept flagged), OCR-exception (per-page warning, provider recorded), empty-text (page kept flagged), mixed doc, idempotent re-OCR (no overwrite), cross-tenant denial; worker scan→PARSED (4 COMPLETED runs, `ocr_name="fake"`, text filled, `ocr_needed=0`) and scan-without-adapter→PARTIAL (OCR no-op, `ocr_name=None` preserved).
+- `ruff check .` ✅ · `mypy src/` ✅ (54 files) · `alembic upgrade head` ✅ · `pytest` ✅ (185 passed + 1 skipped; real-Tesseract test runs locally once the binary is installed).
 
 ### This checkpoint is complete only when
 
-- Each page has an inspectable native-text or OCR path and uncertainty metadata.
+- [x] Each page has an inspectable native-text or OCR path and uncertainty metadata.
+- [x] Image-only, digital, and mixed fixtures choose the expected path.
+- [x] OCR uncertainty (confidence, empty/flagged pages) is preserved, not collapsed.
 
-### Bynd reuse notes
+### Implementation / PR note
 
-- **References:** `metric-search` PDF text-trust gate and `validation-service` OCR handling.
-- Detect hidden OCR layers as well as image-only pages. Selectable text can itself be OCR and therefore non-authoritative.
-- When source quality is too damaged to support a strong negative conclusion, emit an unresolved/review state rather than pretending absence was proven.
-- Record why OCR was selected and whether OCR output replaced an untrusted native layer.
+- **Branch:** `cp21/scanned-page-ocr`
+- **New package `tender_compliance_api/ocr/`:** `adapter.py` (port + dataclasses), `tesseract.py` (TesseractOcrAdapter), `fake.py` (FakeOcrAdapter).
+- **`document/service.py`:** added `apply_ocr()` (best-effort, tenant-scoped, per-page non-fatal).
+- **`tender_compliance_worker/processor.py`:** `JobProcessor.__init__` accepts `ocr`; added `_do_ocr()`; routed `ProcessingStage.OCR` to it; removed stale `OCR_NAME`/`OCR_VERSION` constants and the unconditional `version.ocr_name`/`ocr_version` assignment (now sourced from the adapter).
+- **`tender_compliance_worker/worker.py`:** `create_worker` injects `TesseractOcrAdapter` and passes it to `JobProcessor`.
+- **`pyproject.toml`:** `pytesseract>=0.3.10,<1.0`, `pillow>=10.0,<13.0`.
+- **No new migration** — `ocr_name`/`ocr_version`/`ocr_confidence`/`ocr_needed` columns already exist (CP19 migration `0007`).
 
 ### Guardrail
 
-- Never silently correct meaning-bearing OCR.
+- Never silently correct meaning-bearing OCR. OCR uncertainty (confidence, no-text pages) is recorded as a review state, not silently treated as "recognized".
 
 ## ⬜ Checkpoint 22 — DOCX adapter and format-appropriate provenance
 

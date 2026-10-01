@@ -31,6 +31,7 @@ from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
 
 if TYPE_CHECKING:
+    from tender_compliance_api.ocr.adapter import OcrAdapter
     from tender_compliance_api.parser.adapter import ParseResult
     from tender_compliance_api.renderer.adapter import RenderResult
     from tender_compliance_api.storage.adapter import ObjectStorageAdapter
@@ -521,6 +522,97 @@ class DocumentService:
 
         await self._session.flush()
         return list(pages_by_num.values())
+
+    # ------------------------------------------------------------------
+    # OCR (CP21)
+    # ------------------------------------------------------------------
+
+    async def apply_ocr(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        ocr_adapter: OcrAdapter,
+        storage: ObjectStorageAdapter,
+    ) -> list[DocumentPage]:
+        """Run OCR on the version's pages flagged ``ocr_needed``.
+
+        For each page whose ``ocr_needed`` is set, fetches the page's
+        rendered image (``rendered_image_object_key`` from CP20) from
+        object storage and runs *ocr_adapter* on it.  Recognized text is
+        persisted on ``DocumentPage.extracted_text`` together with the
+        adapter's confidence on ``ocr_confidence``; once a page has usable
+        text ``ocr_needed`` is cleared.  The OCR provider name/version is
+        recorded on the owning :class:`DocumentVersion`.
+
+        Semantics / provenance:
+
+        * ``ocr_needed`` stays ``True`` until the page has usable text.
+          OCR that runs but produces no text therefore leaves the page
+          flagged (so the version is correctly PARTIAL) and records a
+          warning rather than silently presenting an empty page as
+          "reviewed".
+        * Provider-availability errors (e.g. a missing ``tesseract``
+          binary) propagate to the per-page handler below as ordinary
+          exceptions — they are recorded as a per-page warning and leave
+          ``ocr_needed`` set (non-fatal, never fabricates text).
+        * If a page has no rendered image (renderer not configured or
+          rendering failed) it is skipped with a warning and keeps
+          ``ocr_needed``.
+        * When the adapter processes at least one page, ``version.ocr_name``
+          and ``version.ocr_version`` are set from the adapter; otherwise
+          they are left untouched (no OCR was actually used).
+        * This is intentionally **best-effort and non-fatal**: a storage
+          or OCR failure on one page never aborts the rest.
+        """
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+
+        result = await self._session.execute(
+            select(DocumentPage)
+            .where(DocumentPage.document_version_id == version.id)
+            .order_by(DocumentPage.page_number)
+        )
+        pages = result.scalars().all()
+
+        ocr_applied = False
+        for page in pages:
+            if not page.ocr_needed:
+                continue
+
+            key = page.rendered_image_object_key
+            if not key:
+                _append_page_warning(
+                    page, "ocr skipped: no rendered image available"
+                )
+                continue
+
+            try:
+                image_bytes = await storage.get(key)
+                ocr_result = await ocr_adapter.ocr(image_bytes)
+            except Exception as exc:  # noqa: BLE001 — per-page, non-fatal
+                _append_page_warning(page, f"ocr failed: {exc!r}")
+                ocr_applied = True
+                continue
+
+            if ocr_result.confidence is not None:
+                page.ocr_confidence = ocr_result.confidence
+            if ocr_result.text and ocr_result.text.strip():
+                page.extracted_text = ocr_result.text
+                page.ocr_needed = False
+            else:
+                # OCR ran but yielded no text — keep the page flagged for
+                # review rather than presenting empty text as "certain".
+                _append_page_warning(page, "ocr produced no recognizable text")
+            ocr_applied = True
+
+        if ocr_applied:
+            version.ocr_name = ocr_adapter.name
+            version.ocr_version = ocr_adapter.version
+
+        await self._session.flush()
+        return list(pages)
 
     # ------------------------------------------------------------------
     # Internals

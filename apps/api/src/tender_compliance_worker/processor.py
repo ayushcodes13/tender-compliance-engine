@@ -31,6 +31,7 @@ from tender_compliance_api.db.models import (
     RunStatus,
 )
 from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.parser.adapter import ParserAdapter, ParseResult
 from tender_compliance_api.queue import QueuedJob
 from tender_compliance_api.renderer.adapter import RendererAdapter, RenderResult
@@ -40,11 +41,6 @@ logger = logging.getLogger(__name__)
 
 #: The system worker's actor ID — a fixed UUID for audit trails.
 WORKER_ACTOR_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
-
-#: OCR identity recorded on the version (configured for CP19, actual OCR
-#: engine will be invoked in CP21).
-OCR_NAME = "tesseract"
-OCR_VERSION = "5.4"
 
 #: Stages the worker processes, in order.
 STAGES: list[ProcessingStage] = [
@@ -83,6 +79,10 @@ class JobProcessor:
             to :class:`PymupdfRendererAdapter`.
         storage: :class:`ObjectStorageAdapter` used to read the original
             document bytes from storage.
+        ocr: :class:`OcrAdapter` used to recognize text on scanned pages
+            (CP21).  When ``None``, the OCR stage is a no-op (existing
+            pages keep their ``ocr_needed`` flag).  Defaults to
+            :class:`TesseractOcrAdapter`.
     """
 
     def __init__(
@@ -91,6 +91,7 @@ class JobProcessor:
         parser: ParserAdapter | None = None,
         renderer: RendererAdapter | None = None,
         storage: ObjectStorageAdapter | None = None,
+        ocr: OcrAdapter | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._parser = parser or _default_parser()
@@ -99,6 +100,10 @@ class JobProcessor:
         # workers created via ``create_worker`` inject a real renderer
         # (CP20).
         self._renderer: RendererAdapter | None = renderer
+        # OCR defaults to None so tests that construct JobProcessor
+        # directly skip OCR (best-effort, non-fatal).  Production workers
+        # created via ``create_worker`` inject a real OCR adapter (CP21).
+        self._ocr: OcrAdapter | None = ocr
         self._storage = storage or _default_storage()
 
     async def process(self, job: QueuedJob) -> None:
@@ -178,12 +183,18 @@ class JobProcessor:
                         # PARSE failed — record parser identity and stop.
                         version.parser_name = self._parser.name
                         version.parser_version = self._parser.version
-                        version.ocr_name = OCR_NAME
-                        version.ocr_version = OCR_VERSION
                         await session.commit()
                         return
+                elif stage == ProcessingStage.OCR:
+                    # Recognize text on scanned pages (CP21).  Best-effort
+                    # and non-fatal — provider/availability errors are
+                    # recorded per-page, not raised.
+                    await self._do_ocr(
+                        session, svc, auth, version, run_id
+                    )
                 else:
-                    # Placeholder stages (CP21+): complete as no-op.
+                    # Placeholder stages (CLEANUP, EXTRACT): complete as
+                    # no-op until implemented.
                     await svc.complete_run(
                         auth,
                         document_id=version.document_id,
@@ -194,11 +205,13 @@ class JobProcessor:
                         error_message=None,
                     )
 
-            # Record parser identity on the version.
+            # Record parser identity on the version.  OCR identity
+            # (ocr_name/ocr_version) is recorded within _do_ocr when OCR
+            # actually runs; leaving the columns NULL when OCR was not
+            # used is intentional (avoids claiming text is OCR-derived
+            # when it was read natively).
             version.parser_name = self._parser.name
             version.parser_version = self._parser.version
-            version.ocr_name = OCR_NAME
-            version.ocr_version = OCR_VERSION
 
             await session.commit()
 
@@ -328,6 +341,63 @@ class JobProcessor:
                 version.id,
                 exc,
             )
+
+    async def _do_ocr(
+        self,
+        session: AsyncSession,
+        svc: DocumentService,
+        auth: AuthContext,
+        version: DocumentVersion,
+        run_id: uuid.UUID,
+    ) -> None:
+        """Execute the OCR stage (CP21).
+
+        Runs OCR on every page flagged ``ocr_needed`` using the rendered
+        page images produced by the PARSE stage (CP20).  Provider and
+        per-page failures are surfaced as per-page warnings (via
+        :meth:`DocumentService.apply_ocr`) and are **never** fatal to the
+        job.  When no OCR adapter is configured this completes the OCR run
+        as a no-op, preserving prior behavior.
+        """
+        if self._ocr is None:
+            await svc.complete_run(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                stage=ProcessingStage.OCR,
+                run_id=run_id,
+                error_type=None,
+                error_message=None,
+            )
+            return
+
+        try:
+            await svc.apply_ocr(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                ocr_adapter=self._ocr,
+                storage=self._storage,
+            )
+            error_type: str | None = None
+            error_message: str | None = None
+        except Exception as exc:  # noqa: BLE001 — never fail the job on OCR
+            logger.warning(
+                "OCR stage failed for version %s: %s", version.id, exc
+            )
+            error_type = "OCRError"
+            error_message = str(exc)
+
+        await svc.complete_run(
+            auth,
+            document_id=version.document_id,
+            version_number=version.version_number,
+            stage=ProcessingStage.OCR,
+            run_id=run_id,
+            error_type=error_type,
+            error_message=error_message,
+        )
+
 
     async def _get_version(
         self, session: AsyncSession, version_id: uuid.UUID
