@@ -205,9 +205,9 @@ Phase 2 evaluation + production release
 
 ### Stage G — Persistent human review and real source verification
 
-- [x] CP35 — Requirement list/detail API
-- [x] CP36 — Real PDF/source viewer with trustworthy highlights
-- [x] CP37 — Wire the three-pane review UI to real APIs
+- [x] ✅ ~~CP35 — Requirement list/detail API~~
+- [x] ✅ ~~CP36 — Real PDF/source viewer with trustworthy highlights~~
+- [x] ✅ ~~CP37 — Wire the three-pane review UI to real APIs~~
 - [x] ~~CP38 — Requirement edit and immutable revision history~~
 - [x] ~~CP39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes~~
 - [x] ~~CP40 — Review-state machine, audit timeline, and real progress counts~~
@@ -219,8 +219,8 @@ Phase 2 evaluation + production release
 
 ### Stage I — Phase 1 evaluation, security, operations, deployment, and release
 
-- [ ] CP43 — Curated Phase 1 benchmark dataset
-- [ ] CP44 — Automated evaluation harness and quality gates
+- [x] ✅ ~~CP43 — Curated Phase 1 benchmark dataset~~
+- [x] ✅ ~~CP44 — Automated evaluation harness and quality gates~~
 - [ ] CP45 — Adversarial documents, tenant security, upload security, and prompt-injection tests
 - [ ] CP46 — Observability, performance, resource, cost, retention, backup, and deletion
 - [ ] CP47 — Deployment configuration and runbook
@@ -2336,9 +2336,9 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 - Do not use confidential customer material without permission.
 
-## ⬜ Checkpoint 44 — Automated evaluation harness and quality gates
+## ✅ ~~Checkpoint 44 — Automated evaluation harness and quality gates~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #53
 
 **Plain-English outcome:** Release decisions use measured precision/recall/provenance fidelity instead of screenshots.
 
