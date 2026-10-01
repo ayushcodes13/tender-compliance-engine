@@ -30,6 +30,7 @@ from tender_compliance_api.document import (
     ConcurrentEditError,
     DocumentNotFoundError,
     DocumentService,
+    TransitionError,
 )
 
 router = APIRouter(prefix="/projects", tags=["requirements"])
@@ -712,3 +713,235 @@ async def list_categories(
         .order_by(_Cat.display_order.asc(), _Cat.name)
     )
     return [CategorySummary.model_validate(c) for c in result.scalars().all()]
+
+
+# ---------------------------------------------------------------------------
+# Review state machine (CP40)
+# ---------------------------------------------------------------------------
+
+
+class ReviewTransitionRequest(BaseModel):
+    """Request body for transitioning review state (CP40)."""
+
+    target_state: str
+    override_uncertainty: bool = False
+
+
+class MarkReviewedRequest(BaseModel):
+    """Request body for the mark-reviewed shorthand (CP40)."""
+
+    override_uncertainty: bool = False
+
+
+class ReviewCountsResponse(BaseModel):
+    """Real review counts for a document version (CP40)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    total: int
+    active: int
+    unreviewed: int
+    reviewed: int
+    needs_clarification: int
+    ocr_warning: int
+    superseded: int
+
+
+class RequirementTransitionResponse(BaseModel):
+    """Response for a review state transition (CP40)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    review_state: str
+    updated_at: datetime | None
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/requirements/{requirement_id}/transition",
+    response_model=RequirementTransitionResponse,
+    response_model_exclude_none=True,
+)
+async def transition_review_state(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    requirement_id: UUID,
+    body: ReviewTransitionRequest = Body(...),  # noqa: B008
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RequirementTransitionResponse:
+    """Transition a requirement's review state (CP40).
+
+    Validates against the review-state machine:
+    UNREVIEWED → {REVIEWED, NEEDS_CLARIFICATION, OCR_WARNING}
+    REVIEWED → {UNREVIEWED, NEEDS_CLARIFICATION}
+    NEEDS_CLARIFICATION → {UNREVIEWED, REVIEWED, OCR_WARNING}
+    OCR_WARNING → {UNREVIEWED, REVIEWED, NEEDS_CLARIFICATION}
+
+    Transitions to REVIEWED while ``uncertainty`` is not ``confirmed`` require
+    ``override_uncertainty=true`` (audited).
+    """
+    try:
+        target = RequirementReviewState(body.target_state)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid review state: {body.target_state}. "
+            f"Valid values: {[s.value for s in RequirementReviewState]}",
+        ) from None
+
+    svc = DocumentService(session)
+    try:
+        req = await svc.transition_review_state(
+            auth,
+            document_id,
+            version_number,
+            requirement_id,
+            target,
+            override_uncertainty=body.override_uncertainty,
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_transition",
+                "message": str(exc),
+            },
+        ) from exc
+
+    await session.commit()
+    return RequirementTransitionResponse.model_validate(req)
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/requirements/{requirement_id}/mark-reviewed",
+    response_model=RequirementTransitionResponse,
+    response_model_exclude_none=True,
+)
+async def mark_reviewed(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    requirement_id: UUID,
+    body: MarkReviewedRequest | None = Body(None),  # noqa: B008
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RequirementTransitionResponse:
+    """Mark a requirement as reviewed (CP40).
+
+    Shorthand for transitioning to ``REVIEWED``. If the requirement's
+    uncertainty is not ``confirmed``, pass ``override_uncertainty=true``
+    to force the transition (audited).
+    """
+    override = body.override_uncertainty if body else False
+    svc = DocumentService(session)
+    try:
+        req = await svc.mark_reviewed(
+            auth,
+            document_id,
+            version_number,
+            requirement_id,
+            override_uncertainty=override,
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_transition",
+                "message": str(exc),
+            },
+        ) from exc
+    await session.commit()
+    return RequirementTransitionResponse.model_validate(req)
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/requirements/{requirement_id}/reopen",
+    response_model=RequirementTransitionResponse,
+    response_model_exclude_none=True,
+)
+async def reopen_requirement(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    requirement_id: UUID,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RequirementTransitionResponse:
+    """Reopen a requirement (transition to UNREVIEWED, CP40)."""
+    svc = DocumentService(session)
+    try:
+        req = await svc.reopen(auth, document_id, version_number, requirement_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_transition",
+                "message": str(exc),
+            },
+        ) from exc
+    await session.commit()
+    return RequirementTransitionResponse.model_validate(req)
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/requirements/{requirement_id}/escalate",
+    response_model=RequirementTransitionResponse,
+    response_model_exclude_none=True,
+)
+async def escalate_requirement(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    requirement_id: UUID,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RequirementTransitionResponse:
+    """Escalate a requirement to NEEDS_CLARIFICATION (CP40)."""
+    svc = DocumentService(session)
+    try:
+        req = await svc.escalate(auth, document_id, version_number, requirement_id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_transition",
+                "message": str(exc),
+            },
+        ) from exc
+    await session.commit()
+    return RequirementTransitionResponse.model_validate(req)
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/review-counts",
+    response_model=ReviewCountsResponse,
+    response_model_exclude_none=True,
+)
+async def get_review_counts(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> ReviewCountsResponse:
+    """Compute real review counts for a document version (CP40).
+
+    Returns counts for: total, active (non-superseded), unreviewed,
+    reviewed, needs_clarification, ocr_warning, superseded.
+    """
+    svc = DocumentService(session)
+    try:
+        counts = await svc.get_project_review_counts(auth, document_id, version_number)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ReviewCountsResponse(**counts)

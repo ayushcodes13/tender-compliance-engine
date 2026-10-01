@@ -244,6 +244,17 @@ export type ReorderRequirementsRequest = {
   order: string[];
 };
 
+/** Real review counts for a document version (CP40). */
+export type ReviewCountsResponse = {
+  total: number;
+  active: number;
+  unreviewed: number;
+  reviewed: number;
+  needs_clarification: number;
+  ocr_warning: number;
+  superseded: number;
+};
+
 /** Request to create a category (CP39). */
 export type CategoryCreateRequest = {
   name: string;
@@ -635,4 +646,52 @@ export const api = {
     apiFetch(
       `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/revisions`
     ).then((r) => expectJson<RevisionSummary[]>(r)),
+
+  // --- Review state machine (CP40) ---
+
+  markReviewed: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    override_uncertainty = false
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/mark-reviewed`,
+      {
+        method: "POST",
+        body: JSON.stringify({ override_uncertainty }),
+      }
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  reopenRequirement: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/reopen`,
+      { method: "POST" }
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  escalateRequirement: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/escalate`,
+      { method: "POST" }
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  fetchReviewCounts: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/review-counts`
+    ).then((r) => expectJson<ReviewCountsResponse>(r)),
 };

@@ -160,6 +160,54 @@ def _is_valid_transition(
     return target in _ALLOWED_TRANSITIONS.get(current, frozenset())
 
 
+# ---------------------------------------------------------------------------
+# Review state machine (CP40)
+# ---------------------------------------------------------------------------
+
+# Allowed transitions for RequirementReviewState.
+# Keys are the current state; values are the states it can move to.
+# Phase 1 review states only — never vendor-compliance verdicts.
+_ALLOWED_REVIEW_TRANSITIONS: dict[
+    RequirementReviewState, frozenset[RequirementReviewState]
+] = {
+    RequirementReviewState.UNREVIEWED: frozenset(
+        {
+            RequirementReviewState.REVIEWED,
+            RequirementReviewState.NEEDS_CLARIFICATION,
+            RequirementReviewState.OCR_WARNING,
+        }
+    ),
+    RequirementReviewState.REVIEWED: frozenset(
+        {
+            RequirementReviewState.UNREVIEWED,
+            RequirementReviewState.NEEDS_CLARIFICATION,
+        }
+    ),
+    RequirementReviewState.NEEDS_CLARIFICATION: frozenset(
+        {
+            RequirementReviewState.UNREVIEWED,
+            RequirementReviewState.REVIEWED,
+            RequirementReviewState.OCR_WARNING,
+        }
+    ),
+    RequirementReviewState.OCR_WARNING: frozenset(
+        {
+            RequirementReviewState.UNREVIEWED,
+            RequirementReviewState.REVIEWED,
+            RequirementReviewState.NEEDS_CLARIFICATION,
+        }
+    ),
+}
+
+
+def _is_valid_review_transition(
+    current: RequirementReviewState, target: RequirementReviewState
+) -> bool:
+    """Return True if *target* is an allowed review-state transition from
+    *current*."""
+    return target in _ALLOWED_REVIEW_TRANSITIONS.get(current, frozenset())
+
+
 def _append_page_warning(page: DocumentPage, message: str) -> None:
     """Append a warning to a page's ``structural_metadata`` in place.
 
@@ -1101,6 +1149,178 @@ class DocumentService:
             .order_by(RequirementNote.created_at.desc())
         )
         return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # Review state machine (CP40)
+    # ------------------------------------------------------------------
+
+    async def transition_review_state(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        target_state: RequirementReviewState,
+        *,
+        override_uncertainty: bool = False,
+    ) -> Requirement:
+        """Transition a requirement's review state (CP40).
+
+        Validates the transition against :data:`_ALLOWED_REVIEW_TRANSITIONS`.
+        When transitioning to ``REVIEWED`` and the requirement's ``uncertainty``
+        is not ``confirmed``, raises :class:`TransitionError` unless
+        ``override_uncertainty`` is True (audited override).
+
+        Every transition is logged as an audit event.
+        """
+        req = await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+        current_state = req.review_state
+        if current_state == target_state:
+            return req  # idempotent no-op
+
+        if not _is_valid_review_transition(current_state, target_state):
+            raise TransitionError(
+                f"Cannot transition review_state from "
+                f"{current_state} to {target_state}"
+            )
+
+        # Guard: prevent marking as REVIEWED when uncertainty remains,
+        # unless an explicit audited override is provided.
+        if (
+            target_state == RequirementReviewState.REVIEWED
+            and req.uncertainty not in ("confirmed", None)
+            and not override_uncertainty
+        ):
+            raise TransitionError(
+                f"Cannot mark as REVIEWED while uncertainty is "
+                f"{req.uncertainty!r}. Use override_uncertainty=true "
+                f"with an auditable reason."
+            )
+
+        prev_state = req.review_state
+        req.review_state = target_state
+        req.updated_at = datetime.now(UTC)
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.transition_review_state",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=await self._project_id_for(document_id),
+            metadata={
+                "from_state": str(prev_state),
+                "to_state": str(target_state),
+                "uncertainty": req.uncertainty,
+                "override_uncertainty": override_uncertainty,
+            },
+        )
+
+        return req
+
+    async def mark_reviewed(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        *,
+        override_uncertainty: bool = False,
+    ) -> Requirement:
+        """Mark a requirement as reviewed (CP40).
+
+        Shorthand for transitioning to ``REVIEWED``. Raises
+        :class:`TransitionError` if uncertainty remains and no override is given.
+        """
+        return await self.transition_review_state(
+            auth,
+            document_id,
+            version_number,
+            requirement_id,
+            RequirementReviewState.REVIEWED,
+            override_uncertainty=override_uncertainty,
+        )
+
+    async def reopen(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> Requirement:
+        """Reopen a requirement (transition to UNREVIEWED, CP40)."""
+        return await self.transition_review_state(
+            auth,
+            document_id,
+            version_number,
+            requirement_id,
+            RequirementReviewState.UNREVIEWED,
+        )
+
+    async def escalate(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> Requirement:
+        """Escalate a requirement to NEEDS_CLARIFICATION (CP40)."""
+        return await self.transition_review_state(
+            auth,
+            document_id,
+            version_number,
+            requirement_id,
+            RequirementReviewState.NEEDS_CLARIFICATION,
+        )
+
+    async def get_project_review_counts(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> dict[str, int]:
+        """Compute real review counts for a document version (CP40).
+
+        Returns a dict with keys: ``total``, ``unreviewed``, ``reviewed``,
+        ``needs_clarification``, ``ocr_warning``, ``superseded``.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+
+        # Use a single grouped query for all non-superseded states.
+        result = await self._session.execute(
+            select(
+                Requirement.review_state,
+                func.count(Requirement.id).label("count"),
+            )
+            .where(
+                Requirement.document_version_id == version.id,
+                Requirement.superseded.is_(False),
+            )
+            .group_by(Requirement.review_state)
+        )
+        counts = {row.review_state.value: row.count for row in result}
+
+        total_result = await self._session.execute(
+            select(
+                func.count(Requirement.id).label("count"),
+                func.count().filter(Requirement.superseded.is_(False)).label("active"),
+            ).where(Requirement.document_version_id == version.id)
+        )
+        row = total_result.one()
+        total = row.count
+        active = row.active
+
+        return {
+            "total": total,
+            "active": active,
+            "unreviewed": counts.get("unreviewed", 0),
+            "reviewed": counts.get("reviewed", 0),
+            "needs_clarification": counts.get("needs_clarification", 0),
+            "ocr_warning": counts.get("ocr_warning", 0),
+            "superseded": (total - active),
+        }
 
     # ------------------------------------------------------------------
     # Source viewer (CP36)

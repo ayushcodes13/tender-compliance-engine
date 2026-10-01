@@ -227,13 +227,34 @@ export function TenderReviewWorkspace(props: {
     }
   };
 
-  const markReviewed = () => {
-    // NOTE: persistence lands with CP40 (review-state machine).
-    // Local UI update only for now.
+  const markReviewed = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      await api.markReviewed(projectId, documentId, version, selectedId);
+      await api.fetchRequirement(projectId, documentId, version, selectedId)
+        .then(setSelectedDetail)
+        .catch(() => {});
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const reopenReview = () => {
-    // NOTE: persistence lands with CP40 (review-state machine).
+  const reopenReview = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    try {
+      await api.reopenRequirement(projectId, documentId, version, selectedId);
+      await api.fetchRequirement(projectId, documentId, version, selectedId)
+        .then(setSelectedDetail)
+        .catch(() => {});
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading && !reqList) {
