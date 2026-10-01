@@ -519,3 +519,59 @@ class ProcessingRun(Base):
             f"ProcessingRun(id={self.id!r}, version={self.document_version_id!r}, "
             f"stage={self.stage!r}, status={self.status!r})"
         )
+
+
+class DocumentPage(Base):
+    """A single page extracted from a :class:`DocumentVersion` during parsing.
+
+    One row per page, ordered by ``page_number``.  ``extracted_text`` is
+    the native text layer from the PDF; when the parser determines the
+    text is untrustworthy (e.g. a scanned raster page), ``extracted_text``
+    is NULL and ``ocr_needed`` is set so a later OCR stage can fill in
+    the gap.
+
+    Structural metadata (bounding boxes, font info, etc.) is stored as
+    nullable JSONB so non-critical signals don't block downstream
+    processing.
+    """
+
+    __tablename__ = "document_pages"
+    __table_args__ = (
+        Index("ix_document_pages_version", "document_version_id"),
+        UniqueConstraint(
+            "document_version_id", "page_number", name="uq_pages_version_page"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    extracted_text: Mapped[str | None] = mapped_column(
+        String(), nullable=True
+    )
+    ocr_needed: Mapped[bool] = mapped_column(
+        Integer(), nullable=False, default=0, server_default="0"
+    )
+    ocr_confidence: Mapped[float | None] = mapped_column(nullable=True)
+    rendered_image_object_key: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    structural_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON(), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"DocumentPage(id={self.id!r}, version={self.document_version_id!r}, "
+            f"page={self.page_number!r}, ocr_needed={self.ocr_needed!r})"
+        )

@@ -39,6 +39,7 @@ yarn-error.log*
 uploads/
 data/
 *.sqlite3
+test.db
 
 # Generated exports
 exports/

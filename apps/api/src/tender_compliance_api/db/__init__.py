@@ -3,6 +3,7 @@
 from tender_compliance_api.db.base import Base
 from tender_compliance_api.db.models import (
     AuditLog,
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
     Membership,
@@ -27,6 +28,7 @@ __all__ = [
     "Project",
     "ProjectStatus",
     "StoredObject",
+    "DocumentPage",
     "DocumentProcessingStatus",
     "DocumentVersion",
     "TenderDocument",

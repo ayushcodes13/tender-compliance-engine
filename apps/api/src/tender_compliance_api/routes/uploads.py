@@ -55,6 +55,8 @@ from tender_compliance_api.db.models import (
 )
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.parser.adapter import ParserAdapter
+from tender_compliance_api.parser.pypdf import PypdfParserAdapter
 from tender_compliance_api.project import (
     ProjectArchivedError,
     ProjectNotFoundError,
@@ -119,6 +121,11 @@ def get_queue_adapter() -> QueueAdapter:
     if settings.redis_url:
         return RedisQueueAdapter(settings.redis_url)
     return FakeQueueAdapter()
+
+
+def get_parser() -> ParserAdapter:
+    """Return the configured PDF parser (PypdfParserAdapter)."""
+    return PypdfParserAdapter()
 
 
 # ---------------------------------------------------------------------------
