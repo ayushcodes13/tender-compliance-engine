@@ -17,6 +17,7 @@ dependencies = [
   "python-multipart>=0.0.12,<1.0",
   "uvicorn[standard]>=0.32,<1.0",
   "alembic>=1.13,<2.0",
+  "redis>=5.0,<6.0",
 ]
 
 [project.optional-dependencies]
@@ -28,8 +29,11 @@ dev = [
   "aiosqlite>=0.19,<1.0",
 ]
 
+[project.scripts]
+tender-worker = "tender_compliance_worker:main"
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/tender_compliance_api"]
+packages = ["src/tender_compliance_api", "src/tender_compliance_worker"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

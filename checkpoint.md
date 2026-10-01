@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP18 — Redis-backed worker and idempotent job execution**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP19 — PDF parser integration**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -827,9 +827,9 @@ Accept real tender files safely and create the processing handoff without doing 
   - 1 test verifying `GET /documents` shows correct processing status after upload.
 - **Verified:** `ruff check .` ✅, `mypy src/` ✅ (34 source files), `alembic upgrade head` ✅ (0001→0006), `pytest` ✅ (124 tests = 101 prior + 23 new).
 
-## ⬜ Checkpoint 18 — Redis-backed worker and idempotent job execution
+## ✅ ~~Checkpoint 18 — Redis-backed worker and idempotent job execution~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #22
 
 **Plain-English outcome:** Parsing/extraction runs in a background worker instead of blocking API requests.
 
@@ -864,6 +864,30 @@ Accept real tender files safely and create the processing handoff without doing 
 ### Guardrail
 
 - Do not introduce agents or complex distributed orchestration.
+
+### Implementation / PR note
+
+- **Branch:** `cp18/redis-backed-worker`
+- **Queue adapter package** (`tender_compliance_api/queue/`):
+  - `adapter.py` — abstract `QueueAdapter` with `enqueue`/`dequeue`/`acknowledge`/`release`/`size`. `QueueMessage` dataclass carries only identifiers (document_version_id, document_id, organization_id, version_number, stage, run_id, attempt) — never document bodies. `make_job_id()` generates a deterministic UUID5 from (version_id, stage) for idempotency. `QueuedJob` dataclass returned by `dequeue`.
+  - `fake.py` — `FakeQueueAdapter` in-memory implementation for tests. Honors `delay` by tracking `released_at` timestamp; supports idempotent enqueue (same job_id not duplicated).
+  - `redis.py` — `RedisQueueAdapter` using Redis LIST for job queue (`LPUSH`/`BRPOP` with 5s poll timeout), HASH for job metadata, and a short-lived `SET NX` lock with TTL for claiming (visibility timeout). Idempotent enqueue: checks job existence + claim key before pushing.
+- **DocumentService.enqueue_processing()** (CP17, extended in CP18): Transitions version `UPLOADED → QUEUED`, returns a deterministic `run_id` (UUID5 from version_id + PARSE stage). Idempotent: if version is already `QUEUED`/`PROCESSING`, returns the same run_id without re-transitioning.
+- **Upload route** (`POST /projects/{id}/upload`): After creating the `DocumentVersion` (status=UPLOADED) and committing, calls `enqueue_processing` to transition to QUEUED, then enqueues a job via `QueueAdapter.enqueue()`. The `QueueAdapter` is injected as a FastAPI dependency (`get_queue_adapter`), overridable in tests. Returns 201 promptly — no blocking processing.
+- **Worker package** (`tender_compliance_worker/`):
+  - `processor.py` — `JobProcessor` class: processes a `QueuedJob` by calling `DocumentService.begin_run` (QUEUED→PROCESSING) for each stage, then `complete_run` for each stage. Placeholder pass marks all 4 stages (PARSE, OCR, CLEANUP, EXTRACT) as COMPLETED → PARSED. Idempotent: skips already-terminal versions. `record_failure()` function records permanent failures on the ProcessingRun.
+  - `worker.py` — `Worker` class: `run_once()` dequeues up to `max_concurrency` jobs (default 4), processes concurrently via `asyncio.gather`, acknowledges successes, and handles failures (re-enqueue with exponential backoff for retries < MAX_RETRIES=5; `record_failure` + acknowledge for permanent failures). `create_worker()` factory selects `RedisQueueAdapter` when `REDIS_URL` is set, falls back to `FakeQueueAdapter`. `main()` CLI entry point with `--max-concurrency` and `--queue` args.
+  - `__main__.py` — enables `python -m tender_compliance_worker`.
+- **Config** (`config.py`): Added `redis_url: str = ""` setting and `max_retries: int = 5`, `max_concurrency: int = 4`.
+- **Package config** (`pyproject.toml`): Added `redis>=5.0,<6.0` dependency, `tender_compliance_worker` to wheel packages, and `tender-worker` console script entry point.
+- **Frontend** (`lib/api/client.ts`): Added `"queued"` and `"partial"` to `DocumentProcessingStatus` type; added `parser_name`/`parser_version`/`ocr_name`/`ocr_version` to `DocumentItem`.
+- **Tests:** 14 new tests in `tests/test_worker.py`:
+  - 6 `FakeQueueAdapter` tests (enqueue/dequeue, empty dequeue, acknowledge, release, delay, idempotent enqueue).
+  - 3 `make_job_id` tests (determinism, different version, different stage).
+  - 2 `JobProcessor` tests (process → PARSED with 4 runs, idempotent skip terminal).
+  - 2 `Worker.run_once` tests (processes queued job, empty queue returns 0).
+  - 1 full integration test (upload → auto-enqueue → worker → PARSED).
+- **Verified:** `ruff check .` ✅, `mypy src/` ✅ (42 source files), `alembic upgrade head` ✅ (no new migration needed — CP18 is queue/worker infrastructure only), `pytest` ✅ (138 tests = 124 prior + 14 new). Web: `npm run typecheck` ✅, `npm run build` ✅.
 
 # Stage D — Source-preserving parsing, rendering, OCR, and document pages
 

@@ -47,6 +47,7 @@ from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
+    ProcessingStage,
     ProjectStatus,
     StoredObject,
     TenderDocument,
@@ -60,6 +61,9 @@ from tender_compliance_api.project import (
     ProjectService,
     StateTransitionError,
 )
+from tender_compliance_api.queue import DEFAULT_QUEUE, QueueAdapter, QueueMessage
+from tender_compliance_api.queue.fake import FakeQueueAdapter
+from tender_compliance_api.queue.redis import RedisQueueAdapter
 from tender_compliance_api.scan.adapter import MalwareScanner, ScanResult
 from tender_compliance_api.scan.fake import FakeScanner
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
@@ -104,6 +108,19 @@ def get_scanner() -> MalwareScanner:
     return FakeScanner()
 
 
+def get_queue_adapter() -> QueueAdapter:
+    """Return the configured queue adapter (FakeQueueAdapter by default).
+
+    In production, when ``REDIS_URL`` is set, this returns a
+    :class:`RedisQueueAdapter`.  Otherwise it falls back to an
+    in-memory :class:`FakeQueueAdapter` for development and CI.
+    """
+    settings = get_settings()
+    if settings.redis_url:
+        return RedisQueueAdapter(settings.redis_url)
+    return FakeQueueAdapter()
+
+
 # ---------------------------------------------------------------------------
 # Response schema
 # ---------------------------------------------------------------------------
@@ -139,6 +156,10 @@ class DocumentVersionResponse(BaseModel):
     mime_type: str
     size_bytes: int
     processing_status: str
+    parser_name: str | None = None
+    parser_version: str | None = None
+    ocr_name: str | None = None
+    ocr_version: str | None = None
     created_at: datetime
 
 
@@ -171,6 +192,7 @@ async def upload_document(
     session: AsyncSession = Depends(get_session),  # noqa: B008
     storage: ObjectStorageAdapter = Depends(get_storage_adapter),  # noqa: B008
     scanner: MalwareScanner = Depends(get_scanner),  # noqa: B008
+    queue: QueueAdapter = Depends(get_queue_adapter),  # noqa: B008
 ) -> UploadResponse:
     """Validate, scan, and store a single uploaded document.
 
@@ -438,6 +460,28 @@ async def upload_document(
     await session.refresh(stored_obj)
     await session.refresh(doc_version)
 
+    # --- Enqueue for background processing (CP18) ---
+    # Transition UPLOADED → QUEUED and enqueue a job.  Identifiers only —
+    # no document bytes on the queue.
+    doc_svc = DocumentService(session)
+    run_id = await doc_svc.enqueue_processing(
+        auth, doc_id, next_version
+    )
+    await queue.enqueue(
+        DEFAULT_QUEUE,
+        str(run_id),
+        QueueMessage(
+            document_version_id=str(doc_version.id),
+            document_id=str(doc_id),
+            organization_id=str(auth.organization_id),
+            version_number=next_version,
+            stage=ProcessingStage.PARSE.value,
+            run_id=str(run_id),
+            attempt=1,
+        ),
+    )
+    await session.commit()
+
     return UploadResponse(
         stored_object_id=stored_obj.id,
         document_id=doc_id,
@@ -492,6 +536,10 @@ async def list_documents(
             mime_type=ver.mime_type,
             size_bytes=ver.size_bytes,
             processing_status=ver.processing_status.value,
+            parser_name=ver.parser_name,
+            parser_version=ver.parser_version,
+            ocr_name=ver.ocr_name,
+            ocr_version=ver.ocr_version,
             created_at=ver.created_at,
         )
         for doc, ver in result
@@ -539,6 +587,10 @@ async def get_document_version(
         mime_type=version.mime_type,
         size_bytes=version.size_bytes,
         processing_status=version.processing_status.value,
+        parser_name=version.parser_name,
+        parser_version=version.parser_version,
+        ocr_name=version.ocr_name,
+        ocr_version=version.ocr_version,
         created_at=version.created_at,
     )
 
