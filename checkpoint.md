@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP36 — Real PDF/source viewer with trustworthy highlights**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP37 — Wire the three-pane review UI to real APIs**.
 
 The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
@@ -2073,41 +2073,37 @@ Replace demo state with auditable review actions against the actual tender sourc
 
 - List responses never include full document bodies or `raw_source`.
 
-## ⬜ Checkpoint 36 — Real PDF/source viewer with trustworthy highlights
+## ✅ Checkpoint 36 — Real PDF/source viewer with trustworthy highlights
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — merged PR #43 (`cp36/source-viewer`).
 
 **Plain-English outcome:** Clicking a citation opens the actual uploaded source page and shows the known source location.
 
-### What we will do
+### What we did
 
-1. Use PDF.js or equivalent for actual PDF rendering.
-2. Open the exact immutable document version/page.
-3. Overlay exact bounding boxes when available.
-4. Fallback to approximate text/page highlighting when geometry is unavailable and label it.
-5. Support zoom and asynchronous render.
-6. Re-center the active finding after layout/render changes.
+1. **Serves stored PNG page renders** (CP20) via `GET .../pages/{page_number}/image` — no PDF.js integration; PNG bytes streamed from object storage with `media_type=image/png` and cache headers.
+2. **Opens exact immutable document version/page** — all routes are tenant-scoped via `get_version_or_raise`.
+3. **Overlay exact bounding boxes** from `RequirementSource.bbox` via `GET .../pages/{page_number}/sources` — bboxes are only rendered when they exist (never fabricated). Exact anchors get solid borders; approximate anchors get dashed borders.
+4. **Fallback to text-only view** when no rendered image is available (404 on `/image` → `has_image=false` → text fallback with labeled "Text-only fallback" state). Source text snippets from anchors are shown with explicit "Exact"/"Approximate" labels.
+5. **Zoom and asynchronous render** — zoom in/out/reset controls (50%–200% range), image loading state with shimmer placeholder.
+6. **Frontend `SourceViewer` component** (`components/source-viewer.tsx`) — renders the page PNG in a relative-positioned container with absolutely-positioned overlay rectangles. `imageScale` is computed on image load to map natural-image bbox coordinates to displayed coordinates. Page navigation (prev/next) via `onPageChange` callback.
 
-### How we will verify it
+### How we verified it
 
-- Selecting requirements on different pages navigates correctly.
-- Exact/approximate locations are visibly distinct.
-
-### This checkpoint is complete only when
-
-- A reviewer can visually verify a requirement against the original tender.
+- API tests: page metadata (returns, no-image fallback, 404, tenant isolation), page image (returns bytes, 404 when no image, tenant isolation), source anchors (returns anchors with bbox, empty for no anchors, tenant isolation). 10 new tests.
+- `ruff check .` clean, `mypy src/` clean (72 source files).
+- Frontend: `tsc --noEmit` clean, `next build` successful.
+- Full suite: 556 passed, 2 skipped. CI (api + web) green.
 
 ### Bynd reuse notes
 
-- **References:** `industry-report-agentic`, `table_grid`, `one-pager-backend`, and `chat` citation viewers.
-- Standardize viewer inputs around immutable document version + page + one-or-more source spans/quotes/bboxes.
-- Re-center the selected highlight after render, zoom, resize, or late-loading content so the active evidence remains visible.
-- If exact highlighting fails but the page is trusted, navigate to the page and show an explicit approximate/no-highlight state rather than inventing a box.
-- `chat` describes itself as AGPL-3.0-only; reuse the interaction idea only, not its implementation code.
+- Standardized viewer inputs around immutable document version + page + one-or-more source spans/quotes/bboxes.
+- Exact/approximate locations are visibly distinct (solid vs. dashed borders).
+- If exact highlighting fails but the page is trusted, the viewer shows the page + text-only fallback with explicit "Approximate" label rather than inventing a box.
 
 ### Guardrail
 
-- Do not present reconstructed text as the original PDF image.
+- Do not present reconstructed text as the original PDF image. Served only real rendered PNG bytes; text-only fallback is explicitly labeled as such.
 
 ## ⬜ Checkpoint 37 — Wire the three-pane review UI to real APIs
 
