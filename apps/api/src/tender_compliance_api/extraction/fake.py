@@ -37,6 +37,9 @@ class FakeLlmAdapter(LlmAdapter):
         self._responses: deque[ExtractionResponse] = deque(responses)
         self.calls: list[LlmCallResult] = []
 
+    provider: str = "fake"
+    model: str = "fake"
+
     async def extract(
         self,
         *,

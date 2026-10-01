@@ -20,10 +20,13 @@ import uuid
 import pytest
 from sqlalchemy import select
 
+from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExtractionCandidate,
     ExtractionRun,
     ExtractionRunStatus,
     Membership,
@@ -50,7 +53,10 @@ from tender_compliance_api.extraction import (
     OpenAiLlmAdapter,
     RequirementCandidate,
     RequirementType,
+    SourceWindow,
+    TrustedSourceContext,
     UncertaintyLevel,
+    extract_from_windows,
 )
 from tender_compliance_api.storage.keys import build_key
 
@@ -425,5 +431,261 @@ class TestOpenAiAdapter:
             assert result.call.provider == "openai"
             assert result.call.model == settings.openai_model
             assert result.call.status == "completed"
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# CP28 — extraction orchestrator -> service -> DB candidate persistence
+# ---------------------------------------------------------------------------
+
+
+class TestExtractStageCandidates:
+    """CP28 end-to-end: orchestrator + audit log + candidate persistence."""
+
+    def test_validated_candidates_are_persisted_with_audit(
+        self, session_cm
+    ) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+
+            text1 = (
+                "The system shall encrypt all data at rest using AES-256 bit "
+                "strong encryption and must not be disabled under any "
+                "operating condition or maintenance mode of the device."
+            )
+            text2 = (
+                "The unit shall weigh less than 2 kg in its installed "
+                "configuration and must remain within operational temperature "
+                "limits when subjected to continuous full-load operation."
+            )
+            w1 = SourceWindow(
+                chunk_id="c1",
+                text=text1,
+                sources=(
+                    TrustedSourceContext.from_page(
+                        DocumentPage(
+                            document_version_id=info["version_id"],
+                            page_number=1,
+                            cleaned_text=text1,
+                            ocr_needed=False,
+                        ),
+                        info["org_id"],
+                        info["doc_id"],
+                    ),
+                ),
+                ocr_warning=False,
+            )
+            w2 = SourceWindow(
+                chunk_id="c2",
+                text=text2,
+                sources=(
+                    TrustedSourceContext.from_page(
+                        DocumentPage(
+                            document_version_id=info["version_id"],
+                            page_number=2,
+                            cleaned_text=text2,
+                            ocr_needed=False,
+                        ),
+                        info["org_id"],
+                        info["doc_id"],
+                    ),
+                ),
+                ocr_warning=True,  # second window is OCR-derived
+            )
+            fake = FakeLlmAdapter(
+                responses=[
+                    ExtractionResponse(
+                        candidates=[
+                            _candidate("Encrypt data at rest with AES-256.", text1)
+                        ]
+                    ),
+                    ExtractionResponse(
+                        candidates=[
+                            _candidate("Weigh less than 2 kg.", text2)
+                        ]
+                    ),
+                ]
+            )
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            persisted: list = []
+            async with sf() as session:
+                svc = DocumentService(session)
+                # log_call anchors every audited LLM result to the EXTRACT run.
+                log_call = lambda call: svc.log_llm_call(  # noqa: E731
+                    info["processing_run_id"], call
+                )
+                outcome = await extract_from_windows(
+                    [w1, w2], fake, log_call=log_call
+                )
+                await svc.store_extraction_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                    candidates=outcome.candidates,
+                )
+                await session.commit()
+                persisted = list(outcome.candidates)
+
+            # audit + persistence assertions read back from the DB
+            async with sf() as session:
+                cands = (
+                    await session.execute(
+                        select(ExtractionCandidate).where(
+                            ExtractionCandidate.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(cands) == 2
+                by_chunk = {c.chunk_id: c for c in cands}
+                rec1, rec2 = by_chunk["c1"], by_chunk["c2"]
+                # window 1: confirm source text -> valid + persistable
+                assert rec1.is_valid is True
+                assert rec1.persistable is True
+                assert rec1.uncertainty == UncertaintyLevel.CONFIRMED.value
+                assert rec1.ocr_warning is False
+                # window 2: OCR-derived -> CONFIRMED elevated to UNCERTAIN
+                assert rec2.is_valid is True
+                assert rec2.persistable is False
+                assert rec2.uncertainty == UncertaintyLevel.UNCERTAIN.value
+                assert rec2.ocr_warning is True
+                # raw_source is stored verbatim, never mutated
+                assert rec1.raw_source == text1
+                assert rec1.normalized_text == "Encrypt data at rest with AES-256."
+                # sources_json carries the trusted anchors (uuids as strings)
+                import json as _json
+
+                src = _json.loads(_json.dumps(rec1.sources_json))
+                assert src[0]["document_id"] == str(info["doc_id"])
+
+                # one audit row per LLM call, both completed + provider echoed
+                runs = (
+                    await session.execute(
+                        select(ExtractionRun).where(
+                            ExtractionRun.processing_run_id
+                            == info["processing_run_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(runs) == 2
+                assert all(r.status == ExtractionRunStatus.COMPLETED for r in runs)
+                assert all(r.provider == "fake" for r in runs)
+                assert all(r.call_site == "extract_candidates" for r in runs)
+                assert all(
+                    r.prompt_version == PROMPT_VERSION for r in runs
+                )
+                assert all(r.schema_version == SCHEMA_VERSION for r in runs)
+
+            assert len(persisted) == 2
+            assert len(fake.calls) == 2
+
+        asyncio.run(_run())
+
+    def test_invalid_candidate_recorded_not_persisted(self, session_cm) -> None:
+        """A candidate whose raw_source is absent from the window is kept for
+        audit (is_valid=False, persistable=False) but stored as non-persistable."""
+
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+
+            window_text = "The system performs data processing in memory only."
+            w = SourceWindow(
+                chunk_id="c1",
+                text=window_text,
+                sources=(
+                    TrustedSourceContext.from_page(
+                        DocumentPage(
+                            document_version_id=info["version_id"],
+                            page_number=1,
+                            cleaned_text=window_text,
+                            ocr_needed=False,
+                        ),
+                        info["org_id"],
+                        info["doc_id"],
+                    ),
+                ),
+                ocr_warning=False,
+            )
+            # raw_source is NOT a substring of window_text -> fabrication guard
+            bad = _candidate(
+                "Must be painted RAL 9005.",
+                "The surface shall be painted RAL 9005 matt.",
+            )
+            fake = FakeLlmAdapter(responses=[ExtractionResponse(candidates=[bad])])
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            async with sf() as session:
+                svc = DocumentService(session)
+                log_call = lambda call: svc.log_llm_call(  # noqa: E731
+                    info["processing_run_id"], call
+                )
+                outcome = await extract_from_windows([w], fake, log_call=log_call)
+                await svc.store_extraction_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                    candidates=outcome.candidates,
+                )
+                await session.commit()
+
+            async with sf() as session:
+                rows = (
+                    await session.execute(
+                        select(ExtractionCandidate).where(
+                            ExtractionCandidate.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(rows) == 1
+                row = rows[0]
+                assert row.is_valid is False
+                assert row.persistable is False
+                assert row.rejection_reason is not None
+                assert "not present in the trusted source text" in (
+                    row.rejection_reason or ""
+                )
+
+        asyncio.run(_run())
+
+    def test_empty_windows_produce_no_candidates(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            fake = FakeLlmAdapter()
+            calls: list[LlmCallResult] = []
+
+            async def log_call(call: LlmCallResult) -> None:
+                calls.append(call)
+
+            async with sf() as session:
+                outcome = await extract_from_windows(
+                    [], fake, log_call=log_call
+                )
+                assert outcome.candidates == []
+                assert outcome.llm_calls == []
+                assert calls == []
+                # no candidates persisted for this version
+                cnt = await session.execute(
+                    select(ExtractionCandidate).where(
+                        ExtractionCandidate.document_version_id
+                        == info["version_id"]
+                    )
+                )
+                assert len(cnt.scalars().all()) == 0
+
+        asyncio.run(_run())
 
         asyncio.run(_run())

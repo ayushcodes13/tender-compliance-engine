@@ -18,6 +18,11 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
+from tender_compliance_api.extraction.extractor import (
+    CandidateRecord,
+    ExtractionOutcome,
+    extract_from_windows,
+)
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
 from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
 from tender_compliance_api.extraction.prompts import (
@@ -40,9 +45,11 @@ if TYPE_CHECKING:  # pragma: no cover - re-export only
     from tender_compliance_api.db.models import DocumentPage  # noqa: F401
 
 __all__ = [
+    "CandidateRecord",
     "CandidateValidationError",
     "EXTRACTION_SYSTEM_PROMPT",
     "ExtractResult",
+    "ExtractionOutcome",
     "ExtractionResponse",
     "FakeLlmAdapter",
     "LlmAdapter",
@@ -58,6 +65,7 @@ __all__ = [
     "SourceWindow",
     "SourcedRequirementCandidate",
     "build_source_windows",
+    "extract_from_windows",
     "TrustedSourceContext",
     "UncertaintyLevel",
 ]

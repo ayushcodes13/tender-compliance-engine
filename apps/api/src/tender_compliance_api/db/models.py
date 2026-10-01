@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -655,4 +656,83 @@ class ExtractionRun(Base):
             f"ExtractionRun(id={self.id!r}, run={self.processing_run_id!r}, "
             f"provider={self.provider!r}, model={self.model!r}, "
             f"status={self.status!r})"
+        )
+
+
+class ExtractionCandidate(Base):
+    """A model-proposed requirement candidate that survived source validation (CP28).
+
+    Persisted during the EXTRACT stage so CP29 (reconciliation), CP30
+    (refined Requirement persistence), and CP35 (human review) can read
+    deterministic extraction results.  One row per candidate the LLM emitted
+    for a version's windows; ``is_valid`` is False when the candidate's
+    ``raw_source`` was not found in its trusted window text (a possible
+    fabrication) — such rows are kept for audit (so the invented-requirement
+    rate is measurable) but are never promoted to a persisted requirement by
+    CP30 (``persistable`` must be True).
+
+    Phase 1 only: this table holds no vendor/OEM-compliance verdicts and no
+    evidence — only the candidate text, its trusted source anchors, and audit
+    flags (per AGENTS.md Phase 1 domain states: human review is an intentional
+    state, not a compliance status).
+    """
+
+    __tablename__ = "extraction_candidates"
+    __table_args__ = (
+        Index("ix_extraction_candidates_version", "document_version_id"),
+        Index("ix_extraction_candidates_run", "processing_run_id", "created_at"),
+        Index("ix_extraction_candidates_chunk", "chunk_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # FK to the EXTRACT-stage processing run that produced the candidate.
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    processing_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("processing_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    chunk_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # The window text the candidate was cited against (trusted).
+    window_text: Mapped[str] = mapped_column(String(8192), nullable=False)
+    # All contributing source fragments (TrustedSourceContext dumps), so a
+    # multi-page candidate is never detached from its locations.
+    sources_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    normalized_text: Mapped[str] = mapped_column(String(2048), nullable=False)
+    raw_source: Mapped[str] = mapped_column(String(2048), nullable=False)
+    requirement_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    uncertainty: Mapped[str] = mapped_column(String(16), nullable=False)
+    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    group_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ocr_warning: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    is_valid: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    persistable: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ExtractionCandidate(chunk={self.chunk_id!r}, "
+            f"type={self.requirement_type!r}, uncertainty={self.uncertainty!r}, "
+            f"persistable={self.persistable!r})"
         )

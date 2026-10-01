@@ -20,6 +20,7 @@ from tender_compliance_api.db.models import (
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExtractionCandidate,
     ExtractionRun,
     ExtractionRunStatus,
     ProcessingRun,
@@ -30,6 +31,7 @@ from tender_compliance_api.db.models import (
     TenderDocument,
 )
 from tender_compliance_api.extraction.adapter import LlmCallResult
+from tender_compliance_api.extraction.extractor import CandidateRecord
 from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
@@ -468,6 +470,85 @@ class DocumentService:
         self._session.add(extraction_run)
         await self._session.flush()
         return extraction_run
+
+    async def get_run(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        run_id: uuid.UUID,
+        stage: ProcessingStage,
+    ) -> ProcessingRun:
+        """Look up the :class:`ProcessingRun` for a stage/run, tenant-scoped.
+
+        Used by the EXTRACT stage (CP28) to anchor LLM call audit records and
+        candidate persistence to the correct run row.
+        """
+
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+        result = await self._session.execute(
+            select(ProcessingRun).where(
+                ProcessingRun.document_version_id == version.id,
+                ProcessingRun.run_id == run_id,
+                ProcessingRun.stage == stage,
+            )
+        )
+        run = result.scalar_one_or_none()
+        if run is None:
+            raise DocumentNotFoundError(
+                f"processing run {run_id} stage={stage.value} not found"
+            )
+        return run
+
+    async def store_extraction_candidates(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        run_id: uuid.UUID,
+        candidates: list[CandidateRecord],
+    ) -> int:
+        """Persist EXTRACT-stage candidate records for this run (CP28).
+
+        Writes one :class:`ExtractionCandidate` row per record (including
+        ``is_valid=False`` rejections, so the invented-requirement rate stays
+        measurable — CP29/CP30 promote only ``persistable=True`` rows).
+
+        Returns the number of rows persisted.
+        """
+
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+        run = await self.get_run(
+            auth, document_id, version_number, run_id, ProcessingStage.EXTRACT
+        )
+        rows: list[ExtractionCandidate] = []
+        for record in candidates:
+            rows.append(
+                ExtractionCandidate(
+                    document_version_id=version.id,
+                    processing_run_id=run.id,
+                    chunk_id=record.chunk_id,
+                    window_text=record.window_text,
+                    sources_json=record.sources_json,
+                    normalized_text=record.normalized_text,
+                    raw_source=record.raw_source,
+                    requirement_type=record.requirement_type,
+                    uncertainty=record.uncertainty,
+                    clause_number=record.clause_number,
+                    group_hint=record.group_hint,
+                    ocr_warning=record.ocr_warning,
+                    is_valid=record.is_valid,
+                    persistable=record.persistable,
+                    rejection_reason=record.rejection_reason,
+                )
+            )
+        self._session.add_all(rows)
+        await self._session.flush()
+        return len(rows)
 
     # ------------------------------------------------------------------
     # Page storage (CP19)

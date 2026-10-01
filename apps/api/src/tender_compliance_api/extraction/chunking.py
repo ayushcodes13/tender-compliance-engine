@@ -64,6 +64,7 @@ class _Segment:
     char_end: int
     clause: str | None  # active clause at this segment (None if unnumbered)
     table_label: str | None  # first row of a table block (row/col header hint)
+    ocr_warning: bool = False  # page was OCR-derived or structurally errored
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,11 @@ class SourceWindow:
             (e.g. ``("1", "1.2", "1.2.3")``).
         table_context: Header labels of any tables included in this window,
             preserving row/column header identity (CP27.5).
+        ocr_warning: ``True`` when any contributing page was OCR-derived
+            (``ocr_needed``) or carries a parse/structure error in its
+            ``structural_metadata`` (CP27.7).  Candidates drawn from such a
+            window are flagged ``UNCERTAIN`` by the extraction orchestrator
+            (CP28.7) rather than presented as confirmed.
     """
 
     chunk_id: str
@@ -94,6 +100,7 @@ class SourceWindow:
     overlap: str | None = None
     hierarchy: tuple[str, ...] = ()
     table_context: tuple[str, ...] = ()
+    ocr_warning: bool = False
 
 
 def _line_kind(line: str) -> str:
@@ -152,6 +159,13 @@ def _segment_page(page: DocumentPage) -> list[_Segment]:
     segments: list[_Segment] = []
     active_clause: str | None = None
 
+    # A page is "uncertain" if it was OCR-derived or carries a parse/structure
+    # error from cleanup.  All segments from such a page inherit the flag so the
+    # extraction orchestrator (CP28.7) can bump affected candidates' uncertainty.
+    page_ocr_warning = bool(page.ocr_needed) or bool(
+        (page.structural_metadata or {}).get("error")
+    )
+
     cur_kind: str | None = None
     cur_lines: list[tuple[str, int, int]] = []
     cur_table_label: str | None = None
@@ -169,6 +183,7 @@ def _segment_page(page: DocumentPage) -> list[_Segment]:
                 char_end=cur_lines[-1][2],
                 clause=active_clause,
                 table_label=cur_table_label,
+                ocr_warning=page_ocr_warning,
             )
         )
 
@@ -191,6 +206,7 @@ def _segment_page(page: DocumentPage) -> list[_Segment]:
                     char_end=end,
                     clause=active_clause,
                     table_label=None,
+                    ocr_warning=page_ocr_warning,
                 )
             )
             cur_kind = None
@@ -220,6 +236,7 @@ class _WindowAccumulator:
     sources: dict[int, list[int]] = field(default_factory=dict)
     table_labels: list[str] = field(default_factory=list)
     hierarchy: tuple[str, ...] = ()
+    ocr_warning: bool = False
     active_clause: str | None = None
 
     def add(self, seg: _Segment) -> None:
@@ -236,6 +253,8 @@ class _WindowAccumulator:
 
         if seg.table_label and seg.table_label not in self.table_labels:
             self.table_labels.append(seg.table_label)
+
+        self.ocr_warning = self.ocr_warning or seg.ocr_warning
 
         if seg.clause and seg.clause != self.active_clause:
             self.active_clause = seg.clause
@@ -334,6 +353,7 @@ def _finalize_window(
         overlap=overlap,
         hierarchy=acc.hierarchy,
         table_context=tuple(acc.table_labels),
+        ocr_warning=acc.ocr_warning,
     )
 
 

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
     ProcessingRun,
@@ -32,6 +33,8 @@ from tender_compliance_api.db.models import (
 )
 from tender_compliance_api.document import DocumentNotFoundError, DocumentService
 from tender_compliance_api.extraction.adapter import LlmAdapter
+from tender_compliance_api.extraction.chunking import build_source_windows
+from tender_compliance_api.extraction.extractor import extract_from_windows
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.parser.adapter import ParserAdapter, ParseResult
 from tender_compliance_api.queue import QueuedJob
@@ -198,9 +201,17 @@ class JobProcessor:
                     await self._do_ocr(
                         session, svc, auth, version, run_id
                     )
+                elif stage == ProcessingStage.EXTRACT:
+                    # Requirement-candidate extraction (CP28).  Best-effort:
+                    # per-window LLM failures are logged and skipped, so a
+                    # transient provider outage does not strand the version.
+                    # CP31 hardens retry / partial-failure semantics.
+                    await self._do_extract(
+                        session, svc, auth, version, run_id
+                    )
                 else:
-                    # Placeholder stages (CLEANUP, EXTRACT): complete as
-                    # no-op until implemented.
+                    # Placeholder stages (e.g. CLEANUP) — complete as no-op
+                    # until their checkpoint implements real behavior.
                     await svc.complete_run(
                         auth,
                         document_id=version.document_id,
@@ -408,6 +419,93 @@ class JobProcessor:
             error_message=error_message,
         )
 
+    async def _do_extract(
+        self,
+        session: AsyncSession,
+        svc: DocumentService,
+        auth: AuthContext,
+        version: DocumentVersion,
+        run_id: uuid.UUID,
+    ) -> None:
+        """Execute the EXTRACT stage (CP28): chunk + LLM candidate extraction.
+
+        Loads the version's pages, builds trusted source windows (CP27), calls
+        the LLM adapter (CP26) per window, logs every call to the EXTRACT run
+        (CP26 audit), and persists the validated candidate records.  If no LLM
+        adapter is configured (e.g. direct ``JobProcessor`` construction in
+        tests) the stage completes as a no-op, preserving prior behavior.
+
+        Per-window LLM failures (:class:`LlmCallError`) are logged and the
+        offending window is skipped — the stage still completes so the version
+        is not stranded (CP31 hardens retry/partial-failure semantics).
+        """
+
+        if self._llm is None:
+            # No adapter configured → nothing to extract.  Keep prior behavior
+            # (test_worker constructs JobProcessor without an LLM) and complete
+            # the EXTRACT run as a clean no-op.
+            await svc.complete_run(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                stage=ProcessingStage.EXTRACT,
+                run_id=run_id,
+                error_type=None,
+                error_message=None,
+            )
+            return
+
+        try:
+            pages = await self._load_pages(session, version.id)
+            windows = build_source_windows(
+                pages,
+                organization_id=auth.organization_id,
+                document_id=version.document_id,
+            )
+            run = await svc.get_run(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                run_id=run_id,
+                stage=ProcessingStage.EXTRACT,
+            )
+            outcome = await extract_from_windows(
+                windows,
+                self._llm,
+                log_call=lambda call: svc.log_llm_call(run.id, call),
+            )
+            await svc.store_extraction_candidates(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                run_id=run_id,
+                candidates=outcome.candidates,
+            )
+        except Exception as exc:  # noqa: BLE001 — never strand the version
+            logger.warning(
+                "EXTRACT stage failed for version %s: %s", version.id, exc
+            )
+            await svc.complete_run(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                stage=ProcessingStage.EXTRACT,
+                run_id=run_id,
+                error_type="ExtractionError",
+                error_message=str(exc),
+            )
+            return
+
+        await svc.complete_run(
+            auth,
+            document_id=version.document_id,
+            version_number=version.version_number,
+            stage=ProcessingStage.EXTRACT,
+            run_id=run_id,
+            error_type=None,
+            error_message=None,
+        )
+
 
     async def _get_version(
         self, session: AsyncSession, version_id: uuid.UUID
@@ -416,6 +514,18 @@ class JobProcessor:
             select(DocumentVersion).where(DocumentVersion.id == version_id)
         )
         return result.scalar_one_or_none()
+
+    async def _load_pages(
+        self, session: AsyncSession, version_id: uuid.UUID
+    ) -> list[DocumentPage]:
+        """Load a version's parsed pages in page order for chunking (CP28)."""
+
+        result = await session.execute(
+            select(DocumentPage)
+            .where(DocumentPage.document_version_id == version_id)
+            .order_by(DocumentPage.page_number)
+        )
+        return list(result.scalars().all())
 
     async def _find_run(
         self,
