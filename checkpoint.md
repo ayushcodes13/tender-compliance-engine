@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP26 — LLM extraction adapter, prompt versions, and run metadata**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -1327,9 +1327,9 @@ Extract explicit obligations only, validate every model response, and persist so
 
 - Never persist free-form model prose as a valid requirement.
 
-## ⬜ Checkpoint 26 — LLM extraction adapter, prompt versions, and run metadata
+## ✅ Checkpoint 26 — LLM extraction adapter, prompt versions, and run metadata
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #31 merged.
 
 **Plain-English outcome:** Model calls are controlled, provider-agnostic, and auditable.
 
@@ -1362,6 +1362,35 @@ Extract explicit obligations only, validate every model response, and persist so
 ### Guardrail
 
 - Document text can never invoke tools or override application instructions.
+
+**Completion summary (PR #31):**
+
+- Added the provider-agnostic `:class:LlmAdapter` port with frozen
+  `LlmCallConfig` / `LlmCallResult` / `ExtractResult` / `LlmCallError` (CP26):
+  providers drop in by subclass, never by rewriting services.
+- `FakeLlmAdapter` — deterministic, no-network adapter (serves pre-canned
+  `ExtractionResponse`s, records an audited `LlmCallResult` per call).
+- `OpenAiLlmAdapter` — production default (`gpt-4o`, structured output parsed
+  into `ExtractionResponse`). The `openai` package is imported lazily so
+  `create_worker` and the worker/test suite never require it; a real call
+  requires `OPENAI_API_KEY` and is opt-in only (`CP26_OPENAI_REAL_CALL=1`).
+- `extraction_runs` audit table (migration `0009`) + `ExtractionRun` /
+  `ExtractionRunStatus` models.  Each LLM call is anchored to its EXTRACT-stage
+  `ProcessingRun` and records provider/model/prompt+schema version, latency,
+  provider-reported tokens, finish reason, and best-effort cost.  Token counts
+  and cost are nullable — `NULL` means "unknown", never a fabricated zero (per
+  the LLM cost-logging SOP in the checkpoint Bynd notes).
+- `DocumentService.log_llm_call` persists the audit record (flush, no source
+  mutation).
+- `create_worker` injects a default `OpenAiLlmAdapter`; `JobProcessor` accepts
+  an injectable `llm`.  The EXTRACT stage still no-ops (CP28 calls the adapter).
+- Real-OCR/test-call skips: `openai` not in `pyproject` deps (lazy import);
+  the live-call test skips without `CP26_OPENAI_REAL_CALL` so CI never incurs
+  cost.
+- Tests: `tests/test_extraction_pipeline.py` (10 passed, 1 opt-in skip) +
+  updated `tests/test_migration.py` (head = `0009_extraction_runs`).  Gate:
+  pytest 245 passed/2 skipped, ruff clean, mypy 63 files clean, `alembic
+  upgrade head` 0001→0009, web `tsc --noEmit` clean.
 
 ## ⬜ Checkpoint 27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
 

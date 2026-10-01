@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # Redis (queue/broker seam)
     redis_url: str = ""
 
+    # LLM extraction (CP26) — OpenAI is the default provider (review.md).
+    # The API key is read from the environment; it is never logged or
+    # committed. When empty, OpenAiLlmAdapter is still constructible (the
+    # call fails fast at extraction time with a typed LlmCallError).
+    openai_api_key: str = ""
+    openai_base_url: str = ""
+    openai_model: str = "gpt-4o"
+
     # Processing limits
     max_retries: int = 5
     max_concurrency: int = 4

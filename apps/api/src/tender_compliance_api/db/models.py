@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     func,
@@ -583,4 +584,75 @@ class DocumentPage(Base):
         return (
             f"DocumentPage(id={self.id!r}, version={self.document_version_id!r}, "
             f"page={self.page_number!r}, ocr_needed={self.ocr_needed!r})"
+        )
+
+
+class ExtractionRunStatus(enum.StrEnum):
+    """Status of a single LLM extraction call (CP26 audit)."""
+
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ExtractionRun(Base):
+    """Auditable record of a single LLM extraction call (CP26).
+
+    One row per call, anchored to the :class:`ProcessingRun` of the EXTRACT
+    stage that made it.  Token counts and cost come from the provider when
+    available; ``NULL`` means "unknown", never a fabricated zero (per the LLM
+    logging SOP).  ``provider``/``model``/``prompt_version``/``schema_version``
+    identify the exact configuration the call was made under, so operators can
+    explain which extraction produced which candidates.
+    """
+
+    __tablename__ = "extraction_runs"
+    __table_args__ = (
+        Index("ix_extraction_runs_run", "processing_run_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    processing_run_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("processing_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    call_site: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # null = unknown pricing; never a fabricated zero.
+    cost_usd: Mapped[float | None] = mapped_column(
+        Numeric(12, 6), nullable=True
+    )
+    finish_reason: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    status: Mapped[ExtractionRunStatus] = mapped_column(
+        Enum(ExtractionRunStatus, name="extraction_run_status"),
+        nullable=False,
+        default=ExtractionRunStatus.COMPLETED,
+        server_default=ExtractionRunStatus.COMPLETED.value,
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ExtractionRun(id={self.id!r}, run={self.processing_run_id!r}, "
+            f"provider={self.provider!r}, model={self.model!r}, "
+            f"status={self.status!r})"
         )

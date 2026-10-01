@@ -31,6 +31,7 @@ from tender_compliance_api.db.models import (
     RunStatus,
 )
 from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.extraction.adapter import LlmAdapter
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.parser.adapter import ParserAdapter, ParseResult
 from tender_compliance_api.queue import QueuedJob
@@ -92,6 +93,7 @@ class JobProcessor:
         renderer: RendererAdapter | None = None,
         storage: ObjectStorageAdapter | None = None,
         ocr: OcrAdapter | None = None,
+        llm: LlmAdapter | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._parser = parser or _default_parser()
@@ -104,6 +106,11 @@ class JobProcessor:
         # directly skip OCR (best-effort, non-fatal).  Production workers
         # created via ``create_worker`` inject a real OCR adapter (CP21).
         self._ocr: OcrAdapter | None = ocr
+        # LLM extraction defaults to None so tests that construct JobProcessor
+        # directly never hit the network.  Production workers created via
+        # ``create_worker`` inject a real LLM adapter (CP26); the EXTRACT
+        # stage invokes it once implemented (CP28).
+        self._llm: LlmAdapter | None = llm
         self._storage = storage or _default_storage()
 
     async def process(self, job: QueuedJob) -> None:

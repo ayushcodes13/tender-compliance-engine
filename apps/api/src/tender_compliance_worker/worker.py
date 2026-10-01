@@ -19,6 +19,8 @@ from typing import cast
 
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import init_engine
+from tender_compliance_api.extraction.adapter import LlmAdapter
+from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.ocr.tesseract import TesseractOcrAdapter
 from tender_compliance_api.parser import (
@@ -156,6 +158,7 @@ def create_worker(
     renderer: RendererAdapter | None = None,
     storage: ObjectStorageAdapter | None = None,
     ocr: OcrAdapter | None = None,
+    llm: LlmAdapter | None = None,
     max_concurrency: int | None = None,
 ) -> Worker:
     """Create a :class:`Worker` with production defaults.
@@ -165,7 +168,9 @@ def create_worker(
     :class:`CompositeParserAdapter` dispatching to
     :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
     (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
-    :class:`TesseractOcrAdapter` (CP21).
+    :class:`TesseractOcrAdapter` (CP21).  The LLM extraction default is
+    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``review.md``); inject a
+    :class:`FakeLlmAdapter` for tests.
     """
     settings = get_settings()
     if queue is None:
@@ -199,6 +204,12 @@ def create_worker(
         # binary surfaces lazily as a per-page non-fatal warning during OCR.
         ocr = TesseractOcrAdapter()
 
+    if llm is None:
+        # OpenAiLlmAdapter construction is lazy (openai imported on first
+        # call), so this never fails at startup without the package; a real
+        # call requires OPENAI_API_KEY at extraction time (CP28).
+        llm = OpenAiLlmAdapter()
+
     return Worker(
         queue=queue,
         session_factory=session_factory,
@@ -208,6 +219,7 @@ def create_worker(
             renderer=renderer,
             storage=storage,
             ocr=ocr,
+            llm=llm,
         ),
         max_concurrency=max_concurrency or settings.max_concurrency,
     )
