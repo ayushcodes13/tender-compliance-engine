@@ -972,6 +972,9 @@ class Requirement(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     sources: Mapped[list[RequirementSource]] = relationship(
         "RequirementSource",
@@ -987,11 +990,78 @@ class Requirement(Base):
         lazy="selectin",
     )
 
+    # Revision history: immutable rows created on every material edit.
+    revisions: Mapped[list[RequirementRevision]] = relationship(
+        "RequirementRevision",
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
     def __repr__(self) -> str:  # pragma: no cover - convenience
         return (
             f"Requirement(id={self.id!r}, type={self.requirement_type!r}, "
             f"state={self.review_state!r}, promoted from "
             f"group={self.reconciliation_group_id!r})"
+        )
+
+
+class RequirementRevision(Base):
+    """Immutable history row for a :class:`Requirement` (CP38).
+
+    One row is created on every material edit to ``normalized_text``.
+    The row captures the *old* value (before the edit), the actor, a
+    reason/note, and the application's view of ``updated_at`` at the time
+    of the edit (for optimistic concurrency).  Raw source is never stored
+    here — it lives only on the parent :class:`Requirement` and is never
+    overwritten by a normalized-text edit.
+    """
+
+    __tablename__ = "requirement_revisions"
+    __table_args__ = (
+        Index("ix_req_revisions_requirement", "requirement_id"),
+        Index("ix_req_revisions_actor", "actor_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The normalized text BEFORE the edit (never the new value).
+    previous_normalized_text: Mapped[str] = mapped_column(
+        String(2048), nullable=False
+    )
+    # The updated_at value that was current at the time of the edit.
+    # Used for optimistic-concurrency validation: if the caller passes
+    # an ``expected_updated_at`` that does not match this, the edit is
+    # rejected (ConcurrentEditError).
+    updated_at_at_edit: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True, index=True
+    )
+    # Free-form reason/note from the reviewer (e.g. "clarified unit").
+    note: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    requirement: Mapped[Requirement] = relationship(
+        "Requirement", back_populates="revisions", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"RequirementRevision(req={self.requirement_id!r}, "
+            f"actor={self.actor_id!r}, at={self.created_at!r})"
         )
 
 

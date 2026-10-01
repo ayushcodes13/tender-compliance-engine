@@ -111,6 +111,8 @@ export function TenderReviewWorkspace(props: {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
 
   // Fetch requirements list from the real API.
@@ -179,13 +181,38 @@ export function TenderReviewWorkspace(props: {
     setSelectedId(reviewQueue[next].id);
   };
 
-  const saveNormalizedText = () => {
+  const saveNormalizedText = async () => {
     const nextText = draftText.trim();
     if (!nextText) return;
-    // NOTE: persistence lands with CP38 (requirement edit + revision history).
-    // For now, this only updates local UI state — the backend call will be
-    // wired in CP38. We deliberately do NOT silently swallow backend errors.
-    setEditing(false);
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await api.editRequirementOrError(
+        projectId,
+        documentId,
+        version,
+        selectedId,
+        {
+          normalized_text: nextText,
+          expected_updated_at: selectedDetail?.updated_at ?? undefined,
+          note: null,
+        }
+      ).then((result) => {
+        if (result.error) {
+          throw new Error(
+            result.error.message + " (conflicting edit detected)"
+          );
+        }
+        if (result.data) {
+          setSelectedDetail(result.data);
+        }
+      });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
   };
 
   const markReviewed = () => {
@@ -617,11 +644,16 @@ export function TenderReviewWorkspace(props: {
                       type="button"
                       className="button button-primary button-small"
                       onClick={saveNormalizedText}
-                      disabled={!draftText.trim()}
+                      disabled={!draftText.trim() || saving}
                     >
-                      Save change
+                      {saving ? "Saving…" : "Save change"}
                     </button>
                   </div>
+                  {saveError ? (
+                    <p className="save-error" role="alert">
+                      {saveError}
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <div className="normalized-card">
@@ -648,6 +680,29 @@ export function TenderReviewWorkspace(props: {
                 </div>
               </dl>
             </section>
+
+            {selectedDetail?.revisions && selectedDetail.revisions.length > 0 ? (
+              <section className="evidence-section">
+                <div className="evidence-section-heading">
+                  <span>Revision history ({selectedDetail.revisions.length})</span>
+                </div>
+                <ul className="revision-list">
+                  {selectedDetail.revisions.map((rev) => (
+                    <li key={rev.id} className="revision-item">
+                      <span className="revision-prev-text">{rev.previous_normalized_text}</span>
+                      <span className="revision-meta">
+                        {new Date(rev.created_at).toLocaleString()}
+                        {rev.note ? ` — ${rev.note}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="field-help">
+                  Immutable log of every material edit. raw_source is never
+                  modified.
+                </p>
+              </section>
+            ) : null}
 
             <section className="evidence-section">
               <div className="evidence-section-heading">

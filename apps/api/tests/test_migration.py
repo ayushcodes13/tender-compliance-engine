@@ -22,16 +22,16 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0014_extraction_constraints"
+_HEAD_REV = "0015_requirement_revisions"
 
-# Tables introduced by CP08..CP32 migrations (one table per checkpoint).
+# Tables introduced by CP08..CP38 migrations (one table per checkpoint).
 _APP_TABLES = {
     "organizations", "users", "memberships", "audit_logs", "projects",
     "stored_objects", "tender_documents", "document_versions",
     "processing_runs", "document_pages", "extraction_runs",
     "extraction_candidates", "extraction_reconciliations",
     "requirements", "requirement_sources", "extraction_diagnostics",
-    "requirement_constraints",
+    "requirement_constraints", "requirement_revisions",
 }
 
 
