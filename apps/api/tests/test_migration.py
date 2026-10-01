@@ -22,12 +22,13 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0005_document_version"
+_HEAD_REV = "0006_processing_run"
 
-# Tables introduced by the CP08 + CP09 + CP12 + CP14 migrations.
+# Tables introduced by the CP08 + CP09 + CP12 + CP14 + CP17 migrations.
 _APP_TABLES = {
     "organizations", "users", "memberships", "audit_logs", "projects",
     "stored_objects", "tender_documents", "document_versions",
+    "processing_runs",
 }
 
 

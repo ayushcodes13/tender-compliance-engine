@@ -53,6 +53,7 @@ from tender_compliance_api.db.models import (
     TenderDocumentType,
 )
 from tender_compliance_api.db.session import get_session
+from tender_compliance_api.document import DocumentNotFoundError, DocumentService
 from tender_compliance_api.project import (
     ProjectArchivedError,
     ProjectNotFoundError,
@@ -139,6 +140,22 @@ class DocumentVersionResponse(BaseModel):
     size_bytes: int
     processing_status: str
     created_at: datetime
+
+
+class ProcessingRunResponse(BaseModel):
+    """A single processing-run record (a processing attempt for a version)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    run_id: uuid.UUID
+    attempt: int
+    stage: str
+    status: str
+    error_type: str | None
+    error_message: str | None
+    started_at: datetime
+    completed_at: datetime | None
 
 
 # ---------------------------------------------------------------------------
@@ -478,4 +495,87 @@ async def list_documents(
             created_at=ver.created_at,
         )
         for doc, ver in result
+    ]
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}",
+    response_model=DocumentVersionResponse,
+)
+async def get_document_version(
+    project_id: uuid.UUID,
+    document_id: uuid.UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> DocumentVersionResponse:
+    """Get a single document version's metadata + processing status.
+
+    Returns 404 if the project, document, or version is not accessible to
+    the authenticated organization.
+    """
+    doc_svc = DocumentService(session)
+    try:
+        version = await doc_svc.get_version_or_raise(
+            auth, document_id, version_number
+        )
+    except DocumentNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found") from None
+
+    # Verify the document belongs to the requested project.
+    result = await session.execute(
+        select(TenderDocument).where(TenderDocument.id == document_id)
+    )
+    doc = result.scalar_one_or_none()
+    if doc is None or doc.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return DocumentVersionResponse(
+        document_id=document_id,
+        display_name=doc.display_name,
+        document_type=doc.document_type.value,
+        version_number=version_number,
+        sha256=version.sha256,
+        mime_type=version.mime_type,
+        size_bytes=version.size_bytes,
+        processing_status=version.processing_status.value,
+        created_at=version.created_at,
+    )
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/runs",
+    response_model=list[ProcessingRunResponse],
+)
+async def list_processing_runs(
+    project_id: uuid.UUID,
+    document_id: uuid.UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> list[ProcessingRunResponse]:
+    """List all processing runs for a document version.
+
+    Each run records a stage (parse, ocr, cleanup, extract), its status,
+    attempt number, and any error details.  Returns newest-first.
+    """
+    doc_svc = DocumentService(session)
+    try:
+        runs = await doc_svc.get_runs(auth, document_id, version_number)
+    except (DocumentNotFoundError, ProjectNotFoundError):
+        raise HTTPException(status_code=404, detail="Document not found") from None
+
+    return [
+        ProcessingRunResponse(
+            id=run.id,
+            run_id=run.run_id,
+            attempt=run.attempt,
+            stage=run.stage.value,
+            status=run.status.value,
+            error_type=run.error_type,
+            error_message=run.error_message,
+            started_at=run.started_at,
+            completed_at=run.completed_at,
+        )
+        for run in runs
     ]
