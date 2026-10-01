@@ -29,7 +29,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy import UUID as SaUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tender_compliance_api.db.base import Base
 
@@ -797,4 +797,165 @@ class ExtractionReconciliation(Base):
         return (
             f"ExtractionReconciliation(version={self.document_version_id!r}, "
             f"groups={len(self.summary)} entries)"
+        )
+
+
+class RequirementReviewState(enum.StrEnum):
+    """Phase 1 human-review states for a persisted :class:`Requirement`.
+
+    These are *review* states only — never vendor/OEM compliance verdicts
+    (Phase 2).  ``OCR_WARNING`` is set when the requirement's strongest
+    source anchor is OCR-derived; otherwise a freshly promoted requirement
+    starts ``UNREVIEWED`` and awaits human review (CP35).
+    """
+
+    UNREVIEWED = "unreviewed"
+    REVIEWED = "reviewed"
+    NEEDS_CLARIFICATION = "needs_clarification"
+    OCR_WARNING = "ocr_warning"
+
+
+class Requirement(Base):
+    """A persisted, source-anchored technical requirement (CP30).
+
+    Promoted from reconciled/extracted candidates (CP29/CP28).  One row per
+    distinct obligation for a :class:`DocumentVersion`; reprocessing a version
+    must not duplicate an unchanged requirement, so the row carries a stable
+    ``promotion_key`` (content-addressed from the candidate's normalized text,
+    type, clause, and contributing pages) and is upserted on reprocess.
+
+    Phase 1 only: no vendor-compliance statuses and no evidence columns — the
+    ``review_state`` is a human-review state.
+    """
+
+    __tablename__ = "requirements"
+    __table_args__ = (
+        Index("ix_requirements_version", "document_version_id"),
+        Index("ix_requirements_group", "reconciliation_group_id"),
+        UniqueConstraint(
+            "document_version_id",
+            "promotion_key",
+            name="uq_requirements_version_promotion_key",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    processing_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("processing_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Stable identity for reprocess idempotency (CP30.9): re-running extraction
+    # on an unchanged version does not duplicate rows.
+    promotion_key: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    reconciliation_group_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    requirement_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    normalized_text: Mapped[str] = mapped_column(String(2048), nullable=False)
+    raw_source: Mapped[str] = mapped_column(String(2048), nullable=False)
+    uncertainty: Mapped[str] = mapped_column(String(16), nullable=False)
+    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ocr_warning: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    review_state: Mapped[RequirementReviewState] = mapped_column(
+        Enum(RequirementReviewState, name="requirement_review_state"),
+        nullable=False,
+        default=RequirementReviewState.UNREVIEWED,
+        server_default=RequirementReviewState.UNREVIEWED.value,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    sources: Mapped[list[RequirementSource]] = relationship(
+        "RequirementSource",
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Requirement(id={self.id!r}, type={self.requirement_type!r}, "
+            f"state={self.review_state!r}, promoted from "
+            f"group={self.reconciliation_group_id!r})"
+        )
+
+
+class RequirementSource(Base):
+    """A trusted source anchor for a :class:`Requirement` (CP30).
+
+    One row per contributing source fragment (usually one page; multi-page
+    windows carry several).  ``location_type`` records the *strongest precision
+    actually known*: ``exact`` when deterministic char offsets into the page's
+    cleaned text locate ``raw_source`` verbatim, ``approximate`` otherwise
+    (page/clause only).  Precision is never upgraded to EXACT on a fuzzy
+    match (Bynd reuse note #4).
+    """
+
+    __tablename__ = "requirement_sources"
+    __table_args__ = (
+        Index("ix_requirement_sources_requirement", "requirement_id"),
+        Index("ix_requirement_sources_version", "document_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    char_start: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    char_end: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    # JSON-encoded bounding box of the raw_source on the page, when the
+    # chunker/renderer produced one (never fabricated).
+    bbox: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ocr_confidence: Mapped[float | None] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )
+    # Literal "exact"/"approximate" (LocationType values live in
+    # extraction.schema; models never import extraction to avoid a circular
+    # import through the package __init__ -> chunking -> models).
+    location_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="approximate",
+        server_default="approximate",
+    )
+    # The page's trusted cleaned_text (or the verbatim raw_source snippet) the
+    # anchor was resolved against — preserved so the citation is source-linked.
+    source_text: Mapped[str | None] = mapped_column(String(8192), nullable=True)
+
+    requirement: Mapped[Requirement] = relationship(
+        "Requirement", back_populates="sources", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"RequirementSource(req={self.requirement_id!r}, page="
+            f"{self.page_number!r}, location={self.location_type!r})"
         )

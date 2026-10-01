@@ -35,6 +35,9 @@ from tender_compliance_api.db.models import (
     ProcessingRun,
     ProcessingStage,
     Project,
+    Requirement,
+    RequirementReviewState,
+    RequirementSource,
     RunStatus,
     StoredObject,
     TenderDocument,
@@ -58,6 +61,7 @@ from tender_compliance_api.extraction import (
     TrustedSourceContext,
     UncertaintyLevel,
     extract_from_windows,
+    promotion_key,
 )
 from tender_compliance_api.storage.keys import build_key
 
@@ -958,6 +962,344 @@ class TestReconciliationPersistence:
                     ).scalars().all()
                 }
                 assert first == second
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# CP30 — candidate -> Requirement promotion persistence
+# ---------------------------------------------------------------------------
+
+
+def _make_candidate_row(
+    session,
+    version_id: uuid.UUID,
+    chunk_id: str,
+    normalized_text: str,
+    raw_source: str,
+    page_number: int,
+    *,
+    deduped: bool = False,
+) -> ExtractionCandidate:
+    return ExtractionCandidate(
+        document_version_id=version_id,
+        processing_run_id=None,
+        chunk_id=chunk_id,
+        window_text=normalized_text,
+        sources_json=[
+            {
+                "page_number": page_number,
+                "document_id": str(uuid.uuid4()),
+                "document_version_id": str(version_id),
+                "clause_number": "1.1",
+                "char_start": 0,
+                "char_end": len(normalized_text),
+                "bbox": None,
+                "ocr_confidence": None,
+                "location_type": "approximate",
+                "source_text": normalized_text,
+            }
+        ],
+        normalized_text=normalized_text,
+        raw_source=raw_source,
+        requirement_type="obligation",
+        uncertainty="confirmed",
+        clause_number="1.1",
+        group_hint=None,
+        ocr_warning=False,
+        is_valid=True,
+        persistable=True,
+        deduped=deduped,
+        reconciliation_decision=None,
+        reconciliation_group_id=None,
+        rejection_reason=None,
+    )
+
+
+class TestPromotionPersistence:
+    """CP30 service: persist_requirements promotes deduped candidates into
+    Requirements with EXACT/APPROXIMATE anchors, idempotently."""
+
+    def test_exactly_anchored_requirement_persisted(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            text = "The system shall encrypt all data at rest using AES-256."
+            raw = "shall encrypt all data at rest"
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                session.add(
+                    _make_candidate_row(
+                        session, info["version_id"], "c1", text, raw, 1
+                    )
+                )
+                await session.flush()
+                inserted, skipped = await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+                assert inserted == 1
+                assert skipped == 0
+
+            async with sf() as session:
+                req = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert req.review_state == RequirementReviewState.UNREVIEWED
+                assert req.normalized_text == text
+                assert req.raw_source == raw
+                assert req.requirement_type == "obligation"
+                assert req.ocr_warning is False
+
+                srcs = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == req.id
+                        )
+                    )
+                ).scalars().all()
+                assert len(srcs) == 1
+                s = srcs[0]
+                # raw is a literal substring of the page source_text -> EXACT
+                assert s.location_type == "exact"
+                assert s.char_start == text.find(raw)
+                assert s.char_end == text.find(raw) + len(raw)
+                assert s.page_number == 1
+                assert s.clause_number == "1.1"
+                assert s.source_text == text
+
+        asyncio.run(_run())
+
+
+    def test_reprocess_is_idempotent_and_preserves_review_state(
+        self, session_cm
+    ) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            text = "The unit shall weigh less than 2 kg."
+            raw = "weigh less than 2 kg"
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                session.add(
+                    _make_candidate_row(
+                        session, info["version_id"], "c1", text, raw, 1
+                    )
+                )
+                await session.flush()
+                first = await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                assert first == (1, 0)
+                # simulate a human reviewer setting the state
+                req = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                req.review_state = RequirementReviewState.REVIEWED
+                await session.flush()
+                # reprocess an unchanged version -> 0 inserted, 1 skipped,
+                # and the human-reviewed state is preserved (not overwritten).
+                second = await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                assert second == (0, 1)
+                await session.commit()
+
+            async with sf() as session:
+                req = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert req.review_state == RequirementReviewState.REVIEWED
+                # still exactly one requirement row (no duplication)
+                count = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(count) == 1
+
+        asyncio.run(_run())
+
+
+    def test_deduped_candidates_are_not_promoted(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            text = "Shall operate below 30 dB(A)."
+            async with sf() as session:
+                svc = DocumentService(session)
+                # one promotable + one deduped (suppressed) duplicate
+                session.add(
+                    _make_candidate_row(
+                        session, info["version_id"], "c1", text, text, 1
+                    )
+                )
+                session.add(
+                    _make_candidate_row(
+                        session, info["version_id"], "c2", text, text, 1,
+                        deduped=True,
+                    )
+                )
+                await session.flush()
+                inserted, skipped = await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+            assert inserted == 1  # only the non-deduped candidate
+
+            async with sf() as session:
+                count = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(count) == 1
+
+        asyncio.run(_run())
+
+
+    def test_non_literal_raw_source_round_trips_as_approximate(
+        self, session_cm
+    ) -> None:
+        """When ``raw_source`` is NOT a literal substring of the page text
+        (e.g. the model collapsed whitespace that differs in the page), the
+        resolver must fall back to APPROXIMATE and reuse the fragment's stored
+        char span rather than fabricating an offset."""
+
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            page_text = "The  system  shall  encrypt data at rest."  # extra spaces
+            raw = "shall encrypt data at rest"  # NOT a literal substring
+            assert page_text.find(raw) == -1  # not literal -> APPROXIMATE
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                session.add(
+                    _make_candidate_row(
+                        session, info["version_id"], "c1", page_text, raw, 1
+                    )
+                )
+                await session.flush()
+                await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+
+            async with sf() as session:
+                s = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id
+                            == (
+                                await session.execute(
+                                    select(Requirement.id).where(
+                                        Requirement.document_version_id
+                                        == info["version_id"]
+                                    )
+                                )
+                            ).scalar_one()
+                        )
+                    )
+                ).scalar_one()
+                assert s.location_type == "approximate"
+                # fragment's stored span reused (0..len), not fabricated
+                assert s.char_start == 0
+                assert s.char_end == len(page_text)
+
+        asyncio.run(_run())
+
+
+    def test_promotion_key_stored_and_stable(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            text = "The relay shall switch 10 A at 250 V AC."
+            raw = text
+            async with sf() as session:
+                svc = DocumentService(session)
+                session.add(
+                    _make_candidate_row(
+                        session, info["version_id"], "c1", text, raw, 1
+                    )
+                )
+                await session.flush()
+                await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+
+            expected = promotion_key(text, "obligation", "1.1", (1,))
+            async with sf() as session:
+                req = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert req.promotion_key == expected
 
         asyncio.run(_run())
 

@@ -40,6 +40,13 @@ from tender_compliance_api.extraction.reconcile import (
     ReconciliationResult,
     reconcile,
 )
+from tender_compliance_api.extraction.requirement import (
+    PromotionInput,
+    ResolvedSource,
+    promotion_key,
+    resolve_sources,
+    to_promotion_input,
+)
 from tender_compliance_api.extraction.schema import (
     CandidateValidationError,
     LocationType,
@@ -71,11 +78,13 @@ __all__ = [
     "LocationType",
     "OpenAiLlmAdapter",
     "PROMPT_VERSION",
+    "PromotionInput",
     "ReconciliationGroup",
     "ReconciliationInput",
     "ReconciliationResult",
     "RequirementCandidate",
     "RequirementType",
+    "ResolvedSource",
     "SCHEMA_VERSION",
     "SourceWindow",
     "SourcedRequirementCandidate",
@@ -83,5 +92,8 @@ __all__ = [
     "UncertaintyLevel",
     "build_source_windows",
     "extract_from_windows",
+    "promotion_key",
     "reconcile",
+    "resolve_sources",
+    "to_promotion_input",
 ]

@@ -27,6 +27,9 @@ from tender_compliance_api.db.models import (
     ProcessingRun,
     ProcessingStage,
     Project,
+    Requirement,
+    RequirementReviewState,
+    RequirementSource,
     RunStatus,
     StoredObject,
     TenderDocument,
@@ -39,6 +42,12 @@ from tender_compliance_api.extraction.reconcile import (
     ReconciliationInput,
     ReconciliationResult,
     reconcile,
+)
+from tender_compliance_api.extraction.requirement import (
+    PromotionInput,
+    ResolvedSource,
+    resolve_sources,
+    to_promotion_input,
 )
 from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
@@ -664,6 +673,110 @@ class DocumentService:
         self._session.add(audit)
         await self._session.flush()
         return outcome
+
+    async def persist_requirements(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        *,
+        run_id: uuid.UUID | None = None,
+    ) -> tuple[int, int]:
+        """Promote reconciled candidates to :class:`Requirement` rows (CP30).
+
+        Promotes only candidates that survived CP25 source validation, CP29
+        reconciliation, and are not deduped (``is_valid`` / ``persistable`` /
+        ``deduped=False``).  Each promotion:
+        - resolves EXACT/APPROXIMATE source anchors from the candidate's trusted
+          ``sources_json`` (never fabricating offsets/pages),
+        - assigns review_state UNREVIEWED (Phase 1; OCR_WARNING is reserved for
+          CP35 reviewer assignment — OCR-derived candidates are UNCERTAIN and
+          therefore non-persistable since CP28),
+        - uses a stable ``promotion_key`` so reprocessing an unchanged version
+          does not duplicate a row (``inserted`` count stays 0) and never
+          overwrites a human-reviewed requirement.
+
+        Returns ``(inserted, skipped)`` where ``skipped`` counts candidates
+        whose requirement already existed (preserved with their existing
+        review_state).
+        """
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+
+        rows = (
+            await self._session.execute(
+                select(ExtractionCandidate)
+                .where(
+                    ExtractionCandidate.document_version_id == version.id,
+                    ExtractionCandidate.is_valid.is_(True),
+                    ExtractionCandidate.persistable.is_(True),
+                    ExtractionCandidate.deduped.is_(False),
+                )
+                .order_by(ExtractionCandidate.chunk_id, ExtractionCandidate.id)
+            )
+        ).scalars().all()
+
+        # Keys already present for this version (reprocess idempotency).
+        existing_keys = {
+            key
+            for (key,) in (
+                await self._session.execute(
+                    select(Requirement.promotion_key).where(
+                        Requirement.document_version_id == version.id
+                    )
+                )
+            ).all()
+        }
+
+        inserted = 0
+        skipped = 0
+        for row in rows:
+            inp: PromotionInput = to_promotion_input(row)
+            if inp.promotion_key in existing_keys:
+                # Unchanged requirement — preserve its existing review_state
+                # (CP30.9: human-reviewed rows are never silently overwritten).
+                skipped += 1
+                continue
+
+            requirement = Requirement(
+                document_version_id=version.id,
+                processing_run_id=run_id,
+                promotion_key=inp.promotion_key,
+                reconciliation_group_id=inp.reconciliation_group_id,
+                requirement_type=inp.requirement_type,
+                normalized_text=inp.normalized_text,
+                raw_source=inp.raw_source,
+                uncertainty=inp.uncertainty,
+                clause_number=inp.clause_number,
+                ocr_warning=inp.ocr_warning,
+                review_state=RequirementReviewState.UNREVIEWED,
+            )
+            self._session.add(requirement)
+            await self._session.flush()
+
+            sources: list[ResolvedSource] = resolve_sources(
+                inp.raw_source, inp.sources_json
+            )
+            for src in sources:
+                self._session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=version.id,
+                        page_number=src.page_number,
+                        clause_number=src.clause_number,
+                        char_start=src.char_start,
+                        char_end=src.char_end,
+                        bbox=src.bbox,
+                        ocr_confidence=src.ocr_confidence,
+                        location_type=src.location_type,
+                        source_text=src.source_text,
+                    )
+                )
+            await self._session.flush()
+            existing_keys.add(inp.promotion_key)
+            inserted += 1
+
+        return inserted, skipped
 
     # ------------------------------------------------------------------
     # Page storage (CP19)
