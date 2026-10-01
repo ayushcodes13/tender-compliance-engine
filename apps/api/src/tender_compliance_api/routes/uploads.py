@@ -26,6 +26,7 @@ can override them with fakes.
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from datetime import datetime
 
@@ -256,6 +257,9 @@ async def upload_document(
         )
 
     filename = file.filename or "unnamed"
+    # Sanitize: strip path traversal components (../../etc/passwd.pdf → passwd.pdf)
+    filename = re.sub(r"^.*[/\\]", "", filename)
+    filename = filename.replace("..", "")
 
     # --- Validate ---
     validator = ValidationService()

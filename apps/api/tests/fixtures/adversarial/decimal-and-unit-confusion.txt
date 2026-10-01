@@ -1,0 +1,5 @@
+The equipment shall operate at a temperature not less than -10 °C and not greater than 55 °C.
+The pressure rating shall be 1 bar to 10 bar maximum.
+The humidity shall be maintained between 5 % and 85 %.
+The voltage shall be 230 V ± 10 %.
+The flow rate shall range from 10,5 m\u00b3/h to 50,5 m\u00b3/h.

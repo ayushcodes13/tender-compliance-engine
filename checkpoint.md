@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP43 — Curated Phase 1 benchmark dataset**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP46 — Observability and resource governance**.
 
 The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
@@ -221,7 +221,7 @@ Phase 2 evaluation + production release
 
 - [x] ✅ ~~CP43 — Curated Phase 1 benchmark dataset~~
 - [x] ✅ ~~CP44 — Automated evaluation harness and quality gates~~
-- [ ] CP45 — Adversarial documents, tenant security, upload security, and prompt-injection tests
+- [x] ✅ ~~CP45 — Adversarial documents, tenant security, upload security, and prompt-injection tests~~
 - [ ] CP46 — Observability, performance, resource, cost, retention, backup, and deletion
 - [ ] CP47 — Deployment configuration and runbook
 - [ ] CP48 — Phase 1 end-to-end acceptance and release gate
