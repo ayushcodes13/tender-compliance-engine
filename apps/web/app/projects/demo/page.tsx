@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/app-shell";
-import { TenderReviewWorkspace } from "@/components/tender-review-workspace";
+import { DemoTenderReviewWorkspace } from "@/components/tender-review-workspace";
 
 export default function DemoTenderProjectPage() {
   return (
     <AppShell>
-      <TenderReviewWorkspace />
+      <DemoTenderReviewWorkspace />
     </AppShell>
   );
 }

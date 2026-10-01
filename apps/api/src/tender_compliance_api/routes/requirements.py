@@ -62,9 +62,11 @@ class RequirementSourceSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    requirement_id: UUID
     page_number: int
     clause_number: str | None
     location_type: str
+    source_text: str | None
     ocr_confidence: float | None
 
 
