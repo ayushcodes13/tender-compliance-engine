@@ -1,8 +1,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm ci --no-audit --no-fund
-COPY . .
+COPY apps/web/ ./
 RUN npm run build
 
 FROM node:20-alpine AS runner
@@ -17,6 +17,6 @@ COPY --from=builder /app/public ./public
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -q -O /dev/null http://localhost:3000/api/health || exit 1
+  CMD wget -q -O /dev/null http://localhost:3000/ || exit 1
 
 CMD ["node", "server.js"]
