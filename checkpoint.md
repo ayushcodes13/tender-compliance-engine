@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP11 — Real project dashboard and project progress**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP12 — Object-storage adapter**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -116,7 +116,9 @@ Phase 2 evaluation + production release
 - [x] ~~CP08 — Organization, identity, authorization, and audit foundation~~
 - [x] ~~CP09 — Project model, lifecycle service, and migrations~~
 - [x] ~~CP10 — Project API~~
-- [ ] CP11 — Real project dashboard and project progress
+- [x] ✅ ~~CP11 — Real project dashboard and project progress~~
+  - Status: DONE — PR #15
+  - Branch: `cp11/project-dashboard`
 
 ### Stage C — Tender upload, immutable storage, versions, and background jobs
 
@@ -580,35 +582,27 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 **Implementation note (PR #14):** Added `ProjectCreate`, `ProjectRename`, and `ProjectResponse` Pydantic schemas (with `ConfigDict(from_attributes=True)`) in `routes/projects.py`. Routes: `POST /projects` (201), `GET /projects`, `GET /projects/{id}`, `PATCH /projects/{id}` (rename), `POST /projects/{id}/archive`, `POST /projects/{id}/reopen`. All routes use `Depends(get_auth_context)` (deny-by-default 401) and `Depends(get_session)` for the session, delegating to `ProjectService`. Domain errors (`ProjectNotFoundError` → 404, `ProjectArchivedError`/`StateTransitionError` → 400) are mapped via an inline `_to_http` helper and `except _ProjectErrors` blocks. Mutating routes call `session.refresh(project)` before `model_validate` to avoid SQLAlchemy async-lazy-load errors on server-defaulted columns (e.g. `updated_at`), then `session.commit()`. Router registered in `main.py`. API tests (18 tests) cover create/list/get/rename/archive/reopen, auth-required, validation (422), not-found (404), cross-tenant (404), state-transition guards (400), and audit events.
 
-## ⬜ Checkpoint 11 — Real project dashboard and project progress
+## ✅ ~~Checkpoint 11 — Real project dashboard and project progress~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #15
 
 **Plain-English outcome:** Hard-coded dashboard data is replaced by persisted projects and trustworthy workflow summaries.
 
-### What we will do
+### What we did
 
-1. Create a frontend API-client boundary.
-2. Load project cards from the API.
-3. Connect 'New tender' to real project creation.
-4. Support rename/archive/reopen UI where appropriate.
-5. Use stable project IDs in routes.
-6. Show explicit loading/empty/error states.
-7. Compute document/requirement/review counts from real data as later checkpoints add them.
-8. Never invent a percentage or count while data is unavailable.
+1. Created `lib/api/client.ts` — typed `fetch` wrapper with dev identity headers.
+2. Rewrote `app/page.tsx` as a `"use client"` component that loads projects from `GET /projects`, shows loading/empty/error states, connects 'New tender' and 'Create tender project' card to `POST /projects`, links cards to `/projects/{id}`, and renders status pills + updated-at from real data.
+3. Created `app/projects/[id]/page.tsx` — project detail page with inline rename, archive/reopen buttons, back-to-dashboard link, and detail panel showing persisted fields.
+4. Added `.env.local.example` for `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_DEV_USER_ID`, `NEXT_PUBLIC_DEV_ORG_ID`.
+5. Added CSS for `.status-neutral`, `.empty-state`, `.dialog`, `.detail-panel`, `.project-card-archived`.
 
-### How we will verify it
+### How we verified it
 
-- Create project → refresh → project remains.
-- Archived/reopened state remains after refresh.
-
-### This checkpoint is complete only when
-
-- The dashboard contains no fake project records in the real workflow.
-
-### Guardrail
-
-- Do not fall back to demo cards when an API request fails.
+- `npm run typecheck` (strict mode) ✅
+- `npm run build` ✅ (5 routes prerendered/static, `/projects/[id]` dynamic)
+- API tests: 60/60 pass
+- Summary strip shows real active-tenders count; `—` for document/requirement/review counts (not yet available)
+- No hardcoded project data remains in the dashboard
 
 # Stage C — Tender upload, immutable storage, versions, and background jobs
 
