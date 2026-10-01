@@ -1,0 +1,35 @@
+{
+  "case_id": "numeric-004-percentage",
+  "category": "gold-positive",
+  "annotator": "system-generated-synthetic",
+  "requirements": [
+    {
+      "normalized_text": "95 % of requests completing within 200 ms",
+      "raw_source": "The response time of the system shall be less than 95 % of requests completing within 200 ms.",
+      "clause_number": "1",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "response_time",
+          "operator": "max",
+          "numeric_value": 200,
+          "unit": "ms",
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "95 % of requests completing within 200 ms"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 91,
+        "location_type": "exact"
+      }
+    }
+  ]
+}

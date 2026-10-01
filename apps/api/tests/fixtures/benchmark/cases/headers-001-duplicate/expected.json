@@ -1,0 +1,128 @@
+{
+  "case_id": "headers-001-duplicate",
+  "category": "gold-positive",
+  "annotator": "system-generated-synthetic",
+  "description": "Repeated page headers and section titles across two pages. Headers must NOT be extracted as requirements; only genuine technical clauses produce requirements.",
+  "requirements": [
+    {
+      "normalized_text": "equipment operate within -10 °C to 55 °C ambient temperature",
+      "raw_source": "The equipment shall operate within -10 °C to 55 °C ambient temperature.",
+      "clause_number": "1",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "temperature",
+          "operator": "range",
+          "numeric_value": null,
+          "unit": "°C",
+          "tolerance": null,
+          "lower_bound": -10,
+          "upper_bound": 55,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "within -10 °C to 55 °C"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "sources": [
+        {
+          "page_number": 1,
+          "char_start": 0,
+          "char_end": 0,
+          "location_type": "approximate"
+        }
+      ]
+    },
+    {
+      "normalized_text": "equipment protected to IP65 ingress protection",
+      "raw_source": "The equipment shall be protected to IP65 ingress protection.",
+      "clause_number": "2",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "environmental_rating",
+          "operator": "exact",
+          "numeric_value": null,
+          "unit": null,
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": "IP65",
+          "normalization_state": "confirmed",
+          "raw_fragment": "IP65 ingress protection"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "sources": [
+        {
+          "page_number": 1,
+          "char_start": 0,
+          "char_end": 0,
+          "location_type": "approximate"
+        }
+      ]
+    },
+    {
+      "normalized_text": "equipment stainless steel housing",
+      "raw_source": "The equipment shall have a stainless steel housing.",
+      "clause_number": "3",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "material",
+          "operator": "exact",
+          "numeric_value": null,
+          "unit": null,
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": "stainless steel",
+          "normalization_state": "confirmed",
+          "raw_fragment": "stainless steel housing"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "sources": [
+        {
+          "page_number": 2,
+          "char_start": 0,
+          "char_end": 0,
+          "location_type": "approximate"
+        }
+      ]
+    },
+    {
+      "normalized_text": "maximum weight not exceed 25 kg",
+      "raw_source": "The maximum weight shall not exceed 25 kg.",
+      "clause_number": "4",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "mass",
+          "operator": "max",
+          "numeric_value": 25,
+          "unit": "kg",
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "not exceed 25 kg"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "sources": [
+        {
+          "page_number": 2,
+          "char_start": 0,
+          "char_end": 0,
+          "location_type": "approximate"
+        }
+      ]
+    }
+  ]
+}

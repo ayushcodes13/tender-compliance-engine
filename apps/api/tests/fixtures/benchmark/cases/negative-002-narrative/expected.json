@@ -1,0 +1,7 @@
+{
+  "case_id": "negative-002-narrative",
+  "category": "gold-negative",
+  "annotator": "system-generated-synthetic",
+  "description": "Narrative description in past tense. No 'shall' obligation language; no requirements should be extracted despite numeric values present.",
+  "requirements": []
+}

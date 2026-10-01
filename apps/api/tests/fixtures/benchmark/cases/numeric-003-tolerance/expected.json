@@ -1,0 +1,35 @@
+{
+  "case_id": "numeric-003-tolerance",
+  "category": "gold-positive",
+  "annotator": "system-generated-synthetic",
+  "requirements": [
+    {
+      "normalized_text": "voltage tolerance of power supply shall be ±2 % of nominal value under full load conditions",
+      "raw_source": "The voltage tolerance of the power supply shall be ±2 % of the nominal value under full load conditions.",
+      "clause_number": "1",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "voltage_tolerance",
+          "operator": "exact",
+          "numeric_value": 2,
+          "unit": "%",
+          "tolerance": 2,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "±2 %"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 84,
+        "location_type": "exact"
+      }
+    }
+  ]
+}

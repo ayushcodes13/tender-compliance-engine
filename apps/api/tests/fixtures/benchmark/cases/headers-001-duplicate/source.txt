@@ -1,0 +1,8 @@
+TENDER REFERENCE: T-2024-001              Page 1
+TECHNICAL REQUIREMENTS - SECTION 3
+The equipment shall operate within -10 °C to 55 °C ambient temperature.
+The equipment shall be protected to IP65 ingress protection.
+TENDER REFERENCE: T-2024-001              Page 2
+TECHNICAL REQUIREMENTS - SECTION 3
+The equipment shall have a stainless steel housing.
+The maximum weight shall not exceed 25 kg.

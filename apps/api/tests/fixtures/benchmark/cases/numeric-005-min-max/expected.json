@@ -1,0 +1,47 @@
+{
+  "case_id": "numeric-005-min-max",
+  "category": "gold-positive",
+  "annotator": "system-generated-synthetic",
+  "requirements": [
+    {
+      "normalized_text": "operating temperature not less than -10 °C at minimum load and not greater than +55 °C at full load",
+      "raw_source": "The operating temperature shall be not less than -10 °C at minimum load and not greater than +55 °C at full load.",
+      "clause_number": "1",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "temperature",
+          "operator": "min",
+          "numeric_value": -10,
+          "unit": "°C",
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "not less than -10 °C"
+        },
+        {
+          "parameter": "temperature",
+          "operator": "max",
+          "numeric_value": 55,
+          "unit": "°C",
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "not greater than +55 °C"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 112,
+        "location_type": "exact"
+      }
+    }
+  ]
+}

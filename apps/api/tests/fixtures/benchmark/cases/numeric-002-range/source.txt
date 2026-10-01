@@ -1,0 +1,2 @@
+The delivered system shall maintain a humidity level within the range
+of 45 % to 55 % relative humidity at all times during operation.
