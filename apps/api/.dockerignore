@@ -7,25 +7,10 @@ __pycache__/
 .gitignore
 .env
 .env.*
-alembic/versions/*.py
-!alembic/versions/0001_initial_baseline.py
-!alembic/versions/0002_*.py
-!alembic/versions/0003_*.py
-!alembic/versions/0004_*.py
-!alembic/versions/0005_*.py
-!alembic/versions/0006_*.py
-!alembic/versions/0007_*.py
-!alembic/versions/0008_*.py
-!alembic/versions/0009_*.py
-!alembic/versions/0010_*.py
-!alembic/versions/0011_*.py
-!alembic/versions/0012_*.py
-!alembic/versions/0013_*.py
-!alembic/versions/0014_*.py
-!alembic/versions/0015_*.py
-!alembic/versions/0016_*.py
-!alembic/versions/0017_*.py
-!alembic/versions/0018_*.py
+# Include ALL alembic migrations — they are required at runtime for
+# `alembic upgrade head`.  Do not maintain a fragile numbered whitelist
+# that silently breaks when a new migration is added.
+alembic/versions/README
 Dockerfile*
 docker-compose*
 docs/*.md

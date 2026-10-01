@@ -9,15 +9,14 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 FROM base AS deps
 RUN pip install --upgrade pip && \
-    pip install "uvicorn[standard]" && \
-    uv tool install hatchling 2>/dev/null || true
+    pip install "uvicorn[standard]"
 
 FROM base AS runtime
 COPY --from=deps /usr/local/lib/python*/site-packages /usr/local/lib/python*/site-packages
 COPY pyproject.toml /app/pyproject.toml
 COPY src/ /app/src/
 RUN pip install -e ".[dev]" && \
-    rm -rf /root/.cache/uv /app/src/*.egg-info
+    rm -rf /root/.cache /app/src/*.egg-info
 
 RUN groupadd -r app && useradd -r -g app app
 USER app
