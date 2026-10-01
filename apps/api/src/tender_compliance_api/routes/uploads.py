@@ -54,7 +54,11 @@ from tender_compliance_api.db.models import (
     TenderDocumentType,
 )
 from tender_compliance_api.db.session import get_session
-from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.document import (
+    DocumentNotFoundError,
+    DocumentService,
+    TransitionError,
+)
 from tender_compliance_api.parser.adapter import ParserAdapter
 from tender_compliance_api.parser.pypdf import PypdfParserAdapter
 from tender_compliance_api.project import (
@@ -184,6 +188,15 @@ class ProcessingRunResponse(BaseModel):
     error_message: str | None
     started_at: datetime
     completed_at: datetime | None
+
+
+class RetryResponse(BaseModel):
+    """Result of re-queueing a document version for processing (CP24)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    run_id: uuid.UUID
+    status: str
 
 
 # ---------------------------------------------------------------------------
@@ -638,3 +651,64 @@ async def list_processing_runs(
         )
         for run in runs
     ]
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/retry",
+    response_model=RetryResponse,
+)
+async def retry_processing(
+    project_id: uuid.UUID,
+    document_id: uuid.UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+    queue: QueueAdapter = Depends(get_queue_adapter),  # noqa: B008
+) -> RetryResponse:
+    """Re-enqueue a FAILED/PARTIAL document version for reprocessing.
+
+    The project must belong to the authenticated organization.  A version in
+    ``FAILED`` or ``PARTIAL`` is transitioned back to ``QUEUED`` and a
+    deterministic PARSE job is enqueued (idempotent — re-calling retry on an
+    already-queued version reuses the same ``run_id``).  A ``PARSED``
+    (terminal) version is rejected with ``409``; a missing
+    project/document/version is ``404``.
+
+    Retry is **not** a new source version — the immutable
+    ``DocumentVersion``/``StoredObject`` are reused unchanged (CP24 guardrail).
+    """
+    # Scope to the authenticated project.
+    project_svc = ProjectService(session)
+    try:
+        await project_svc.get_or_raise(auth, project_id)
+    except ProjectNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found") from None
+
+    doc_svc = DocumentService(session)
+    try:
+        run_id = await doc_svc.requeue_version(auth, document_id, version_number)
+    except DocumentNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found") from None
+    except TransitionError:
+        raise HTTPException(
+            status_code=409, detail="Version cannot be retried"
+        ) from None
+
+    version = await doc_svc.get_version_or_raise(auth, document_id, version_number)
+
+    await queue.enqueue(
+        DEFAULT_QUEUE,
+        str(run_id),
+        QueueMessage(
+            document_version_id=str(version.id),
+            document_id=str(document_id),
+            organization_id=str(auth.organization_id),
+            version_number=version_number,
+            stage=ProcessingStage.PARSE.value,
+            run_id=str(run_id),
+            attempt=1,
+        ),
+    )
+    await session.commit()
+
+    return RetryResponse(run_id=run_id, status=DocumentProcessingStatus.QUEUED.value)

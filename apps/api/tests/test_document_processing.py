@@ -30,9 +30,14 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     User,
 )
-from tender_compliance_api.document import DocumentService
+from tender_compliance_api.document import DocumentNotFoundError, DocumentService
 from tender_compliance_api.document.service import TransitionError, _is_valid_transition
 from tender_compliance_api.main import app
+from tender_compliance_api.queue import DEFAULT_QUEUE, FakeQueueAdapter
+from tender_compliance_api.queue.adapter import make_job_id
+from tender_compliance_api.routes.uploads import (
+    get_queue_adapter as get_queue_adapter_dep,
+)
 
 client = TestClient(app)
 
@@ -641,3 +646,319 @@ class TestProcessingRunsApi:
             headers=_headers(other_user, other_org),
         )
         assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Retry action (CP24): DocumentService.requeue_version
+# ---------------------------------------------------------------------------
+
+
+def _set_version_status(
+    session_cm, doc_id: uuid.UUID, status: DocumentProcessingStatus
+) -> uuid.UUID:
+    """Force a version's processing_status (bypassing the state machine).
+
+    Returns the version's uuid.  Used to set up terminal/partial starting
+    states that the happy-path upload flow never produces.
+    """
+
+    async def _go() -> uuid.UUID:
+        async with session_cm() as session:
+            ver = (
+                await session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.document_id == doc_id
+                    )
+                )
+            ).scalar_one()
+            ver.processing_status = status
+            await session.commit()
+            return ver.id
+
+    return asyncio.run(_go())
+
+
+class TestRetryVersion:
+    """``DocumentService.requeue_version``: FAILED/PARTIAL -> QUEUED."""
+
+    def test_requeue_failed_to_queued(self, session_cm) -> None:
+        """A FAILED version is transitioned back to QUEUED and a run_id is
+        returned deterministically keyed on the version + PARSE stage."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        ver_id = _set_version_status(
+            session_cm, doc_id, DocumentProcessingStatus.FAILED
+        )
+
+        async def _run() -> None:
+            async with session_cm() as session:
+                svc = DocumentService(session)
+                auth = _mk_auth(org_id, user_id)
+                run_id = await svc.requeue_version(auth, doc_id, ver_num)
+                assert run_id == make_job_id(
+                    str(ver_id), ProcessingStage.PARSE.value
+                )
+                ver = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalar_one()
+                assert ver.processing_status == DocumentProcessingStatus.QUEUED
+
+        asyncio.run(_run())
+
+    def test_requeue_partial_to_queued(self, session_cm) -> None:
+        """A PARTIAL version (some pages OCR-failed but not dead) is retryable."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        _set_version_status(session_cm, doc_id, DocumentProcessingStatus.PARTIAL)
+
+        async def _run() -> None:
+            async with session_cm() as session:
+                svc = DocumentService(session)
+                auth = _mk_auth(org_id, user_id)
+                run_id = await svc.requeue_version(auth, doc_id, ver_num)
+                ver = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalar_one()
+                assert ver.processing_status == DocumentProcessingStatus.QUEUED
+                assert run_id == make_job_id(
+                    str(ver.id), ProcessingStage.PARSE.value
+                )
+
+        asyncio.run(_run())
+
+    def test_requeue_parsed_rejected(self, session_cm) -> None:
+        """PARSED is terminal — retrying it is a 409, never a silent re-run."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        _set_version_status(session_cm, doc_id, DocumentProcessingStatus.PARSED)
+
+        async def _run() -> None:
+            async with session_cm() as session:
+                svc = DocumentService(session)
+                auth = _mk_auth(org_id, user_id)
+                with pytest.raises(TransitionError):
+                    await svc.requeue_version(auth, doc_id, ver_num)
+                ver = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalar_one()
+                assert ver.processing_status == DocumentProcessingStatus.PARSED
+
+        asyncio.run(_run())
+
+    def test_requeue_is_idempotent(self, session_cm) -> None:
+        """Re-calling requeue on an already-QUEUED version returns the same
+        run_id and does not enqueue a second distinct job / transition."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        ver_id = _set_version_status(
+            session_cm, doc_id, DocumentProcessingStatus.FAILED
+        )
+
+        async def _run() -> None:
+            async with session_cm() as session:
+                svc = DocumentService(session)
+                auth = _mk_auth(org_id, user_id)
+                first = await svc.requeue_version(auth, doc_id, ver_num)
+                second = await svc.requeue_version(auth, doc_id, ver_num)
+                assert first == second
+                assert first == make_job_id(
+                    str(ver_id), ProcessingStage.PARSE.value
+                )
+                ver = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalar_one()
+                assert ver.processing_status == DocumentProcessingStatus.QUEUED
+
+        asyncio.run(_run())
+
+    def test_requeue_cross_tenant_denied(self, session_cm) -> None:
+        """A user from another org cannot requeue a version they can't see."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        _set_version_status(session_cm, doc_id, DocumentProcessingStatus.FAILED)
+
+        other_user = uuid.uuid4()
+        other_org = uuid.uuid4()
+
+        async def _setup_other() -> None:
+            async with session_cm() as session:
+                session.add(Organization(id=other_org, name="Other Org"))
+                session.add(
+                    User(
+                        id=other_user,
+                        auth_provider="dev",
+                        auth_provider_user_id=str(other_user),
+                    )
+                )
+                session.add(
+                    Membership(
+                        organization_id=other_org, user_id=other_user, role="owner"
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_setup_other())
+
+        async def _run() -> None:
+            async with session_cm() as session:
+                svc = DocumentService(session)
+                auth = _mk_auth(other_org, other_user)
+                with pytest.raises(DocumentNotFoundError):
+                    await svc.requeue_version(auth, doc_id, ver_num)
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Retry API endpoint (CP24)
+# ---------------------------------------------------------------------------
+
+
+class TestRetryProcessingApi:
+    """``POST .../versions/{v}/retry`` endpoint."""
+
+    def test_retry_failed_version(
+        self, session_cm
+    ) -> None:
+        """Retrying a FAILED version returns 200, queues a deterministic job,
+        and transitions the version to QUEUED."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        ver_id = _set_version_status(
+            session_cm, doc_id, DocumentProcessingStatus.FAILED
+        )
+
+        fake_queue = FakeQueueAdapter()
+        app.dependency_overrides[get_queue_adapter_dep] = lambda: fake_queue
+        try:
+            response = client.post(
+                f"/projects/{project_id}/documents/{doc_id}/versions/"
+                f"{ver_num}/retry",
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        expected_run_id = str(
+            make_job_id(str(ver_id), ProcessingStage.PARSE.value)
+        )
+        assert body["run_id"] == expected_run_id
+        assert body["status"] == DocumentProcessingStatus.QUEUED.value
+
+        # Version was transitioned to QUEUED.
+        async def _check_db() -> None:
+            async with session_cm() as session:
+                ver = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalar_one()
+                assert ver.processing_status == DocumentProcessingStatus.QUEUED
+
+        asyncio.run(_check_db())
+
+        # One deterministic job enqueued with a fresh worker attempt.
+        async def _check_queue() -> None:
+            assert await fake_queue.size(DEFAULT_QUEUE) == 1
+            job = await fake_queue.dequeue(DEFAULT_QUEUE)
+            assert job is not None
+            assert job.job_id == expected_run_id
+            assert job.payload["stage"] == ProcessingStage.PARSE.value
+            assert job.payload["attempt"] == 1
+            assert job.payload["document_version_id"] == str(ver_id)
+            assert job.payload["document_id"] == str(doc_id)
+
+        asyncio.run(_check_queue())
+
+    def test_retry_parsed_returns_409(self, session_cm) -> None:
+        """A PARSED (terminal) version cannot be retried — 409."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        _set_version_status(session_cm, doc_id, DocumentProcessingStatus.PARSED)
+
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/"
+            f"{ver_num}/retry",
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 409
+
+    def test_retry_not_found_returns_404(self, session_cm) -> None:
+        """Retrying a non-existent version is 404 (no version enumeration)."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        response = client.post(
+            f"/projects/{project_id}/documents/{uuid.uuid4()}/versions/1/retry",
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 404
+
+    def test_retry_wrong_project_returns_404(self, session_cm) -> None:
+        """Document exists but belongs to a different project -> 404."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        _set_version_status(session_cm, doc_id, DocumentProcessingStatus.FAILED)
+
+        response = client.post(
+            f"/projects/{uuid.uuid4()}/documents/{doc_id}/versions/"
+            f"{ver_num}/retry",
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 404
+
+    def test_retry_is_idempotent_at_api(self, session_cm) -> None:
+        """Two consecutive retries return the same run_id and enqueue one job."""
+        user_id, org_id, project_id = _build_org_project(session_cm)
+        doc_id, ver_num = _create_doc_version(session_cm, project_id)
+        ver_id = _set_version_status(
+            session_cm, doc_id, DocumentProcessingStatus.FAILED
+        )
+
+        fake_queue = FakeQueueAdapter()
+        app.dependency_overrides[get_queue_adapter_dep] = lambda: fake_queue
+        try:
+            first = client.post(
+                f"/projects/{project_id}/documents/{doc_id}/versions/"
+                f"{ver_num}/retry",
+                headers=_headers(user_id, org_id),
+            )
+            second = client.post(
+                f"/projects/{project_id}/documents/{doc_id}/versions/"
+                f"{ver_num}/retry",
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert first.status_code == 200, first.text
+        assert second.status_code == 200, second.text
+        assert first.json()["run_id"] == second.json()["run_id"]
+        expected_run_id = str(
+            make_job_id(str(ver_id), ProcessingStage.PARSE.value)
+        )
+        assert first.json()["run_id"] == expected_run_id
+
+        async def _check_queue() -> None:
+            # Idempotent enqueue: still exactly one job.
+            assert await fake_queue.size(DEFAULT_QUEUE) == 1
+
+        asyncio.run(_check_queue())
