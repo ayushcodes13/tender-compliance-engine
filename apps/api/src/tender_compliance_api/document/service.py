@@ -450,6 +450,65 @@ class DocumentService:
             )
         return requirement
 
+    # ------------------------------------------------------------------
+    # Source viewer (CP36)
+    # ------------------------------------------------------------------
+
+    async def get_page(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        page_number: int,
+    ) -> DocumentPage:
+        """Fetch a single :class:`DocumentPage` by page number, tenant-scoped.
+
+        Returns the page with its text, OCR confidence, and structural
+        metadata.  Raises :class:`DocumentNotFoundError` if the page (or
+        version, or document) is not in the authenticated organization.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(DocumentPage).where(
+                DocumentPage.document_version_id == version.id,
+                DocumentPage.page_number == page_number,
+            )
+        )
+        page = result.scalar_one_or_none()
+        if page is None:
+            raise DocumentNotFoundError(
+                f"page {page_number} not found in "
+                f"document {document_id} v{version_number}"
+            )
+        return page
+
+    async def get_page_image_bytes(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        page_number: int,
+        storage: ObjectStorageAdapter,
+    ) -> tuple[bytes, str]:
+        """Fetch the rendered PNG bytes for a page, tenant-scoped.
+
+        Returns ``(image_bytes, content_type)``.  If the page has no
+        rendered image yet (rendering was skipped/failed), raises
+        :class:`DocumentNotFoundError` — the client should fall back to
+        the text viewer.
+        """
+        page = await self.get_page(auth, document_id, version_number, page_number)
+        if page.rendered_image_object_key is None:
+            raise DocumentNotFoundError(
+                f"page {page_number} of document {document_id} v{version_number} "
+                f"has no rendered image available"
+            )
+        image_bytes = await storage.get(page.rendered_image_object_key)
+        # Determine content type from the stored object metadata, falling
+        # back to PNG (the renderer always produces PNG).
+        content_type = "image/png"
+        return image_bytes, content_type
+
     async def get_runs(
         self,
         auth: AuthContext,

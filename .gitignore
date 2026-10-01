@@ -50,3 +50,7 @@ exports/
 *.pem
 *.key
 credentials.json
+
+# PR body templates and lock files
+.cp*-pr-body.md
+apps/api/uv.lock

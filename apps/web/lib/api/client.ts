@@ -81,6 +81,98 @@ export type UploadResponse = DocumentItem & {
   uploaded_at: string;
 };
 
+/** Requirement review state (Phase 1). */
+export type RequirementReviewState =
+  | "UNREVIEWED"
+  | "REVIEWED"
+  | "NEEDS_CLARIFICATION"
+  | "OCR_WARNING";
+
+/** A single requirement in list view. */
+export type RequirementSummary = {
+  id: string;
+  requirement_type: string;
+  normalized_text: string;
+  uncertainty: string;
+  review_state: RequirementReviewState;
+  ocr_warning: boolean;
+  clause_number: string | null;
+  created_at: string;
+};
+
+/** A single structured constraint. */
+export type ConstraintSummary = {
+  id: string;
+  parameter: string;
+  operator: string | null;
+  numeric_value: number | null;
+  lower_bound: number | null;
+  upper_bound: number | null;
+  unit: string | null;
+  tolerance: number | null;
+  qualitative_condition: string | null;
+  normalization_state: string;
+  raw_fragment: string;
+  created_at: string;
+};
+
+/** A source anchor for a requirement. */
+export type RequirementSourceSummary = {
+  id: string;
+  page_number: number;
+  clause_number: string | null;
+  location_type: string;
+  ocr_confidence: number | null;
+};
+
+/** Full detail view of a requirement. */
+export type RequirementDetail = {
+  id: string;
+  document_version_id: string;
+  requirement_type: string;
+  normalized_text: string;
+  raw_source: string;
+  uncertainty: string;
+  review_state: RequirementReviewState;
+  ocr_warning: boolean;
+  clause_number: string | null;
+  reconciliation_group_id: string | null;
+  created_at: string;
+  constraints: ConstraintSummary[];
+  sources: RequirementSourceSummary[];
+};
+
+/** Paginated list of requirements. */
+export type RequirementListResponse = {
+  items: RequirementSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+/** Page metadata for the source viewer. */
+export type PageResponse = {
+  page_number: number;
+  has_image: boolean;
+  ocr_needed: boolean;
+  ocr_confidence: number | null;
+  cleaned_text: string | null;
+  extracted_text: string | null;
+  structural_metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+/** A source anchor (bounding box) for overlay on the source viewer. */
+export type SourceAnchor = {
+  requirement_id: string;
+  clause_number: string | null;
+  page_number: number;
+  location_type: string;
+  source_text: string | null;
+  bbox: { x: number; y: number; width: number; height: number } | null;
+  ocr_confidence: number | null;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Headers for the development identity mode. */
@@ -185,4 +277,71 @@ export const api = {
       body: form,
     }).then((r) => expectJson<UploadResponse>(r));
   },
+
+  // --- Requirements (CP35) ---
+
+  fetchRequirements: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    params?: { review_state?: string; requirement_type?: string; search?: string; limit?: number; offset?: number }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.review_state) q.set("review_state", params.review_state);
+    if (params?.requirement_type) q.set("requirement_type", params.requirement_type);
+    if (params?.search) q.set("search", params.search);
+    if (params?.limit !== undefined) q.set("limit", String(params.limit));
+    if (params?.offset !== undefined) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements${qs ? `?${qs}` : ""}`
+    ).then((r) => expectJson<RequirementListResponse>(r));
+  },
+
+  fetchRequirement: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}`
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  // --- Source viewer (CP36) ---
+
+  fetchPage: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    pageNumber: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}`
+    ).then((r) => expectJson<PageResponse>(r)),
+
+  fetchPageImage: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    pageNumber: number
+  ): Promise<Blob> =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}/image`
+    ).then((r) => {
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+      }
+      return r.blob();
+    }),
+
+  fetchPageSources: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    pageNumber: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}/sources`
+    ).then((r) => expectJson<SourceAnchor[]>(r)),
 };
