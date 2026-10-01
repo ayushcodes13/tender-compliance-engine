@@ -19,6 +19,8 @@ from typing import cast
 
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import init_engine
+from tender_compliance_api.ocr.adapter import OcrAdapter
+from tender_compliance_api.ocr.tesseract import TesseractOcrAdapter
 from tender_compliance_api.parser import PypdfParserAdapter
 from tender_compliance_api.parser.adapter import ParserAdapter
 from tender_compliance_api.queue import (
@@ -149,13 +151,15 @@ def create_worker(
     parser: ParserAdapter | None = None,
     renderer: RendererAdapter | None = None,
     storage: ObjectStorageAdapter | None = None,
+    ocr: OcrAdapter | None = None,
     max_concurrency: int | None = None,
 ) -> Worker:
     """Create a :class:`Worker` with production defaults.
 
     Uses :class:`RedisQueueAdapter` when ``REDIS_URL`` is configured;
-    otherwise falls back to :class:`FakeQueueAdapter`.  The renderer
-    defaults to :class:`PymupdfRendererAdapter` (CP20).
+    otherwise falls back to :class:`FakeQueueAdapter`.  Defaults:
+    :class:`PypdfParserAdapter` (CP19), :class:`PymupdfRendererAdapter`
+    (CP20), and :class:`TesseractOcrAdapter` (CP21).
     """
     settings = get_settings()
     if queue is None:
@@ -177,6 +181,12 @@ def create_worker(
     if storage is None:
         storage = _get_storage_adapter()
 
+    if ocr is None:
+        # TesseractOcrAdapter construction never touches the binary, so this
+        # cannot fail at import/construct time; a missing ``tesseract``
+        # binary surfaces lazily as a per-page non-fatal warning during OCR.
+        ocr = TesseractOcrAdapter()
+
     return Worker(
         queue=queue,
         session_factory=session_factory,
@@ -185,6 +195,7 @@ def create_worker(
             parser=parser,
             renderer=renderer,
             storage=storage,
+            ocr=ocr,
         ),
         max_concurrency=max_concurrency or settings.max_concurrency,
     )
