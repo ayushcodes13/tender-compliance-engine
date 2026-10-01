@@ -8,6 +8,7 @@ from tender_compliance_api.db.session import close_engine, init_engine
 from tender_compliance_api.routes.health import router as health_router
 from tender_compliance_api.routes.projects import router as projects_router
 from tender_compliance_api.routes.requirements import router as requirements_router
+from tender_compliance_api.routes.source_viewer import router as source_viewer_router
 from tender_compliance_api.routes.uploads import router as uploads_router
 
 
@@ -33,3 +34,4 @@ app.include_router(health_router)
 app.include_router(projects_router)
 app.include_router(uploads_router)
 app.include_router(requirements_router)
+app.include_router(source_viewer_router)

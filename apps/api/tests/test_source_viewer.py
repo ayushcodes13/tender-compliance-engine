@@ -1,0 +1,384 @@
+"""Tests for CP36 — Source viewer API.
+
+Covers:
+- GET .../pages/{page_number} — page metadata (text, OCR, structural metadata)
+- GET .../pages/{page_number}/image — rendered PNG bytes from storage
+- GET .../pages/{page_number}/sources — requirement source anchors for overlay
+- Tenant isolation: cross-org access is denied
+- 404 for non-existent pages or pages with no rendered image
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import uuid
+
+from fastapi.testclient import TestClient
+
+from tender_compliance_api.db.models import (
+    DocumentPage,
+    DocumentProcessingStatus,
+    DocumentVersion,
+    Membership,
+    Organization,
+    Project,
+    ProjectStatus,
+    Requirement,
+    RequirementReviewState,
+    RequirementSource,
+    TenderDocument,
+    User,
+)
+from tender_compliance_api.db.session import get_session
+from tender_compliance_api.main import app
+from tender_compliance_api.routes.source_viewer import get_storage_adapter
+from tender_compliance_api.storage.fake import FakeStorageAdapter
+
+client = TestClient(app)
+
+_session_cm = contextlib.asynccontextmanager(get_session)
+
+# Shared fake storage for tests that override the dependency.
+_test_storage: FakeStorageAdapter | None = None
+
+
+def _make_test_storage() -> FakeStorageAdapter:
+    """Return a fresh FakeStorageAdapter and install it as the route dependency."""
+    global _test_storage
+    _test_storage = FakeStorageAdapter()
+    app.dependency_overrides[get_storage_adapter] = lambda: _test_storage
+    return _test_storage
+
+
+def _clear_test_storage():
+    """Remove the storage dependency override."""
+    app.dependency_overrides.pop(get_storage_adapter, None)
+
+
+def _put_image_sync(key: str, data: bytes, content_type: str = "image/png"):
+    """Synchronously store an image in the test storage."""
+    assert _test_storage is not None, "Test storage not initialized; call _make_test_storage first"
+    asyncio.run(_test_storage.put(key, data, content_type))
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _headers(user_id: uuid.UUID, org_id: uuid.UUID) -> dict[str, str]:
+    return {
+        "x-dev-user-id": str(user_id),
+        "x-dev-organization-id": str(org_id),
+    }
+
+
+def _build_org_project():
+    """Set up org + user + membership + project; return (user_id, org_id, project_id)."""
+
+    async def _setup():
+        org_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        project_id = uuid.uuid4()
+        async with _session_cm() as session:
+            session.add(Organization(id=org_id, name="CP36 Test Org"))
+            session.add(
+                User(
+                    id=user_id,
+                    auth_provider="dev",
+                    auth_provider_user_id=str(user_id),
+                )
+            )
+            session.add(
+                Membership(organization_id=org_id, user_id=user_id, role="owner")
+            )
+            session.add(
+                Project(
+                    id=project_id,
+                    organization_id=org_id,
+                    name="CP36 Project",
+                    status=ProjectStatus.TENDER_UPLOADED,
+                    created_by=user_id,
+                )
+            )
+            await session.commit()
+        return user_id, org_id, project_id
+
+    return asyncio.run(_setup())
+
+
+def _create_doc_version_with_pages(project_id: uuid.UUID, num_pages: int = 3):
+    """Create a document version with pages, one requirement with a source anchor.
+
+    Returns (document_id, version_number).
+    """
+
+    async def _create():
+        async with _session_cm() as session:
+            doc = TenderDocument(
+                project_id=project_id,
+                display_name="tender.pdf",
+                document_type="tender",
+            )
+            session.add(doc)
+            await session.flush()
+            version = DocumentVersion(
+                document_id=doc.id,
+                version_number=1,
+                stored_object_id=uuid.uuid4(),
+                sha256="abc123",
+                mime_type="application/pdf",
+                size_bytes=1024,
+                processing_status=DocumentProcessingStatus.PARSED,
+            )
+            session.add(version)
+            await session.flush()
+
+            # Create pages.  Page 1 and 2 have rendered images; page 3 does not.
+            for i in range(1, num_pages + 1):
+                page = DocumentPage(
+                    document_version_id=version.id,
+                    page_number=i,
+                    extracted_text=f"Page {i} native text content.",
+                    cleaned_text=f"Page {i} cleaned text.",
+                    ocr_needed=0,
+                    ocr_confidence=0.95,
+                    rendered_image_object_key=f"rendered/page_{i}.png" if i <= 2 else None,
+                )
+                session.add(page)
+            await session.flush()
+
+            # Create a requirement on page 1 with a source anchor that has a bbox
+            req = Requirement(
+                document_version_id=version.id,
+                promotion_key=f"pk-{uuid.uuid4().hex[:8]}",
+                requirement_type="obligation",
+                normalized_text="weight \u2264 2 kg",
+                raw_source="weight \u2264 2 kg",
+                uncertainty="confirmed",
+                ocr_warning=False,
+                review_state=RequirementReviewState.UNREVIEWED,
+            )
+            session.add(req)
+            await session.flush()
+
+            source = RequirementSource(
+                requirement_id=req.id,
+                document_version_id=version.id,
+                page_number=1,
+                clause_number="4.2.1",
+                location_type="exact",
+                source_text="weight \u2264 2 kg",
+                bbox={"x": 100, "y": 200, "width": 300, "height": 20},
+                ocr_confidence=0.95,
+            )
+            session.add(source)
+            await session.commit()
+            return doc.id, version.version_number
+
+    return asyncio.run(_create())
+
+
+def _setup_other_org():
+    """Create a second org/user not in the project's org; return (user_id, org_id)."""
+
+    async def _setup():
+        other_org = uuid.uuid4()
+        other_user = uuid.uuid4()
+        async with _session_cm() as session:
+            session.add(Organization(id=other_org, name="Other Org"))
+            session.add(
+                User(
+                    id=other_user,
+                    auth_provider="dev",
+                    auth_provider_user_id=str(other_user),
+                )
+            )
+            session.add(
+                Membership(
+                    organization_id=other_org, user_id=other_user, role="owner"
+                )
+            )
+            await session.commit()
+        return other_user, other_org
+
+    return asyncio.run(_setup())
+
+
+# ---------------------------------------------------------------------------
+# Page metadata endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestPageMetadata:
+    def test_get_page_returns_metadata(self):
+        """GET page returns text, OCR, structural metadata."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["page_number"] == 1
+        assert body["has_image"] is True  # page 1 has rendered_image_object_key
+        assert body["ocr_needed"] is False
+        assert body["ocr_confidence"] == 0.95
+        assert body["cleaned_text"] == "Page 1 cleaned text."
+        assert body["extracted_text"] == "Page 1 native text content."
+        assert "created_at" in body
+
+    def test_get_page_no_image_metadata(self):
+        """GET page for a page with no rendered image still returns metadata."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/3",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["page_number"] == 3
+        assert body["has_image"] is False
+
+    def test_get_page_404_for_nonexistent_page(self):
+        """GET page for a non-existent page number returns 404."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/99",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 404
+
+    def test_get_page_tenant_isolation(self):
+        """Cross-org access to page metadata returns 404."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        other_user, other_org = _setup_other_org()
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1",
+            headers=_headers(other_user, other_org),
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Page image endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestPageImage:
+    def test_get_page_image_returns_bytes(self):
+        """GET page image returns the stored PNG bytes."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        _make_test_storage()
+        _put_image_sync("rendered/page_1.png", b"\x89PNG\r\n\x1a\n fake png data")
+        try:
+            resp = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/image",
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            _clear_test_storage()
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/png"
+        assert resp.content == b"\x89PNG\r\n\x1a\n fake png data"
+
+    def test_get_page_image_404_when_no_image(self):
+        """GET page image for a page with no rendered image returns 404."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+        # Page 3 has no rendered_image_object_key
+
+        _make_test_storage()
+        try:
+            resp = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/3/image",
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            _clear_test_storage()
+
+        assert resp.status_code == 404
+
+    def test_get_page_image_tenant_isolation(self):
+        """Cross-org access to page image returns 404."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        other_user, other_org = _setup_other_org()
+
+        _make_test_storage()
+        try:
+            resp = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/image",
+                headers=_headers(other_user, other_org),
+            )
+        finally:
+            _clear_test_storage()
+
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Source anchors endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestSourceAnchors:
+    def test_get_page_sources_returns_anchors(self):
+        """GET page sources returns source anchors with bbox for overlay."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/sources",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        anchor = body[0]
+        assert anchor["page_number"] == 1
+        assert anchor["location_type"] == "exact"
+        assert anchor["source_text"] == "weight \u2264 2 kg"
+        assert anchor["bbox"] == {"x": 100, "y": 200, "width": 300, "height": 20}
+        assert anchor["ocr_confidence"] == 0.95
+        assert "clause_number" in anchor
+        assert "requirement_id" in anchor
+
+    def test_get_page_sources_empty_for_page_without_anchors(self):
+        """GET page sources for a page with no anchors returns empty list."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/2/sources",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_get_page_sources_tenant_isolation(self):
+        """Cross-org access to source anchors returns 404."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+
+        other_user, other_org = _setup_other_org()
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/sources",
+            headers=_headers(other_user, other_org),
+        )
+        assert resp.status_code == 404
