@@ -31,8 +31,9 @@ from tender_compliance_api.db.models import (
     RunStatus,
 )
 from tender_compliance_api.document import DocumentNotFoundError, DocumentService
-from tender_compliance_api.parser.adapter import ParserAdapter
+from tender_compliance_api.parser.adapter import ParserAdapter, ParseResult
 from tender_compliance_api.queue import QueuedJob
+from tender_compliance_api.renderer.adapter import RendererAdapter, RenderResult
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,9 @@ class JobProcessor:
             yielding an ``AsyncSession``.
         parser: :class:`ParserAdapter` used to extract page text (CP19).
             Defaults to :class:`PypdfParserAdapter`.
+        renderer: :class:`RendererAdapter` used to rasterize page images
+            (CP20).  When ``None``, no page images are produced.  Defaults
+            to :class:`PymupdfRendererAdapter`.
         storage: :class:`ObjectStorageAdapter` used to read the original
             document bytes from storage.
     """
@@ -85,10 +89,16 @@ class JobProcessor:
         self,
         session_factory: SessionFactory,
         parser: ParserAdapter | None = None,
+        renderer: RendererAdapter | None = None,
         storage: ObjectStorageAdapter | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._parser = parser or _default_parser()
+        # renderer defaults to None (no rendering) so direct JobProcessor
+        # construction in tests is a no-op for rendering.  Production
+        # workers created via ``create_worker`` inject a real renderer
+        # (CP20).
+        self._renderer: RendererAdapter | None = renderer
         self._storage = storage or _default_storage()
 
     async def process(self, job: QueuedJob) -> None:
@@ -250,6 +260,9 @@ class JobProcessor:
             parse_result=parse_result,
         )
 
+        # Render visual page assets (best-effort, non-fatal — CP20).
+        await self._render_pages(svc, auth, version, data, parse_result)
+
         # Complete the PARSE run successfully.
         await svc.complete_run(
             auth,
@@ -265,6 +278,56 @@ class JobProcessor:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    async def _render_pages(
+        self,
+        svc: DocumentService,
+        auth: AuthContext,
+        version: DocumentVersion,
+        data: bytes,
+        parse_result: ParseResult,
+    ) -> None:
+        """Render visual page assets and persist image keys (CP20).
+
+        Best-effort and non-fatal: a renderer exception or a fatal render
+        error is logged and recorded per-page (via
+        :meth:`DocumentService.store_rendered_pages`) without failing the
+        PARSE stage.  If no renderer is configured, this is a no-op.
+        """
+        if self._renderer is None:
+            return
+        try:
+            render_result = await self._renderer.render(
+                data, version.mime_type
+            )
+        except Exception as exc:  # noqa: BLE001 — never fail parsing on render
+            logger.warning(
+                "page rendering failed for version %s: %s", version.id, exc
+            )
+            # Synthesize a fatal RenderResult so the failure is recorded
+            # per-page (via store_rendered_pages) rather than only logged.
+            render_result = RenderResult(
+                renderer_name=self._renderer.name,
+                renderer_version=self._renderer.version,
+                render_dpi=self._renderer.render_dpi,
+                page_count=0,
+                pages=[],
+                fatal_error=f"renderer raised: {exc!r}",
+            )
+        try:
+            await svc.store_rendered_pages(
+                auth,
+                document_id=version.document_id,
+                version_number=version.version_number,
+                render_result=render_result,
+                storage=self._storage,
+            )
+        except Exception as exc:  # noqa: BLE001 — storage failure is non-fatal
+            logger.warning(
+                "storing rendered pages failed for version %s: %s",
+                version.id,
+                exc,
+            )
 
     async def _get_version(
         self, session: AsyncSession, version_id: uuid.UUID

@@ -149,7 +149,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP19 — PDF parser adapter~~
   - Status: DONE — PR #23
   - Branch: `cp19/pdf-parser-adapter`
-- [ ] CP20 — Rendered page assets and real visual source
+- [x] ✅ ~~CP20 — Rendered page assets and real visual source~~
+  - Status: DONE — PR #25
+  - Branch: `cp20/rendered-page-assets`
 - [ ] CP21 — Scanned-page detection and OCR
 - [ ] CP22 — DOCX adapter and format-appropriate provenance
 - [ ] CP23 — DocumentPage persistence and structural cleanup
@@ -948,29 +950,49 @@ Turn source files into trustworthy page/segment representations while keeping un
 
 - [x] Page boundaries preserved — each PDF page maps to exactly one `DocumentPage` row, ordered by `page_number`.
 
-## ⬜ Checkpoint 20 — Rendered page assets and real visual source
+## ✅ Checkpoint 20 — Rendered page assets and real visual source
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #25
 
-**Plain-English outcome:** Every PDF page has a visual representation reviewers can inspect.
+**Plain-English outcome:** Every PDF page has a visual representation reviewers can inspect, stored as derived PNG assets keyed to the source version.
 
-### What we will do
+### What we did
 
-1. Render pages to a stable image representation/resolution.
-2. Store derived page images in object storage.
-3. Persist asset keys.
-4. Record render failures per page.
-5. Keep source version identity attached.
-6. Choose settings that balance readability and storage.
+1. Added a replaceable `RendererAdapter` port (`tender_compliance_api/renderer/`) mirroring the `ParserAdapter` abstraction — one `RenderResult`/`RenderPageResult` per page, 1-indexed `page_number`, fatal errors returned (never raised).
+2. Implemented `PymupdfRendererAdapter` (PyMuPDF via `pymupdf`) rendering each page to PNG at a stable 150 DPI; detects encrypted/unopenable documents and per-page failures without aborting the whole document.
+3. Added `DocumentService.store_rendered_pages()` which stores each rendered PNG in object storage under a deterministic, org/project/document/version-scoped key (`build_key` with a UUID5 `object_id`) and persists it on `DocumentPage.rendered_image_object_key` (column added in CP19 migration `0007`, nullable).
+4. Integrated rendering into the worker's PARSE stage (`_do_parse`) — best-effort and non-fatal: a render/storage failure is recorded as a per-page `structural_metadata` warning and never fails parsing.
+5. Made keys **idempotent**: re-rendering the same version/page/DPI overwrites the same storage key (no duplicate blobs); `store_pages` already deletes+recreates page rows on re-parse so image keys are always re-derived consistently.
+6. Rendering is wired into `create_worker` (production) and is opt-in for tests via the `renderer=` argument; a `JobProcessor` constructed without a renderer skips rendering (safe default).
 
-### How we will verify it
+### How we verified it
 
-- Rendered page count matches source page count for normal PDFs.
-- Stored image for a page can be retrieved.
+- `PymupdfRendererAdapter` renders a real 3-page PDF to 3 ordered PNGs with valid PNG signatures (8 renderer unit tests).
+- Encrypted/corrupt/unsupported-MIME PDFs produce `fatal_error`, never raise.
+- `FakeRendererAdapter` produces deterministic, dependency-free PNGs.
+- `DocumentService.store_rendered_pages` sets `rendered_image_object_key` per page, images are retrievable from storage, keys are idempotent across re-renders, fatal/per-page failures are annotated as warnings without images, and cross-tenant access is denied (7 service tests).
+- Worker integration: a `JobProcessor` with a renderer persists image keys; without a renderer it is a no-op and never fails (2 worker tests).
 
 ### This checkpoint is complete only when
 
-- The system has a stable visual source even when text extraction is imperfect.
+- [x] The system has a stable visual source even when text extraction is imperfect.
+- [x] A `DocumentPage` row can be located and its rendered image retrieved from object storage.
+- [x] Re-rendering a version does not duplicate stored image objects (deterministic keys).
+
+### Implementation / PR note
+
+- **Branch:** `cp20/rendered-page-assets`
+- **`pyproject.toml`:** added `pymupdf>=1.25,<2.0`.
+- **New package `tender_compliance_api/renderer/`:**
+  - `adapter.py` — `RendererAdapter` ABC + frozen `RenderPageResult`/`RenderResult` dataclasses.
+  - `pymupdf.py` — production renderer (`pymupdf`); 150 DPI PNG; safe on untrusted input (no JS/exec); per-page failure isolation; encryption → fatal.
+  - `fake.py` — deterministic dependency-free PNG renderer for tests.
+- **`document/service.py`:** added `store_rendered_pages()` (best-effort, tenant-scoped, deterministic UUID5 keys) + `_append_page_warning()` helper.
+- **`tender_compliance_worker/processor.py`:** `JobProcessor` accepts `renderer: RendererAdapter | None`; `_do_parse` renders after `store_pages`; `_render_pages()` helper isolates failures.
+- **`tender_compliance_worker/worker.py`:** `create_worker()` injects `PymupdfRendererAdapter`.
+- **No new migration** — `rendered_image_object_key` already exists on `document_pages` (CP19 migration `0007`).
+- **Tests:** 18 new tests in `tests/test_renderer.py`.
+- **Verified:** `ruff check .` ✅, `mypy src/` ✅ (50 source files), `alembic upgrade head` ✅, `pytest` ✅ (169 tests = 151 prior + 18 new).
 
 ### Guardrail
 

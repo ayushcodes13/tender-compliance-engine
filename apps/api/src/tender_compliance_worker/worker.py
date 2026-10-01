@@ -28,6 +28,8 @@ from tender_compliance_api.queue import (
     QueuedJob,
     RedisQueueAdapter,
 )
+from tender_compliance_api.renderer import PymupdfRendererAdapter
+from tender_compliance_api.renderer.adapter import RendererAdapter
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 from tender_compliance_api.storage.fake import FakeStorageAdapter
 from tender_compliance_api.storage.s3 import S3StorageAdapter
@@ -145,13 +147,15 @@ def create_worker(
     *,
     queue: QueueAdapter | None = None,
     parser: ParserAdapter | None = None,
+    renderer: RendererAdapter | None = None,
     storage: ObjectStorageAdapter | None = None,
     max_concurrency: int | None = None,
 ) -> Worker:
     """Create a :class:`Worker` with production defaults.
 
     Uses :class:`RedisQueueAdapter` when ``REDIS_URL`` is configured;
-    otherwise falls back to :class:`FakeQueueAdapter`.
+    otherwise falls back to :class:`FakeQueueAdapter`.  The renderer
+    defaults to :class:`PymupdfRendererAdapter` (CP20).
     """
     settings = get_settings()
     if queue is None:
@@ -167,6 +171,9 @@ def create_worker(
     if parser is None:
         parser = PypdfParserAdapter()
 
+    if renderer is None:
+        renderer = PymupdfRendererAdapter()
+
     if storage is None:
         storage = _get_storage_adapter()
 
@@ -174,7 +181,10 @@ def create_worker(
         queue=queue,
         session_factory=session_factory,
         processor=JobProcessor(
-            session_factory, parser=parser, storage=storage
+            session_factory,
+            parser=parser,
+            renderer=renderer,
+            storage=storage,
         ),
         max_concurrency=max_concurrency or settings.max_concurrency,
     )
