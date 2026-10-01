@@ -21,6 +21,28 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: ruff check .
       - run: pytest
+      - name: Run benchmark evaluation harness
+        # Runs the eval harness and saves a report artifact.  Currently
+        # non-blocking because the parser has known divergences (see
+        # checkpoint.md CP44 / known-parser-divergences tests).  Once the
+        # parser meets the quality thresholds, remove continue-on-error.
+        continue-on-error: true
+        run: |
+          python -c "
+          from tender_compliance_api.extraction.eval_harness import run_eval, format_text_report
+          report = run_eval()
+          text = format_text_report(report)
+          with open('eval-report.txt', 'w') as f:
+              f.write(text)
+          print(text)
+          print(f'ALL GATES PASSED: {report.all_passed}')
+          "
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-eval-report
+          path: eval-report.txt
 
   web:
     runs-on: ubuntu-latest
