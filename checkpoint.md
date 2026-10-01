@@ -8,7 +8,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP32 — RequirementConstraint model and normalization states**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP33 — Deterministic numeric/operator/unit parsing**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -186,7 +186,9 @@ Phase 2 evaluation + production release
 
 ### Stage F — Conservative normalization and structured constraints
 
-- [ ] CP32 — RequirementConstraint model and normalization states
+- [x] ✅ ~~CP32 — RequirementConstraint model and normalization states~~
+  - Status: DONE — PR #37
+  - Branch: `cp32/constraint-model`
 - [ ] CP33 — Deterministic numeric/operator/unit parsing
 - [ ] CP34 — Qualitative normalization and ambiguity escalation
 
@@ -1885,9 +1887,9 @@ All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 
 Turn safe pieces of requirements into typed constraints without changing their meaning.
 
-## ⬜ Checkpoint 32 — RequirementConstraint model and normalization states
+## ✅ ~~Checkpoint 32 — RequirementConstraint model and normalization states~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #37 merged.
 
 **Plain-English outcome:** Structured values live in typed records alongside their raw fragments.
 
@@ -1910,6 +1912,65 @@ Turn safe pieces of requirements into typed constraints without changing their m
 ### Guardrail
 
 - No guessed value is required just to satisfy the schema.
+
+### Completion summary (PR #37)
+
+**Why:** Phase 1 extraction (CP28–CP31) now produces validated requirements, but
+no structured value could be modeled, audited, or compared yet. CP32 adds the
+`RequirementConstraint` model + `ConstraintNormalizationState` so that
+conservative numeric/qualitative constraints can live in typed records beside
+their verbatim `raw_fragment` — without inferring values that aren't there.
+
+**What changed:**
+- `db/models.py`: `ConstraintNormalizationState` StrEnum
+  (`UNNORMALIZED`/`SAFE`/`PARTIAL`/`NEEDS_REVIEW`) + `RequirementConstraint` table
+  (many-per-requirement; FK to `requirements.id` + `document_versions.id`, both
+  CASCADE; indexes). Columns: `parameter`, `operator` (String, so OCR/ambiguous
+  operators are recordable without fabrication), `numeric_value`, `lower_bound`,
+  `upper_bound`, `unit`, `tolerance` (all `Numeric(18,6)`, nullable),
+  `qualitative_condition`, `normalization_state` (Enum, DB+Python default
+  `unnormalized`), verbatim `raw_fragment`. Added `constraints` relationship on
+  `Requirement` (back-populated, `delete-orphan`). Phase 1 only — no
+  vendor-compliance columns.
+- `alembic/versions/0014_extraction_constraints.py` (new): `CREATE TABLE
+  requirement_constraints` + indexes; `normalization_state` stored as VARCHAR
+  (SQLite-compatible, mirroring CP30 review_state/location_type). Head →
+  `0014_extraction_constraints`.
+- No service/parser changes — CP32 is model + states only (CP33 parses, CP34
+  qualitatively normalizes). `compute_diagnostics`/processor unchanged.
+
+**Scope:** `RequirementConstraint` model + normalization states only. Does
+**not** parse numeric values (CP33), qualitatively normalize wording (CP34),
+expose constraints via API (CP35), project the matrix (CP41), or any Phase-2
+work. Parsed columns stay `NULL` at CP32 (no guessed value).
+
+**Evidence / provenance impact:** Every constraint carries a verbatim
+`raw_fragment` and a stable `requirement_id` → `requirement_sources` anchor
+chain, so each structured value is auditable back to its requirement's source
+pages (CP30/CP35). `normalization_state` is never silently advanced — values
+start `UNNORMALIZED` and only CP33/CP34 transition them, preserving the
+"unreviewed uncertainty presented as certain" guardrail.
+
+**Verification:**
+- `tests/test_extraction_constraint.py` (new, 9 cases): states are the closed
+  Phase-1 set with stable string values; column-level default is
+  `unnormalized` (Python + DB server_default) and parsed fields are nullable;
+  full field set round-trips on a transient instance; multi-constraint
+  relationship grouping; DB round-trip for every `ConstraintNormalizationState`
+  (read-back == set enum member, raw_fragment verbatim, back-populated parent);
+  insert-without-state still yields `UNNORMALIZED`.
+- `tests/test_migration.py`: head bumped to `0014_extraction_constraints`;
+  `requirement_constraints` added to `_APP_TABLES`.
+
+**Risks / limitations:**
+- No parsing yet — `numeric_value`/`operator`/etc. remain `NULL` until CP33/CP34.
+  The matrix (CP41) skips NULL-value constraints.
+- `operator` is a free `String` at CP32 (operators are validated/normalized in
+  CP33's parser, not the schema).
+
+**Gate (run from `apps/api`):** `pytest` 324 passed / 2 skipped; `ruff check .`
+All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
+`0014_extraction_constraints`; `npx tsc --noEmit` (apps/web) clean.
 
 ## ⬜ Checkpoint 33 — Deterministic numeric/operator/unit parsing
 
