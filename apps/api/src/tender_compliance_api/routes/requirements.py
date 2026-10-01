@@ -12,9 +12,10 @@ wire — and never include full document bodies (guardrail from CP35).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.db.models import (
+    DocumentVersion,
+    ExportArtifact,
+    ExportStatus,
     Requirement,
     RequirementReviewState,
 )
@@ -1001,3 +1005,139 @@ async def get_matrix(
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [MatrixRowResponse.model_validate(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# XLSX export (CP42)
+# ---------------------------------------------------------------------------
+
+
+class ExportArtifactResponse(BaseModel):
+    """Metadata for an export artifact (CP42)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    document_version_id: UUID
+    stored_object_id: UUID | None
+    actor_id: UUID | None
+    status: str
+    error_message: str | None
+    requirement_count: int
+    workbook_sha256: str
+    generated_at: datetime | None
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/exports",
+    response_model=ExportArtifactResponse,
+    response_model_exclude_none=True,
+)
+async def create_export(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> ExportArtifactResponse:
+    """Generate a matrix XLSX export for a document version (CP42).
+
+    Uses the canonical matrix projection.  The workbook is stored in object
+    storage and an audit event is logged.  If generation fails, a FAILED
+    artifact is recorded and the error is propagated.
+    """
+    svc = DocumentService(session)
+    try:
+        artifact = await svc.export_matrix(auth, document_id, version_number)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        # The service already recorded a FAILED artifact and audit event.
+        # Find the most recent failed artifact for this version.
+        result = await session.execute(
+            select(ExportArtifact)
+            .where(
+                ExportArtifact.document_version_id == (
+                    select(DocumentVersion.id)
+                    .where(
+                        DocumentVersion.document_id == document_id,
+                        DocumentVersion.version_number == version_number,
+                    )
+                ),
+                ExportArtifact.status == ExportStatus.FAILED,
+            )
+            .order_by(ExportArtifact.generated_at.desc())
+        )
+        failing_artifact = result.scalar_one_or_none()
+        if failing_artifact is None:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Export failed: {exc}",
+            ) from exc
+        await session.commit()
+        return ExportArtifactResponse.model_validate(failing_artifact)
+
+    await session.commit()
+    return ExportArtifactResponse.model_validate(artifact)
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/exports",
+    response_model=list[ExportArtifactResponse],
+    response_model_exclude_none=True,
+)
+async def list_exports(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> list[ExportArtifactResponse]:
+    """List export artifacts for a document version (CP42)."""
+    svc = DocumentService(session)
+    try:
+        artifacts = await svc.get_exports(auth, document_id, version_number)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [ExportArtifactResponse.model_validate(a) for a in artifacts]
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/exports/{export_id}",
+    response_class=Response,
+    name="download_export",
+)
+async def download_export(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    export_id: UUID,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> Any:
+    """Download the XLSX workbook for a completed export (CP42)."""
+    svc = DocumentService(session)
+    try:
+        workbook_bytes = await svc.download_export(
+            auth, document_id, version_number, export_id
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Export download failed: {exc}",
+        ) from exc
+
+    return Response(
+        content=workbook_bytes,
+        media_type=(
+            "application/vnd.openxmlformats-"
+            "officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="tender_matrix_export.xlsx"'
+            )
+        },
+    )

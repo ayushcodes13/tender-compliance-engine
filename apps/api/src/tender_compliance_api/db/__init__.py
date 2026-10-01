@@ -7,6 +7,8 @@ from tender_compliance_api.db.models import (
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExportArtifact,
+    ExportStatus,
     Membership,
     Organization,
     ProcessingRun,
@@ -38,4 +40,6 @@ __all__ = [
     "RunStatus",
     "ProcessingRun",
     "Category",
+    "ExportArtifact",
+    "ExportStatus",
 ]

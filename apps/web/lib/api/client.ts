@@ -305,6 +305,19 @@ export type MatrixRowResponse = {
   review_status: RequirementReviewState;
 };
 
+/** Metadata for a matrix XLSX export artifact (CP42). */
+export type ExportArtifactResponse = {
+  id: string;
+  document_version_id: string;
+  stored_object_id: string | null;
+  actor_id: string | null;
+  status: "completed" | "failed";
+  error_message: string | null;
+  requirement_count: number;
+  workbook_sha256: string;
+  generated_at: string | null;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Headers for the development identity mode. */
@@ -718,4 +731,34 @@ export const api = {
     apiFetch(
       `/projects/${projectId}/documents/${documentId}/versions/${version}/matrix`
     ).then((r) => expectJson<MatrixRowResponse[]>(r)),
+
+  // --- XLSX export (CP42) ---
+
+  createMatrixExport: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/exports`,
+      { method: "POST" }
+    ).then((r) => expectJson<ExportArtifactResponse>(r)),
+
+  downloadMatrixExport: async (
+    projectId: string,
+    documentId: string,
+    version: number,
+    exportId: string
+  ): Promise<Blob> => {
+    const resp = await fetch(
+      `${API_URL}/projects/${projectId}/documents/${documentId}/versions/${version}/exports/${exportId}`,
+      {
+        headers: devHeaders(),
+      }
+    );
+    if (!resp.ok) {
+      throw new Error(`Download failed: ${resp.status}`);
+    }
+    return resp.blob();
+  },
 };

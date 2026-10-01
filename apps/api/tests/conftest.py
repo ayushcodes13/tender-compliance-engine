@@ -43,6 +43,22 @@ def test_database():
     TEST_DB_PATH.unlink(missing_ok=True)
 
 
+@pytest.fixture(autouse=True)
+def _clear_fake_storage():
+    """Clear the FakeStorageAdapter's class-level dict between tests.
+
+    The adapter uses class-level storage (so that export-then-download
+    roundtrips work across separate dependency instantiations).  Tests
+    that seed their own storage instances must not see data from other
+    tests.
+    """
+    from tender_compliance_api.storage.fake import FakeStorageAdapter
+
+    FakeStorageAdapter._store.clear()
+    FakeStorageAdapter._meta.clear()
+    yield
+
+
 @pytest.fixture
 def session_cm():
     """Return an async context manager yielding a fresh :class:`AsyncSession`.

@@ -1486,3 +1486,66 @@ class Category(Base):
         return (
             f"Category(project={self.project_id!r}, name={self.name!r})"
         )
+
+
+class ExportStatus(enum.StrEnum):
+    """Status of a matrix export job (CP42)."""
+
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ExportArtifact(Base):
+    """Record of a matrix XLSX export for a document version (CP42).
+
+    Each row represents one export attempt.  Multiple historical exports
+    are retained so reviewers can see what was exported when.  The actual
+    workbook bytes live in object storage (``stored_object_id``); this row
+    is the metadata pointer.
+
+    ``status`` captures success or failure.  When ``FAILED``,
+    ``error_message`` holds the failure reason so the UI can surface it
+    without retrying blindly.
+    """
+
+    __tablename__ = "export_artifacts"
+    __table_args__ = (
+        Index("ix_export_artifacts_version", "document_version_id"),
+        Index("ix_export_artifacts_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stored_object_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("stored_objects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True, index=True
+    )
+    status: Mapped[ExportStatus] = mapped_column(
+        Enum(ExportStatus, name="export_status", native_enum=False),
+        nullable=False,
+        default=ExportStatus.COMPLETED,
+        server_default=ExportStatus.COMPLETED.value,
+    )
+    error_message: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    requirement_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    workbook_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ExportArtifact(version={self.document_version_id!r}, "
+            f"status={self.status!r}, count={self.requirement_count})"
+        )

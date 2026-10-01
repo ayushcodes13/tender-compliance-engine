@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, AlertCircle, CheckCircle, XCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, CheckCircle, XCircle, Download } from "lucide-react";
 import { api, MatrixRowResponse } from "@/lib/api/client";
 
 interface MatrixViewProps {
@@ -52,6 +52,8 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
   const [rows, setRows] = useState<MatrixRowResponse[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const loadMatrix = async () => {
     setLoading(true);
@@ -74,6 +76,49 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
     void loadMatrix();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, documentId, version]);
+
+  const handleExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      // Trigger XLSX generation on the backend.
+      const artifact = await api.createMatrixExport(
+        projectId,
+        documentId,
+        version
+      );
+
+      if (artifact.status !== "completed") {
+        setExportError(
+          `Export failed: ${artifact.error_message ?? "unknown error"}`
+        );
+        return;
+      }
+
+      // Download the generated workbook.
+      const blob = await api.downloadMatrixExport(
+        projectId,
+        documentId,
+        version,
+        artifact.id
+      );
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tender_matrix_v${version}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? err.message : "Export failed"
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -108,44 +153,70 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
     status === "ocr_warning";
 
   return (
-    <div className="matrix-container">
-      <table className="matrix-table">
-        <thead>
-          <tr>
-            <th>S.No.</th>
-            <th>Requirement ID</th>
-            <th>Tender Requirement</th>
-            <th>Category</th>
-            <th>Clause</th>
-            <th>Source Page</th>
-            <th>Mandatory</th>
-            <th>User Notes</th>
-            <th>Review Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.requirement_id}
-              className={isUnresolved(row.review_status) ? "unresolved" : ""}
-            >
-              <td>{row.serial}</td>
-              <td className="mono">{row.requirement_id.slice(0, 8)}…</td>
-              <td>{row.tender_requirement}</td>
-              <td>{row.category ?? "—"}</td>
-              <td>{row.clause ?? "—"}</td>
-              <td>{row.source_page ?? "—"}</td>
-              <td>
-                {row.mandatory === null ? "—" : row.mandatory ? "Yes" : "No"}
-              </td>
-              <td>{row.user_notes ?? "—"}</td>
-              <td>
-                <ReviewStatusBadge status={row.review_status} />
-              </td>
+    <div className="matrix-wrapper">
+      <div className="matrix-container">
+        <table className="matrix-table">
+          <thead>
+            <tr>
+              <th>S.No.</th>
+              <th>Requirement ID</th>
+              <th>Tender Requirement</th>
+              <th>Category</th>
+              <th>Clause</th>
+              <th>Source Page</th>
+              <th>Mandatory</th>
+              <th>User Notes</th>
+              <th>Review Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.requirement_id}
+                className={isUnresolved(row.review_status) ? "unresolved" : ""}
+              >
+                <td>{row.serial}</td>
+                <td className="mono">{row.requirement_id.slice(0, 8)}…</td>
+                <td>{row.tender_requirement}</td>
+                <td>{row.category ?? "—"}</td>
+                <td>{row.clause ?? "—"}</td>
+                <td>{row.source_page ?? "—"}</td>
+                <td>
+                  {row.mandatory === null ? "—" : row.mandatory ? "Yes" : "No"}
+                </td>
+                <td>{row.user_notes ?? "—"}</td>
+                <td>
+                  <ReviewStatusBadge status={row.review_status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="matrix-actions">
+        <button
+          type="button"
+          className="button button-primary"
+          onClick={handleExport}
+          disabled={exporting}
+        >
+          {exporting ? (
+            <>
+              <RefreshCw size={14} className="spin" aria-hidden="true" />
+              Exporting…
+            </>
+          ) : (
+            <>
+              <Download size={14} aria-hidden="true" />
+              Export XLSX
+            </>
+          )}
+        </button>
+        {exportError && (
+          <span className="error-text">{exportError}</span>
+        )}
+      </div>
     </div>
   );
 }

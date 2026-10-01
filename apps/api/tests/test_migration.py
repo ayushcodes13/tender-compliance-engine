@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0016_requirement_structure"
+_HEAD_REV = "0017_export_artifacts"
 
 # Tables introduced by CP08..CP48 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -33,7 +33,7 @@ _APP_TABLES = {
     "requirements", "requirement_sources", "extraction_diagnostics",
     "requirement_constraints", "requirement_revisions",
     "requirement_relations", "requirement_notes", "categories",
-    "requirement_categories",
+    "requirement_categories", "export_artifacts",
 }
 
 
