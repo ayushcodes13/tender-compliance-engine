@@ -27,6 +27,7 @@ from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
     ExtractionCandidate,
+    ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
     Membership,
@@ -685,6 +686,278 @@ class TestExtractStageCandidates:
                     )
                 )
                 assert len(cnt.scalars().all()) == 0
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# CP29 — reconciliation persistence (dedup + audit read-back)
+# ---------------------------------------------------------------------------
+
+
+def _persist_candidate_row(
+    session,
+    version_id: uuid.UUID,
+    chunk_id: str,
+    normalized_text: str,
+    page_numbers: tuple[int, ...],
+) -> ExtractionCandidate:
+    return ExtractionCandidate(
+        document_version_id=version_id,
+        processing_run_id=None,
+        chunk_id=chunk_id,
+        window_text=normalized_text,
+        sources_json=[
+            {
+                "page_number": p,
+                "document_id": str(uuid.uuid4()),
+                "document_version_id": str(version_id),
+                "clause_number": None,
+                "char_start": 0,
+                "char_end": 10,
+                "bbox": None,
+                "ocr_confidence": None,
+                "location_type": "approximate",
+                "source_text": normalized_text,
+            }
+            for p in page_numbers
+        ],
+        normalized_text=normalized_text,
+        raw_source=normalized_text,
+        requirement_type="obligation",
+        uncertainty="confirmed",
+        clause_number=None,
+        group_hint=None,
+        ocr_warning=False,
+        is_valid=True,
+        persistable=True,
+        rejection_reason=None,
+    )
+
+
+class TestReconciliationPersistence:
+    """CP29 service: reconcile_version_candidates writes group/decision columns
+    + an audit row, and is non-destructive for flagged-review groups."""
+
+    def test_dedup_and_audit_rows_persisted(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                rows = [
+                    _persist_candidate_row(
+                        session,
+                        info["version_id"],
+                        "c1",
+                        "Shall encrypt data at rest using AES-256.",
+                        (1,),
+                    ),
+                    # overlap duplicate: same text on page 1 (chunk c2)
+                    _persist_candidate_row(
+                        session,
+                        info["version_id"],
+                        "c2",
+                        "Shall encrypt data at rest using AES-256.",
+                        (1,),
+                    ),
+                    # singleton obligation on page 2
+                    _persist_candidate_row(
+                        session,
+                        info["version_id"],
+                        "c3",
+                        "Enclosure must be IP67 rated.",
+                        (2,),
+                    ),
+                ]
+                session.add_all(rows)
+                await session.flush()
+                candidate_ids = [r.id for r in rows]
+
+                outcome = await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+
+            assert outcome.input_count == 3
+            assert outcome.removed_count == 1
+            assert outcome.singleton_count == 1
+
+            async with sf() as session:
+                db_rows = (
+                    await session.execute(
+                        select(ExtractionCandidate).where(
+                            ExtractionCandidate.document_version_id
+                            == info["version_id"]
+                        )
+                        .order_by(ExtractionCandidate.chunk_id)
+                    )
+                ).scalars().all()
+                by_chunk = {r.chunk_id: r for r in db_rows}
+                a, b, c = by_chunk["c1"], by_chunk["c2"], by_chunk["c3"]
+                # overlap duplicate: 'b' deduped, 'a' canonical, same group
+                assert b.deduped is True
+                assert b.reconciliation_decision == "dedup_exact"
+                assert b.reconciliation_group_id == a.reconciliation_group_id
+                assert a.deduped is False
+                assert c.deduped is False
+                assert c.reconciliation_decision == "singleton"
+                assert a.reconciliation_group_id != c.reconciliation_group_id
+                # audit row
+                audit = (
+                    await session.execute(
+                        select(ExtractionReconciliation).where(
+                            ExtractionReconciliation.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(audit) == 1
+                summary = audit[0].summary
+                assert summary["input"] == 3
+                assert summary["deduped"] == 1
+                assert summary["singleton"] == 1
+
+            assert candidate_ids[0] == a.id
+
+        asyncio.run(_run())
+
+    def test_identical_text_distinct_pages_flagged_not_deleted(
+        self, session_cm
+    ) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            hdr = "CONFIDENTIAL - Tender Document"
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                session.add_all(
+                    [
+                        _persist_candidate_row(
+                            session, info["version_id"], "h1", hdr, (1,)
+                        ),
+                        _persist_candidate_row(
+                            session, info["version_id"], "h2", hdr, (2,)
+                        ),
+                    ]
+                )
+                await session.flush()
+                await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+
+            async with sf() as session:
+                rows = (
+                    await session.execute(
+                        select(ExtractionCandidate).where(
+                            ExtractionCandidate.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                # flagged_review keeps BOTH (no silent deletion)
+                assert len(rows) == 2
+                assert all(r.deduped is False for r in rows)
+                assert all(
+                    r.reconciliation_decision == "flagged_review" for r in rows
+                )
+                assert rows[0].reconciliation_group_id == rows[1].reconciliation_group_id
+
+        asyncio.run(_run())
+
+    def test_reconcile_is_idempotent(self, session_cm) -> None:
+        """Running reconciliation twice yields stable ids/decisions."""
+
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                session.add_all(
+                    [
+                        _persist_candidate_row(
+                            session, info["version_id"], "c1", "Same req text.", (1,)
+                        ),
+                        _persist_candidate_row(
+                            session, info["version_id"], "c2", "Same req text.", (1,)
+                        ),
+                        _persist_candidate_row(
+                            session, info["version_id"], "c3", "Other req.", (1,)
+                        ),
+                    ]
+                )
+                await session.flush()
+                await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                first = {
+                    r.chunk_id: (
+                        r.reconciliation_group_id,
+                        r.deduped,
+                        r.reconciliation_decision,
+                    )
+                    for r in (
+                        await session.execute(
+                            select(ExtractionCandidate).where(
+                                ExtractionCandidate.document_version_id
+                                == info["version_id"]
+                            )
+                        )
+                    ).scalars().all()
+                }
+                await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+
+            async with sf() as session:
+                second = {
+                    r.chunk_id: (
+                        r.reconciliation_group_id,
+                        r.deduped,
+                        r.reconciliation_decision,
+                    )
+                    for r in (
+                        await session.execute(
+                            select(ExtractionCandidate).where(
+                                ExtractionCandidate.document_version_id
+                                == info["version_id"]
+                            )
+                        )
+                    ).scalars().all()
+                }
+                assert first == second
 
         asyncio.run(_run())
 

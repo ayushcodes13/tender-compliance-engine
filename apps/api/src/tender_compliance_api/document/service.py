@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.audit.service import AuditService
@@ -21,6 +21,7 @@ from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
     ExtractionCandidate,
+    ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
     ProcessingRun,
@@ -32,6 +33,13 @@ from tender_compliance_api.db.models import (
 )
 from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.extraction.extractor import CandidateRecord
+from tender_compliance_api.extraction.reconcile import (
+    DECISION_DEDUP,
+    DECISION_SINGLETON,
+    ReconciliationInput,
+    ReconciliationResult,
+    reconcile,
+)
 from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
@@ -112,6 +120,38 @@ def _append_page_warning(page: DocumentPage, message: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+
+
+def _candidate_to_input(row: ExtractionCandidate) -> ReconciliationInput:
+    """Project a persisted candidate into the CP29 reconciliation surface.
+
+    Page numbers are parsed from the candidate's trusted ``sources_json``
+    (never synthesized) so dedup signals reflect the actual cited locations.
+    Candidates with no source fragments are reconciled by text alone (they
+    cluster by fingerprint but cannot share a page span, so identical-text
+    cases become ``flagged_review`` rather than silently deduped).
+    """
+
+    sources = row.sources_json
+    if isinstance(sources, list):
+        page_numbers = tuple(
+            sorted(
+                {
+                    s["page_number"]
+                    for s in sources
+                    if isinstance(s, dict) and "page_number" in s
+                }
+            )
+        )
+    else:
+        page_numbers = ()
+    return ReconciliationInput(
+        candidate_id=row.id,
+        chunk_id=row.chunk_id,
+        normalized_text=row.normalized_text,
+        page_numbers=page_numbers,
+        sources_json=sources if isinstance(sources, list) else None,
+    )
 
 
 class DocumentService:
@@ -549,6 +589,81 @@ class DocumentService:
         self._session.add_all(rows)
         await self._session.flush()
         return len(rows)
+
+    async def reconcile_version_candidates(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        *,
+        run_id: uuid.UUID | None = None,
+    ) -> ReconciliationResult:
+        """Deterministically reconcile a version's persisted candidates (CP29).
+
+        Clusters the version's source-validated, persistable candidates by
+        whitespace-normalized ``normalized_text`` (via
+        :func:`tender_compliance_api.extraction.reconcile.reconcile`), then
+        records each candidate's ``reconciliation_group_id`` / ``deduped`` /
+        ``reconciliation_decision`` so CP30 promotes only non-deduped
+        candidates, and writes a single audit row
+        (:class:`~tender_compliance_api.db.models.ExtractionReconciliation`)
+        capturing the aggregate counts.
+
+        Reconciliation is idempotent and re-runnable (CP31 retry semantics):
+        re-running yields the same group ids and decisions, and re-overwrites
+        the per-candidate columns.
+        """
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+
+        # Only candidates that passed source validation can become requirements;
+        # invalid (fabrication-guarded) rows are audit-only and left untouched.
+        result = await self._session.execute(
+            select(ExtractionCandidate)
+            .where(
+                ExtractionCandidate.document_version_id == version.id,
+                ExtractionCandidate.is_valid.is_(True),
+                ExtractionCandidate.persistable.is_(True),
+            )
+            .order_by(ExtractionCandidate.chunk_id, ExtractionCandidate.id)
+        )
+        rows = list(result.scalars().all())
+
+        inputs = [_candidate_to_input(row) for row in rows]
+        outcome = reconcile(inputs)
+
+        # Map candidate_id -> (group_id, deduped, decision) for the update.
+        decisions: dict[uuid.UUID, tuple[str, bool, str]] = {}
+        for group in outcome.groups:
+            for cid in group.kept:
+                decisions[cid] = (group.group_id, False, group.decision)
+            for cid in group.removed:
+                decisions[cid] = (group.group_id, True, DECISION_DEDUP)
+
+        # Bulk-update the per-candidate columns in stable (id) order.
+        for row in sorted(rows, key=lambda r: r.id):
+            group_id, deduped, decision = decisions.get(
+                row.id, (row.reconciliation_group_id, row.deduped, DECISION_SINGLETON)
+            )
+            # SQLAlchemy 2.0 bulk UPDATE by primary key.
+            await self._session.execute(
+                update(ExtractionCandidate)
+                .where(ExtractionCandidate.id == row.id)
+                .values(
+                    reconciliation_group_id=group_id,
+                    deduped=deduped,
+                    reconciliation_decision=decision,
+                )
+            )
+
+        audit = ExtractionReconciliation(
+            document_version_id=version.id,
+            processing_run_id=run_id,
+            summary=outcome.summary(),
+        )
+        self._session.add(audit)
+        await self._session.flush()
+        return outcome
 
     # ------------------------------------------------------------------
     # Page storage (CP19)
