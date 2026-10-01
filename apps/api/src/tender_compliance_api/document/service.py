@@ -25,12 +25,15 @@ from sqlalchemy.orm import selectinload
 
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
+from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import (
     Category,
     ConstraintNormalizationState,
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExportArtifact,
+    ExportStatus,
     ExtractionCandidate,
     ExtractionDiagnostics,
     ExtractionReconciliation,
@@ -81,6 +84,9 @@ from tender_compliance_api.extraction.requirement import (
 from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
+from tender_compliance_api.storage.adapter import ObjectStorageAdapter
+from tender_compliance_api.storage.fake import FakeStorageAdapter
+from tender_compliance_api.storage.keys import build_key
 
 if TYPE_CHECKING:
     from tender_compliance_api.matrix.projection import MatrixRow
@@ -94,6 +100,26 @@ if TYPE_CHECKING:
 #: re-rendering the same version/page/DPI overwrites the same storage key
 #: instead of producing duplicate blobs (CP20 idempotency).
 _RENDER_KEY_NAMESPACE = uuid.UUID("00000000-0000-5000-8000-000000000042")
+
+
+def _resolve_storage() -> ObjectStorageAdapter:
+    """Return a storage adapter based on configuration (CP42).
+
+    Mirrors the logic in ``routes/uploads.py:get_storage_adapter`` but as
+    a plain function so the service layer can call it without depending
+    on FastAPI's dependency-injection machinery.
+    """
+    settings = get_settings()
+    if not settings.object_storage_endpoint:
+        return FakeStorageAdapter()
+    from tender_compliance_api.storage.s3 import S3StorageAdapter  # noqa: PLC0415
+
+    return S3StorageAdapter(
+        endpoint_url=settings.object_storage_endpoint,
+        access_key=settings.object_storage_access_key,
+        secret_key=settings.object_storage_secret_key,
+        bucket=settings.object_storage_bucket,
+    )
 
 
 class DocumentNotFoundError(Exception):
@@ -1344,6 +1370,219 @@ class DocumentService:
 
         version = await self.get_version_or_raise(auth, document_id, version_number)
         return await project_matrix_rows(self._session, version.id)
+
+    # ------------------------------------------------------------------
+    # Matrix XLSX export (CP42)
+    # ------------------------------------------------------------------
+
+    async def export_matrix(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        *,
+        storage: ObjectStorageAdapter | None = None,
+    ) -> ExportArtifact:
+        """Generate a matrix XLSX workbook and persist it (CP42).
+
+        Uses the canonical matrix projection — no duplicated column logic.
+        The workbook bytes are written to object storage, and an
+        :class:`ExportArtifact` metadata row records the actor, requirement
+        count, checksum, and timestamp.
+
+        If workbook generation fails, an ``ExportArtifact`` with
+        ``status=FAILED`` and ``error_message`` is recorded so the caller
+        can surface the failure.
+
+        Returns the :class:`ExportArtifact` row (committed by the caller or
+        this method on success).
+        """
+        from tender_compliance_api.export.xlsx import (  # noqa: PLC0415
+            build_matrix_workbook,
+            save_matrix_workbook,
+        )
+        from tender_compliance_api.matrix.projection import (  # noqa: PLC0415
+            project_matrix_rows,
+        )
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        # Fetch projection (also used to count rows).
+        rows = await project_matrix_rows(self._session, version.id)
+
+        if storage is None:
+            storage = _resolve_storage()
+
+        try:
+            wb, checksum = build_matrix_workbook(
+                rows,
+                project_name=str(document_id),
+                document_id=document_id,
+                version_number=version_number,
+                actor_id=auth.actor_id,
+                requirement_count=len(rows),
+            )
+            workbook_bytes = save_matrix_workbook(wb)
+
+            # Store the workbook bytes.
+            storage_key = build_key(
+                org_id=auth.organization_id,
+                project_id=project_id,
+                document_id=document_id,
+                version=version_number,
+                original_filename="tender_matrix_v1.xlsx",
+            )
+            obj_info = await storage.put(
+                storage_key,
+                workbook_bytes,
+                content_type=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                ),
+            )
+
+            # Create the StoredObject row.
+            from tender_compliance_api.db.models import (  # noqa: PLC0415
+                StoredObject,
+            )
+
+            stored_obj = StoredObject(
+                organization_id=auth.organization_id,
+                project_id=project_id,
+                document_id=document_id,
+                storage_key=storage_key,
+                filename=f"tender_matrix_v{version_number}.xlsx",
+                content_type=obj_info.content_type,
+                content_length=obj_info.content_length,
+                checksum_sha256=obj_info.checksum_sha256,
+                etag=obj_info.etag,
+            )
+            self._session.add(stored_obj)
+            await self._session.flush()
+
+            artifact = ExportArtifact(
+                document_version_id=version.id,
+                stored_object_id=stored_obj.id,
+                actor_id=auth.actor_id,
+                status=ExportStatus.COMPLETED,
+                requirement_count=len(rows),
+                workbook_sha256=obj_info.checksum_sha256,
+            )
+            self._session.add(artifact)
+            await self._session.flush()
+
+            await self._audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="matrix.export",
+                entity_type="export",
+                entity_id=artifact.id,
+                project_id=project_id,
+                metadata={
+                    "document_id": str(document_id),
+                    "version_number": version_number,
+                    "requirement_count": len(rows),
+                    "workbook_sha256": obj_info.checksum_sha256,
+                    "storage_key": storage_key,
+                },
+            )
+
+            return artifact
+
+        except Exception as exc:
+            # Record the failure as an audit trail entry.
+            artifact = ExportArtifact(
+                document_version_id=version.id,
+                stored_object_id=None,
+                actor_id=auth.actor_id,
+                status=ExportStatus.FAILED,
+                error_message=str(exc)[:2048],
+                requirement_count=0,
+                workbook_sha256="",
+            )
+            self._session.add(artifact)
+            await self._session.flush()
+
+            await self._audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="matrix.export.failed",
+                entity_type="export",
+                entity_id=artifact.id,
+                project_id=project_id,
+                metadata={
+                    "document_id": str(document_id),
+                    "version_number": version_number,
+                    "error": str(exc)[:512],
+                },
+            )
+
+            raise
+
+    async def get_exports(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> list[ExportArtifact]:
+        """List export artifacts for a document version (CP42)."""
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(ExportArtifact)
+            .where(ExportArtifact.document_version_id == version.id)
+            .order_by(ExportArtifact.generated_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def download_export(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        export_id: uuid.UUID,
+        *,
+        storage: ObjectStorageAdapter | None = None,
+    ) -> bytes:
+        """Download the workbook bytes for a completed export (CP42)."""
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+
+        if storage is None:
+            storage = _resolve_storage()
+
+        result = await self._session.execute(
+            select(ExportArtifact)
+            .where(
+                ExportArtifact.id == export_id,
+                ExportArtifact.document_version_id == version.id,
+            )
+        )
+        artifact = result.scalar_one_or_none()
+        if artifact is None:
+            raise DocumentNotFoundError(
+                f"export {export_id} not found for document "
+                f"{document_id} v{version_number}"
+            )
+
+        if artifact.status != ExportStatus.COMPLETED:
+            raise DocumentNotFoundError(
+                f"export {export_id} is not available "
+                f"(status={artifact.status})"
+            )
+
+        if artifact.stored_object_id is None:
+            raise DocumentNotFoundError(
+                f"export {export_id} has no stored object"
+            )
+
+        # Fetch the StoredObject to get the storage_key.
+        stored = await self._session.get(StoredObject, artifact.stored_object_id)
+        if stored is None:
+            raise DocumentNotFoundError(
+                f"stored object for export {export_id} not found"
+            )
+
+        return await storage.get(stored.storage_key)
 
     # ------------------------------------------------------------------
     # Source viewer (CP36)

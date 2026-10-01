@@ -1,8 +1,12 @@
 """In-memory fake object-storage adapter (CP12).
 
 Used by tests and local development without a running MinIO/S3 instance.
-All objects live in a process-local dictionary and are lost when the
-adapter is garbage-collected.
+All objects live in a **class-level** dictionary so that a single logical
+store persists across ``FakeStorageAdapter()`` instantiations within the
+same process — this matters for request/response roundtrips (e.g. export
+then download) where FastAPI creates a new dependency each time.
+
+Not suitable for production or multi-process deployments.
 """
 
 from __future__ import annotations
@@ -14,14 +18,15 @@ from tender_compliance_api.storage.adapter import ObjectInfo, ObjectStorageAdapt
 
 
 class FakeStorageAdapter(ObjectStorageAdapter):
-    """Thread-safe-enough in-memory store for testing.
+    """Process-local in-memory store for testing and local development.
 
-    Not suitable for production or multi-process deployments.
+    Data is stored at the **class level** so that multiple instances share
+    the same underlying dict — this allows roundtrip tests (write then
+    read in separate request scopes) to work correctly.
     """
 
-    def __init__(self) -> None:
-        self._store: dict[str, bytes] = {}
-        self._meta: dict[str, dict[str, object]] = {}
+    _store: dict[str, bytes] = {}
+    _meta: dict[str, dict[str, object]] = {}
 
     async def put(
         self, key: str, data: bytes, content_type: str
