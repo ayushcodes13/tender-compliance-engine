@@ -182,6 +182,86 @@ class TestUploadValid:
 
         asyncio.run(_verify())
 
+    def test_list_documents_after_upload(self, session_cm) -> None:
+        """GET /projects/{id}/documents returns uploaded document versions."""
+        headers, project_id = _build_auth_headers(session_cm)
+        pdf_data = _make_valid_pdf()
+
+        # Upload one document
+        r1 = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", pdf_data, "application/pdf")},
+            headers=headers,
+        )
+        assert r1.status_code == 201, r1.text
+
+        # Upload same content again (v2)
+        r2 = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", pdf_data, "application/pdf")},
+            headers=headers,
+        )
+        assert r2.status_code == 201, r2.text
+
+        # Fetch the document list
+        r_list = client.get(
+            f"/projects/{project_id}/documents",
+            headers=headers,
+        )
+        assert r_list.status_code == 200, r_list.text
+        items = r_list.json()
+        assert len(items) == 2
+        assert items[0]["version_number"] == 1
+        assert items[1]["version_number"] == 2
+        assert items[0]["display_name"] == "tender.pdf"
+        assert items[0]["size_bytes"] == len(pdf_data)
+        assert items[0]["processing_status"] == "uploaded"
+
+    def test_list_documents_cross_tenant_denied(self, session_cm) -> None:
+        """Cross-tenant users cannot list another org's documents."""
+        headers_a, project_id = _build_auth_headers(session_cm)
+
+        # Upload to org A's project
+        r1 = client.post(
+            f"/projects/{project_id}/upload",
+            files={
+                "file": ("tender.pdf", _make_valid_pdf(), "application/pdf")
+            },
+            headers=headers_a,
+        )
+        assert r1.status_code == 201, r1.text
+
+        # Org B tries to list
+        other_user = uuid.uuid4()
+        other_org = uuid.uuid4()
+
+        async def _setup_other() -> None:
+            async with session_cm() as session:
+                session.add(Organization(id=other_org, name="Other Org"))
+                session.add(
+                    User(
+                        id=other_user,
+                        auth_provider="dev",
+                        auth_provider_user_id=str(other_user),
+                    )
+                )
+                session.add(
+                    Membership(
+                        organization_id=other_org,
+                        user_id=other_user,
+                        role="owner",
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_setup_other())
+
+        r_list = client.get(
+            f"/projects/{project_id}/documents",
+            headers=_headers(other_user, other_org),
+        )
+        assert r_list.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # Version semantics

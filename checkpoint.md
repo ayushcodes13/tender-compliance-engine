@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP16 — Upload UI and document list**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP17 — Document-processing state machine**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -134,7 +134,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP15 — Tender upload API, versioning, and duplicate semantics~~
   - Status: DONE — PR #19
   - Branch: `cp15/upload-versioning-duplicates`
-- [ ] CP16 — Upload UI and document list
+- [x] ✅ ~~CP16 — Upload UI and document list~~
+  - Status: DONE — PR #20
+  - Branch: `cp16/upload-ui-document-list`
 - [ ] CP17 — Document-processing state machine
 - [ ] CP18 — Redis-backed worker and idempotent job execution
 

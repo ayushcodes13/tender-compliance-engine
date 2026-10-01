@@ -42,6 +42,39 @@ export type ProjectRename = {
   name: string;
 };
 
+/** Processing status of a single uploaded document version. */
+export type DocumentProcessingStatus =
+  | "uploaded"
+  | "processing"
+  | "parsed"
+  | "ocr_warning"
+  | "failed";
+
+/** A single persisted document version returned by `GET /projects/{id}/documents`. */
+export type DocumentItem = {
+  document_id: string;
+  display_name: string;
+  document_type: string;
+  version_number: number;
+  sha256: string;
+  mime_type: string;
+  size_bytes: number;
+  processing_status: DocumentProcessingStatus;
+  created_at: string;
+};
+
+/** Response from `POST /projects/{id}/upload`. */
+export type UploadResponse = DocumentItem & {
+  stored_object_id: string;
+  storage_key: string;
+  filename: string;
+  content_type: string;
+  content_length: number;
+  checksum_sha256: string;
+  project_status: ProjectStatus;
+  uploaded_at: string;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Headers for the development identity mode. */
@@ -82,6 +115,25 @@ async function expectJson<T>(response: Response): Promise<T> {
 }
 
 /**
+ * Fetch variant that omits the default `Content-Type: application/json` header.
+ *
+ * This is required for `FormData` uploads: the browser must set the boundary
+ * itself, and a static `Content-Type` header would override it.
+ */
+async function apiFetchFile(
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  return fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...devHeaders(),
+      ...init.headers,
+    },
+  });
+}
+
+/**
  * Public API surface consumed by React components.
  *
  * Each method maps directly to a project-lifecycle route on the backend.
@@ -113,4 +165,18 @@ export const api = {
     apiFetch(`/projects/${id}/reopen`, { method: "POST" }).then((r) =>
       expectJson<Project>(r)
     ),
+
+  fetchDocuments: (projectId: string) =>
+    apiFetch(`/projects/${projectId}/documents`).then((r) =>
+      expectJson<DocumentItem[]>(r)
+    ),
+
+  uploadDocument: (projectId: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetchFile(`/projects/${projectId}/upload`, {
+      method: "POST",
+      body: form,
+    }).then((r) => expectJson<UploadResponse>(r));
+  },
 };

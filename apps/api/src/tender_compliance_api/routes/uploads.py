@@ -125,6 +125,22 @@ class UploadResponse(BaseModel):
     uploaded_at: datetime
 
 
+class DocumentVersionResponse(BaseModel):
+    """A single immutable document version with its logical document info."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    document_id: uuid.UUID
+    display_name: str
+    document_type: str
+    version_number: int
+    sha256: str
+    mime_type: str
+    size_bytes: int
+    processing_status: str
+    created_at: datetime
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -417,3 +433,49 @@ async def upload_document(
         project_status=project.status,
         uploaded_at=stored_obj.created_at,
     )
+
+
+@router.get("/{project_id}/documents", response_model=list[DocumentVersionResponse])
+async def list_documents(
+    project_id: uuid.UUID,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> list[DocumentVersionResponse]:
+    """List all document versions for a project.
+
+    Returns every version of every :class:`TenderDocument` belonging to
+    *project_id*, ordered by creation time.  Only projects belonging to
+    ``auth``'s organization are accessible.
+    """
+    project_svc = ProjectService(session)
+    try:
+        await project_svc.get_or_raise(auth, project_id)
+    except ProjectNotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found") from None
+
+    stmt = (
+        select(TenderDocument, DocumentVersion)
+        .join(
+            DocumentVersion,
+            DocumentVersion.document_id == TenderDocument.id,
+        )
+        .where(TenderDocument.project_id == project_id)
+        .order_by(
+            TenderDocument.created_at, DocumentVersion.version_number
+        )
+    )
+    result = await session.execute(stmt)
+    return [
+        DocumentVersionResponse(
+            document_id=doc.id,
+            display_name=doc.display_name,
+            document_type=doc.document_type.value,
+            version_number=ver.version_number,
+            sha256=ver.sha256,
+            mime_type=ver.mime_type,
+            size_bytes=ver.size_bytes,
+            processing_status=ver.processing_status.value,
+            created_at=ver.created_at,
+        )
+        for doc, ver in result
+    ]
