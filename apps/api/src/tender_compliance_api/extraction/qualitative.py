@@ -131,7 +131,7 @@ _DOC_PATTERNS = [
         r"user\s+manual|"
         r"test\s+report|"
         r"calibration\s+certificate|"
-        r"warranty(?:\s+\(?\d+\s+years?\)?)?)\b",
+        r"warranty\s+certificate)\b",
         re.IGNORECASE,
     ),
 ]

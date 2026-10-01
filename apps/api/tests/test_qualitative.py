@@ -185,10 +185,16 @@ def test_certificate_of_conformity_extracted() -> None:
     assert "certificate" in c.condition.lower()
 
 
-def test_warranty_extracted() -> None:
-    c = _single("A 2-year warranty is provided.")
+def test_warranty_certificate_extracted() -> None:
+    c = _single("A warranty certificate is included with the equipment.")
     assert c.parameter == "documentation"
-    assert "warranty" in c.condition.lower()
+    assert "warranty certificate" in c.condition.lower()
+
+
+def test_bare_warranty_not_extracted() -> None:
+    """Bare 'warranty' without obligation context must not be extracted as a
+    documentation obligation — it is a concept, not a deliverable document."""
+    assert parse_qualitative_conditions("with a 2-year warranty period") == []
 
 
 # ---------------------------------------------------------------------------

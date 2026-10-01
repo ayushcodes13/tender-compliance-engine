@@ -21,21 +21,27 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: ruff check .
       - run: pytest
-      - name: Run benchmark evaluation harness
-        # Runs the eval harness and saves a report artifact.  Currently
-        # non-blocking because the parser has known divergences (see
-        # checkpoint.md CP44 / known-parser-divergences tests).  Once the
-        # parser meets the quality thresholds, remove continue-on-error.
-        continue-on-error: true
+      - name: Run benchmark evaluation harness — critical quality gates
+        # Critical gates (invented-negative rate = 0, numeric fidelity = 0)
+        # are BLOCKING — they guard against fabricated requirements and wrong
+        # citations.  The aggregate F1 gate remains non-blocking because recall
+        # is bounded by inherent deterministic-parser limitations (no bare-number
+        # fabrication, no table-layout analysis, per-requirement rather than
+        # cross-requirement context).  F1 is monitored in the eval report
+        # artifact but does not block merge.  See checkpoint.md CP48.
         run: |
           python -c "
-          from tender_compliance_api.extraction.eval_harness import run_eval, format_text_report
+          from tender_compliance_api.extraction.eval_harness import run_eval, format_text_report, check_quality_gates
           report = run_eval()
           text = format_text_report(report)
           with open('eval-report.txt', 'w') as f:
               f.write(text)
           print(text)
+          print(f'CRITICAL GATES PASSED: {report.critical_gates_passed}')
           print(f'ALL GATES PASSED: {report.all_passed}')
+          if not report.critical_gates_passed:
+              raise SystemExit('CRITICAL quality gates FAILED — see eval-report.txt')
+          print('Critical quality gates PASSED.')
           "
       - name: Upload eval report
         if: always()

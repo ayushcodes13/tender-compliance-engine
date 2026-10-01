@@ -258,12 +258,13 @@ class TestNormalizeRequirementConstraints:
 
         asyncio.run(_run())
 
-    def test_corrupted_number_constraint_partially(self, session_cm) -> None:
-        """When a constraint has an unknown unit (e.g. "2O" split as num=2 +
-        unit='O'), the normalization state is PARTIAL and the requirement
-        stays UNREVIEWED (no ocr_warning flag on the requirement itself).
-        The constraint is still persisted for human review, never silently
-        promoted to SAFE."""
+    def test_corrupted_number_constraint_escalates_to_needs_review(self, session_cm) -> None:
+        """When '2O' appears where a number is expected, the parser detects
+        it as an OCR-corrupted number (digit + non-unit letter with no space).
+        The constraint is persisted with NEEDS_REVIEW state and the real unit
+        that follows ('kg') is still captured.  The requirement escalates to
+        NEEDS_CLARIFICATION — the corrupted value is never silently
+        fabricated into a SAFE number."""
         user_id, org_id, project_id = _build_org_project(session_cm)
         req_id = _create_doc_version_and_requirement(
             session_cm, project_id, "weight ≤ 2O kg"
@@ -290,8 +291,9 @@ class TestNormalizeRequirementConstraints:
                         select(Requirement).where(Requirement.id == req_id)
                     )
                 ).scalar_one()
-                # No ocr_warning on the requirement → stays UNREVIEWED.
-                assert req.review_state is RequirementReviewState.UNREVIEWED
+                # OCR-corrupted number → NEEDS_REVIEW → escalates to
+                # NEEDS_CLARIFICATION for human review.
+                assert req.review_state is RequirementReviewState.NEEDS_CLARIFICATION
 
                 constraints = (
                     await session.execute(
@@ -300,12 +302,16 @@ class TestNormalizeRequirementConstraints:
                         )
                     )
                 ).scalars().all()
-                # The constraint is persisted with PARTIAL state (unknown_unit).
+                # The constraint is persisted with NEEDS_REVIEW state and the
+                # real unit ('kg') is captured; numeric_value is None (no
+                # value fabricated from corrupted input).
                 assert len(constraints) == 1
                 assert (
                     constraints[0].normalization_state
-                    is ConstraintNormalizationState.PARTIAL
+                    is ConstraintNormalizationState.NEEDS_REVIEW
                 )
+                assert constraints[0].unit == "kg"
+                assert constraints[0].numeric_value is None
 
         asyncio.run(_run())
 

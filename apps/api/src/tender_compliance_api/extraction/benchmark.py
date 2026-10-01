@@ -23,6 +23,7 @@ Design notes (per AGENTS.md):
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -237,10 +238,46 @@ def _count_pages(text: str) -> int:
 
 
 def _split_pages(text: str) -> list[str]:
-    """Split source text into pages by form-feed character."""
+    """Split source text into pages by form-feed character.
+
+    When a form-feed (``\\f``) boundary falls in the middle of a token
+    (e.g. a number or word that wraps across pages), the last token of
+    the preceding page is often repeated verbatim at the start of the
+    next page — a common PDF-extraction artefact.  This function
+    deduplicates such boundary repeats so that, e.g., ``85\\f85 °C``
+    becomes ``85 °C`` rather than ``85 85 °C`` (which the number parser
+    would flag as an ambiguous space-separated group).
+    """
+
     if "\f" not in text:
         return [text]
-    return [p for p in text.split("\f")]
+
+    pages = text.split("\f")
+    # Deduplicate boundary repeats: if the last non-whitespace token of
+    # page N equals the first non-whitespace token of page N+1, strip the
+    # duplicate from page N+1.
+    _boundary_repeat = re.compile(
+        r"^(?P<first>\S+)"  # first token of next page
+        r"(?P<rest>\s+\S.*)?$",
+        re.DOTALL,
+    )
+    for i in range(len(pages) - 1):
+        cur = pages[i].rstrip()
+        nxt = pages[i + 1].lstrip()
+        cur_tokens = cur.split()
+        nxt_m = _boundary_repeat.match(nxt)
+        if cur_tokens and nxt_m:
+            last_cur = cur_tokens[-1]
+            if _strip_num_marker(last_cur) == _strip_num_marker(nxt_m.group("first")):
+                pages[i + 1] = (nxt_m.group("rest") or "").lstrip()
+    return pages
+
+
+def _strip_num_marker(tok: str) -> str:
+    """Normalise a boundary token for comparison (strip common OCR/mark
+    artefacts like trailing punctuation)."""
+
+    return tok.rstrip(".,;:").lower()
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +390,7 @@ def run_parser_on_case(case: BenchmarkCase, *, ocr_warning: bool = False) -> Par
     page's text.  The ``raw_source`` for each requirement is the full
     per-page text (each page is treated as a potential requirement unit).
 
-    This is a **pure** function — no database, no network — so it can be
+    this is a **pure** function — no database, no network — so it can be
     called from tests and the eval harness alike.
     """
 
@@ -361,48 +398,59 @@ def run_parser_on_case(case: BenchmarkCase, *, ocr_warning: bool = False) -> Par
     all_numeric: list[ParsedBenchmarkConstraint] = []
     all_qualitative: list[ParsedBenchmarkConstraint] = []
 
-    for page_text in pages:
-        page_text = page_text.strip()
-        if not page_text:
-            continue
+    # Join pages into a single text after boundary deduplication (handled
+    # in _split_pages).  This ensures requirements that span page breaks
+    # — where the unit may sit on the next page — are parsed as a whole,
+    # mirroring how the LLM would extract the full requirement fragment
+    # in the real pipeline.
+    full_text = " ".join(p.strip() for p in pages if p.strip())
+    if not full_text:
+        return ParsedBenchmarkResult(
+            case_id=case.case_id,
+            pages=pages,
+            numeric_constraints=[],
+            qualitative_conditions=[],
+            normalized_text="",
+            has_ocr_warning=False,
+        )
 
-        # Numeric constraints (CP33).
-        for pc in parse_constraint(page_text, ocr_warning=ocr_warning):
-            all_numeric.append(
-                ParsedBenchmarkConstraint(
-                    parameter=pc.parameter,
-                    operator=pc.operator,
-                    numeric_value=pc.numeric_value,
-                    unit=pc.unit,
-                    tolerance=pc.tolerance,
-                    lower_bound=pc.lower_bound,
-                    upper_bound=pc.upper_bound,
-                    qualitative_condition=None,
-                    normalization_state=pc.normalization_state.value,
-                    raw_fragment=pc.raw_fragment,
-                    raw_value_lexical=pc.raw_value_lexical,
-                    issues=pc.issues,
-                    source_type="numeric",
-                )
+    # Numeric constraints (CP33).
+    for pc in parse_constraint(full_text, ocr_warning=ocr_warning):
+        all_numeric.append(
+            ParsedBenchmarkConstraint(
+                parameter=pc.parameter,
+                operator=pc.operator,
+                numeric_value=pc.numeric_value,
+                unit=pc.unit,
+                tolerance=pc.tolerance,
+                lower_bound=pc.lower_bound,
+                upper_bound=pc.upper_bound,
+                qualitative_condition=None,
+                normalization_state=pc.normalization_state.value,
+                raw_fragment=pc.raw_fragment,
+                raw_value_lexical=pc.raw_value_lexical,
+                issues=pc.issues,
+                source_type="numeric",
             )
+        )
 
-        # Qualitative conditions (CP34).
-        for qc in parse_qualitative_conditions(page_text, ocr_warning=ocr_warning):
-            all_qualitative.append(
-                ParsedBenchmarkConstraint(
-                    parameter=qc.parameter,
-                    operator=None,
-                    numeric_value=None,
-                    unit=None,
-                    tolerance=None,
-                    lower_bound=None,
-                    upper_bound=None,
-                    qualitative_condition=qc.condition,
-                    normalization_state=qc.normalization_state.value,
-                    raw_fragment=qc.raw_fragment,
-                    raw_value_lexical=None,
-                    issues=qc.issues,
-                    source_type="qualitative",
+    # Qualitative conditions (CP34).
+    for qc in parse_qualitative_conditions(full_text, ocr_warning=ocr_warning):
+        all_qualitative.append(
+            ParsedBenchmarkConstraint(
+                parameter=qc.parameter,
+                operator=None,
+                numeric_value=None,
+                unit=None,
+                tolerance=None,
+                lower_bound=None,
+                upper_bound=None,
+                qualitative_condition=qc.condition,
+                normalization_state=qc.normalization_state.value,
+                raw_fragment=qc.raw_fragment,
+                raw_value_lexical=None,
+                issues=qc.issues,
+                source_type="qualitative",
                 )
             )
 
