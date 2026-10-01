@@ -330,3 +330,71 @@ class TestStorePagesCleanup:
                 assert rows[0].extracted_text == "only"
 
         asyncio.run(_run())
+
+    def test_store_pages_persists_page_error(self, session_cm) -> None:
+        """A page-level parse/extraction error is preserved in structural
+        metadata (never silently swallowed), while healthy pages stay clean."""
+        async def _run():
+            info = await _create_version(
+                session_cm, DocumentProcessingStatus.QUEUED
+            )
+            sf = _get_session_factory()
+            auth = _auth(info["org_id"])
+
+            pages = [
+                PageResult(
+                    page_number=1,
+                    text="",
+                    text_length=0,
+                    ocr_needed=False,
+                    warnings=[],
+                    error="text extraction failed: corrupted stream",
+                ),
+                PageResult(
+                    page_number=2,
+                    text="Body two",
+                    text_length=8,
+                    ocr_needed=False,
+                    warnings=[],
+                    error=None,
+                ),
+            ]
+            parse_result = ParseResult(
+                parser_name="test",
+                parser_version="test",
+                page_count=len(pages),
+                pages=pages,
+            )
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                stored = await svc.store_pages(
+                    auth, info["doc_id"], info["version_number"], parse_result
+                )
+                assert len(stored) == 2
+                await session.commit()
+
+            async with sf() as session:
+                rows = (
+                    await session.execute(
+                        select(DocumentPage).where(
+                            DocumentPage.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                rows.sort(key=lambda r: r.page_number)
+                # Failed page: error preserved, cleaned_text empty (no text
+                # to clean — empty extraction stores NULL per CP19 behaviour).
+                err_meta = rows[0].structural_metadata or {}
+                assert (
+                    err_meta.get("error")
+                    == "text extraction failed: corrupted stream"
+                )
+                assert rows[0].extracted_text is None
+                # Healthy page: no error key, text preserved.
+                ok_meta = rows[1].structural_metadata or {}
+                assert "error" not in ok_meta
+                assert rows[1].extracted_text == "Body two"
+
+        asyncio.run(_run())

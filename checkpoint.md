@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP24 — Processing retry, idempotency, and partial failure**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP25 — Structured extraction schema and trusted source-window contract**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -155,9 +155,15 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP21 — Scanned-page detection and OCR~~
   - Status: DONE — PR #26
   - Branch: `cp21/scanned-page-ocr`
-- [ ] CP22 — DOCX adapter and format-appropriate provenance
-- [ ] CP23 — DocumentPage persistence and structural cleanup
-- [ ] CP24 — Processing retry, idempotency, and partial failure
+- [x] ✅ ~~CP22 — DOCX adapter and format-appropriate provenance~~
+  - Status: DONE — PR #27
+  - Branch: `cp22/docx-adapter`
+- [x] ✅ ~~CP23 — DocumentPage persistence and structural cleanup~~
+  - Status: DONE — PR #28
+  - Branch: `cp23/document-page-cleanup`
+- [x] ✅ ~~CP24 — Processing retry, idempotency, and partial failure~~
+  - Status: DONE — PR #29
+  - Branch: `cp24/retry-idempotency`
 
 ### Stage E — Conservative technical requirement extraction and provenance
 
@@ -1204,9 +1210,9 @@ that make persisted pages safe to clean *without* losing provenance:
   into the derived `cleaned_text`; the raw `extracted_text` is never
   modified.)
 
-## ⬜ Checkpoint 24 — Processing retry, idempotency, and partial failure
+## ✅ Checkpoint 24 — Processing retry, idempotency, and partial failure
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #29 merged.
 
 **Plain-English outcome:** Reprocessing a document is safe and incomplete work remains visible.
 
@@ -1228,6 +1234,17 @@ that make persisted pages safe to clean *without* losing provenance:
 ### This checkpoint is complete only when
 
 - Operators can explain what retry will do and why it is safe.
+
+**Completion summary (PR #29):**
+
+- The version-level state machine, deterministic `run_id` (`make_job_id(version_id, stage)`), idempotent `store_pages` (delete-then-recreate), and `FAILED/PARTIAL → QUEUED` transitions already existed on `main` (CP17/CP21/CP23).
+- CP24 closes the remaining gaps:
+  - **`DocumentService.requeue_version`** — transitions `FAILED`/`PARTIAL → QUEUED` (rejects terminal `PARSED` with `TransitionError`), returns the deterministic PARSE `run_id`, is idempotent for already-queued versions, tenant-isolated, and audit-logged (`document.retry`). Source bytes (`StoredObject`, `restricted`) are never mutated or destroyed.
+  - **`POST /projects/{project_id}/documents/{document_id}/versions/{version_number}/retry`** — thin route delegating to `requeue_version` + deterministic queue `enqueue`; returns 200/`run_id`, 404 for missing/wrong-project, 409 for terminal `PARSED`.
+  - **Per-page error visibility** — `store_pages` now persists `PageResult.error` into `structural_metadata["error"]` so a single failed page never silently disappears inside an otherwise-successful parse.
+- **Tests:** `TestRetryVersion` (service: failed/partial→queued, parsed rejected, idempotent, cross-tenant denied) + `TestRetryProcessingApi` (HTTP: 200/409/404/404-idempotent; asserts deterministic `run_id`, single enqueued job) + `TestStorePagesCleanup.test_store_pages_persists_page_error`.
+- **Verification:** `pytest` 215 passed / 1 skipped (real-Tesseract skip), `ruff check .` clean, `mypy src/` clean, `alembic upgrade head` applies `0001→0008`, `apps/web npx tsc --noEmit` clean. No new migration (JSON metadata + service-only).
+- **Known limitations:** operator retry re-runs the full PARSE→OCR→CLEANUP→EXTRACT pipeline; the `attempt` counter in the Worker retry loop is reset to 1 on operator retry (a fresh worker attempt), while `ProcessingRun.attempt` is the per-version-per-stage max+1 (auditable).
 
 ### Bynd reuse notes
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -364,6 +364,71 @@ class DocumentService:
 
         return run_id
 
+    async def requeue_version(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> uuid.UUID:
+        """Re-queue a ``FAILED``/``PARTIAL`` version for reprocessing (CP24).
+
+        Transitions the version back to ``QUEUED`` (the state machine only
+        permits this from ``FAILED``/``PARTIAL``) and returns the
+        deterministic PARSE ``run_id`` the caller should enqueue with.
+
+        *Idempotent*: if the version is already ``QUEUED``/``PROCESSING``,
+        the existing ``run_id`` is returned without re-transitioning, so a
+        retry action fired twice re-enqueues the same deterministic job
+        (queue-side dedup handles the duplicate).
+
+        Raises :class:`TransitionError` for ``PARSED`` (terminal — a
+        completed version must not be silently reprocessed; retrying it is a
+        new upload/version, not a re-run of the same source).  The immutable
+        source bytes on the version are never modified or destroyed.
+        """
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+        current = version.processing_status
+
+        if current == DocumentProcessingStatus.PARSED:
+            raise TransitionError(
+                f"version {version.id} is PARSED; cannot retry a completed version"
+            )
+
+        if current in (
+            DocumentProcessingStatus.QUEUED,
+            DocumentProcessingStatus.PROCESSING,
+        ):
+            # Already queued/processing — idempotent: reuse the run_id.
+            pass
+        else:
+            # FAILED or PARTIAL -> QUEUED
+            await self.transition_to(
+                auth, document_id, version_number,
+                DocumentProcessingStatus.QUEUED,
+            )
+
+        run_id = make_job_id(str(version.id), ProcessingStage.PARSE.value)
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="document.retry",
+            entity_type="document_version",
+            entity_id=version.id,
+            project_id=await self._project_id_for(version.document_id),
+            metadata={
+                "document_id": str(version.document_id),
+                "version_number": version.version_number,
+                "from": current.value,
+                "to": DocumentProcessingStatus.QUEUED.value,
+                "run_id": str(run_id),
+            },
+        )
+
+        return run_id
+
     # ------------------------------------------------------------------
     # Page storage (CP19)
     # ------------------------------------------------------------------
@@ -423,7 +488,7 @@ class DocumentService:
         for idx, page_result in enumerate(parse_result.pages):
             cleanup = cleanups[idx]
             # Merge parse-time warnings with cleanup-recorded warnings.
-            meta: dict[str, list[str]] = {}
+            meta: dict[str, Any] = {}
             all_warnings = list(page_result.warnings or []) + list(cleanup.warnings)
             if all_warnings:
                 meta["warnings"] = all_warnings
@@ -431,6 +496,10 @@ class DocumentService:
                 meta["headers"] = list(cleanup.headers)
             if cleanup.footers:
                 meta["footers"] = list(cleanup.footers)
+            # Per-page extraction/parse errors stay visible (CP24): a failed
+            # page must not silently disappear inside a "success".
+            if page_result.error:
+                meta["error"] = page_result.error
 
             page = DocumentPage(
                 document_version_id=version.id,
