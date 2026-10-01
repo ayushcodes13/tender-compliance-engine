@@ -194,3 +194,36 @@ class ProjectService:
             project_id=project_id,
         )
         return project
+
+    async def mark_uploaded(
+        self, auth: AuthContext, project_id: uuid.UUID
+    ) -> Project:
+        """Transition a project from DRAFT to TENDER_UPLOADED.
+
+        Only allowed from DRAFT.  Archived and already-uploaded projects
+        raise an error.
+        """
+        project = await self.get_or_raise(auth, project_id)
+        if project.status == ProjectStatus.ARCHIVED:
+            raise ProjectArchivedError(
+                f"project {project_id} is archived; reopen before uploading"
+            )
+        if project.status != ProjectStatus.DRAFT:
+            raise StateTransitionError(
+                f"project {project_id} is in {project.status!r}; "
+                "expected DRAFT"
+            )
+        old_status = project.status
+        project.status = ProjectStatus.TENDER_UPLOADED
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="project.mark_uploaded",
+            entity_type="project",
+            entity_id=project_id,
+            project_id=project_id,
+            metadata={"from": old_status.value, "to": project.status.value},
+        )
+        return project
