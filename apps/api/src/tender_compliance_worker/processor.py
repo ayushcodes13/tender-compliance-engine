@@ -484,8 +484,10 @@ class JobProcessor:
             # Dedup the freshly-extracted candidates (CP29).  Reconciliation is
             # best-effort: if it fails, candidates are still persisted (CP30
             # can re-reconcile); the EXTRACT run still completes.
+            reconciliation_outcome = None
+            promoted = 0
             try:
-                await svc.reconcile_version_candidates(
+                reconciliation_outcome = await svc.reconcile_version_candidates(
                     auth,
                     document_id=version.document_id,
                     version_number=version.version_number,
@@ -501,6 +503,7 @@ class JobProcessor:
                         version_number=version.version_number,
                         run_id=run.id,
                     )
+                    promoted = inserted
                     if inserted or skipped:
                         logger.info(
                             "EXTRACT promoted %d requirement(s) for version "
@@ -516,6 +519,23 @@ class JobProcessor:
                 logger.warning(
                     "EXTRACT reconciliation failed for version %s: %s",
                     version.id, rec_exc,
+                )
+            # Record one diagnostics row for this run (CP31) — best-effort,
+            # never strands the version if it fails.
+            try:
+                await svc.capture_extraction_diagnostics(
+                    auth,
+                    document_id=version.document_id,
+                    version_number=version.version_number,
+                    run_id=run.id,
+                    outcome=outcome,
+                    reconciliation_outcome=reconciliation_outcome,
+                    promoted_count=promoted,
+                )
+            except Exception as diag_exc:  # noqa: BLE001
+                logger.warning(
+                    "EXTRACT diagnostics capture failed for version %s: %s",
+                    version.id, diag_exc,
                 )
         except Exception as exc:  # noqa: BLE001 — never strand the version
             logger.warning(

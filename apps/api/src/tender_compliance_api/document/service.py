@@ -21,6 +21,7 @@ from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
     ExtractionCandidate,
+    ExtractionDiagnostics,
     ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
@@ -35,7 +36,10 @@ from tender_compliance_api.db.models import (
     TenderDocument,
 )
 from tender_compliance_api.extraction.adapter import LlmCallResult
-from tender_compliance_api.extraction.extractor import CandidateRecord
+from tender_compliance_api.extraction.diagnostics import (
+    compute_diagnostics,
+)
+from tender_compliance_api.extraction.extractor import CandidateRecord, ExtractionOutcome
 from tender_compliance_api.extraction.reconcile import (
     DECISION_DEDUP,
     DECISION_SINGLETON,
@@ -673,6 +677,63 @@ class DocumentService:
         self._session.add(audit)
         await self._session.flush()
         return outcome
+
+    async def capture_extraction_diagnostics(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        *,
+        run_id: uuid.UUID,
+        outcome: ExtractionOutcome,
+        reconciliation_outcome: ReconciliationResult | None = None,
+        promoted_count: int = 0,
+    ) -> ExtractionDiagnostics:
+        """Persist one diagnostics row for an EXTRACT run (CP31).
+
+        Answers "why did this document produce its requirement set" from a
+        single auditable row: window/call/candidate counts, accepted vs
+        rejected (fabrication-guarded) vs OCR-uncertain, deduped, promoted, plus
+        the provider/model/prompt/schema versions taken from the audited LLM
+        calls.  Rejection keys are short reason codes — never document bodies
+        (AGENTS: do not log sensitive content, do not expose provider internals).
+
+        The row is anchored to the EXTRACT ``ProcessingRun`` (unique), so it is
+        written once per stage completion; reprocessing a version creates a new
+        run → a new diagnostics row (history grows rather than overwrites).
+        """
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        run = await self.get_run(
+            auth, document_id, version_number, run_id, ProcessingStage.EXTRACT
+        )
+
+        summary = compute_diagnostics(
+            outcome,
+            promoted_count=promoted_count,
+            reconciliation_outcome=reconciliation_outcome,
+        )
+        diag = ExtractionDiagnostics(
+            document_version_id=version.id,
+            processing_run_id=run.id,
+            total_windows=summary.total_windows,
+            total_llm_calls=summary.total_llm_calls,
+            total_candidates=summary.total_candidates,
+            accepted_candidates=summary.accepted_candidates,
+            rejected_candidates=summary.rejected_candidates,
+            deduped_candidates=summary.deduped_candidates,
+            promoted_requirements=summary.promoted_requirements,
+            ocr_warning_candidates=summary.ocr_warning_candidates,
+            provider=summary.provider,
+            model=summary.model,
+            prompt_version=summary.prompt_version,
+            schema_version=summary.schema_version,
+            rejection_breakdown=summary.rejection_breakdown,
+            reconciliation_summary=summary.reconciliation_summary,
+        )
+        self._session.add(diag)
+        await self._session.flush()
+        return diag
 
     async def persist_requirements(
         self,

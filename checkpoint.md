@@ -8,7 +8,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP31 — Extraction diagnostics and reconciliation history**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP32 — RequirementConstraint model and normalization states**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -180,7 +180,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP30 — Exact/approximate source anchors and Requirement persistence~~
   - Status: DONE — PR #35
   - Branch: `cp30/requirements`
-- [ ] CP31 — Extraction diagnostics and reconciliation history
+- [x] ✅ ~~CP31 — Extraction diagnostics and reconciliation history~~
+  - Status: DONE — PR #36
+  - Branch: `cp31/diagnostics`
 
 ### Stage F — Conservative normalization and structured constraints
 
@@ -1759,9 +1761,9 @@ as contradictory evidence.
 All checks passed; `mypy src/` Success (67 files); `alembic upgrade head` →
 `0012_requirements`; `npx tsc --noEmit` (apps/web) clean.
 
-## ⬜ Checkpoint 31 — Extraction diagnostics and reconciliation history
+## ✅ ~~Checkpoint 31 — Extraction diagnostics and reconciliation history~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #36 merged.
 
 **Plain-English outcome:** A bad extraction can be reproduced and explained.
 
@@ -1792,6 +1794,92 @@ All checks passed; `mypy src/` Success (67 files); `alembic upgrade head` →
 ### Guardrail
 
 - Do not expose provider internals/sensitive content to unauthorized users.
+
+### Completion summary (PR #36)
+
+**Why:** After CP28–CP31, an EXTRACT pass left audit crumbs scattered across
+`processing_runs`, `extraction_runs` (per-call), `extraction_candidates`, and
+one `extraction_reconciliations` summary row — but there was no single
+developer-facing record that answered "why did this document produce its
+requirement set?" with one query (counts, versions, rejection breakdown,
+reconciliation summary). CP31 adds that diagnostics row.
+
+**What changed:**
+- `db/models.py`: `ExtractionDiagnostics` table — one row per EXTRACT
+  `ProcessingRun` (unique on `processing_run_id`): `total_windows`,
+  `total_llm_calls`, `total_candidates`, `accepted_candidates`,
+  `rejected_candidates`, `deduped_candidates`, `promoted_requirements`,
+  `ocr_warning_candidates`, plus `provider`/`model`/`prompt_version`/
+  `schema_version` (captured from the audited LLM calls), a
+  `rejection_breakdown` JSON (reason-code -> count, never document bodies), and
+  a `reconciliation_summary` JSON (the CP29 pass summary, if reconciliation ran).
+  Tenant-scoped via `document_version_id` (CASCADE). Phase 1 only — no
+  vendor-compliance verdicts.
+- `alembic/versions/0013_extraction_diagnostics.py` (new): `CREATE TABLE
+  extraction_diagnostics` with indexes + `uq_extraction_diagnostics_run`. Head →
+  `0013_extraction_diagnostics`.
+- `extraction/diagnostics.py` (new, pure): `compute_diagnostics(outcome,
+  *, promoted_count, reconciliation_outcome) -> ExtractionDiagnosticsSummary` —
+  derives counts from an `ExtractionOutcome` (accepted = valid+persistable;
+  rejected = not valid; ocr_warning = window.ocr_warning; versions from the first
+  audited `LlmCallResult`).
+- `document/service.py`: `capture_extraction_diagnostics(auth, document_id,
+  version_number, *, run_id, outcome, reconciliation_outcome=None,
+  promoted_count=0) -> ExtractionDiagnostics` — anchors on the EXTRACT run
+  (tenant-scoped `get_version_or_raise` + `get_run`), computes then persists one
+  row (unique per run → re-running a version's EXTRACT stage creates a new run
+  → a new row = history grows, never overwrites).
+- `worker/processor.py`: `_do_extract` calls `capture_extraction_diagnostics`
+  after reconcile + promotion (best-effort, logs on failure, never strands the
+  version) with the real `outcome`, the reconciliation result, and the promoted
+  count.
+- `extraction/__init__.py`: re-exports `compute_diagnostics`,
+  `ExtractionDiagnosticsSummary`.
+
+**Scope:** Diagnostics/history for the EXTRACT stage only. Does **not** add
+retry semantics, per-candidate extraction history, user-facing diagnostics API,
+or Phase-2 work.
+
+**Evidence / provenance impact:** Counts are derived deterministically from
+persisted `extraction_candidates` + the audited `extraction_runs` — no
+document bodies are stored or logged (rejection keys are short reason codes,
+per the guardrail). Provider/model/version come from the audited calls, so the
+exact extraction configuration is reproducible. Because the row is unique per
+processing run, reprocessing is append-only history.
+
+**Verification:**
+- `tests/test_extraction_diagnostics.py` (new, 7 pure cases): accepted/rejected/
+  ocr-warning/deduped/promoted counts; rejection_breakdown grouping incl.
+  unknown reason; ocr_warning independence from acceptance; versions captured
+  from first call, None when no calls, captured even on a failed call;
+  reconciliation wiring (deduped count + summary passthrough); no-reconciliation
+  defaults.
+- `tests/test_extraction_pipeline.py` (+2 `TestExtractionDiagnostics` cases):
+  end-to-end `store_extraction_candidates` → `reconcile_version_candidates` →
+  `persist_requirements` → `capture_extraction_diagnostics` → DB read-back of
+  the exact counts (4 candidates, 3 accepted, 1 rejected w/ breakdown, 1 deduped,
+  2 promoted, 0 ocr_warning, provider/model/prompt/schema from "fake" adapter,
+  reconciliation summary carried through); and a second EXTRACT run (new run_id)
+  writes a second diagnostics row.
+- `tests/test_migration.py`: head bumped to `0013_extraction_diagnostics`;
+  `extraction_diagnostics` added to `_APP_TABLES`.
+
+**Risks / limitations:**
+- Diagnostics are written once per EXTRACT run (unique constraint). A re-run
+  with the SAME processing run (same run_id+stage+attempt) would violate the
+  unique key — the processor never re-captures the same run in-process; CP31
+  retry semantics (CP31's own "retry/re-run" item, kept as deferred here) will
+  formalize re-processing as new runs.
+- `accepted_candidates`/`rejected_candidates` are computed from candidate
+  records *before* dedup; `deduped_candidates` reflects the reconciliation pass
+  separately. This is intentional (counts measure distinct pipeline stages).
+- Provider/model are taken from the first audited call; a version that mixes
+  providers in one run would still report the first (CP26 logs every call
+  individually for full fidelity).
+
+**Gate (run from `apps/api`):** `pytest` 315 passed / 2 skipped; `ruff check .`
+All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
+`0013_extraction_diagnostics`; `npx tsc --noEmit` (apps/web) clean.
 
 # Stage F — Conservative normalization and structured constraints
 
