@@ -85,3 +85,75 @@
   summary JSON. `compute_diagnostics` is a pure function (no DB/IO). Re-running
   a version = new run = new row (append-only history; never overwrites).
 - No input needed. CP31 retry semantics kept as deferred (new-run-per-attempt).
+
+## CP32–CP34 — Constraint parsing & qualitative normalization  ✅ DONE (PRs #37–#40, merged)
+- Numeric parser: pure regex/rule-based. Operators: `=`, `<`, `≤`, `>`, `≥`, `!=`,
+  `between`. Handles negatives, decimals, ranges, percentages, units (18 mappings),
+  scientific notation, thousands separators (European-ambiguous → PARTIAL),
+  tolerances (± N). OCR-corrupted numbers (letter in digit) → NEEDS_REVIEW.
+- Qualitative normalization: `conservative_normalized_text()` (whitespace/punctuation
+  only, no semantic changes). Extracts explicit qualitative conditions
+  (certifications, IP/NEMA ratings, materials, interfaces, documentation, safety,
+  performance) via conservative regex — never infers from vague prose.
+- Review states: OCR_WARNING (OCR-derived), NEEDS_CLARIFICATION (constraint
+  NEEDS_REVIEW). Phase 1 only — no vendor compliance statuses.
+- No input needed.
+
+## CP35–CP40 — Persistent human review and real source verification  ✅ DONE (PRs #41–#49, merged)
+- Requirement list/detail API, real PDF/source viewer (PNG page serves + bbox overlays),
+  three-pane review UI wired to real APIs, requirement edit with immutable revision
+  history, split/merge/supersede/categories/notes/mandatory/ordering, review-state
+  machine with audit timeline and real progress counts.
+- All review states are UNREVIEWED/REVIEWED/NEEDS_CLARIFICATION/OCR_WARNING (Phase 1 only).
+- Cross-tenant isolation enforced on every tenant-owned query.
+- No input needed.
+
+## CP41–CP42 — Matrix + XLSX export  ✅ DONE (PRs #50–#51, merged)
+- Canonical matrix projection (S.No., Requirement ID, Tender Requirement, Category,
+  Clause, Source Page, Mandatory, User Notes, Review Status). One projection powers
+  both UI and export. XLSX export via `openpyxl` with history, download, and failure
+  handling.
+- No input needed.
+
+## CP43–CP44 — Benchmark dataset + eval harness  ✅ DONE (PRs #52–#53, merged)
+- 15-case benchmark dataset with expected outputs/provenance (numeric, range,
+  tolerance, OCR noise, multi-page, adversarial). Automated eval harness measuring
+  precision/recall/F1, split/group accuracy, invented-requirement rate, page/clause
+  accuracy, citation fidelity, numeric/unit/operator accuracy, false normalization,
+  OCR escalation. Conservative release thresholds.
+- Eval runs in CI but is `continue-on-error` (non-blocking) — see ⚠️ below.
+- No input needed.
+
+## CP45 — Adversarial documents, tenant security, upload security, prompt-injection tests  ✅ DONE (PR #54, merged)
+- Tests for comparison symbols, decimal points, units, Greek symbols, rotated pages,
+  merged tables, page breaks, duplicated headers. Malformed/protected PDFs, resource
+  abuse. Prompt-injection content in source documents. Cross-tenant API tests for
+  every tenant-owned resource. Filename sanitization.
+- No input needed.
+
+## CP46 — Observability, performance, resource, cost, retention, backup, deletion  ✅ DONE (PR #55, merged)
+- Structured logs with request/job correlation IDs. Stage duration, provider/version,
+  retries, validation failures, counts, export outcomes. Metrics for queue depth/
+  failures/latency/review backlog. Upload/page/time/memory/concurrency limits. LLM
+  token/cost metadata (nullable when unknown). Retention policies. Authorized hard
+  deletion. Database/object-storage backup strategy.
+- No input needed.
+
+## CP47 — Deployment configuration and runbook  ✅ DONE (PR #56, merged)
+- Three Dockerfiles (API, worker, web) with non-root users and health checks.
+  `docker-compose.yml` full stack with health checks + dependency ordering.
+  `scripts/migrate.sh` for init-container migration pattern. Complete deployment runbook.
+- **⚠️ Adversarial review fixes applied:**
+  - Web Dockerfile COPY paths: was `COPY apps/web/package.json` (broken with `context: ./apps/web`),
+    fixed to `COPY package.json` (context-relative).
+  - `.dockerignore`: fragile numbered migration whitelist replaced with inclusive pattern.
+  - API Dockerfile: removed broken `uv tool install hatchling` (silently failed, not needed).
+  - docker-compose.yml: fixed missing `.env.production` → inline env vars + fixed web healthcheck URL.
+- **⚠️ Known limitations:**
+  - CI does NOT push Docker images to a registry (`load: true` only). Registry publishing
+    requires credentials (GitHub OIDC recommended).
+  - API Dockerfile includes `[dev]` extras (test tools) — intentional for migration job
+    support but adds image weight. Can slim if you want.
+  - CI dependency audit is `continue-on-error: true` — vulnerabilities surface in logs
+    but don't block CI.
+- **No input needed** unless you want registry push configured or production image slimming.
