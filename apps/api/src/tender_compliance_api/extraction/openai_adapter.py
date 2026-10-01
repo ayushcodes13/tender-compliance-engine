@@ -59,6 +59,14 @@ class OpenAiLlmAdapter(LlmAdapter):
             settings.openai_api_key or None
         )
 
+    @property
+    def provider(self) -> str:
+        return "openai"
+
+    @property
+    def model(self) -> str:
+        return self._model
+
     def _client(self) -> Any:
         """Build an OpenAI async client.
 

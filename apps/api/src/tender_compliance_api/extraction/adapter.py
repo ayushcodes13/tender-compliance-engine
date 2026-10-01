@@ -83,6 +83,16 @@ class LlmAdapter(ABC):
     narrow so any provider can implement it.
     """
 
+    @property
+    @abstractmethod
+    def provider(self) -> str:
+        """Stable provider name for audit records (e.g. ``"openai"``)."""
+
+    @property
+    @abstractmethod
+    def model(self) -> str:
+        """Concrete model identifier for audit records (e.g. ``"gpt-4o"``)."""
+
     @abstractmethod
     async def extract(
         self,

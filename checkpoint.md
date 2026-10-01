@@ -8,7 +8,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP28 — Requirement candidate extraction, splitting, grouping, and abstention**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP29 — Duplicate/header/footer/overlap candidate reconciliation**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -1461,9 +1461,9 @@ Extract explicit obligations only, validate every model response, and persist so
   upgrade head` unchanged (head `0009_extraction_runs`), web `tsc --noEmit`
   clean.
 
-## ⬜ Checkpoint 28 — Requirement candidate extraction, splitting, grouping, and abstention
+## ✅ ~~Checkpoint 28 — Requirement candidate extraction, splitting, grouping, and abstention~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #33 merged.
 
 **Plain-English outcome:** Explicit technical obligations become reviewable candidate rows without invented meaning.
 
@@ -1490,6 +1490,38 @@ Extract explicit obligations only, validate every model response, and persist so
 ### Guardrail
 
 - Do not optimize recall by inferring requirements that are not stated.
+
+### Completion summary (PR #33)
+
+**Why:** The EXTRACT stage previously no-opped (`JobProcessor.__init__(llm=None)` →
+stage completed as empty). Without calling the LLM, there were no candidates to
+review (CP29) or refine into requirements (CP30), so the pipeline produced
+nothing after parsing/cleanup. CP28 makes the EXTRACT stage actually run the
+extraction adapter on the CP27 source windows.
+
+**What changed:**
+- `extraction/extractor.py` (new): `extract_from_windows(windows, llm, *, log_call, prompt_version, schema_version) -> ExtractionOutcome`. For each CP27 `SourceWindow` it builds the user payload (`overlap` + text), calls `LlmAdapter.extract` (the EXTRACTION_SYSTEM_PROMPT is the system message; document text only enters the user message), audits every call via the `log_call` callback (CP26), and converts each `RequirementCandidate` into a `CandidateRecord` anchored to the window's primary `TrustedSourceContext` via `SourcedRequirementCandidate.validate_source` (CP25 citation-substring boundary). OCR/structure-uncertain windows (`SourceWindow.ocr_warning`, computed end-to-end in CP27's chunker from `page.ocr_needed` and `structural_metadata["error"]`) elevate `CONFIRMED`→`UNCERTAIN`. ABSTAIN candidates are kept (audit, non-persistable). Per-window `LlmCallError` is logged and skipped so a transient provider outage does not strand the version.
+- `db/models.py`: `ExtractionCandidate` table (one row per candidate, tenant-scoped via `document_version_id`, FK to `processing_runs`, `sources_json` carrying every contributing source fragment, `ocr_warning`/`is_valid`/`persistable` flags, verbatim `raw_source`/`normalized_text`). No Phase-2/vendor-compliance columns.
+- `alembic/versions/0010_extraction_candidates.py`: migration (head advances to `0010_extraction_candidates`).
+- `document/service.py`: `get_run` (tenant-scoped EXTRACT-run lookup) and `store_extraction_candidates` (persist `CandidateRecord`s; only `persistable=True` rows can be promoted later by CP30).
+- `worker/processor.py`: `STAGES` EXTRACT dispatch now calls `_do_extract` (was a no-op `else`); `_do_extract` loads pages, builds windows (CP27), runs the orchestrator, logs calls, persists candidates, and completes the run. When `llm is None` it still completes as a clean no-op, preserving the existing `test_worker.py` contract.
+- `extraction/adapter.py` / `fake.py` / `openai_adapter.py`: the previously-uncommitted in-flight `provider`/`model` port properties (abstract on `LlmAdapter`; concrete on `FakeLlmAdapter`/`OpenAiLlmAdapter`) are finalized here, since CP28's orchestrator reads `llm.provider`/`llm.model` for audit provenance.
+- `extraction/__init__.py`: re-exports `CandidateRecord`, `ExtractionOutcome`, `extract_from_windows`.
+
+**Scope:** EXTRACT-stage candidate extraction only. Does **not** implement CP29 (duplicate/reconciliation), CP30 (refined `Requirement` refinement), or any Phase-2/vendor-compliance behavior.
+
+**Evidence/provenance impact:** Every persisted candidate carries its `chunk_id`, the window's trusted `sources_json` (document_id/version_id/page_number/clause_number/source_text/char offsets), verbatim `raw_source`, and `ocr_warning`. Candidates whose `raw_source` is not a substring of the trusted window are recorded `is_valid=False` with a `rejection_reason` (never presented as a requirement). EXTRACT runs are no longer empty — `extraction_runs` audit rows now have provider/model/prompt_version/schema_version.
+
+**Verification:**
+- `tests/test_extraction_extractor.py` (new, 12 cases): happy-path validation+persistability, fabrication rejection, OCR-uncertainty elevation (CONFIRMED→UNCERTAIN), structural-error elevation via the real chunker, ABSTAIN kept-but-not-persisted, multi-window one-call-per-window, empty no-op, LLM-failure audit+skip, overlap in payload, JSON-serializable `sources_json` (uuids as strings), provider/model/call_site echo. Pure-logic (FakeLlmAdapter), no network.
+- `tests/test_extraction_pipeline.py` (CP26 file, +3 cases): end-to-end orchestrator→`log_llm_call`→`store_extraction_candidates`→DB read-back (valid+persistable, OCR-elevated, fabrication rejection, empty→0 rows).
+- `tests/test_migration.py`: head bumped to `0010_extraction_candidates` + `extraction_candidates` table added to `_APP_TABLES`.
+
+**Risks / limitations:**
+- Per-window LLM failures are logged and skipped (best-effort) rather than retried within the stage; retry semantics are deferred to CP31. A version where *all* windows fail yields zero candidates but still completes the EXTRACT run (no stranded version).
+- `sources_json` is stored as a JSON dump (portable, indexable only by `chunk_id`/`document_version_id`/`processing_run_id`); richer source-location querying is deferred to CP30/CP35.
+
+**Gate (run from `apps/api`):** `pytest` 273 passed / 2 skipped; `ruff check .` All checks passed; `mypy src/` Success (65 files); `alembic upgrade head` → `0010_extraction_candidates`; `npx tsc --noEmit` (apps/web) clean.
 
 ## ⬜ Checkpoint 29 — Duplicate/header/footer/overlap reconciliation
 
