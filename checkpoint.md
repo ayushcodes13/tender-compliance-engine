@@ -6,7 +6,9 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows**.
+## Current position
+
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP28 — Requirement candidate extraction, splitting, grouping, and abstention**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -1392,9 +1394,9 @@ Extract explicit obligations only, validate every model response, and persist so
   pytest 245 passed/2 skipped, ruff clean, mypy 63 files clean, `alembic
   upgrade head` 0001→0009, web `tsc --noEmit` clean.
 
-## ⬜ Checkpoint 27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
+## ✅ Checkpoint 27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #32 merged.
 
 **Plain-English outcome:** Extraction sees enough context to understand complicated tender structure without losing provenance.
 
@@ -1426,6 +1428,38 @@ Extract explicit obligations only, validate every model response, and persist so
 ### Guardrail
 
 - Do not flatten structure in a way that changes table or clause meaning.
+
+**Completion summary (PR #32):**
+
+- Added `extraction/chunking.py` with a **pure, deterministic** chunker
+  (`build_source_windows`) producing `SourceWindow` fragments from a version's
+  `DocumentPage` rows.  No DB schema change (CP27 is in-memory windowing).
+- Boundaries are structural, never flattening: **page** (trusted
+  `page_number`), **clause/section** headers (same numbered-clause convention
+  as `parser.cleanup`), and **tables** (consecutive ``|``-rows kept together,
+  header row preserved as `table_context`).  Windows break only *between*
+  segments; a blank line flushes a segment and an oversized atomic segment is
+  emitted whole (no mid-table / mid-clause splits → no data loss).
+- **Stable `chunk_id`s**: content-addressed to version + page span + char
+  span + clause + content hash, so the same input yields identical windows
+  across re-runs.
+- **Bounded overlap**: each window after the first carries `overlap` = the
+  previous window's tail (`overlap_chars`, validated `< max_chars`); recorded
+  (not silently merged) so CP29 can reconcile.
+- **Honest multi-page provenance**: a window spanning pages carries one
+  `TrustedSourceContext` per contributing page, each with **exact** char
+  offsets within that page's `cleaned_text`, `location_type=EXACT`, and the
+  shared trusted window text as `source_text`.  `source_pages` are the real
+  input pages — no synthetic page numbers or version ids (AGENTS "never
+  fabricate").
+- `SourceWindow` / `build_source_windows` re-exported from `extraction`.
+- Tests: `tests/test_chunking.py` (13 cases) covering boundary-spanning splits,
+  table atomicity + header preservation, nested-clause hierarchy, multi-page
+  windows retaining every page, deterministic chunk IDs, no-fabrication, and
+  overflow-safety.
+- Gate: pytest 258 passed/2 skipped, ruff clean, mypy 64 files clean, `alembic
+  upgrade head` unchanged (head `0009_extraction_runs`), web `tsc --noEmit`
+  clean.
 
 ## ⬜ Checkpoint 28 — Requirement candidate extraction, splitting, grouping, and abstention
 
