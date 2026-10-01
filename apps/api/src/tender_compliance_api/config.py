@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     max_retries: int = 5
     max_concurrency: int = 4
 
+    # Resource limits
+    upload_max_bytes: int = 50 * 1024 * 1024  # 50 MB
+    max_pdf_pages: int = 500
+    request_timeout_seconds: float = 30.0
+
+    # Retention policy (in days)
+    # Original tender documents are retained for this long after the
+    # project is hard-deleted or the retention window expires.
+    retention_originals_days: int = 90
+    # Rendered assets (page images, OCR output) are retained separately.
+    retention_rendered_days: int = 30
+    # Export artifacts (XLSX workbooks) are retained for this long.
+    retention_exports_days: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

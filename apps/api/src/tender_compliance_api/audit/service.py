@@ -42,6 +42,7 @@ class AuditService:
         entity_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
         metadata: dict[str, Any] | None = None,
+        correlation_id: str | None = None,
     ) -> AuditLog:
         """Create and persist (flush) a single audit-log entry.
 
@@ -54,10 +55,16 @@ class AuditService:
             entity_id: The UUID of the affected entity, if applicable.
             project_id: Optional project scope (added in CP09).
             metadata: Small, non-confidential structured context.
+            correlation_id: Request/background-job correlation ID (CP46).
+                If not provided, falls back to the current logging context.
 
         Returns:
             The freshly created :class:`AuditLog` row.
         """
+        if correlation_id is None:
+            from tender_compliance_api.logs import get_correlation_id
+
+            correlation_id = get_correlation_id()
         entry = AuditLog(
             organization_id=organization_id,
             project_id=project_id,
@@ -67,6 +74,7 @@ class AuditService:
             entity_type=entity_type,
             entity_id=entity_id,
             metadata_json=metadata,
+            correlation_id=correlation_id,
         )
         self._session.add(entry)
         await self._session.flush()
@@ -82,6 +90,7 @@ async def write_audit_event(
     entity_id: uuid.UUID | None = None,
     project_id: uuid.UUID | None = None,
     metadata: dict[str, Any] | None = None,
+    correlation_id: str | None = None,
 ) -> AuditLog:
     """Convenience wrapper: log an event attributed to *auth*'s actor."""
     service = AuditService(session)
@@ -93,4 +102,5 @@ async def write_audit_event(
         entity_id=entity_id,
         project_id=project_id,
         metadata=metadata,
+        correlation_id=correlation_id,
     )
