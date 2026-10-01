@@ -7,6 +7,7 @@ from tender_compliance_api.db.models import (
     Organization,
     Project,
     ProjectStatus,
+    StoredObject,
     User,
 )
 
@@ -18,4 +19,5 @@ __all__ = [
     "AuditLog",
     "Project",
     "ProjectStatus",
+    "StoredObject",
 ]

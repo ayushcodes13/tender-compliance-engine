@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP12 — Object-storage adapter**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP13 — Document model and upload route**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -122,7 +122,9 @@ Phase 2 evaluation + production release
 
 ### Stage C — Tender upload, immutable storage, versions, and background jobs
 
-- [ ] CP12 — Object-storage adapter
+- [x] ✅ ~~CP12 — Object-storage adapter~~
+  - Status: DONE — PR #16
+  - Branch: `cp12/object-storage-adapter`
 - [ ] CP13 — Upload validation and hostile-file controls
 - [ ] CP14 — TenderDocument and immutable DocumentVersion models
 - [ ] CP15 — Tender upload API, versioning, and duplicate semantics
@@ -608,25 +610,29 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 Accept real tender files safely and create the processing handoff without doing heavy work inside HTTP requests.
 
-## ⬜ Checkpoint 12 — Object-storage adapter
+## ✅ ~~Checkpoint 12 — Object-storage adapter~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #16
 
 **Plain-English outcome:** Original/derived files are stored outside PostgreSQL behind a provider-agnostic interface.
 
-### What we will do
+### What we did
 
-1. Define put/get/head/delete/read-access operations.
-2. Implement S3-compatible MinIO locally.
-3. Scope object keys by organization/project/document/version.
-4. Persist checksums and metadata in PostgreSQL, not raw document bytes.
-5. Add test/fake storage support.
-6. Keep cloud-vendor details inside the adapter.
+1. Defined abstract `ObjectStorageAdapter` interface with `put`/`get`/`head`/`delete`/`read_access` operations and `ObjectInfo` dataclass.
+2. Implemented `S3StorageAdapter` (boto3) with MinIO-compatible S3 endpoint — all boto3 calls confined to this module.
+3. Implemented `FakeStorageAdapter` (in-memory) for tests with no external dependencies.
+4. Added `build_key()` key-scoping: `{org_id}/{project_id}[/{document_id}[/{version}]]/{uuid}{ext}` — org_id first guarantees namespace isolation.
+5. Added `StoredObject` model in PostgreSQL for object metadata (checksums, key, filename, content-type, etag) — never raw file bytes.
+6. SHA-256 checksums computed application-side, never trusted from provider.
 
-### How we will verify it
+### How we verified it
 
-- Write/read/checksum round-trip passes.
-- Objects from two organizations cannot collide by key.
+- `ruff check .` ✅, `mypy src/` ✅ (23 source files)
+- `alembic upgrade head` ✅ (0001→0004)
+- 13 new tests in `tests/test_storage.py` + 60 existing = 73 pass
+- Round-trip: put→get returns identical bytes
+- Checksum: SHA-256 matches `hashlib.sha256(data).hexdigest()`
+- Org isolation: keys with different org_id prefixes never collide
 
 ### This checkpoint is complete only when
 

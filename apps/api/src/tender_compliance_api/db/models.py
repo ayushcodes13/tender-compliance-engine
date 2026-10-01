@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     DateTime,
     Enum,
     ForeignKey,
@@ -239,4 +240,63 @@ class Project(Base):
         return (
             f"Project(id={self.id!r}, org={self.organization_id!r}, "
             f"status={self.status!r})"
+        )
+
+
+class StoredObject(Base):
+    """Metadata for a file persisted in object storage (S3/MinIO).
+
+    The raw file bytes live in the object store; this table records the
+    *key* (location handle), original filename, content-type, size, and
+    a SHA-256 checksum computed by the application — never trusting
+    the provider-supplied ETag as a content hash.
+
+    ``document_id`` is nullable and unconstrained (no FK yet) because the
+    Document model does not exist in Phase 1.  It will be linked when
+    documents are introduced.
+    """
+
+    __tablename__ = "stored_objects"
+    __table_args__ = (
+        Index("ix_stored_objects_org", "organization_id"),
+        Index("ix_stored_objects_project", "project_id"),
+        UniqueConstraint("storage_key", name="uq_stored_objects_storage_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        nullable=True,
+    )
+    storage_key: Mapped[str] = mapped_column(
+        String(512), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_length: Mapped[int] = mapped_column(
+        BigInteger, nullable=False
+    )
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    etag: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"StoredObject(id={self.id!r}, org={self.organization_id!r}, "
+            f"key={self.storage_key!r})"
         )
