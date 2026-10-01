@@ -27,6 +27,7 @@ from tender_compliance_api.db.models import (
     StoredObject,
     TenderDocument,
 )
+from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
 
@@ -404,25 +405,40 @@ class DocumentService:
             auth, document_id, version_number
         )
 
-        # Clear any previously parsed pages for this version (idempotent).
+        # Clear any previously parsed pages for this version (idempotent
+        # re-parse; CP24 adds run-level idempotency on top of this).
         await self._session.execute(
             delete(DocumentPage).where(
                 DocumentPage.document_version_id == version.id
             )
         )
 
+        # CP23 structural cleanup is deterministic and version-scoped: a
+        # header/footer line only qualifies as noise when it recurs across
+        # multiple pages of the *same* version.  The raw ``extracted_text``
+        # is never mutated — cleanup produces a separate ``cleaned_text``.
+        cleanups = cleanup_pages(parse_result.pages)
+
         pages: list[DocumentPage] = []
-        for page_result in parse_result.pages:
+        for idx, page_result in enumerate(parse_result.pages):
+            cleanup = cleanups[idx]
+            # Merge parse-time warnings with cleanup-recorded warnings.
+            meta: dict[str, list[str]] = {}
+            all_warnings = list(page_result.warnings or []) + list(cleanup.warnings)
+            if all_warnings:
+                meta["warnings"] = all_warnings
+            if cleanup.headers:
+                meta["headers"] = list(cleanup.headers)
+            if cleanup.footers:
+                meta["footers"] = list(cleanup.footers)
+
             page = DocumentPage(
                 document_version_id=version.id,
                 page_number=page_result.page_number,
                 extracted_text=page_result.text if page_result.text else None,
+                cleaned_text=cleanup.cleaned_text or None,
                 ocr_needed=1 if page_result.ocr_needed else 0,
-                structural_metadata=(
-                    {"warnings": page_result.warnings}
-                    if page_result.warnings
-                    else None
-                ),
+                structural_metadata=meta or None,
             )
             self._session.add(page)
             pages.append(page)
