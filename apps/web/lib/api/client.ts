@@ -140,8 +140,34 @@ export type RequirementDetail = {
   clause_number: string | null;
   reconciliation_group_id: string | null;
   created_at: string;
+  updated_at: string | null;
   constraints: ConstraintSummary[];
   sources: RequirementSourceSummary[];
+  revisions: RevisionSummary[];
+};
+
+/** A single immutable revision row (CP38). */
+export type RevisionSummary = {
+  id: string;
+  previous_normalized_text: string;
+  updated_at_at_edit: string | null;
+  actor_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+/** Request to edit a requirement's normalized text (CP38). */
+export type EditRequirementRequest = {
+  normalized_text: string;
+  expected_updated_at?: string | null;
+  note?: string | null;
+};
+
+/** Error response for concurrent edits (CP38). */
+export type ConcurrentEditError = {
+  error: string;
+  message: string;
+  current_updated_at: string | null;
 };
 
 /** Paginated list of requirements. */
@@ -346,4 +372,51 @@ export const api = {
     apiFetch(
       `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}/sources`
     ).then((r) => expectJson<SourceAnchor[]>(r)),
+
+  // --- Requirement edit (CP38) ---
+
+  editRequirement: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body: EditRequirementRequest
+  ): Promise<RequirementDetail> =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  editRequirementOrError: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body: EditRequirementRequest
+  ): Promise<{ data?: RequirementDetail; error?: ConcurrentEditError }> =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => {
+      if (r.ok) return r.json().then((data) => ({ data: data as RequirementDetail }));
+      return r.json().then((err) => ({
+        error: err as ConcurrentEditError,
+      }));
+    }),
+
+  fetchRevisionHistory: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/revisions`
+    ).then((r) => expectJson<RevisionSummary[]>(r)),
 };

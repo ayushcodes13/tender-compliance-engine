@@ -7,8 +7,9 @@ enforced in one place, consistent with :mod:`tender_compliance_api.project`.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, or_, select, update
@@ -33,6 +34,7 @@ from tender_compliance_api.db.models import (
     Requirement,
     RequirementConstraint,
     RequirementReviewState,
+    RequirementRevision,
     RequirementSource,
     RunStatus,
     StoredObject,
@@ -83,6 +85,23 @@ _RENDER_KEY_NAMESPACE = uuid.UUID("00000000-0000-5000-8000-000000000042")
 
 class DocumentNotFoundError(Exception):
     """Raised when a TenderDocument or DocumentVersion is not found or not owned."""
+
+
+class ConcurrentEditError(Exception):
+    """Raised when a requirement edit is rejected due to optimistic
+    concurrency — the requirement was modified by another actor between
+    the client's read and write.
+
+    Carries the ``current_updated_at`` so the caller can retry with a fresh
+    read.
+    """
+
+    def __init__(self, current_updated_at: datetime | None) -> None:
+        self.current_updated_at = current_updated_at
+        super().__init__(
+            "The requirement was modified by another user. "
+            "Please refresh and try again."
+        )
 
 
 class TransitionError(Exception):
@@ -436,6 +455,7 @@ class DocumentService:
             .options(
                 selectinload(Requirement.constraints),
                 selectinload(Requirement.sources),
+                selectinload(Requirement.revisions),
             )
             .where(
                 Requirement.id == requirement_id,
@@ -449,6 +469,139 @@ class DocumentService:
                 f"document {document_id} v{version_number}"
             )
         return requirement
+
+    async def update_requirement_normalized_text(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        new_normalized_text: str,
+        *,
+        expected_updated_at: datetime | None = None,
+        note: str | None = None,
+    ) -> Requirement:
+        """Edit a requirement's ``normalized_text`` with immutable revision
+        history (CP38).
+
+        - **Raw source is never touched.** Only ``normalized_text`` is modified;
+          ``raw_source`` remains the verbatim extracted text for audit.
+        - **Optimistic concurrency:** if ``expected_updated_at`` is provided and
+          does not match the requirement's current ``updated_at``, raises
+          :class:`ConcurrentEditError` with the current timestamp so the caller
+          can refresh and retry.
+        - **Revision history:** if ``new_normalized_text`` differs materially
+          from the current value, a :class:`RequirementRevision` row is created
+          capturing the *previous* text, the actor, the note, and an
+          ``updated_at`` snapshot.  No revision row is created for no-ops.
+        - **Audit trail:** a ``requirement.edit_normalized_text`` audit event is
+          written with the actor, old/new text hash, and revision ID.
+        - **Tenant isolation:** enforced via ``get_version_or_raise``.
+
+        Returns the updated :class:`Requirement` with ``revisions`` eager-loaded.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+
+        # Eager-load the requirement with its revision history.
+        result = await self._session.execute(
+            select(Requirement)
+            .options(selectinload(Requirement.revisions))
+            .where(
+                Requirement.id == requirement_id,
+                Requirement.document_version_id == version.id,
+            )
+        )
+        requirement = result.scalar_one_or_none()
+        if requirement is None:
+            raise DocumentNotFoundError(
+                f"requirement {requirement_id} not found in "
+                f"document {document_id} v{version_number}"
+            )
+
+        # Optimistic concurrency check.
+        if expected_updated_at is not None:
+            if requirement.updated_at != expected_updated_at:
+                raise ConcurrentEditError(requirement.updated_at)
+
+        # Skip if the text is identical (no revision row needed).
+        old_text = requirement.normalized_text
+        if old_text == new_normalized_text:
+            await self._audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="requirement.edit_normalized_text",
+                entity_type="requirement",
+                entity_id=requirement_id,
+                project_id=await self._project_id_for(document_id),
+                metadata={
+                    "changed": False,
+                    "reason": "text_unchanged",
+                },
+            )
+            return requirement
+
+        # Create an immutable revision capturing the PREVIOUS text.
+        revision = RequirementRevision(
+            requirement_id=requirement_id,
+            previous_normalized_text=old_text,
+            updated_at_at_edit=requirement.updated_at,
+            actor_id=auth.actor_id,
+            note=note,
+        )
+        self._session.add(revision)
+        await self._session.flush()  # get revision.id before audit
+
+        # Apply the edit.
+        now = datetime.now(UTC)
+        requirement.normalized_text = new_normalized_text
+        requirement.updated_at = now
+        await self._session.flush()
+
+        # Write the audit event.
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.edit_normalized_text",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=await self._project_id_for(document_id),
+            metadata={
+                "changed": True,
+                "revision_id": str(revision.id),
+                "old_text_sha256": hashlib.sha256(old_text.encode()).hexdigest(),
+                "new_text_sha256": hashlib.sha256(
+                    new_normalized_text.encode()
+                ).hexdigest(),
+                "note": note,
+            },
+        )
+
+        return requirement
+
+    async def get_requirement_revisions(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> list[RequirementRevision]:
+        """Return the immutable revision history for a requirement,
+        tenant-scoped.
+
+        Raises :class:`DocumentNotFoundError` if the requirement does not
+        exist in the authenticated organization's document version.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(RequirementRevision)
+            .where(
+                RequirementRevision.requirement_id == requirement_id,
+                Requirement.id == requirement_id,
+                Requirement.document_version_id == version.id,
+            )
+            .order_by(RequirementRevision.created_at.desc())
+        )
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------------
     # Source viewer (CP36)

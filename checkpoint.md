@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP38 — Requirement edit and immutable revision history**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes**.
 
 The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
@@ -205,10 +205,10 @@ Phase 2 evaluation + production release
 
 ### Stage G — Persistent human review and real source verification
 
-- [ ] CP35 — Requirement list/detail API
-- [ ] CP36 — Real PDF/source viewer with trustworthy highlights
-- [ ] CP37 — Wire the three-pane review UI to real APIs
-- [ ] CP38 — Requirement edit and immutable revision history
+- [x] CP35 — Requirement list/detail API
+- [x] CP36 — Real PDF/source viewer with trustworthy highlights
+- [x] CP37 — Wire the three-pane review UI to real APIs
+- [x] ~~CP38 — Requirement edit and immutable revision history~~
 - [ ] CP39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes
 - [ ] CP40 — Review-state machine, audit timeline, and real progress counts
 

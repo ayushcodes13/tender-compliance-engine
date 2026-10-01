@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,11 @@ from tender_compliance_api.db.models import (
     RequirementReviewState,
 )
 from tender_compliance_api.db.session import get_session
-from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.document import (
+    ConcurrentEditError,
+    DocumentNotFoundError,
+    DocumentService,
+)
 
 router = APIRouter(prefix="/projects", tags=["requirements"])
 
@@ -101,8 +105,10 @@ class RequirementDetail(BaseModel):
     clause_number: str | None
     reconciliation_group_id: str | None
     created_at: datetime
+    updated_at: datetime | None
     constraints: list[ConstraintSummary]
     sources: list[RequirementSourceSummary]
+    revisions: list[RevisionSummary]
 
 
 class RequirementListResponse(BaseModel):
@@ -114,6 +120,27 @@ class RequirementListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class RevisionSummary(BaseModel):
+    """A single immutable revision row (CP38)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    previous_normalized_text: str
+    updated_at_at_edit: datetime | None
+    actor_id: UUID | None
+    note: str | None
+    created_at: datetime
+
+
+class EditRequirementRequest(BaseModel):
+    """Request body for editing a requirement's normalized text (CP38)."""
+
+    normalized_text: str
+    expected_updated_at: datetime | None = None
+    note: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -218,4 +245,60 @@ async def get_requirement_detail(
         )
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RequirementDetail.model_validate(req)
+
+
+@router.patch(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/requirements/{requirement_id}",
+    response_model=RequirementDetail,
+    response_model_exclude_none=True,
+)
+async def edit_requirement(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    requirement_id: UUID,
+    body: EditRequirementRequest = Body(...),  # noqa: B008
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RequirementDetail:
+    """Edit a requirement's normalized text with immutable revision history (CP38).
+
+    - ``raw_source`` is **never** modified — only ``normalized_text`` changes.
+    - If ``normalized_text`` is unchanged, no revision row is created (no-op).
+    - If ``expected_updated_at`` is provided and does not match the current
+      ``updated_at``, returns ``409 Conflict`` with the current timestamp
+      so the client can refresh and retry.
+    - A :class:`RequirementRevision` row capturing the *previous* text is
+      created for every material edit.
+
+    Returns the updated requirement with its revision history.
+    """
+    svc = DocumentService(session)
+    try:
+        req = await svc.update_requirement_normalized_text(
+            auth,
+            document_id,
+            version_number,
+            requirement_id,
+            body.normalized_text,
+            expected_updated_at=body.expected_updated_at,
+            note=body.note,
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ConcurrentEditError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "concurrent_edit",
+                "message": str(exc),
+                "current_updated_at": exc.current_updated_at.isoformat()
+                if exc.current_updated_at
+                else None,
+            },
+        ) from exc
+
+    await session.commit()
+    await session.refresh(req)
     return RequirementDetail.model_validate(req)
