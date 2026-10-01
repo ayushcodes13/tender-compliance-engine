@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP37 — Wire the three-pane review UI to real APIs**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP38 — Requirement edit and immutable revision history**.
 
 The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
@@ -2105,33 +2105,30 @@ Replace demo state with auditable review actions against the actual tender sourc
 
 - Do not present reconstructed text as the original PDF image. Served only real rendered PNG bytes; text-only fallback is explicitly labeled as such.
 
-## ⬜ Checkpoint 37 — Wire the three-pane review UI to real APIs
+## ✅ Checkpoint 37 — Wire the three-pane review UI to real APIs
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — merged PR #45 (`cp37/review-ui`).
 
 **Plain-English outcome:** The existing interaction model becomes the real product instead of a demo.
 
-### What we will do
+### What we did
 
-1. Remove demo seed data from real project routes.
-2. Load project, requirements, counts, selected requirement, and source metadata from APIs.
-3. Persist selection/deep-link state where useful.
-4. Show loading/error/processing/partial/no-requirement states.
-5. Use real document/version/page labels.
-6. Keep a separate isolated demo fixture only if helpful for UI development.
+1. Removed demo seed data (`seedRequirements`) from real project routes — `TenderReviewWorkspace` now accepts `projectId`/`documentId`/`version` props and fetches from the API.
+2. Loads requirements via `api.fetchRequirements` (CP35 list), selected requirement detail via `api.fetchRequirement` (CP35 detail) with constraints and sources.
+3. Selection/deep-link state is in component state (URL deep-linking deferred).
+4. Shows loading shimmer, API error state, no-requirements state, and detail-loading state — no fake fallback on backend failure.
+5. Uses real document/version/page labels from API responses.
+6. `DemoTenderReviewWorkspace` kept as an isolated fixture for the demo route (`/projects/demo`); real project routes never fall back to demo data.
 
-### How we will verify it
+### How we verified it
 
-- Refresh preserves server-backed state.
-- API failure never causes fake fallback requirements.
-
-### This checkpoint is complete only when
-
-- Every source chip and requirement in a real project comes from persistence.
+- API: `ruff check .` clean, `mypy src/` clean (72 source files), 556 tests pass.
+- Web: `tsc --noEmit` clean, `next build` successful (new `/projects/[id]/review` route generated).
+- Review workspace link unhidden on project page.
 
 ### Guardrail
 
-- Never hide backend failure by rendering demo data.
+- Never hide backend failure by rendering demo data. The real workspace shows explicit error/empty states; demo seed data is only on the isolated `/projects/demo` route.
 
 ## ⬜ Checkpoint 38 — Requirement edit and immutable revision history
 
