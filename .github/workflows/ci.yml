@@ -46,15 +46,15 @@ jobs:
       - name: Dependency audit
         run: |
           pip install pip-audit
-          pip-audit --requirement requirements.txt --requirement requirements-dev.txt 2>&1 || true
+          pip-audit -r pyproject.toml 2>&1 || true
           # In CI, scan the installed project + all transitive deps:
           pip-audit 2>&1 || true
         continue-on-error: true
       - name: Docker build
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: Dockerfile
+          context: ./apps/api
+          file: ./apps/api/Dockerfile
           push: false
           load: true
 
@@ -74,8 +74,8 @@ jobs:
       - name: Docker build (worker)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: Dockerfile.worker
+          context: ./apps/api
+          file: ./apps/api/Dockerfile.worker
           push: false
           load: true
 
@@ -95,7 +95,7 @@ jobs:
       - name: Docker build
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: Dockerfile
+          context: ./apps/web
+          file: ./apps/web/Dockerfile
           push: false
           load: true
