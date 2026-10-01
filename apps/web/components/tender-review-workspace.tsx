@@ -21,7 +21,14 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { api, DocumentItem, RequirementDetail, RequirementListResponse, SourceAnchor } from "@/lib/api/client";
+import {
+  api,
+  DocumentItem,
+  NoteSummary,
+  RequirementDetail,
+  RequirementListResponse,
+  SourceAnchor,
+} from "@/lib/api/client";
 import { SourceViewer } from "@/components/source-viewer";
 
 /** Status for the local UI state (mirrors backend RequirementReviewState). */
@@ -113,6 +120,10 @@ export function TenderReviewWorkspace(props: {
   const [draftText, setDraftText] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [notes, setNotes] = useState<NoteSummary[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
 
   // Fetch requirements list from the real API.
@@ -152,11 +163,12 @@ export function TenderReviewWorkspace(props: {
     }
   }, [reqList, selectedId]);
 
-  // Reset draft text when selection changes.
+  // Reset draft text and notes when selection changes.
   useEffect(() => {
     if (!selectedDetail) return;
     setDraftText(selectedDetail.normalized_text);
     setEditing(false);
+    setNotes(selectedDetail.notes ?? []);
     const frame = window.requestAnimationFrame(() => {
       sourceRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
@@ -222,10 +234,6 @@ export function TenderReviewWorkspace(props: {
 
   const reopenReview = () => {
     // NOTE: persistence lands with CP40 (review-state machine).
-  };
-
-  const updateNote = (_note: string) => {
-    // NOTE: persistence lands with CP38 (requirement edit + revision history).
   };
 
   if (loading && !reqList) {
@@ -706,20 +714,70 @@ export function TenderReviewWorkspace(props: {
 
             <section className="evidence-section">
               <div className="evidence-section-heading">
-                <span>Reviewer note</span>
+                <span>Reviewer notes ({notes.length})</span>
               </div>
+
+              {notes.length > 0 ? (
+                <ul className="note-list">
+                  {notes.map((note) => (
+                    <li key={note.id} className="note-item">
+                      <p className="note-text">{note.text}</p>
+                      <span className="note-meta">
+                        {new Date(note.created_at).toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
               <textarea
                 className="review-textarea note-textarea"
-                value=""
-                onChange={() => {}}
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
                 rows={4}
                 placeholder="Add a note about wording, OCR, or source interpretation…"
                 aria-label="Reviewer note"
-                disabled
+                disabled={notesLoading}
               />
-              <p className="field-help">
-                Note persistence lands with CP38 (immutable revision history).
-              </p>
+              {notesError ? (
+                <p className="save-error" role="alert">{notesError}</p>
+              ) : null}
+              <button
+                type="button"
+                className="button button-secondary button-small"
+                onClick={async () => {
+                  if (!noteText.trim() || !selectedId) return;
+                  setNotesLoading(true);
+                  setNotesError(null);
+                  try {
+                    await api.addNote(
+                      projectId,
+                      documentId,
+                      version,
+                      selectedId,
+                      { text: noteText.trim() }
+                    );
+                    setNoteText("");
+                    // Reload detail to refresh notes list.
+                    const detail = await api.fetchRequirement(
+                      projectId,
+                      documentId,
+                      version,
+                      selectedId
+                    );
+                    setNotes(detail.notes ?? []);
+                  } catch (err) {
+                    setNotesError(
+                      err instanceof Error ? err.message : "Failed to add note"
+                    );
+                  } finally {
+                    setNotesLoading(false);
+                  }
+                }}
+                disabled={!noteText.trim() || notesLoading}
+              >
+                {notesLoading ? "Saving…" : "Add note"}
+              </button>
             </section>
           </div>
 

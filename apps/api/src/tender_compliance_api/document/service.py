@@ -12,13 +12,21 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import (
+    delete,
+    func,
+    insert,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
+    Category,
     ConstraintNormalizationState,
     DocumentPage,
     DocumentProcessingStatus,
@@ -33,12 +41,16 @@ from tender_compliance_api.db.models import (
     Project,
     Requirement,
     RequirementConstraint,
+    RequirementNote,
+    RequirementRelation,
+    RequirementRelationType,
     RequirementReviewState,
     RequirementRevision,
     RequirementSource,
     RunStatus,
     StoredObject,
     TenderDocument,
+    requirement_categories,
 )
 from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.extraction.constraint_parser import (
@@ -396,15 +408,19 @@ class DocumentService:
         review_state: RequirementReviewState | None = None,
         requirement_type: str | None = None,
         search: str | None = None,
+        include_superseded: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Requirement]:
         """List requirements for a document version, tenant-scoped.
 
-        Supports stable ordering (by ``created_at`` descending), pagination
-        (``limit``/``offset``), and optional filters on ``review_state`` and
-        ``requirement_type``.  ``search`` performs a case-insensitive substring
-        match on ``normalized_text`` or ``raw_source``.
+        Supports stable ordering (by ``display_order`` then ``created_at``
+        descending), pagination (``limit``/``offset``), and optional filters
+        on ``review_state`` and ``requirement_type``.  ``search`` performs a
+        case-insensitive substring match on ``normalized_text`` or ``raw_source``.
+
+        By default, superseded (soft-deleted) requirements are excluded.
+        Pass ``include_superseded=True`` to include them.
 
         Authorized by organization (via the document version lookup) and
         project ownership.
@@ -414,11 +430,17 @@ class DocumentService:
         stmt = (
             select(Requirement)
             .where(Requirement.document_version_id == version.id)
-            .order_by(Requirement.created_at.desc(), Requirement.id)
+            .order_by(
+                Requirement.display_order.asc().nulls_last(),
+                Requirement.created_at.desc(),
+                Requirement.id,
+            )
             .limit(limit)
             .offset(offset)
         )
 
+        if not include_superseded:
+            stmt = stmt.where(Requirement.superseded.is_(False))
         if review_state is not None:
             stmt = stmt.where(Requirement.review_state == review_state)
         if requirement_type is not None:
@@ -600,6 +622,483 @@ class DocumentService:
                 Requirement.document_version_id == version.id,
             )
             .order_by(RequirementRevision.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # Requirement structure: split, merge, supersede (CP39)
+    # ------------------------------------------------------------------
+
+    async def _requirement_or_raise(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> Requirement:
+        """Fetch a single requirement, tenant-scoped, raising on missing.
+
+        Eager-loads constraints, sources, revisions, relations, notes,
+        and categories so the caller has the full picture.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(Requirement)
+            .options(
+                selectinload(Requirement.constraints),
+                selectinload(Requirement.sources),
+                selectinload(Requirement.revisions),
+                selectinload(Requirement.relations),
+                selectinload(Requirement.notes),
+                selectinload(Requirement.categories),
+            )
+            .where(
+                Requirement.id == requirement_id,
+                Requirement.document_version_id == version.id,
+            )
+        )
+        requirement = result.scalar_one_or_none()
+        if requirement is None:
+            raise DocumentNotFoundError(
+                f"requirement {requirement_id} not found in "
+                f"document {document_id} v{version_number}"
+            )
+        return requirement
+
+    async def split_requirement(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        new_requirements: list[dict[str, Any]],
+    ) -> list[Requirement]:
+        """Split one requirement into multiple (CP39).
+
+        Each entry in ``new_requirements`` must contain at least
+        ``normalized_text`` and ``raw_source`` (the verbatim snippet this
+        child is anchored on).  Optional fields: ``clause_number``,
+        ``requirement_type``, ``confidence``.
+
+        The original requirement is marked ``superseded`` and a
+        ``SPLIT_INTO`` :class:`RequirementRelation` is created for each
+        child, preserving provenance.
+        """
+        source_req = await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+        if source_req.superseded:
+            raise DocumentNotFoundError(
+                f"requirement {requirement_id} has been superseded"
+            )
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        children: list[Requirement] = []
+        relations: list[RequirementRelation] = []
+        for spec in new_requirements:
+            child = Requirement(
+                document_version_id=version.id,
+                promotion_key=f"split-{uuid.uuid4().hex[:12]}",
+                requirement_type=spec.get("requirement_type") or source_req.requirement_type,
+                normalized_text=spec["normalized_text"],
+                raw_source=spec["raw_source"],
+                uncertainty=spec.get("uncertainty") or source_req.uncertainty,
+                clause_number=spec.get("clause_number") or source_req.clause_number,
+                ocr_warning=bool(spec.get("ocr_warning", source_req.ocr_warning)),
+                review_state=RequirementReviewState.UNREVIEWED,
+            )
+            self._session.add(child)
+            await self._session.flush()
+            children.append(child)
+            relations.append(
+                RequirementRelation(
+                    source_requirement_id=source_req.id,
+                    target_requirement_id=child.id,
+                    relation_type=RequirementRelationType.SPLIT_INTO,
+                    document_version_id=version.id,
+                )
+            )
+
+        # Mark the original as superseded.
+        source_req.superseded = True
+        self._session.add_all(relations)
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.split",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=project_id,
+            metadata={
+                "source_id": str(source_req.id),
+                "child_ids": [str(c.id) for c in children],
+                "child_count": len(children),
+            },
+        )
+
+        return children
+
+    async def merge_requirements(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_ids: list[uuid.UUID],
+        merged_normalized_text: str,
+        merged_raw_sources: list[str],
+    ) -> Requirement:
+        """Merge multiple requirements into one (CP39).
+
+        Creates a new :class:`Requirement` whose ``raw_source`` lists all
+        contributing fragments (joined with ``\\n---\\n``), marks all
+        source requirements as ``superseded``, and creates a
+        ``MERGED_INTO`` relation from each source to the target.
+        """
+        if len(requirement_ids) < 2:
+            raise DocumentNotFoundError(
+                "merge requires at least two requirement IDs"
+            )
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        # Fetch all source requirements.
+        result = await self._session.execute(
+            select(Requirement)
+            .where(
+                Requirement.id.in_(requirement_ids),
+                Requirement.document_version_id == version.id,
+            )
+        )
+        sources = result.scalars().all()
+        if len(sources) != len(requirement_ids):
+            found = {s.id for s in sources}
+            missing = set(requirement_ids) - found
+            raise DocumentNotFoundError(
+                f"requirements not found: {missing}"
+            )
+
+        # Preserve all contributing source fragments.
+        combined_raw = "\n---\n".join(merged_raw_sources)
+        target = Requirement(
+            document_version_id=version.id,
+            promotion_key=f"merge-{uuid.uuid4().hex[:12]}",
+            requirement_type=sources[0].requirement_type,
+            normalized_text=merged_normalized_text,
+            raw_source=combined_raw,
+            uncertainty=sources[0].uncertainty,
+            ocr_warning=any(s.ocr_warning for s in sources),
+            review_state=RequirementReviewState.UNREVIEWED,
+        )
+        self._session.add(target)
+        await self._session.flush()
+
+        # Create MERGED_INTO relations and mark sources superseded.
+        relations: list[RequirementRelation] = []
+        for src in sources:
+            src.superseded = True
+            relations.append(
+                RequirementRelation(
+                    source_requirement_id=src.id,
+                    target_requirement_id=target.id,
+                    relation_type=RequirementRelationType.MERGED_INTO,
+                    document_version_id=version.id,
+                )
+            )
+        self._session.add_all(relations)
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.merge",
+            entity_type="requirement",
+            entity_id=target.id,
+            project_id=project_id,
+            metadata={
+                "source_ids": [str(s.id) for s in sources],
+                "target_id": str(target.id),
+            },
+        )
+
+        return target
+
+    async def supersede_requirement(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        superseded_by: uuid.UUID | None = None,
+        note: str | None = None,
+    ) -> Requirement:
+        """Mark a requirement as superseded (auditable soft-delete, CP39).
+
+        If ``superseded_by`` is provided, a ``SUPERSEDES`` relation is
+        created from this requirement to the replacement.  The requirement
+        stays in the database for audit purposes but is excluded from
+        default list/detail queries.
+        """
+        req = await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        req.superseded = True
+        if superseded_by is not None:
+            relation = RequirementRelation(
+                source_requirement_id=req.id,
+                target_requirement_id=superseded_by,
+                relation_type=RequirementRelationType.SUPERSEDES,
+                document_version_id=version.id,
+            )
+            self._session.add(relation)
+            await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.supersede",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=project_id,
+            metadata={
+                "superseded_by": str(superseded_by) if superseded_by else None,
+                "note": note,
+            },
+        )
+
+        return req
+
+    # ------------------------------------------------------------------
+    # Requirement structure: mandatory, categories, ordering, notes (CP39)
+    # ------------------------------------------------------------------
+
+    async def set_requirement_mandatory(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        mandatory: bool | None,
+    ) -> Requirement:
+        """Set the tri-state mandatory flag on a requirement (CP39)."""
+        req = await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+        project_id = await self._project_id_for(document_id)
+        req.mandatory = mandatory
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.set_mandatory",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=project_id,
+            metadata={"mandatory": mandatory},
+        )
+        return req
+
+    async def assign_category(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        category_id: uuid.UUID,
+    ) -> Requirement:
+        """Assign a category to a requirement (CP39)."""
+        await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+        project_id = await self._project_id_for(document_id)
+
+        # Verify the category belongs to the same project.
+        result = await self._session.execute(
+            select(Category).where(
+                Category.id == category_id,
+                Category.project_id == project_id,
+            )
+        )
+        category = result.scalar_one_or_none()
+        if category is None:
+            raise DocumentNotFoundError(
+                f"category {category_id} not found in project {project_id}"
+            )
+
+        # Use raw insert on the association table to avoid duplicate
+        # relationship manipulation edge cases.
+        await self._session.execute(
+            insert(requirement_categories).values(
+                requirement_id=requirement_id,
+                category_id=category_id,
+            )
+        )
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.assign_category",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=project_id,
+            metadata={"category_id": str(category_id)},
+        )
+        # Reload and return the requirement with updated categories.
+        return await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+
+    async def unassign_category(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        category_id: uuid.UUID,
+    ) -> Requirement:
+        """Remove a category assignment from a requirement (CP39)."""
+        await self._requirement_or_raise(auth, document_id, version_number, requirement_id)
+        project_id = await self._project_id_for(document_id)
+
+        await self._session.execute(
+            delete(requirement_categories).where(
+                requirement_categories.c.requirement_id == requirement_id,
+                requirement_categories.c.category_id == category_id,
+            )
+        )
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.unassign_category",
+            entity_type="requirement",
+            entity_id=requirement_id,
+            project_id=project_id,
+            metadata={"category_id": str(category_id)},
+        )
+        return await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+
+    async def reorder_requirements(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        order: list[uuid.UUID],
+    ) -> list[Requirement]:
+        """Persist a new stable sort order for requirements (CP39).
+
+        ``order`` is an explicit ordered list of requirement IDs.  Each
+        requirement's ``display_order`` is set to its index in the list.
+        Requirements not in the list are left unchanged (their
+        ``display_order`` may be NULL, which sorts last).
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        # Verify all IDs exist in this version.
+        result = await self._session.execute(
+            select(Requirement.id).where(
+                Requirement.id.in_(order),
+                Requirement.document_version_id == version.id,
+            )
+        )
+        found_ids = {r for r in result.scalars().all()}
+        if len(found_ids) != len(order):
+            missing = set(order) - found_ids
+            raise DocumentNotFoundError(
+                f"requirements not found for reordering: {missing}"
+            )
+
+        # Update display_order for each requirement.
+        for idx, req_id in enumerate(order):
+            await self._session.execute(
+                update(Requirement)
+                .where(
+                    Requirement.id == req_id,
+                    Requirement.document_version_id == version.id,
+                )
+                .values(display_order=idx)
+            )
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.reorder",
+            entity_type="requirement",
+            entity_id=version.id,
+            project_id=project_id,
+            metadata={
+                "ordered_ids": [str(r) for r in order],
+                "version_id": str(version.id),
+            },
+        )
+        # Reload reordered requirements.
+        result = await self._session.execute(
+            select(Requirement)
+            .where(Requirement.id.in_(order))
+            .order_by(Requirement.display_order.asc().nulls_last())
+        )
+        rows: list[Requirement] = result.scalars().all()  # type: ignore[assignment]
+        return rows
+
+    async def add_note(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+        text: str,
+    ) -> RequirementNote:
+        """Add a reviewer note to a requirement (CP39)."""
+        await self._requirement_or_raise(
+            auth, document_id, version_number, requirement_id
+        )
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        note = RequirementNote(
+            requirement_id=requirement_id,
+            document_version_id=version.id,
+            actor_id=auth.actor_id,
+            text=text.strip(),
+        )
+        self._session.add(note)
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="requirement.add_note",
+            entity_type="requirement_note",
+            entity_id=note.id,
+            project_id=project_id,
+            metadata={"requirement_id": str(requirement_id)},
+        )
+        return note
+
+    async def get_requirement_notes(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> list[RequirementNote]:
+        """List notes for a requirement, new-first, tenant-scoped (CP39)."""
+        await self._requirement_or_raise(auth, document_id, version_number, requirement_id)
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(RequirementNote)
+            .where(
+                RequirementNote.requirement_id == requirement_id,
+                RequirementNote.document_version_id == version.id,
+            )
+            .order_by(RequirementNote.created_at.desc())
         )
         return list(result.scalars().all())
 
