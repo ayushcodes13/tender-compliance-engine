@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import time
 import uuid
 
 from fastapi.testclient import TestClient
@@ -21,6 +22,7 @@ from sqlalchemy import select
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
     Membership,
@@ -29,10 +31,13 @@ from tender_compliance_api.db.models import (
     ProcessingStage,
     Project,
     RunStatus,
+    StoredObject,
     TenderDocument,
     User,
 )
 from tender_compliance_api.main import app
+from tender_compliance_api.parser import FakeParserAdapter
+from tender_compliance_api.parser.adapter import PageResult
 from tender_compliance_api.queue import (
     DEFAULT_QUEUE,
     FakeQueueAdapter,
@@ -51,6 +56,7 @@ from tender_compliance_api.routes.uploads import (
 )
 from tender_compliance_api.scan.fake import FakeScanner
 from tender_compliance_api.storage.fake import FakeStorageAdapter
+from tender_compliance_api.storage.keys import build_key
 from tender_compliance_worker.processor import WORKER_ACTOR_ID, JobProcessor
 from tender_compliance_worker.worker import Worker
 
@@ -128,12 +134,45 @@ async def _create_version(
     session_cm,
     org_id: uuid.UUID,
     status: DocumentProcessingStatus,
+    *,
+    pdf_bytes: bytes | None = None,
 ) -> dict:
-    """Create org + user + membership + project + document + version."""
+    """Create org + user + membership + project + document + version + stored object.
+
+    Returns a dict with IDs and ``storage_key`` + ``stored_object_id`` so
+    tests can populate a :class:`FakeStorageAdapter` with the bytes.
+    """
     info = await _create_org_project(session_cm)
+    org_id = info["org_id"]
     doc_id = uuid.uuid4()
     version_id = uuid.uuid4()
+    stored_object_id = uuid.uuid4()
+
+    if pdf_bytes is None:
+        pdf_bytes = _make_pdf()
+
+    storage_key = build_key(
+        org_id=org_id,
+        project_id=info["project_id"],
+        document_id=doc_id,
+        version=1,
+    )
+
+    import hashlib
+
     async with session_cm() as session:
+        stored = StoredObject(
+            id=stored_object_id,
+            organization_id=org_id,
+            project_id=info["project_id"],
+            storage_key=storage_key,
+            filename="tender.pdf",
+            content_type="application/pdf",
+            content_length=len(pdf_bytes),
+            checksum_sha256=hashlib.sha256(pdf_bytes).hexdigest(),
+        )
+        session.add(stored)
+
         doc = TenderDocument(
             id=doc_id,
             project_id=info["project_id"],
@@ -145,10 +184,10 @@ async def _create_version(
             id=version_id,
             document_id=doc_id,
             version_number=1,
-            stored_object_id=uuid.uuid4(),
-            sha256="abc123",
+            stored_object_id=stored_object_id,
+            sha256=hashlib.sha256(pdf_bytes).hexdigest(),
             mime_type="application/pdf",
-            size_bytes=100,
+            size_bytes=len(pdf_bytes),
             processing_status=status,
         )
         session.add(version)
@@ -157,6 +196,9 @@ async def _create_version(
         doc_id=doc_id,
         version_id=version_id,
         version_number=1,
+        stored_object_id=stored_object_id,
+        storage_key=storage_key,
+        pdf_bytes=pdf_bytes,
     )
     return info
 
@@ -282,7 +324,7 @@ class TestMakeJobId:
 
 
 class TestJobProcessor:
-    """Tests for the worker's JobProcessor (CP18 placeholder pass)."""
+    """Tests for the worker's JobProcessor (CP19 — PARSE stage integration)."""
 
     def test_process_transitions_to_parsed(self, session_cm) -> None:
         """Processing a QUEUED version transitions it to PARSED."""
@@ -292,7 +334,27 @@ class TestJobProcessor:
                 session_cm, uuid.uuid4(), DocumentProcessingStatus.QUEUED
             )
             sf = _get_session_factory()
-            processor = JobProcessor(sf)
+            # Use FakeParserAdapter + FakeStorageAdapter with the PDF bytes.
+            storage = FakeStorageAdapter()
+            storage._store[info["storage_key"]] = info["pdf_bytes"]
+            storage._meta[info["storage_key"]] = {
+                "content_type": "application/pdf",
+                "content_length": len(info["pdf_bytes"]),
+                "etag": "test-etag",
+                "stored_at": time.time(),
+            }
+            pages = [
+                PageResult(
+                    page_number=1,
+                    text="test page text",
+                    text_length=13,
+                    ocr_needed=False,
+                    warnings=[],
+                    error=None,
+                )
+            ]
+            parser = FakeParserAdapter(pages=pages)
+            processor = JobProcessor(sf, parser=parser, storage=storage)
 
             run_id = make_job_id(
                 str(info["version_id"]), ProcessingStage.PARSE.value
@@ -322,7 +384,8 @@ class TestJobProcessor:
                 )
                 updated = result.scalar_one()
                 assert updated.processing_status == DocumentProcessingStatus.PARSED
-                assert updated.parser_name == "tender-compliance-engine"
+                assert updated.parser_name == "fake"
+                assert updated.parser_version == "test"
 
                 # Verify ProcessingRun rows exist for all 4 stages
                 run_result = await session.execute(
@@ -334,6 +397,17 @@ class TestJobProcessor:
                 assert len(runs) == 4
                 for r in runs:
                     assert r.status == RunStatus.COMPLETED
+
+                # Verify DocumentPage rows were stored
+                page_result = await session.execute(
+                    select(DocumentPage).where(
+                        DocumentPage.document_version_id == info["version_id"]
+                    )
+                )
+                pages_stored = list(page_result.scalars().all())
+                assert len(pages_stored) == 1
+                assert pages_stored[0].page_number == 1
+                assert pages_stored[0].extracted_text == "test page text"
 
         asyncio.run(_run())
 
@@ -402,9 +476,34 @@ class TestWorkerRunOnce:
             await queue.enqueue(DEFAULT_QUEUE, str(run_id), msg)
 
             sf = _get_session_factory()
+            # Use FakeParserAdapter + FakeStorageAdapter with the PDF bytes.
+            storage = FakeStorageAdapter()
+            storage._store[info["storage_key"]] = info["pdf_bytes"]
+            storage._meta[info["storage_key"]] = {
+                "content_type": "application/pdf",
+                "content_length": len(info["pdf_bytes"]),
+                "etag": "test-etag",
+                "stored_at": time.time(),
+            }
             worker = Worker(
                 queue=queue,
                 session_factory=sf,  # type: ignore[arg-type]
+                processor=JobProcessor(
+                    sf,
+                    parser=FakeParserAdapter(
+                        pages=[
+                            PageResult(
+                                page_number=1,
+                                text="test page text",
+                                text_length=13,
+                                ocr_needed=False,
+                                warnings=[],
+                                error=None,
+                            )
+                        ]
+                    ),
+                    storage=storage,
+                ),
                 max_concurrency=1,
             )
             processed = await worker.run_once()
@@ -419,6 +518,7 @@ class TestWorkerRunOnce:
                 )
                 updated = result.scalar_one()
                 assert updated.processing_status == DocumentProcessingStatus.PARSED
+                assert updated.parser_name == "fake"
 
         asyncio.run(_run())
 
@@ -448,7 +548,8 @@ class TestFullProcessingFlow:
 
     def test_upload_then_worker_parses(self, session_cm) -> None:
         fake_queue = FakeQueueAdapter()
-        app.dependency_overrides[get_storage_dep] = lambda: FakeStorageAdapter()
+        shared_storage = FakeStorageAdapter()
+        app.dependency_overrides[get_storage_dep] = lambda: shared_storage
         app.dependency_overrides[get_scanner_dep] = lambda: FakeScanner()
         app.dependency_overrides[get_queue_adapter_dep] = lambda: fake_queue
 
@@ -494,6 +595,22 @@ class TestFullProcessingFlow:
                 worker = Worker(
                     queue=fake_queue,
                     session_factory=sf,  # type: ignore[arg-type]
+                    processor=JobProcessor(
+                        sf,
+                        parser=FakeParserAdapter(
+                            pages=[
+                                PageResult(
+                                    page_number=1,
+                                    text="page one text",
+                                    text_length=15,
+                                    ocr_needed=False,
+                                    warnings=[],
+                                    error=None,
+                                )
+                            ]
+                        ),
+                        storage=shared_storage,
+                    ),
                     max_concurrency=1,
                 )
                 processed = await worker.run_once()
@@ -518,7 +635,7 @@ class TestFullProcessingFlow:
                     assert len(versions) >= 1
                     latest = versions[-1]
                     assert latest.processing_status == DocumentProcessingStatus.PARSED
-                    assert latest.parser_name == "tender-compliance-engine"
+                    assert latest.parser_name == "fake"
 
             asyncio.run(_check_parsed())
 

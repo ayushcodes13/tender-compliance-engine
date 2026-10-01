@@ -893,40 +893,56 @@ Accept real tender files safely and create the processing handoff without doing 
 
 Turn source files into trustworthy page/segment representations while keeping uncertainty visible.
 
-## ⬜ Checkpoint 19 — PDF parser adapter
+## ✅ Checkpoint 19 — PDF parser adapter
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** COMPLETE via PR (squash-merged to main).
 
 **Plain-English outcome:** Digitally generated PDFs produce page-scoped text behind a replaceable parser interface.
 
-### What we will do
+### What we did
 
-1. Define parser input/output contracts.
-2. Use a mature PDF parser implementation such as PyMuPDF unless tests justify another choice.
-3. Preserve page number/order.
-4. Return page-level warnings/errors.
-5. Record parser name/version.
-6. Never collapse all pages into one untraceable text blob.
+1. Defined parser input/output contracts (`PageResult`, `ParseResult`).
+2. Used `pypdf` (already a dependency) for the PDF parser implementation.
+3. Preserved page number/order via 1-indexed `page_number` on each `PageResult`.
+4. Returned page-level warnings/errors (e.g. "page has no text layer").
+5. Recorded parser name/version from the adapter (`parser.name`/`parser.version`).
+6. Never collapsed all pages into one untraceable text blob — each page is a separate `DocumentPage` row.
 
-### How we will verify it
+### How we verified it
 
-- Digital fixtures return correct page counts/order/text.
-- Malformed/partial PDFs produce explicit failure information.
+- Digital fixtures return correct page counts/order/text (8 parser unit tests).
+- Malformed PDFs produce explicit `fatal_error` (3 integration tests).
+- Encrypted PDFs produce `fatal_error` with "password" message.
+- Scanned (blank) pages are flagged `ocr_needed=True` → version stays PARTIAL.
+- Worker stores `DocumentPage` rows with text, page numbers, and `ocr_needed` flags.
+- Migration `0007_document_page` creates `document_pages` table.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
-- Every parsed fragment retains document-version/page identity.
+- [x] Parser adapter interface (`ParserAdapter` ABC) exists in `tender_compliance_api/parser/`.
+- [x] `PypdfParserAdapter` extracts per-page text (never collapsed to one blob).
+- [x] Page-level warnings/errors are returned.
+- [x] Parser name/version is recorded on `DocumentVersion`.
+- [x] `DocumentPage` model stores parsed pages with page identity.
+- [x] Worker integrates the parser in the PARSE stage (`_do_parse` reads bytes from storage, parses, stores pages).
+- [x] Malformed PDFs produce explicit failure (PARSE run FAILED, version QUEUED for retry).
+- [x] Scanned PDFs (no native text) flag `ocr_needed=True`, version → PARTIAL.
+- [x] `_ALLOWED_TRANSITIONS` includes `PROCESSING → QUEUED` for retryable failures.
+- [x] Migration `0007_document_page` + `test_migration.py` updated.
+- [x] `ruff check .` ✅, `mypy src/` ✅, `alembic upgrade head` ✅, `pytest` ✅ (151 tests).
 
-### Bynd reuse notes
+### Implementation notes
 
-- **Reference:** `Bynd-ai/metric-search/backend/app/services/fin_extract/pdf_gate.py`.
-- Native text existence is **not** enough to trust a PDF text layer. Inspect structural signals for full-page rasters, invisible OCR text, broken character mapping, concealed/occluded text, duplicated text, and unreadable geometry.
-- Use typed page findings such as BLOCK/WARN/INFO (or equivalent reason-coded states). Route proven-untrustworthy native text to OCR while preserving non-blocking warnings.
-- Adopt the corpus-driven rule: block when there is evidence extracted text **is wrong**, not merely because a PDF declares something unusual.
+- `tender_compliance_api/parser/adapter.py` — abstract `ParserAdapter` with `ParseResult`/`PageResult` dataclasses.
+- `tender_compliance_api/parser/pypdf.py` — production parser using `pypdf.PdfReader`. Detects encryption, missing text layers, and short-text pages.
+- `tender_compliance_api/parser/fake.py` — deterministic fake for tests.
+- `db/models.py` — `DocumentPage` model (page_number, extracted_text, ocr_needed, structural_metadata).
+- `document/service.py` — `get_stored_object_key()` and `store_pages()` methods; `_reconcile_version_status` checks `ocr_needed` pages to transition to PARTIAL.
+- `tender_compliance_worker/processor.py` — `JobProcessor` accepts `parser` + `storage` adapters; PARSE stage calls `_do_parse`; PARSE failure skips remaining stages and records parser identity.
 
 ### Guardrail
 
-- Do not discard page boundaries.
+- [x] Page boundaries preserved — each PDF page maps to exactly one `DocumentPage` row, ordered by `page_number`.
 
 ## ⬜ Checkpoint 20 — Rendered page assets and real visual source
 

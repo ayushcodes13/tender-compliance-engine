@@ -19,6 +19,8 @@ from typing import cast
 
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import init_engine
+from tender_compliance_api.parser import PypdfParserAdapter
+from tender_compliance_api.parser.adapter import ParserAdapter
 from tender_compliance_api.queue import (
     DEFAULT_QUEUE,
     FakeQueueAdapter,
@@ -26,6 +28,9 @@ from tender_compliance_api.queue import (
     QueuedJob,
     RedisQueueAdapter,
 )
+from tender_compliance_api.storage.adapter import ObjectStorageAdapter
+from tender_compliance_api.storage.fake import FakeStorageAdapter
+from tender_compliance_api.storage.s3 import S3StorageAdapter
 from tender_compliance_worker.processor import JobProcessor, SessionFactory
 
 logger = logging.getLogger(__name__)
@@ -139,6 +144,8 @@ class Worker:
 def create_worker(
     *,
     queue: QueueAdapter | None = None,
+    parser: ParserAdapter | None = None,
+    storage: ObjectStorageAdapter | None = None,
     max_concurrency: int | None = None,
 ) -> Worker:
     """Create a :class:`Worker` with production defaults.
@@ -157,10 +164,33 @@ def create_worker(
 
     session_factory = _get_session_factory()
 
+    if parser is None:
+        parser = PypdfParserAdapter()
+
+    if storage is None:
+        storage = _get_storage_adapter()
+
     return Worker(
         queue=queue,
         session_factory=session_factory,
+        processor=JobProcessor(
+            session_factory, parser=parser, storage=storage
+        ),
         max_concurrency=max_concurrency or settings.max_concurrency,
+    )
+
+
+def _get_storage_adapter() -> ObjectStorageAdapter:
+    """Return the storage adapter based on configuration."""
+    settings = get_settings()
+    if not settings.object_storage_endpoint:
+        return FakeStorageAdapter()
+    return S3StorageAdapter(
+        endpoint_url=settings.object_storage_endpoint,
+        access_key=settings.object_storage_access_key,
+        secret_key=settings.object_storage_secret_key,
+        bucket=settings.object_storage_bucket,
+        region=settings.object_storage_region,
     )
 
 

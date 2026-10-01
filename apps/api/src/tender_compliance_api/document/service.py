@@ -9,23 +9,29 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
     ProcessingRun,
     ProcessingStage,
     Project,
     RunStatus,
+    StoredObject,
     TenderDocument,
 )
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
+
+if TYPE_CHECKING:
+    from tender_compliance_api.parser.adapter import ParseResult
 
 
 class DocumentNotFoundError(Exception):
@@ -56,6 +62,7 @@ _ALLOWED_TRANSITIONS: dict[
             DocumentProcessingStatus.PARSED,
             DocumentProcessingStatus.PARTIAL,
             DocumentProcessingStatus.FAILED,
+            DocumentProcessingStatus.QUEUED,
         }
     ),
     DocumentProcessingStatus.PARTIAL: frozenset(
@@ -334,6 +341,73 @@ class DocumentService:
         return run_id
 
     # ------------------------------------------------------------------
+    # Page storage (CP19)
+    # ------------------------------------------------------------------
+
+    async def get_stored_object_key(
+        self, auth: AuthContext, document_id: uuid.UUID, version_number: int
+    ) -> str:
+        """Return the ``storage_key`` for a version's stored object.
+
+        Looks up the :class:`DocumentVersion` → :class:`StoredObject`
+        chain, enforcing tenant isolation via *auth*.
+        """
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+        result = await self._session.execute(
+            select(StoredObject).where(StoredObject.id == version.stored_object_id)
+        )
+        stored = result.scalar_one_or_none()
+        if stored is None:
+            raise DocumentNotFoundError(
+                f"StoredObject {version.stored_object_id} not found"
+            )
+        return stored.storage_key
+
+    async def store_pages(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        parse_result: ParseResult,
+    ) -> list[DocumentPage]:
+        """Persist parsed pages for a document version.
+
+        Deletes any existing pages for this version (idempotent re-parse),
+        then creates new :class:`DocumentPage` rows from *parse_result*.
+        """
+        version = await self.get_version_or_raise(
+            auth, document_id, version_number
+        )
+
+        # Clear any previously parsed pages for this version (idempotent).
+        await self._session.execute(
+            delete(DocumentPage).where(
+                DocumentPage.document_version_id == version.id
+            )
+        )
+
+        pages: list[DocumentPage] = []
+        for page_result in parse_result.pages:
+            page = DocumentPage(
+                document_version_id=version.id,
+                page_number=page_result.page_number,
+                extracted_text=page_result.text if page_result.text else None,
+                ocr_needed=1 if page_result.ocr_needed else 0,
+                structural_metadata=(
+                    {"warnings": page_result.warnings}
+                    if page_result.warnings
+                    else None
+                ),
+            )
+            self._session.add(page)
+            pages.append(page)
+
+        await self._session.flush()
+        return pages
+
+    # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
@@ -454,9 +528,24 @@ class DocumentService:
 
         # All expected stages completed → PARSED
         if len(completed_stages) == total:
-            await self._safe_transition(
-                auth, version, DocumentProcessingStatus.PARSED
+            # If any pages still need OCR (native text untrustworthy),
+            # the version is PARTIAL — OCR (CP21) hasn't filled the gap.
+            ocr_count_result = await self._session.execute(
+                select(func.count())
+                .where(
+                    DocumentPage.document_version_id == version.id,
+                    DocumentPage.ocr_needed == 1,
+                )
             )
+            ocr_needed_count = ocr_count_result.scalar() or 0
+            if ocr_needed_count > 0:
+                await self._safe_transition(
+                    auth, version, DocumentProcessingStatus.PARTIAL
+                )
+            else:
+                await self._safe_transition(
+                    auth, version, DocumentProcessingStatus.PARSED
+                )
         # All expected stages permanently failed → FAILED
         elif len(permanently_failed_stages) == total:
             await self._safe_transition(
