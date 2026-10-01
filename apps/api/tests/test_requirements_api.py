@@ -6,6 +6,7 @@ Covers:
 - Tenant isolation: cross-org access is denied
 - No document body leakage in any response
 - Stable ordering and pagination correctness
+- CP39 fields (superseded, mandatory, display_order) on summary/detail
 """
 
 from __future__ import annotations
@@ -392,3 +393,53 @@ class TestStableOrdering:
         assert len(items) == 2
         for item in items:
             assert "created_at" in item
+
+
+class TestCP39SummaryFields:
+    """Verify CP39 fields appear on list/detail responses."""
+
+    def test_summary_includes_cp39_fields(self):
+        """List response includes display_order, mandatory, superseded after set."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_requirements(
+            project_id, [("obligation", "weight ≤ 2 kg")]
+        )
+        req_id = _get_first_req_id_str(doc_id, ver)
+
+        # Set mandatory to True and display_order to 0.
+        client.patch(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/requirements/{req_id}/mandatory",
+            json={"value": True},
+            headers=_headers(user_id, org_id),
+        )
+
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/requirements",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        item = resp.json()["items"][0]
+        assert "superseded" in item
+        assert item["superseded"] is False
+        assert "mandatory" in item
+        assert item["mandatory"] is True
+
+    def test_detail_includes_cp39_fields(self):
+        """Detail response includes superseded, notes, categories."""
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_requirements(
+            project_id, [("obligation", "weight ≤ 2 kg")]
+        )
+        req_id = _get_first_req_id_str(doc_id, ver)
+        resp = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/requirements/{req_id}",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        detail = resp.json()
+        assert "superseded" in detail
+        assert detail["superseded"] is False
+        assert "notes" in detail
+        assert "categories" in detail
+        assert detail["notes"] == []
+        assert detail["categories"] == []

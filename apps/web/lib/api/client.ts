@@ -97,6 +97,9 @@ export type RequirementSummary = {
   review_state: RequirementReviewState;
   ocr_warning: boolean;
   clause_number: string | null;
+  display_order: number | null;
+  mandatory: boolean | null;
+  superseded: boolean;
   created_at: string;
 };
 
@@ -139,11 +142,16 @@ export type RequirementDetail = {
   ocr_warning: boolean;
   clause_number: string | null;
   reconciliation_group_id: string | null;
+  display_order: number | null;
+  mandatory: boolean | null;
+  superseded: boolean;
   created_at: string;
   updated_at: string | null;
   constraints: ConstraintSummary[];
   sources: RequirementSourceSummary[];
   revisions: RevisionSummary[];
+  notes: NoteSummary[];
+  categories: CategorySummary[];
 };
 
 /** A single immutable revision row (CP38). */
@@ -168,6 +176,78 @@ export type ConcurrentEditError = {
   error: string;
   message: string;
   current_updated_at: string | null;
+};
+
+/** A single reviewer note on a requirement (CP39). */
+export type NoteSummary = {
+  id: string;
+  requirement_id: string;
+  actor_id: string | null;
+  text: string;
+  created_at: string;
+  updated_at: string | null;
+};
+
+/** Request to add a reviewer note (CP39). */
+export type NoteCreateRequest = {
+  text: string;
+};
+
+/** A project-scoped hierarchical category (CP39). */
+export type CategorySummary = {
+  id: string;
+  project_id: string;
+  parent_id: string | null;
+  name: string;
+  display_order: number;
+};
+
+/** Request to assign a category (CP39). */
+export type CategoryAssignmentRequest = {
+  category_id: string;
+};
+
+/** Request to split a requirement (CP39). */
+export type SplitRequirementRequest = {
+  new_requirements: SplitChildSpec[];
+};
+
+export type SplitChildSpec = {
+  normalized_text: string;
+  raw_source: string;
+  requirement_type?: string;
+  clause_number?: string;
+  uncertainty?: string;
+  ocr_warning?: boolean;
+};
+
+/** Request to merge requirements (CP39). */
+export type MergeRequirementRequest = {
+  requirement_ids: string[];
+  merged_normalized_text: string;
+  merged_raw_sources: string[];
+};
+
+/** Request to supersede a requirement (CP39). */
+export type SupersedeRequirementRequest = {
+  superseded_by?: string | null;
+  note?: string | null;
+};
+
+/** Request to set mandatory tri-state flag (CP39). */
+export type SetMandatoryRequest = {
+  value: boolean | null;
+};
+
+/** Request to persist a new display order (CP39). */
+export type ReorderRequirementsRequest = {
+  order: string[];
+};
+
+/** Request to create a category (CP39). */
+export type CategoryCreateRequest = {
+  name: string;
+  parent_id?: string | null;
 };
 
 /** Paginated list of requirements. */
@@ -335,6 +415,142 @@ export const api = {
     apiFetch(
       `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}`
     ).then((r) => expectJson<RequirementDetail>(r)),
+
+  // --- Requirement structure (CP39) ---
+
+  splitRequirement: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body: SplitRequirementRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/split`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<RequirementSummary[]>(r)),
+
+  mergeRequirements: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    body: MergeRequirementRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/merge`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<RequirementSummary>(r)),
+
+  supersedeRequirement: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body?: SupersedeRequirementRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/supersede`,
+      {
+        method: "POST",
+        body: body ? JSON.stringify(body) : undefined,
+      }
+    ).then((r) => expectJson<RequirementSummary>(r)),
+
+  setMandatory: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body: SetMandatoryRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/mandatory`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<RequirementSummary>(r)),
+
+  assignCategory: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body: CategoryAssignmentRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/categories`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  unassignCategory: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    categoryId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/categories/${categoryId}`,
+      {
+        method: "DELETE",
+      }
+    ).then((r) => expectJson<RequirementDetail>(r)),
+
+  reorderRequirements: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    body: ReorderRequirementsRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/reorder`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<RequirementSummary[]>(r)),
+
+  addNote: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string,
+    body: NoteCreateRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/notes`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<NoteSummary>(r)),
+
+  listNotes: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    requirementId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/${requirementId}/notes`
+    ).then((r) => expectJson<NoteSummary[]>(r)),
+
+  // --- Categories (CP39) ---
+
+  listCategories: (projectId: string) =>
+    apiFetch(`/projects/${projectId}/categories`).then((r) =>
+      expectJson<CategorySummary[]>(r)
+    ),
 
   // --- Source viewer (CP36) ---
 

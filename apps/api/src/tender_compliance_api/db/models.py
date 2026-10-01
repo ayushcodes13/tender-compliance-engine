@@ -18,6 +18,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Column,
     DateTime,
     Enum,
     ForeignKey,
@@ -25,6 +26,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Table,
     UniqueConstraint,
     func,
 )
@@ -969,6 +971,18 @@ class Requirement(Base):
         default=RequirementReviewState.UNREVIEWED,
         server_default=RequirementReviewState.UNREVIEWED.value,
     )
+    # Human-edited stable sort order for the matrix (CP39).
+    # When NULL the requirement falls back to ``created_at`` ordering so the
+    # initial order from extraction is always meaningful.
+    display_order: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    # Tri-state mandatory flag (CP39): True / False / None (unknown).
+    # Kept nullable — never fabricated from a best-guess of the source text.
+    mandatory: Mapped[bool | None] = mapped_column(Boolean(), nullable=True)
+    # Soft-delete: superseded requirements stay auditable but are excluded
+    # from the default list/query surface (CP39).
+    superseded: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -995,6 +1009,31 @@ class Requirement(Base):
         "RequirementRevision",
         back_populates="requirement",
         cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    # Structural relations (split/merge/supersede lineage, CP39).
+    relations: Mapped[list[RequirementRelation]] = relationship(  # noqa: UP037
+        "RequirementRelation",
+        primaryjoin="Requirement.id==RequirementRelation.source_requirement_id",
+        back_populates="source",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    # Reviewer notes persisted separately from normalized text (CP39).
+    notes: Mapped[list[RequirementNote]] = relationship(
+        "RequirementNote",
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    # Categories assigned by the reviewer (CP39).
+    categories: Mapped[list[Category]] = relationship(
+        "Category",
+        secondary="requirement_categories",
+        back_populates="requirements",
         lazy="selectin",
     )
 
@@ -1237,4 +1276,213 @@ class RequirementConstraint(Base):
             f"RequirementConstraint(requirement={self.requirement_id!r}, "
             f"parameter={self.parameter!r}, op={self.operator!r}, "
             f"state={self.normalization_state!r})"
+        )
+
+
+class RequirementRelationType(enum.StrEnum):
+    """Structural lineage between requirements (CP39).
+
+    These are *structural* relationships, not compliance verdicts or
+    review states.  They let the matrix show the *current* active
+    requirement while preserving the full split/merge/supersede history
+    for audit.
+    """
+
+    SPLIT_INTO = "split_into"       # one source split into multiple targets
+    MERGED_INTO = "merged_into"      # multiple sources merged into one target
+    SUPERSEDES = "supersedes"        # one source supersedes another target
+
+
+# Association table: many-to-many Requirement <-> Category (CP39).
+requirement_categories = Table(
+    "requirement_categories",
+    Base.metadata,
+    Column(
+        "requirement_id",
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "category_id",
+        SaUUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Index("ix_requirement_categories_category", "category_id"),
+)
+
+
+class RequirementRelation(Base):
+    """A directed structural relation between two requirements (CP39).
+
+    ``source`` → ``target`` with a :class:`RequirementRelationType`.
+    For example, a SPLIT creates one row per child: (original → child, SPLIT_INTO).
+    A supersede creates: (mistaken → replacement, SUPERSEDES).
+    """
+
+    __tablename__ = "requirement_relations"
+    __table_args__ = (
+        Index("ix_req_relations_source", "source_requirement_id"),
+        Index("ix_req_relations_target", "target_requirement_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    source_requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation_type: Mapped[RequirementRelationType] = mapped_column(
+        Enum(
+            RequirementRelationType,
+            name="requirement_relation_type",
+            native_enum=False,
+        ),
+        nullable=False,
+    )
+    # The document_version_id is carried (not inferred) so a relation row
+    # can be audited without a join to the source requirement.  It is set
+    # from the source requirement at creation time.
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    source: Mapped[Requirement] = relationship(
+        "Requirement",
+        foreign_keys=[source_requirement_id],
+        back_populates="relations",
+        lazy="selectin",
+    )
+    target: Mapped[Requirement] = relationship(
+        "Requirement",
+        foreign_keys=[target_requirement_id],
+        lazy="selectin",
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"RequirementRelation(src={self.source_requirement_id!r}, "
+            f"tgt={self.target_requirement_id!r}, "
+            f"typ={self.relation_type!r})"
+        )
+
+
+class RequirementNote(Base):
+    """A reviewer note attached to a requirement (CP39).
+
+    Notes are persisted separately from ``normalized_text`` so that the
+    verbatim extraction remains a clean audit anchor while human
+    commentary is still source-linked and attributable.
+    """
+
+    __tablename__ = "requirement_notes"
+    __table_args__ = (
+        Index("ix_req_notes_requirement", "requirement_id"),
+        Index("ix_req_notes_actor", "actor_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True, index=True
+    )
+    text: Mapped[str] = mapped_column(String(2048), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    requirement: Mapped[Requirement] = relationship(
+        "Requirement", back_populates="notes", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"RequirementNote(req={self.requirement_id!r}, "
+            f"actor={self.actor_id!r}, at={self.created_at!r})"
+        )
+
+
+class Category(Base):
+    """A hierarchical requirement category scoped to a project (CP39).
+
+    Categories let reviewers organize requirements into a stable, project-
+    local taxonomy (e.g. \"Electrical\", \"Mechanical\").  The hierarchy is
+    a simple parent/self FK.  Categories are *not* shared across projects.
+    """
+
+    __tablename__ = "categories"
+    __table_args__ = (
+        Index("ix_categories_project", "project_id"),
+        Index("ix_categories_parent", "parent_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    parent: Mapped[Category | None] = relationship(
+        "Category",
+        remote_side=[id],
+        backref="children",
+        lazy="selectin",
+    )
+    requirements: Mapped[list[Requirement]] = relationship(
+        "Requirement",
+        secondary="requirement_categories",
+        back_populates="categories",
+        lazy="selectin",
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Category(project={self.project_id!r}, name={self.name!r})"
         )
