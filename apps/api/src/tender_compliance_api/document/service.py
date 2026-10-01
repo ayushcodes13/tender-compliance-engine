@@ -36,9 +36,11 @@ from tender_compliance_api.db.models import (
     TenderDocument,
 )
 from tender_compliance_api.extraction.adapter import LlmCallResult
-from tender_compliance_api.extraction.diagnostics import (
-    compute_diagnostics,
+from tender_compliance_api.extraction.constraint_parser import (
+    ParsedConstraint,
+    parse_constraint,
 )
+from tender_compliance_api.extraction.diagnostics import compute_diagnostics
 from tender_compliance_api.extraction.extractor import CandidateRecord, ExtractionOutcome
 from tender_compliance_api.extraction.reconcile import (
     DECISION_DEDUP,
@@ -213,6 +215,45 @@ class DocumentService:
                 f"not found in org {auth.organization_id}"
             )
         return version
+
+    async def normalize_requirement_constraints(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> list[ParsedConstraint]:
+        """Parse the verbatim ``raw_source`` of a requirement into structured
+        numeric constraints (CP33).
+
+        The requirement is loaded tenant-scoped (via the document version) so the
+        caller cannot read another organization's data.  Returns zero or more
+        :class:`ParsedConstraint` records, each anchored to the requirement's
+        verbatim ``raw_source``.  This is a read-only parse: persistence of the
+        resulting constraints (and their normalization-state transitions) is the
+        responsibility of CP34.
+
+        Deterministic & reproducible: the same ``raw_source`` always yields the
+        same output.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(Requirement).where(
+                Requirement.id == requirement_id,
+                Requirement.document_version_id == version.id,
+            )
+        )
+        requirement = result.scalar_one_or_none()
+        if requirement is None:
+            raise DocumentNotFoundError(
+                f"requirement {requirement_id} not found in "
+                f"document {document_id} v{version_number}"
+            )
+        raw_source = requirement.raw_source or ""
+        return parse_constraint(
+            raw_source,
+            ocr_warning=bool(requirement.ocr_warning),
+        )
 
     async def get_runs(
         self,

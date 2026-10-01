@@ -18,6 +18,11 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
+from tender_compliance_api.extraction.constraint_parser import (
+    ConstraintOperator,
+    ParsedConstraint,
+    parse_constraint,
+)
 from tender_compliance_api.extraction.diagnostics import (
     ExtractionDiagnosticsSummary,
     compute_diagnostics,
@@ -68,6 +73,7 @@ __all__ = [
     "CandidateRecord",
     "CandidateValidationError",
     "compute_diagnostics",
+    "ConstraintOperator",
     "ExtractionDiagnosticsSummary",
     "DECISION_DEDUP",
     "DECISION_FLAGGED",
@@ -84,6 +90,7 @@ __all__ = [
     "LocationType",
     "OpenAiLlmAdapter",
     "PROMPT_VERSION",
+    "ParsedConstraint",
     "PromotionInput",
     "ReconciliationGroup",
     "ReconciliationInput",
@@ -98,6 +105,7 @@ __all__ = [
     "UncertaintyLevel",
     "build_source_windows",
     "extract_from_windows",
+    "parse_constraint",
     "promotion_key",
     "reconcile",
     "resolve_sources",

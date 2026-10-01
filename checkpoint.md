@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP33 — Deterministic numeric/operator/unit parsing**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP34 — Qualitative normalization and ambiguity escalation**.
 
 The repository has the complete Phase 1 extraction pipeline through CP32 (RequirementConstraint model + normalization states), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), and the RequirementConstraint model + normalization states (CP32). The next work is CP33: deterministic numeric/operator/unit parsing for conservative constraint extraction.
 
@@ -194,7 +194,10 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP32 — RequirementConstraint model and normalization states~~
   - Status: DONE — PR #37
   - Branch: `cp32/constraint-model`
-- [ ] CP33 — Deterministic numeric/operator/unit parsing
+- [x] ✅ ~~CP33 — Deterministic numeric/operator/unit parsing~~
+  - Status: DONE — PR #39
+  - Branch: `cp33/numeric-operator-unit-parsing`
+  - Pure regex/rule-based parser. Operators: `=`, `<`, `≤`/`<=`, `>`, `≥`/`>=`, `!=`/`≠`, `between`. Negative numbers, decimals, ranges (5 variants), percentages, units (18 quantity mappings), scientific notation, thousands separators (US/UK/space, European-ambiguous → PARTIAL), tolerances (± N, "tolerance of N"). OCR corruption detected at `_parse_number` level (letter in number token → NEEDS_REVIEW). Scientific notation backtracking guarded by rejecting "e"/"E" as unit in `_SPAN_RE`. Zero fabrication: bare numbers and unit-less ranges yield no constraints.
 - [ ] CP34 — Qualitative normalization and ambiguity escalation
 
 ### Stage G — Persistent human review and real source verification
