@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP19 — PDF parser integration**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP20 — Rendered page assets and real visual source**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -140,11 +140,15 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP17 — Document-processing state machine~~
   - Status: DONE — PR #21
   - Branch: `cp17/document-processing-state-machine`
-- [ ] CP18 — Redis-backed worker and idempotent job execution
+- [x] ✅ ~~CP18 — Redis-backed worker and idempotent job execution~~
+  - Status: DONE — PR #22
+  - Branch: `cp18/redis-backed-worker`
 
 ### Stage D — Source-preserving parsing, rendering, OCR, and document pages
 
-- [ ] CP19 — PDF parser adapter
+- [x] ✅ ~~CP19 — PDF parser adapter~~
+  - Status: DONE — PR #23
+  - Branch: `cp19/pdf-parser-adapter`
 - [ ] CP20 — Rendered page assets and real visual source
 - [ ] CP21 — Scanned-page detection and OCR
 - [ ] CP22 — DOCX adapter and format-appropriate provenance
