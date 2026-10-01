@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP25 — Structured extraction schema and trusted source-window contract**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP26 — LLM extraction adapter, prompt versions, and run metadata**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -164,6 +164,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP24 — Processing retry, idempotency, and partial failure~~
   - Status: DONE — PR #29
   - Branch: `cp24/retry-idempotency`
+- [x] ✅ ~~CP25 — Structured extraction schema and trusted source-window contract~~
+  - Status: DONE — PR #30
+  - Branch: `cp25/extraction-schema-boundary`
 
 ### Stage E — Conservative technical requirement extraction and provenance
 
@@ -1262,9 +1265,9 @@ that make persisted pages safe to clean *without* losing provenance:
 
 Extract explicit obligations only, validate every model response, and persist source-backed requirements.
 
-## ⬜ Checkpoint 25 — Structured extraction schema and trusted source-window contract
+## ✅ Checkpoint 25 — Structured extraction schema and trusted source-window contract
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #30 merged.
 
 **Plain-English outcome:** The LLM can only propose candidates in a strict schema tied to trusted source metadata.
 
@@ -1285,6 +1288,40 @@ Extract explicit obligations only, validate every model response, and persist so
 ### This checkpoint is complete only when
 
 - There is a machine-enforced boundary between model suggestion and persistable requirement.
+
+**Completion summary (PR #30):**
+
+- Added `tender_compliance_api/extraction/` package with the Phase 1 extraction schema:
+  - `RequirementCandidate` — the model-owned output. Carries **no** trusted
+    location fields (`page_number`/`version_id`/`bbox`/etc. are absent and
+    `extra="forbid"`), so the model cannot attach or move a page.
+  - `TrustedSourceContext` — service-owned source window (org/doc/version/page,
+    clause, char offsets, bbox, ocr_confidence, location_type, `source_text`),
+    built via `from_page(DocumentPage, …)`.
+  - `SourcedRequirementCandidate` — the boundary object: required `source`
+    + `:meth:validate_source` (citation must be a whitespace-normalized
+    substring of the trusted window) + `:meth:is_persistable` (CONFIRMED +
+    citation verified). A bare candidate is not persistable.
+  - Enums: `RequirementType` (obligation/prohibition/permission),
+    `UncertaintyLevel` (confirmed/uncertain/abstain — tri-state mandatory),
+    `LocationType` (exact/approximate). `CandidateValidationError` typed error.
+- **Boundary guarantees:** missing/malformed enum/structure → construction
+  `ValidationError` (`extra="forbid"`, strict enums, required fields); a
+  citation not present in the trusted window → `CandidateValidationError`
+  (model cannot move a candidate to a different page).
+- Tests: `tests/test_extraction.py` (20 tests) — candidate schema, trusted
+  context (incl. `from_page` from a parsed `DocumentPage`), and the sourced
+  boundary (persistable gate, missing source, malformed/unknown enums,
+  no-page-on-candidate, different-page rejection, whitespace tolerance,
+  uncertain/abstain not persistable).
+- **Verification:** `pytest` 235 passed / 1 skipped (real-Tesseract skip),
+  `ruff check .` clean, `mypy src/` clean (59 files), `alembic upgrade head`
+  applies `0001→0008` (no new migration), `apps/web npx tsc --noEmit` clean.
+- **Known limitations / deferred:** no DB table for candidates yet (CP30
+  persists `Requirement`); the LLM adapter that produces candidates is CP26;
+  multi-page windows + fuzzy citation matching live in CP27/CP31. CP25
+  delivers only the schema + boundary, intentionally leaving the model call
+  to CP26.
 
 ### Guardrail
 
