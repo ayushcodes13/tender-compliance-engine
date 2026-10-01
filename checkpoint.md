@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP14 — Document model and upload route**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP15 — Tender upload API, versioning, and duplicate semantics**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -128,7 +128,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP13 — Upload validation and hostile-file controls~~
   - Status: DONE — PR #17
   - Branch: `cp13/upload-validation`
-- [ ] CP14 — TenderDocument and immutable DocumentVersion models
+- [x] ✅ ~~CP14 — TenderDocument and immutable DocumentVersion models~~
+  - Status: DONE — PR #18
+  - Branch: `cp14/document-version-models`
 - [ ] CP15 — Tender upload API, versioning, and duplicate semantics
 - [ ] CP16 — Upload UI and document list
 - [ ] CP17 — Document-processing state machine
@@ -675,32 +677,34 @@ Accept real tender files safely and create the processing handoff without doing 
 - Cross-tenant access denied (404)
 - PDF JavaScript/macros never executed — pypdf only reads structural metadata
 
-## ⬜ Checkpoint 14 — TenderDocument and immutable DocumentVersion models
+## ✅ ~~Checkpoint 14 — TenderDocument and immutable DocumentVersion models~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #18
 
 **Plain-English outcome:** Every citation can target one exact uploaded source version.
 
-### What we will do
+### What we did
 
-1. Add `TenderDocument` linked to a project.
-2. Add immutable `DocumentVersion` with version number, object key, SHA-256, MIME, size, processing status, parser/OCR metadata, timestamps.
-3. Enforce unique `(document_id, version_number)`.
-4. Never overwrite an old version's source object/checksum.
-5. Add lookup indexes.
+1. Added `DocumentProcessingStatus` enum (`uploaded`, `processing`, `parsed`, `failed`).
+2. Added `TenderDocumentType` enum (`tender`, `amendment`, `specification`, `other`).
+3. Added `TenderDocument` model: linked to project, `display_name`, `document_type`, timestamps.
+4. Added `DocumentVersion` model: immutable, versioned, with `stored_object_id` FK to `StoredObject` (ON DELETE RESTRICT), `sha256`, `mime_type`, `size_bytes`, `processing_status`, `parser_name/version`, `ocr_name/version`, timestamps.
+5. Enforced unique `(document_id, version_number)` constraint.
+6. Added lookup indexes on `document_id`, `stored_object_id`, and `project_id`.
+7. Created hand-written Alembic migration `0005_document_version`.
+8. Exported new models from `db/__init__.py`.
 
-### How we will verify it
+### How we verified it
 
-- Uploading a later version creates a new record.
-- Old version metadata stays queryable.
-
-### This checkpoint is complete only when
-
-- The logical document and its exact immutable versions are distinct.
-
-### Guardrail
-
-- Filename is display metadata, not identity.
+- `ruff check .` ✅, `mypy src/` ✅ (32 source files)
+- `alembic upgrade head` ✅ (0001→0005)
+- 6 new tests in `test_document_models.py`:
+  - TenderDocument creation + defaults
+  - DocumentVersion v1 creation + defaults (processing_status=UPLOADED)
+  - Later version creates new row, old version stays queryable
+  - Duplicate version_number violates unique constraint
+  - FK introspection (RESTRICT on stored_object_id, CASCADE on document_id)
+- 96 tests total pass
 
 ## ⬜ Checkpoint 15 — Tender upload API, versioning, and duplicate semantics
 

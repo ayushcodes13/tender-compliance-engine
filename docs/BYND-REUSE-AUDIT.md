@@ -136,9 +136,9 @@ This is an architecture/reuse audit, **not** a claim that every line in every re
 
 ## What this changes in the canonical checkpoint plan
 
-The checkpoint numbers and order stay stable. This audit adds implementation guidance inside the existing checkpoints rather than creating a parallel roadmap. The next checkpoint remains **CP14 — Document model and upload route**.
+The checkpoint numbers and order stay stable. This audit adds implementation guidance inside the existing checkpoints rather than creating a parallel roadmap. The next checkpoint remains **CP15 — Tender upload API, versioning, and duplicate semantics**.
 
-Updated checkpoints: **CP06, CP07, CP08, CP09, CP10, CP11, CP12, CP13, CP18, CP19, CP21, CP22, CP23, CP24, CP26, CP27, CP30, CP31, CP33, CP36, CP42, CP43, CP44, CP45, CP46, CP47, CP50, CP54, CP55, CP56, CP57**.
+Updated checkpoints: **CP06, CP07, CP08, CP09, CP10, CP11, CP12, CP13, CP14, CP18, CP19, CP21, CP22, CP23, CP24, CP26, CP27, CP30, CP31, CP33, CP36, CP42, CP43, CP44, CP45, CP46, CP47, CP50, CP54, CP55, CP56, CP57**.
 
 ## Complete Bynd repository inventory
 
