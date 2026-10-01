@@ -17,6 +17,23 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
+from tender_compliance_api.extraction.benchmark import (
+    ANNOTATION_TO_OPERATOR,
+    ANNOTATION_TO_REQUIREMENT_TYPE,
+    ANNOTATION_TO_REVIEW_STATE,
+    ANNOTATION_TO_STATE,
+    OPERATOR_TO_ANNOTATION,
+    STATE_TO_ANNOTATION,
+    BenchmarkCase,
+    BenchmarkConstraint,
+    BenchmarkDataset,
+    BenchmarkRequirement,
+    BenchmarkSource,
+    ParsedBenchmarkConstraint,
+    ParsedBenchmarkResult,
+    load_dataset,
+    run_parser_on_case,
+)
 from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
 from tender_compliance_api.extraction.constraint_parser import (
     ConstraintOperator,
@@ -76,6 +93,22 @@ if TYPE_CHECKING:  # pragma: no cover - re-export only
     from tender_compliance_api.db.models import DocumentPage  # noqa: F401
 
 __all__ = [
+    "ANNOTATION_TO_OPERATOR",
+    "ANNOTATION_TO_REQUIREMENT_TYPE",
+    "ANNOTATION_TO_REVIEW_STATE",
+    "ANNOTATION_TO_STATE",
+    "BenchmarkCase",
+    "BenchmarkConstraint",
+    "BenchmarkDataset",
+    "BenchmarkRequirement",
+    "BenchmarkSource",
+    "STATE_TO_ANNOTATION",
+    "OPERATOR_TO_ANNOTATION",
+    "ParsedBenchmarkConstraint",
+    "ParsedBenchmarkResult",
+    "SourceWindow",
+    "load_dataset",
+    "run_parser_on_case",
     "CandidateRecord",
     "CandidateValidationError",
     "compute_diagnostics",
@@ -107,7 +140,6 @@ __all__ = [
     "RequirementType",
     "ResolvedSource",
     "SCHEMA_VERSION",
-    "SourceWindow",
     "SourcedRequirementCandidate",
     "TrustedSourceContext",
     "UncertaintyLevel",

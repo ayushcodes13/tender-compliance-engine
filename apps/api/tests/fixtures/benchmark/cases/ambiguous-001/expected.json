@@ -1,0 +1,53 @@
+{
+  "case_id": "ambiguous-001",
+  "category": "gold-positive",
+  "annotator": "system-generated-synthetic",
+  "description": "Ambiguous terminology: 'suitable', 'durable', 'applicable standards' are non-quantifiable. No numeric or qualitative constraints should be extracted. Requirements remain in NEEDS_CLARIFICATION review state.",
+  "requirements": [
+    {
+      "normalized_text": "equipment suitable for industrial use in harsh environments",
+      "raw_source": "The equipment shall be suitable for industrial use in harsh environments.",
+      "clause_number": "1",
+      "requirement_type": "obligation",
+      "constraints": [],
+      "uncertainty": "uncertain",
+      "expected_review_state": "needs_clarification",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 0,
+        "location_type": "approximate"
+      }
+    },
+    {
+      "normalized_text": "housing constructed of durable materials",
+      "raw_source": "The housing shall be constructed of durable materials.",
+      "clause_number": "2",
+      "requirement_type": "obligation",
+      "constraints": [],
+      "uncertainty": "uncertain",
+      "expected_review_state": "needs_clarification",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 0,
+        "location_type": "approximate"
+      }
+    },
+    {
+      "normalized_text": "comply with applicable standards",
+      "raw_source": "The equipment shall comply with applicable standards.",
+      "clause_number": "3",
+      "requirement_type": "obligation",
+      "constraints": [],
+      "uncertainty": "uncertain",
+      "expected_review_state": "needs_clarification",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 0,
+        "location_type": "approximate"
+      }
+    }
+  ]
+}

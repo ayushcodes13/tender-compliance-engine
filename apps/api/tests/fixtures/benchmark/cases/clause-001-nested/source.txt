@@ -1,0 +1,7 @@
+1. GENERAL REQUIREMENTS
+1.1 The equipment shall have the following operating characteristics:
+1.1.1 Operating ambient temperature: from -10 °C to 55 °C, non-condensing.
+1.1.2 Storage temperature: not greater than +70 °C.
+1.1.3 Relative humidity: 5 % to 85 % non-condensing.
+1.1.4 Altitude: not exceeding 2000 m above sea level.
+1.2 The equipment shall be installed according to manufacturer instructions.

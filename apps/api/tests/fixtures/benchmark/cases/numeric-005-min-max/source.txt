@@ -1,0 +1,2 @@
+The operating temperature shall be not less than -10 °C at minimum load
+and not greater than +55 °C at full load.

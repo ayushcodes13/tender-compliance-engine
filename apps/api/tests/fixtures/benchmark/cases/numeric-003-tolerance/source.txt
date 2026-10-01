@@ -1,0 +1,2 @@
+The voltage tolerance of the power supply shall be ±2 % of the nominal
+value under full load conditions.

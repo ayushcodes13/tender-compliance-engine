@@ -1,0 +1,35 @@
+{
+  "case_id": "numeric-001-exact",
+  "category": "gold-positive",
+  "annotator": "system-generated-synthetic",
+  "requirements": [
+    {
+      "normalized_text": "maximum operating temperature does not exceed 85 °C during normal operation",
+      "raw_source": "The Supplier shall ensure that the maximum operating temperature of the equipment does not exceed 85 °C during normal operation.",
+      "clause_number": "1",
+      "requirement_type": "obligation",
+      "constraints": [
+        {
+          "parameter": "temperature",
+          "operator": "max",
+          "numeric_value": 85,
+          "unit": "°C",
+          "tolerance": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "qualitative_condition": null,
+          "normalization_state": "confirmed",
+          "raw_fragment": "does not exceed 85 °C"
+        }
+      ],
+      "uncertainty": "confirmed",
+      "expected_review_state": "unreviewed",
+      "source": {
+        "page_number": 1,
+        "char_start": 0,
+        "char_end": 137,
+        "location_type": "exact"
+      }
+    }
+  ]
+}

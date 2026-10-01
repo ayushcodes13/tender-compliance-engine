@@ -1,0 +1,2 @@
+The Supplier shall ensure that the maximum operating temperature of the equipment does not exceed 85
+85 °C during normal operation. The voltage tolerance shall be ±2 % of nominal.
