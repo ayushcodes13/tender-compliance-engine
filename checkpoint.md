@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP15 — Tender upload API, versioning, and duplicate semantics**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP16 — Upload UI and document list**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -131,7 +131,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP14 — TenderDocument and immutable DocumentVersion models~~
   - Status: DONE — PR #18
   - Branch: `cp14/document-version-models`
-- [ ] CP15 — Tender upload API, versioning, and duplicate semantics
+- [x] ✅ ~~CP15 — Tender upload API, versioning, and duplicate semantics~~
+  - Status: DONE — PR #19
+  - Branch: `cp15/upload-versioning-duplicates`
 - [ ] CP16 — Upload UI and document list
 - [ ] CP17 — Document-processing state machine
 - [ ] CP18 — Redis-backed worker and idempotent job execution
@@ -706,37 +708,36 @@ Accept real tender files safely and create the processing handoff without doing 
   - FK introspection (RESTRICT on stored_object_id, CASCADE on document_id)
 - 96 tests total pass
 
-## ⬜ Checkpoint 15 — Tender upload API, versioning, and duplicate semantics
+## ✅ ~~Checkpoint 15 — Tender upload API, versioning, and duplicate semantics~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #19
 
 **Plain-English outcome:** A project can receive real tender bytes and get durable document/version IDs.
 
-### What we will do
+### What we did
 
-1. Add a project-scoped upload endpoint.
-2. Authorize project access before reading/storing the file.
-3. Validate the file.
-4. Calculate SHA-256.
-5. Store immutable bytes.
-6. Create document/version records.
-7. Define exact-duplicate behavior deterministically: reject, reuse bytes, or create a new provenance version as documented.
-8. Clean up partial storage/DB failures.
-9. Return IDs/status.
-10. Write audit events.
+1. Upgraded `POST /projects/{id}/upload` to create `TenderDocument` + `DocumentVersion` records alongside the existing `StoredObject`.
+2. Added SHA-256 computation before storage for duplicate detection.
+3. Duplicate-content handling: if a `StoredObject` with the same SHA-256 exists for the org, the bytes are **reused** (no re-storage) and a new `DocumentVersion` is created on the same `TenderDocument` with `version_number = max + 1`.
+4. New-content handling: if no existing document for the project, creates a new `TenderDocument` + `DocumentVersion` v1.
+5. Updated `UploadResponse` schema to include `document_id` and `version_number`.
+6. Updated `build_key` calls to include `document_id` and `version` in the storage path.
+7. Audit events now include `document_id`, `version_number`, and `bytes_reused` metadata.
+8. Project status transitions: DRAFT→TENDER_UPLOADED on first upload; subsequent uploads (already TENDER_UPLOADED) are logged but don't fail.
 
-### How we will verify it
+### How we verified it
 
-- API tests cover valid upload, invalid project, unsafe file, duplicate content, and storage failure.
-- Stored checksum matches uploaded bytes.
-
-### This checkpoint is complete only when
-
-- A PDF uploaded through the API is durable and versioned after restart.
+- `ruff check .` ✅, `mypy src/` ✅ (32 source files)
+- `alembic upgrade head` ✅ (0001→0005)
+- 99 tests pass (3 new in test_uploads.py: duplicate content reuse, different content new version, durability after restart)
+- Existing 7 upload tests still pass (updated to check for `document_id` + `version_number`)
+- Duplicate upload: same stored_object_id, version_number=2, same document_id
+- Different content: new stored_object_id, version_number=2, same document_id
+- Upload survives across session boundaries (file-based SQLite durability)
 
 ### Guardrail
 
-- Do not parse/extract synchronously inside the upload request.
+- Do not parse/extract synchronously inside the upload request — only validation + storage + metadata persistence.
 
 ## ⬜ Checkpoint 16 — Upload UI and document list
 

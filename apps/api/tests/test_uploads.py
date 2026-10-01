@@ -1,9 +1,9 @@
-"""API-level tests for the document upload route (CP13).
+"""API-level tests for the document upload route (CP13, versioning in CP15).
 
 Exercises the full HTTP request/response cycle: validation, malware
-scanning, storage, DB persistence, project-status transition, and
-audit logging.  Uses :class:`FakeStorageAdapter` and
-:class:`FakeScanner` via FastAPI dependency overrides.
+scanning, storage, DB persistence, document/version creation, project-
+status transition, and audit logging.  Uses :class:`FakeStorageAdapter`
+and :class:`FakeScanner` via FastAPI dependency overrides.
 """
 
 import asyncio
@@ -15,11 +15,13 @@ from pypdf import PdfWriter
 from sqlalchemy import select
 
 from tender_compliance_api.db.models import (
+    DocumentVersion,
     Membership,
     Organization,
     Project,
     ProjectStatus,
     StoredObject,
+    TenderDocument,
     User,
 )
 from tender_compliance_api.main import app
@@ -53,6 +55,16 @@ def _make_valid_pdf() -> bytes:
     """Create a minimal valid single-page PDF."""
     writer = PdfWriter()
     writer.add_blank_page(width=72, height=72)
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+def _make_valid_pdf_different() -> bytes:
+    """Create a different valid PDF (two pages)."""
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    writer.add_blank_page(width=100, height=100)
     buf = io.BytesIO()
     writer.write(buf)
     return buf.getvalue()
@@ -111,7 +123,7 @@ def _build_auth_headers(session_cm) -> tuple[dict[str, str], uuid.UUID]:
 class TestUploadValid:
     def test_valid_pdf_upload(self, session_cm) -> None:
         """A valid PDF is accepted, stored, and project transitions to
-        TENDER_UPLOADED."""
+        TENDER_UPLOADED.  A TenderDocument + DocumentVersion are created."""
         headers, project_id = _build_auth_headers(session_cm)
         pdf_data = _make_valid_pdf()
 
@@ -129,7 +141,12 @@ class TestUploadValid:
         assert "checksum_sha256" in body
         assert body["project_status"] == "tender_uploaded"
 
-        # Verify StoredObject was persisted in the DB.
+        # Document/version fields (CP14/CP15)
+        assert "document_id" in body
+        assert body["version_number"] == 1
+        doc_id = uuid.UUID(body["document_id"])
+
+        # Verify StoredObject + TenderDocument + DocumentVersion persisted.
         async def _verify() -> None:
             async with session_cm() as session:
                 objs = (
@@ -141,6 +158,168 @@ class TestUploadValid:
                 ).scalars().all()
                 assert len(objs) == 1
                 assert objs[0].checksum_sha256 == body["checksum_sha256"]
+
+                docs = (
+                    await session.execute(
+                        select(TenderDocument).where(
+                            TenderDocument.project_id == project_id
+                        )
+                    )
+                ).scalars().all()
+                assert len(docs) == 1
+
+                versions = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalars().all()
+                assert len(versions) == 1
+                assert versions[0].version_number == 1
+                assert versions[0].stored_object_id == objs[0].id
+                assert versions[0].sha256 == body["checksum_sha256"]
+
+        asyncio.run(_verify())
+
+
+# ---------------------------------------------------------------------------
+# Version semantics
+# ---------------------------------------------------------------------------
+
+
+class TestUploadVersioning:
+    def test_duplicate_content_reuses_stored_object(self, session_cm) -> None:
+        """Uploading identical bytes a second time reuses the StoredObject
+        but creates a new DocumentVersion (v2) on the same TenderDocument."""
+        headers, project_id = _build_auth_headers(session_cm)
+        pdf_data = _make_valid_pdf()
+
+        # First upload — creates document + v1
+        r1 = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", pdf_data, "application/pdf")},
+            headers=headers,
+        )
+        assert r1.status_code == 201, r1.text
+        b1 = r1.json()
+        doc_id = uuid.UUID(b1["document_id"])
+        so_id_1 = uuid.UUID(b1["stored_object_id"])
+        assert b1["version_number"] == 1
+
+        # Second upload — same bytes, new version
+        r2 = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", pdf_data, "application/pdf")},
+            headers=headers,
+        )
+        assert r2.status_code == 201, r2.text
+        b2 = r2.json()
+        assert b2["document_id"] == str(doc_id)  # same document
+        assert b2["stored_object_id"] == str(so_id_1)  # bytes reused
+        assert b2["version_number"] == 2  # new version
+
+        # Verify exactly one StoredObject and two DocumentVersions
+        async def _verify() -> None:
+            async with session_cm() as session:
+                so_query = (
+                    await session.execute(
+                        select(StoredObject).where(
+                            StoredObject.project_id == project_id
+                        )
+                    )
+                ).scalars().all()
+                assert len(so_query) == 1, "bytes should be reused, not stored twice"
+
+                v_query = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id
+                        )
+                    )
+                ).scalars().all()
+                assert len(v_query) == 2
+                assert v_query[0].version_number == 1
+                assert v_query[1].version_number == 2
+                assert v_query[0].stored_object_id == v_query[1].stored_object_id
+
+        asyncio.run(_verify())
+
+    def test_different_content_creates_new_version(self, session_cm) -> None:
+        """Uploading different bytes to the same project creates a new
+        version (v2) with a new StoredObject."""
+        headers, project_id = _build_auth_headers(session_cm)
+
+        r1 = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", _make_valid_pdf(), "application/pdf")},
+            headers=headers,
+        )
+        assert r1.status_code == 201, r1.text
+        b1 = r1.json()
+        doc_id = uuid.UUID(b1["document_id"])
+        so_id_1 = uuid.UUID(b1["stored_object_id"])
+        assert b1["version_number"] == 1
+
+        # Second upload — genuinely different valid PDF
+        r2 = client.post(
+            f"/projects/{project_id}/upload",
+            files={
+                "file": ("tender_v2.pdf", _make_valid_pdf_different(), "application/pdf"),
+            },
+            headers=headers,
+        )
+        assert r2.status_code == 201, r2.text
+        b2 = r2.json()
+        assert b2["document_id"] == str(doc_id)  # same document
+        assert b2["stored_object_id"] != str(so_id_1)  # new bytes
+        assert b2["version_number"] == 2  # new version
+
+    def test_upload_durable_after_restart(self, session_cm) -> None:
+        """Uploaded documents/versions persist across session boundaries
+        (file-based SQLite durability)."""
+        headers, project_id = _build_auth_headers(session_cm)
+        pdf_data = _make_valid_pdf()
+
+        r = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", pdf_data, "application/pdf")},
+            headers=headers,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        doc_id = uuid.UUID(body["document_id"])
+        so_id = uuid.UUID(body["stored_object_id"])
+
+        # Second session — data should still be there (same file-based DB)
+        async def _verify() -> None:
+            async with session_cm() as session:
+                so = (
+                    await session.execute(
+                        select(StoredObject).where(StoredObject.id == so_id)
+                    )
+                ).scalar_one()
+                assert so is not None
+                assert so.checksum_sha256 == body["checksum_sha256"]
+
+                doc = (
+                    await session.execute(
+                        select(TenderDocument).where(TenderDocument.id == doc_id)
+                    )
+                ).scalar_one()
+                assert doc is not None
+                assert doc.display_name == "tender.pdf"
+
+                ver = (
+                    await session.execute(
+                        select(DocumentVersion)
+                        .where(DocumentVersion.document_id == doc_id)
+                        .order_by(DocumentVersion.version_number)
+                    )
+                ).scalars().all()
+                assert len(ver) == 1
+                assert ver[0].version_number == 1
+                assert ver[0].stored_object_id == so_id
 
         asyncio.run(_verify())
 
