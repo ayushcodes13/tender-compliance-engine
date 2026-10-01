@@ -6,9 +6,9 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP34 — Qualitative normalization and ambiguity escalation**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP35 — Requirement list/detail API**.
 
-The repository has the complete Phase 1 extraction pipeline through CP32 (RequirementConstraint model + normalization states), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), and the RequirementConstraint model + normalization states (CP32). The next work is CP33: deterministic numeric/operator/unit parsing for conservative constraint extraction.
+The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
 ## How every human or coding agent must use this file
 
@@ -198,7 +198,10 @@ Phase 2 evaluation + production release
   - Status: DONE — PR #39
   - Branch: `cp33/numeric-operator-unit-parsing`
   - Pure regex/rule-based parser. Operators: `=`, `<`, `≤`/`<=`, `>`, `≥`/`>=`, `!=`/`≠`, `between`. Negative numbers, decimals, ranges (5 variants), percentages, units (18 quantity mappings), scientific notation, thousands separators (US/UK/space, European-ambiguous → PARTIAL), tolerances (± N, "tolerance of N"). OCR corruption detected at `_parse_number` level (letter in number token → NEEDS_REVIEW). Scientific notation backtracking guarded by rejecting "e"/"E" as unit in `_SPAN_RE`. Zero fabrication: bare numbers and unit-less ranges yield no constraints.
-- [ ] CP34 — Qualitative normalization and ambiguity escalation
+- [x] ✅ ~~CP34 — Qualitative normalization and ambiguity escalation~~
+  - Status: DONE — PR #40
+  - Branch: `cp34/qualitative-normalization`
+  - New `qualitative.py` module: `parse_qualitative_conditions(fragment, ocr_warning)` extracts explicit qualitative conditions (certifications, IP/NEMA ratings, materials, interfaces, documentation, safety construction, performance) via conservative regex patterns — never infers from vague prose. `conservative_normalized_text()` does whitespace/punctuation-only normalisation (no semantic changes). `NORMALIZATION_VERSION` for rule versioning. Service `normalize_requirement_constraints` now persists numeric + qualitative constraints to `RequirementConstraint` rows, sets `review_state = OCR_WARNING` when `ocr_warning=True`, `NEEDS_CLARIFICATION` when a constraint is NEEDS_REVIEW, and applies conservative normalized text to the requirement. Idempotent: reprocessing replaces existing constraints.
 
 ### Stage G — Persistent human review and real source verification
 
@@ -2013,7 +2016,7 @@ All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 
 - Do not use an LLM as the final authority for simple math parsing.
 
-## ⬜ Checkpoint 34 — Qualitative normalization and ambiguity escalation
+## ✅ ~~Checkpoint 34 — Qualitative normalization and ambiguity escalation~~
 
 **Status:** NOT STARTED unless a merged PR updates this file.
 
