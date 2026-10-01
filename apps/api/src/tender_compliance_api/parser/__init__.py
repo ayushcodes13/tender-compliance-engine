@@ -9,6 +9,7 @@ from tender_compliance_api.parser.adapter import (
     ParserAdapter,
     ParseResult,
 )
+from tender_compliance_api.parser.cleanup import PageCleanup, cleanup_pages
 from tender_compliance_api.parser.composite import CompositeParserAdapter
 from tender_compliance_api.parser.docx import DocxParserAdapter
 from tender_compliance_api.parser.fake import FakeParserAdapter
@@ -18,8 +19,10 @@ __all__ = [
     "CompositeParserAdapter",
     "DocxParserAdapter",
     "FakeParserAdapter",
+    "PageCleanup",
     "PageResult",
     "ParseResult",
     "ParserAdapter",
     "PypdfParserAdapter",
+    "cleanup_pages",
 ]

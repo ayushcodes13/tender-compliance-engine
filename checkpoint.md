@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP23 — DocumentPage persistence and structural cleanup**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP24 — Processing retry, idempotency, and partial failure**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -1132,41 +1132,77 @@ Page **detection** was already in place from CP19 (`pypdf` sets `ocr_needed=True
 
 - Do not pretend converted page numbers are original-source pages unless that representation is explicitly defined.
 
-## ⬜ Checkpoint 23 — DocumentPage persistence and structural cleanup
+## ✅ Checkpoint 23 — DocumentPage persistence and structural cleanup
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #28
 
 **Plain-English outcome:** Page-level source text/assets/metadata survive processing and can support extraction/citations.
 
-### What we will do
+### What we did
 
-1. Add `DocumentPage` with version, page/segment number, text, OCR flag/confidence, rendered asset key, limited structural metadata.
-2. Enforce unique version/page identity where appropriate.
-3. Keep raw source text retrievable.
-4. Detect repeated headers/footers deterministically.
-5. Preserve headings, numbered clauses, nested bullets, table context.
-6. Keep raw vs cleaned representations separate when useful.
-7. Index page lookup.
+The `DocumentPage` table and its unique `(document_version_id, page_number)`
+identity, `ix_document_pages_version` lookup index, and the raw
+`extracted_text` column already existed from CP19. CP23 added the two signals
+that make persisted pages safe to clean *without* losing provenance:
 
-### How we will verify it
+1. **Header/footer dedup** (`parser/cleanup.py`, pure function
+   `cleanup_pages`): deterministically detects lines that are the first/last
+   non-empty line of a page and recur textually-identically on `>= max(2,
+   ceil(50%))` of the version's pages (and are short, non-clause-numbered).
+   Recurrence is required, so unique body text, varying per-page lines
+   (e.g. `"Page 3"`), numbered-clause references (`1.2.3`), and long lines are
+   never stripped. The input `PageResult` objects are not mutated.
+2. **Raw-vs-cleaned separation**: new nullable `cleaned_text` column on
+   `document_pages` (migration `0008_document_page_cleaned_text`) holds the
+   page text with detected header/footer noise removed. `extracted_text`
+   stays the immutable authoritative source — cleanup never destroys it.
+3. **Structure in `structural_metadata`**: `store_pages` now also records
+   `headers`/`footers`/cleanup-`warnings` (merged with parser warnings) so
+   downstream can load per-page structure from durable storage and see
+   exactly what was stripped.
 
-- Reprocessing does not duplicate page rows.
-- Cleanup removes repeated noise without deleting real requirement text.
+### How we verified it
+
+- `tests/test_cleanup.py` (10 tests): pure `cleanup_pages` strips repeated
+  headers/footers, leaves unique body text / varying lines / clause numbers /
+  long lines untouched, never mutates input, single-page not stripped; plus
+  `store_pages` integration: `cleaned_text` populated and raw text preserved,
+  `structural_metadata` records `headers` + warning, and reprocessing
+  replaces (does not duplicate) page rows.
+- `tests/test_migration.py`: updated expected head revision to
+  `0008_document_page_cleaned_text` (new migration).
+- `ruff check .` ✅ · `mypy src/` ✅ (57 files) · `alembic upgrade head` ✅
+  (`0001_initial_baseline → 0008_document_page_cleaned_text`) · `pytest` ✅
+  (204 passed, 1 skipped real-Tesseract) · `apps/web npx tsc --noEmit` ✅.
 
 ### This checkpoint is complete only when
 
-- Downstream code can load exact source pages/segments and structure from durable storage.
+- [x] Page-level source text/assets/metadata survive processing and can support extraction/citations.
+- [x] Reprocessing does not duplicate page rows (`store_pages` deletes-then-inserts; tested).
+- [x] Cleanup removes repeated noise without deleting real requirement text (`cleaned_text` is derived; `extracted_text` is immutable; tested).
+
+### Implementation / PR note
+
+- **Branch:** `cp23/page-cleanup`
+- **New:** `tender_compliance_api/parser/cleanup.py` (`cleanup_pages`, `PageCleanup`).
+- **`db/models.py`:** `DocumentPage.cleaned_text` column + docstring.
+- **`document/service.py`:** `store_pages` computes `cleanup_pages(parse_result.pages)` and persists `cleaned_text` + `headers`/`footers`/`warnings` into `structural_metadata`; raw `extracted_text` unchanged.
+- **`parser/__init__.py`:** export `PageCleanup`, `cleanup_pages`.
+- **`alembic/versions/0008_document_page_cleaned_text.py`:** add nullable `cleaned_text` column (drop in downgrade).
+- **No behavioral change** to PDF/DOCX parsing or OCR; the OCR stage still fills `extracted_text`/`ocr_confidence` for `ocr_needed` pages (CP21) independently of the raw/cleaned split.
 
 ### Bynd reuse notes
 
 - **References:** `table_grid`, `ocr-table-fixes-discovery`, and Bynd table/OCR experiments.
-- When tables matter, preserve optional cell-level structure: row/column position, original cell text, confidence, and bounding box.
-- Keep `original_text` separately from any cleaned representation so later normalization can always be audited.
+- Decision for Phase 1: deferred optional cell-level table structure (row/column position, cell confidence, bbox) — full clause/numbering hierarchy and cell-level metadata belong to CP25–CP27 (chunking/chunk windows). CP23 keeps the raw-vs-cleaned split and header/footer provenance so that later normalization can always be audited from `extracted_text` + `structural_metadata`.
 - Structured table metadata supplements raw source text; it never replaces it.
 
 ### Guardrail
 
-- Do not perform semantic rewriting in cleanup.
+- Do not perform semantic rewriting in cleanup. (Honoured: only identical,
+  repeated, non-clause, length-capped positional lines are removed, and only
+  into the derived `cleaned_text`; the raw `extracted_text` is never
+  modified.)
 
 ## ⬜ Checkpoint 24 — Processing retry, idempotency, and partial failure
 

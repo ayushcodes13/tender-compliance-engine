@@ -525,13 +525,17 @@ class DocumentPage(Base):
     """A single page extracted from a :class:`DocumentVersion` during parsing.
 
     One row per page, ordered by ``page_number``.  ``extracted_text`` is
-    the native text layer from the PDF; when the parser determines the
-    text is untrustworthy (e.g. a scanned raster page), ``extracted_text``
-    is NULL and ``ocr_needed`` is set so a later OCR stage can fill in
-    the gap.
+    the native text layer from the document parser; when the parser
+    determines the text is untrustworthy (e.g. a scanned raster page),
+    ``extracted_text`` is NULL and ``ocr_needed`` is set so a later OCR
+    stage can fill in the gap.
 
-    Structural metadata (bounding boxes, font info, etc.) is stored as
-    nullable JSONB so non-critical signals don't block downstream
+    ``cleaned_text`` (CP23) is the same page text with deterministic
+    header/footer noise removed.  It is a *derived* view — the raw
+    ``extracted_text`` is always preserved as the authoritative source so
+    cleanup never destroys provenance.  Structural metadata
+    (header/footer lines, warnings, bounding boxes, font info) is stored
+    as nullable JSON so non-critical signals don't block downstream
     processing.
     """
 
@@ -555,6 +559,11 @@ class DocumentPage(Base):
     page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
     extracted_text: Mapped[str | None] = mapped_column(
         String(), nullable=True
+    )
+    cleaned_text: Mapped[str | None] = mapped_column(
+        String(), nullable=True,
+        comment="derived page text with deterministic header/footer noise "
+                "removed (CP23); raw extracted_text is the source of truth",
     )
     ocr_needed: Mapped[bool] = mapped_column(
         Integer(), nullable=False, default=0, server_default="0"
