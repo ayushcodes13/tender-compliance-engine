@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck
+.PHONY: help infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
 
 help:
 	@echo "Tender Compliance Engine"
@@ -14,6 +14,9 @@ help:
 	@echo "  make web-install    Install frontend dependencies"
 	@echo "  make web-dev        Run Next.js development server"
 	@echo "  make web-typecheck  Run TypeScript type checking"
+	@echo "  make docker-build   Build API Docker image"
+	@echo "  make docker-worker-build  Build worker Docker image"
+	@echo "  make deploy-smoke   Run deployment smoke tests"
 
 infra-up:
 	docker compose -f infra/docker-compose.yml up -d
@@ -50,3 +53,16 @@ web-dev:
 
 web-typecheck:
 	cd apps/web && npm run typecheck
+
+docker-build:
+	docker build -f apps/api/Dockerfile -t tender-compliance-api:dev apps/api
+
+docker-worker-build:
+	docker build -f apps/api/Dockerfile.worker -t tender-compliance-worker:dev apps/api
+
+deploy-smoke:
+	@echo "Running deployment smoke tests..."
+	@curl -sf http://localhost:8000/health || (echo "Health check FAILED" && exit 1)
+	@curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/projects | grep -q 401 || (echo "Auth check FAILED" && exit 1)
+	@curl -sf http://localhost:8000/metrics | python -c "import sys,json; d=json.load(sys.stdin); assert 'gauges' in d" || (echo "Metrics check FAILED" && exit 1)
+	@echo "All smoke tests passed."

@@ -50,6 +50,34 @@ jobs:
           # In CI, scan the installed project + all transitive deps:
           pip-audit 2>&1 || true
         continue-on-error: true
+      - name: Docker build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+
+  api-worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install -e .
+          which tesseract 2>/dev/null || echo "Tesseract not installed (expected in CI)"
+      - name: Docker build (worker)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.worker
+          push: false
+          load: true
 
   web:
     runs-on: ubuntu-latest
@@ -64,3 +92,10 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
+      - name: Docker build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
