@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP35 — Requirement list/detail API**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP36 — Real PDF/source viewer with trustworthy highlights**.
 
 The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
@@ -2048,32 +2048,30 @@ All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 
 Replace demo state with auditable review actions against the actual tender source.
 
-## ⬜ Checkpoint 35 — Requirement list/detail API
+## ✅ Checkpoint 35 — Requirement list/detail API
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — merged PR #41 (`cp35/requirement-api`).
 
 **Plain-English outcome:** The frontend can load real requirements, filters, constraints, and sources.
 
-### What we will do
+### What we did
 
-1. Add project-scoped requirement list.
-2. Add detail endpoint.
-3. Support stable ordering and pagination.
-4. Support review/category/document/search filters as needed.
-5. Return sources/constraints/revision summary in appropriate detail responses.
-6. Authorize every query by organization/project.
+1. Added project-scoped requirement list (`GET /projects/{project_id}/documents/{document_id}/versions/{version_number}/requirements`).
+2. Added detail endpoint (`GET .../requirements/{requirement_id}`).
+3. Stable ordering by `created_at` desc + `id` for deterministic pagination.
+4. Filters for `review_state`, `requirement_type`, and case-insensitive `search`.
+5. Detail response returns sources/constraints/revision summary; list response omits `raw_source` and constraints (guardrail satisfied).
+6. Every query authorized by organization (membership verification via `get_version_or_raise`).
 
-### How we will verify it
+### How we verified it
 
-- API tests cover ordering, filtering, empty lists, pagination, and tenant isolation.
-
-### This checkpoint is complete only when
-
-- The review UI no longer requires `seedRequirements` for real projects.
+- API tests cover ordering, filtering, empty lists, pagination, search, detail (full info, 404, tenant isolation), and stable ordering. 10 new tests.
+- `ruff check .` clean, `mypy src/` clean (71 source files).
+- Full suite: 546 passed, 2 skipped. CI (api + web) green.
 
 ### Guardrail
 
-- Do not return whole document bodies in every list response.
+- List responses never include full document bodies or `raw_source`.
 
 ## ⬜ Checkpoint 36 — Real PDF/source viewer with trustworthy highlights
 
