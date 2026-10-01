@@ -800,6 +800,99 @@ class ExtractionReconciliation(Base):
         )
 
 
+class ExtractionDiagnostics(Base):
+    """Developer-facing diagnostics for one version's EXTRACT pass (CP31).
+
+    A single row written when the EXTRACT stage completes (one per
+    :class:`ProcessingRun`, anchored via ``processing_run_id``).  Captures the
+    aggregate counts (windows/calls/candidates, accepted/rejected/deduped/
+    promoted/ocr-warning) plus the provider/model/prompt/schema versions and a
+    rejection-breakdown + reconciliation-summary, so an operator can answer
+    "why did this document produce its requirement set" from one row — without
+    re-deriving the counts or re-running the stage.
+
+    Phase 1 only: no vendor-compliance verdicts, no evidence, and **no document
+    bodies** — ``rejection_breakdown`` is keyed by short reason codes.
+    """
+
+    __tablename__ = "extraction_diagnostics"
+    __table_args__ = (
+        Index(
+            "ix_extraction_diagnostics_version", "document_version_id"
+        ),
+        Index(
+            "ix_extraction_diagnostics_created", "created_at"
+        ),
+        UniqueConstraint(
+            "processing_run_id", name="uq_extraction_diagnostics_run"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    processing_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("processing_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    total_windows: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    total_llm_calls: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    total_candidates: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    accepted_candidates: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    rejected_candidates: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    deduped_candidates: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    promoted_requirements: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    ocr_warning_candidates: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    # Extraction configuration the pass ran under (from the audited LLM calls).
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    schema_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # reason-code -> count (short codes, never document bodies).
+    rejection_breakdown: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False
+    )
+    # Copy of the reconciliation pass summary (the last one, if any).
+    reconciliation_summary: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ExtractionDiagnostics(version={self.document_version_id!r}, "
+            f"accepted={self.accepted_candidates}, rejected="
+            f"{self.rejected_candidates}, promoted="
+            f"{self.promoted_requirements})"
+        )
+
+
 class RequirementReviewState(enum.StrEnum):
     """Phase 1 human-review states for a persisted :class:`Requirement`.
 

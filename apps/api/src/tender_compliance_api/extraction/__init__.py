@@ -18,6 +18,10 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
+from tender_compliance_api.extraction.diagnostics import (
+    ExtractionDiagnosticsSummary,
+    compute_diagnostics,
+)
 from tender_compliance_api.extraction.extractor import (
     CandidateRecord,
     ExtractionOutcome,
@@ -63,6 +67,8 @@ if TYPE_CHECKING:  # pragma: no cover - re-export only
 __all__ = [
     "CandidateRecord",
     "CandidateValidationError",
+    "compute_diagnostics",
+    "ExtractionDiagnosticsSummary",
     "DECISION_DEDUP",
     "DECISION_FLAGGED",
     "DECISION_SINGLETON",

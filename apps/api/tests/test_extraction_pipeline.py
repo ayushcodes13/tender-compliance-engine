@@ -27,6 +27,7 @@ from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
     ExtractionCandidate,
+    ExtractionDiagnostics,
     ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
@@ -48,6 +49,8 @@ from tender_compliance_api.extraction import (
     EXTRACTION_SYSTEM_PROMPT,
     PROMPT_VERSION,
     SCHEMA_VERSION,
+    CandidateRecord,
+    ExtractionOutcome,
     ExtractionResponse,
     ExtractResult,
     FakeLlmAdapter,
@@ -1302,5 +1305,266 @@ class TestPromotionPersistence:
                 assert req.promotion_key == expected
 
         asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# CP31 — extraction diagnostics persistence
+# ---------------------------------------------------------------------------
+
+
+def _candidate_record(
+    *,
+    chunk_id: str = "c1",
+    normalized_text: str = "req",
+    raw_source: str = "req",
+    source_text: str = "req",
+    page_number: int = 1,
+    valid: bool = True,
+    persistable: bool = True,
+    uncertainty: str = "confirmed",
+    requirement_type: str = "obligation",
+    ocr_warning: bool = False,
+    rejection_reason: str | None = None,
+) -> CandidateRecord:
+    """Build a CP30-style CandidateRecord with a single trusted source fragment."""
+
+    return CandidateRecord(
+        chunk_id=chunk_id,
+        sources_json=[
+            {
+                "page_number": page_number,
+                "document_id": str(uuid.uuid4()),
+                "document_version_id": str(uuid.uuid4()),
+                "clause_number": "1.1",
+                "char_start": 0,
+                "char_end": len(source_text),
+                "bbox": None,
+                "ocr_confidence": None,
+                "location_type": "approximate",
+                "source_text": source_text,
+            }
+        ],
+        window_text=source_text,
+        normalized_text=normalized_text,
+        raw_source=raw_source,
+        requirement_type=requirement_type,
+        uncertainty=uncertainty,
+        clause_number="1.1",
+        group_hint=None,
+        ocr_warning=ocr_warning,
+        is_valid=valid,
+        persistable=persistable,
+        rejection_reason=rejection_reason,
+    )
+
+
+class TestExtractionDiagnostics:
+    """CP31 end-to-end: EXTRACT pass -> diagnostics row captures counts."""
+
+    def test_diagnostics_row_written_with_correct_counts(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+
+            text_a = "The system shall encrypt data at rest using AES-256."
+            text_b = "The unit shall weigh less than 2 kg."
+            # A + B are two windows; A emits the SAME obligation twice (overlap
+            # duplicate on page 1 -> one deduped), B emits a distinct obligation
+            # on page 2; one window emits a fabrication (rejected, not persisted
+            # as promotable).
+            outcome = ExtractionOutcome(
+                candidates=[
+                    _candidate_record(
+                        chunk_id="c1",
+                        normalized_text="Encrypt data at rest.",
+                        raw_source="Encrypt data at rest.",
+                        source_text=text_a,
+                        page_number=1,
+                    ),  # A1: valid+persistable, page 1
+                    _candidate_record(
+                        chunk_id="c1",
+                        normalized_text="Encrypt data at rest.",
+                        raw_source="Encrypt data at rest.",
+                        source_text=text_a,
+                        page_number=1,
+                    ),  # A2: valid+persistable, page 1 (deduped w/ A1)
+                    _candidate_record(
+                        chunk_id="c1",
+                        normalized_text="Bogus fabricated obligation.",
+                        raw_source="something not in window",
+                        source_text=text_a,
+                        page_number=1,
+                        valid=False,
+                        persistable=False,
+                        rejection_reason="fabrication:raw_source not in window text",
+                    ),  # C: rejected (fabrication guard)
+                    _candidate_record(
+                        chunk_id="c2",
+                        normalized_text="Weigh less than 2 kg.",
+                        raw_source="Weigh less than 2 kg.",
+                        source_text=text_b,
+                        page_number=2,
+                    ),  # D: valid+persistable, page 2 (singleton)
+                ],
+                llm_calls=[
+                    LlmCallResult(
+                        provider="fake", model="fake",
+                        prompt_version=PROMPT_VERSION,
+                        schema_version=SCHEMA_VERSION, latency_ms=5,
+                        prompt_tokens=10, completion_tokens=3, total_tokens=13,
+                        cost_usd=None, finish_reason="stop",
+                        status="completed", call_site="extract_candidates",
+                    ),
+                    LlmCallResult(
+                        provider="fake", model="fake",
+                        prompt_version=PROMPT_VERSION,
+                        schema_version=SCHEMA_VERSION, latency_ms=5,
+                        prompt_tokens=None, completion_tokens=None,
+                        total_tokens=None, cost_usd=None, finish_reason="stop",
+                        status="completed", call_site="extract_candidates",
+                    ),
+                ],
+            )
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                await svc.store_extraction_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                    candidates=outcome.candidates,
+                )
+                recon = await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                inserted, _skipped = await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                assert inserted == 2  # A1 + D promoted (A2 deduped, C rejected)
+                diag = await svc.capture_extraction_diagnostics(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                    outcome=outcome,
+                    reconciliation_outcome=recon,
+                    promoted_count=inserted,
+                )
+                await session.commit()
+                diag_id = diag.id
+
+            async with sf() as session:
+                row = (
+                    await session.execute(
+                        select(ExtractionDiagnostics).where(
+                            ExtractionDiagnostics.id == diag_id
+                        )
+                    )
+                ).scalar_one()
+                assert row.total_windows == 2
+                assert row.total_llm_calls == 2
+                assert row.total_candidates == 4
+                # A1, A2, D are valid+persistable
+                assert row.accepted_candidates == 3
+                # C is the only invalid candidate
+                assert row.rejected_candidates == 1
+                assert row.rejection_breakdown == {
+                    "fabrication:raw_source not in window text": 1
+                }
+                # A2 deduped by reconcile (overlap duplicate on page 1)
+                assert row.deduped_candidates == recon.removed_count == 1
+                # A1 + D promoted to requirements
+                assert row.promoted_requirements == 2
+                assert row.ocr_warning_candidates == 0
+                # Versions captured from the audited LLM calls
+                assert row.provider == "fake"
+                assert row.model == "fake"
+                assert row.prompt_version == PROMPT_VERSION
+                assert row.schema_version == SCHEMA_VERSION
+                # Reconciliation summary carried through verbatim
+                assert row.reconciliation_summary == recon.summary()
+
+        asyncio.run(_run())
+
+    def test_diagnostics_unique_per_run(self, session_cm) -> None:
+        """A second EXTRACT run (new run_id) writes a second diagnostics row
+        (history grows), each anchored to its own processing_run_id."""
+
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            outcome = ExtractionOutcome(
+                candidates=[_candidate_record()],
+                llm_calls=[
+                    LlmCallResult(
+                        provider="fake", model="fake",
+                        prompt_version=PROMPT_VERSION,
+                        schema_version=SCHEMA_VERSION, latency_ms=1,
+                        prompt_tokens=1, completion_tokens=1, total_tokens=2,
+                        cost_usd=None, finish_reason="stop", status="completed",
+                        call_site="extract_candidates",
+                    ),
+                ],
+            )
+            run2_id = uuid.uuid4()
+            async with sf() as session:
+                svc = DocumentService(session)
+                await svc.capture_extraction_diagnostics(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                    outcome=outcome,
+                )
+                second_run = ProcessingRun(
+                    document_version_id=info["version_id"],
+                    run_id=run2_id,
+                    attempt=1,
+                    stage=ProcessingStage.EXTRACT,
+                    status=RunStatus.RUNNING,
+                )
+                session.add(second_run)
+                await session.flush()
+                second_processing_run_id = second_run.id
+                await svc.capture_extraction_diagnostics(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=run2_id,
+                    outcome=outcome,
+                )
+                await session.commit()
+
+            async with sf() as session:
+                rows = (
+                    await session.execute(
+                        select(ExtractionDiagnostics).where(
+                            ExtractionDiagnostics.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(rows) == 2
+                assert {r.processing_run_id for r in rows} == {
+                    info["processing_run_id"],
+                    second_processing_run_id,
+                }
 
         asyncio.run(_run())
