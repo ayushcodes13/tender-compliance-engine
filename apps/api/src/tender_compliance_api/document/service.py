@@ -20,6 +20,8 @@ from tender_compliance_api.db.models import (
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExtractionRun,
+    ExtractionRunStatus,
     ProcessingRun,
     ProcessingStage,
     Project,
@@ -27,6 +29,7 @@ from tender_compliance_api.db.models import (
     StoredObject,
     TenderDocument,
 )
+from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
@@ -428,6 +431,43 @@ class DocumentService:
         )
 
         return run_id
+
+    async def log_llm_call(
+        self,
+        processing_run_id: uuid.UUID,
+        call: LlmCallResult,
+    ) -> ExtractionRun:
+        """Persist an LLM-call audit record under a processing run (CP26).
+
+        The record captures provider, model, prompt version, schema version,
+        latency, token usage (provider-reported; ``None`` when unknown —
+        never fabricated zero), cost (``None`` when pricing is unknown),
+        and finish reason.  Anchoring on ``processing_run_id`` (a
+        :class:`ProcessingRun`) ties every LLM call to a version + stage so
+        operators can explain exactly which extraction configuration produced
+        which candidates.
+        """
+
+        extraction_run = ExtractionRun(
+            processing_run_id=processing_run_id,
+            provider=call.provider,
+            model=call.model,
+            prompt_version=call.prompt_version,
+            schema_version=call.schema_version,
+            call_site=call.call_site,
+            latency_ms=call.latency_ms,
+            prompt_tokens=call.prompt_tokens,
+            completion_tokens=call.completion_tokens,
+            total_tokens=call.total_tokens,
+            # cost_usd is None when pricing is unknown — never a fabricated 0.
+            cost_usd=call.cost_usd,
+            finish_reason=call.finish_reason,
+            status=ExtractionRunStatus(call.status),
+            error_message=call.error_message,
+        )
+        self._session.add(extraction_run)
+        await self._session.flush()
+        return extraction_run
 
     # ------------------------------------------------------------------
     # Page storage (CP19)

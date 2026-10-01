@@ -1,24 +1,30 @@
-"""Structured extraction schemas and the trusted source-window boundary (CP25).
+"""Structured extraction: schema, adapter port, providers, and prompts (CP25–26).
 
-Phase 1 boundary rule (see AGENTS.md "Never fabricate" + CP25 guardrail):
-
-A model-suggested :class:`RequirementCandidate` is **not** directly
-persistable.  Only a :class:`SourcedRequirementCandidate` — a candidate
-*plus* a service-attached :class:`TrustedSourceContext` that passes
-machine validation — can graduate toward a domain requirement (CP30).
-
-The model never controls version/page/window metadata: those live on
-:class:`TrustedSourceContext`, which is constructed by the service from a
-parsed :class:`~tender_compliance_api.db.models.DocumentPage` (or an
-explicit source window).  A candidate's ``raw_source`` citation must be a
-real substring of the trusted window text, so the model cannot relocate a
-citation to a different page or document.
+Phase 1 boundary: model output is bounded by the CP25 schema and the
+:class:`~tender_compliance_api.extraction.adapter.LlmAdapter` port — a
+provider-agnostic seam so swapping providers does not rewrite services (CP26,
+"changing providers does not require rewriting document services").
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from tender_compliance_api.extraction.adapter import (
+    ExtractResult,
+    LlmAdapter,
+    LlmCallConfig,
+    LlmCallError,
+    LlmCallResult,
+)
+from tender_compliance_api.extraction.fake import FakeLlmAdapter
+from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
+from tender_compliance_api.extraction.prompts import (
+    EXTRACTION_SYSTEM_PROMPT,
+    PROMPT_VERSION,
+    SCHEMA_VERSION,
+    ExtractionResponse,
+)
 from tender_compliance_api.extraction.schema import (
     CandidateValidationError,
     LocationType,
@@ -34,9 +40,20 @@ if TYPE_CHECKING:  # pragma: no cover - re-export only
 
 __all__ = [
     "CandidateValidationError",
+    "EXTRACTION_SYSTEM_PROMPT",
+    "ExtractResult",
+    "ExtractionResponse",
+    "FakeLlmAdapter",
+    "LlmAdapter",
+    "LlmCallConfig",
+    "LlmCallError",
+    "LlmCallResult",
     "LocationType",
+    "OpenAiLlmAdapter",
+    "PROMPT_VERSION",
     "RequirementCandidate",
     "RequirementType",
+    "SCHEMA_VERSION",
     "SourcedRequirementCandidate",
     "TrustedSourceContext",
     "UncertaintyLevel",
