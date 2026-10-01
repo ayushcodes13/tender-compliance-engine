@@ -6,11 +6,9 @@
 
 ## Current position
 
-## Current position
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP33 — Deterministic numeric/operator/unit parsing**.
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP33 — Deterministic numeric/operator/unit parsing**.
-
-The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
+The repository has the complete Phase 1 extraction pipeline through CP32 (RequirementConstraint model + normalization states), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), and the RequirementConstraint model + normalization states (CP32). The next work is CP33: deterministic numeric/operator/unit parsing for conservative constraint extraction.
 
 ## How every human or coding agent must use this file
 
@@ -166,17 +164,24 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP24 — Processing retry, idempotency, and partial failure~~
   - Status: DONE — PR #29
   - Branch: `cp24/retry-idempotency`
-- [x] ✅ ~~CP25 — Structured extraction schema and trusted source-window contract~~
-  - Status: DONE — PR #30
-  - Branch: `cp25/extraction-schema-boundary`
 
 ### Stage E — Conservative technical requirement extraction and provenance
 
-- [ ] CP25 — Structured extraction schema and trusted source-window contract
-- [ ] CP26 — LLM extraction adapter, prompt versions, and run metadata
-- [ ] CP27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows
-- [ ] CP28 — Requirement candidate extraction, splitting, grouping, and abstention
-- [ ] CP29 — Duplicate/header/footer/overlap reconciliation
+- [x] ✅ ~~CP25 — Structured extraction schema and trusted source-window contract~~
+  - Status: DONE — PR #30
+  - Branch: `cp25/extraction-schema-boundary`
+- [x] ✅ ~~CP26 — LLM extraction adapter, prompt versions, and run metadata~~
+  - Status: DONE — PR #31
+  - Branch: `cp26/llm-adapter`
+- [x] ✅ ~~CP27 — Chunking, overlap, clause hierarchy, tables, and multi-page windows~~
+  - Status: DONE — PR #32
+  - Branch: `cp27/windowing`
+- [x] ✅ ~~CP28 — Requirement candidate extraction, splitting, grouping, and abstention~~
+  - Status: DONE — PR #33
+  - Branch: `cp28/extraction`
+- [x] ✅ ~~CP29 — Duplicate/header/footer/overlap reconciliation~~
+  - Status: DONE — PR #34
+  - Branch: `cp29/reconciliation`
 - [x] ✅ ~~CP30 — Exact/approximate source anchors and Requirement persistence~~
   - Status: DONE — PR #35
   - Branch: `cp30/requirements`
