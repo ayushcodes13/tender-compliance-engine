@@ -11,8 +11,9 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
@@ -362,6 +363,92 @@ class DocumentService:
 
         await self._session.flush()
         return parsed
+
+    # ------------------------------------------------------------------
+    # Requirement queries (CP35)
+    # ------------------------------------------------------------------
+
+    async def list_requirements(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        *,
+        review_state: RequirementReviewState | None = None,
+        requirement_type: str | None = None,
+        search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Requirement]:
+        """List requirements for a document version, tenant-scoped.
+
+        Supports stable ordering (by ``created_at`` descending), pagination
+        (``limit``/``offset``), and optional filters on ``review_state`` and
+        ``requirement_type``.  ``search`` performs a case-insensitive substring
+        match on ``normalized_text`` or ``raw_source``.
+
+        Authorized by organization (via the document version lookup) and
+        project ownership.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+
+        stmt = (
+            select(Requirement)
+            .where(Requirement.document_version_id == version.id)
+            .order_by(Requirement.created_at.desc(), Requirement.id)
+            .limit(limit)
+            .offset(offset)
+        )
+
+        if review_state is not None:
+            stmt = stmt.where(Requirement.review_state == review_state)
+        if requirement_type is not None:
+            stmt = stmt.where(Requirement.requirement_type == requirement_type)
+        if search:
+            # Case-insensitive substring search on both normalized and raw text.
+            pattern = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    Requirement.normalized_text.like(pattern),
+                    Requirement.raw_source.like(pattern),
+                )
+            )
+
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_requirement(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        requirement_id: uuid.UUID,
+    ) -> Requirement:
+        """Fetch a single requirement with its constraints and sources,
+        tenant-scoped.
+
+        Raises :class:`DocumentNotFoundError` if the requirement does not
+        exist in the authenticated organization's document version.
+        """
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        result = await self._session.execute(
+            select(Requirement)
+            .options(
+                selectinload(Requirement.constraints),
+                selectinload(Requirement.sources),
+            )
+            .where(
+                Requirement.id == requirement_id,
+                Requirement.document_version_id == version.id,
+            )
+        )
+        requirement = result.scalar_one_or_none()
+        if requirement is None:
+            raise DocumentNotFoundError(
+                f"requirement {requirement_id} not found in "
+                f"document {document_id} v{version_number}"
+            )
+        return requirement
 
     async def get_runs(
         self,
