@@ -980,6 +980,13 @@ class Requirement(Base):
         lazy="selectin",
     )
 
+    constraints: Mapped[list[RequirementConstraint]] = relationship(
+        "RequirementConstraint",
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
     def __repr__(self) -> str:  # pragma: no cover - convenience
         return (
             f"Requirement(id={self.id!r}, type={self.requirement_type!r}, "
@@ -1051,4 +1058,113 @@ class RequirementSource(Base):
         return (
             f"RequirementSource(req={self.requirement_id!r}, page="
             f"{self.page_number!r}, location={self.location_type!r})"
+        )
+
+
+class ConstraintNormalizationState(enum.StrEnum):
+    """Normalization progress for a structured constraint value (CP32+).
+
+    ``UNNORMALIZED`` is the starting point before any deterministic parser runs
+    (CP33).  ``SAFE`` means the value was parsed unambiguously and matches the
+    source verbatim; ``PARTIAL`` means a value was extracted but some aspect
+    (operator / unit / OCR) is ambiguous; ``NEEDS_REVIEW`` means the source is
+    too unreliable to normalize without risking a meaning change.  These are
+    *normalization* states, not requirement review states (CP35) and not
+    vendor-compliance verdicts (Phase 2).
+    """
+
+    UNNORMALIZED = "unnormalized"
+    SAFE = "safe"
+    PARTIAL = "partial"
+    NEEDS_REVIEW = "needs_review"
+
+
+class RequirementConstraint(Base):
+    """A structured value extracted from a requirement (CP32).
+
+    One row per normalized value (numeric bound, unit, tolerance, or
+    qualitative condition) carried by a :class:`Requirement`.  Multiple
+    constraints may attach to one requirement.  Every structured value is kept
+    alongside its verbatim ``raw_fragment`` so it can be audited against the
+    source (Bynd reuse note: never normalize without preserving the raw text).
+
+    CP32 adds the model + states only; deterministic numeric/operator/unit
+    parsing (CP33) and qualitative normalization (CP34) populate the parsed
+    fields and transition ``normalization_state``.
+    """
+
+    __tablename__ = "requirement_constraints"
+    __table_args__ = (
+        Index("ix_requirement_constraints_requirement", "requirement_id"),
+        Index("ix_requirement_constraints_version", "document_version_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # What is being constrained (e.g. "weight", "operating_temperature").
+    parameter: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Operator symbol as parsed from the source (``=``, ``<``, ``<=``, ``>``,
+    # ``>=``, ``between``, ``!=``); kept as a string so OCR-derived/ambiguous
+    # operators can be recorded without fabrication (CP33 narrows these).
+    operator: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # A single numeric value (``operator`` is one of = / < / > / <= / >= / !=).
+    numeric_value: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    # Inclusive bounds for ranges / between operators.
+    lower_bound: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    upper_bound: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tolerance: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    # Free-form qualitative condition when no numeric value exists
+    # (e.g. "operational in cold rooms"). Never inferred from non-matching text.
+    qualitative_condition: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    # Always start unormalized; CP33/CP34 transition to SAFE/PARTIAL/NEEDS_REVIEW.
+    normalization_state: Mapped[ConstraintNormalizationState] = mapped_column(
+        Enum(
+            ConstraintNormalizationState,
+            name="constraint_normalization_state",
+        ),
+        nullable=False,
+        default=ConstraintNormalizationState.UNNORMALIZED,
+        server_default=ConstraintNormalizationState.UNNORMALIZED.value,
+    )
+    # Verbatim source fragment this constraint was parsed from — never mutated,
+    # never fabricated. The audit anchor for "every structured value audited
+    # against its source fragment".
+    raw_fragment: Mapped[str] = mapped_column(String(2048), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    requirement: Mapped[Requirement] = relationship(
+        "Requirement", back_populates="constraints", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"RequirementConstraint(requirement={self.requirement_id!r}, "
+            f"parameter={self.parameter!r}, op={self.operator!r}, "
+            f"state={self.normalization_state!r})"
         )
