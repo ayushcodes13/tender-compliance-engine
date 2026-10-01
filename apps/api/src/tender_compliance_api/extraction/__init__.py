@@ -17,6 +17,7 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
+from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
 from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
 from tender_compliance_api.extraction.prompts import (
@@ -54,7 +55,9 @@ __all__ = [
     "RequirementCandidate",
     "RequirementType",
     "SCHEMA_VERSION",
+    "SourceWindow",
     "SourcedRequirementCandidate",
+    "build_source_windows",
     "TrustedSourceContext",
     "UncertaintyLevel",
 ]
