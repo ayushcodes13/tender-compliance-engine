@@ -306,13 +306,26 @@ class StoredObject(Base):
 class DocumentProcessingStatus(enum.StrEnum):
     """Lifecycle stage for a DocumentVersion's parsing/OCR pipeline.
 
-    Phase 1 only needs ``UPLOADED`` (bytes stored, not yet parsed) — later
-    checkpoints progress through ``PROCESSING``/``PARSED``/``FAILED``.
+    States (CP17 state machine):
+
+    * ``UPLOADED`` — bytes stored, queued for processing.
+    * ``QUEUED`` — waiting in the background job queue.
+    * ``PROCESSING`` — a worker is actively parsing/OCR-ing this version.
+    * ``PARSED`` — all pages processed successfully (ready for extraction).
+    * ``PARTIAL`` — processing completed but some pages failed; review needed.
+    * ``FAILED`` — all retries exhausted; no usable output.
+
+    ``UPLOADED`` is the initial state after upload (CP15).  The worker
+    transitions through ``QUEUED`` → ``PROCESSING`` → ``PARSED`` /
+    ``PARTIAL`` / ``FAILED``.  ``PARTIAL`` and ``FAILED`` versions may
+    be retried back to ``QUEUED``.
     """
 
     UPLOADED = "uploaded"
+    QUEUED = "queued"
     PROCESSING = "processing"
     PARSED = "parsed"
+    PARTIAL = "partial"
     FAILED = "failed"
 
 
@@ -434,4 +447,75 @@ class DocumentVersion(Base):
         return (
             f"DocumentVersion(id={self.id!r}, document={self.document_id!r}, "
             f"v={self.version_number!r})"
+        )
+
+
+class ProcessingStage(enum.StrEnum):
+    """Ordered sub-stages within a single processing run."""
+
+    PARSE = "parse"
+    OCR = "ocr"
+    CLEANUP = "cleanup"
+    EXTRACT = "extract"
+
+
+class RunStatus(enum.StrEnum):
+    """Status of an individual :class:`ProcessingRun`."""
+
+    STARTED = "started"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RETRY = "retry"
+
+
+class ProcessingRun(Base):
+    """Record of a single attempt to process a :class:`DocumentVersion`.
+
+    A version may have multiple runs over its lifetime (retries).  Each run
+    tracks which *stage* failed, how many attempts were made, and the
+    error reason — but the immutable source bytes referenced by
+    ``DocumentVersion.stored_object_id`` are never mutated.
+    """
+
+    __tablename__ = "processing_runs"
+    __table_args__ = (
+        Index("ix_processing_runs_version", "document_version_id"),
+        Index("ix_processing_runs_stage", "document_version_id", "stage"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), nullable=False, index=True
+    )
+    attempt: Mapped[int] = mapped_column(Integer(), nullable=False, default=1)
+    stage: Mapped[ProcessingStage] = mapped_column(
+        Enum(ProcessingStage, name="processing_stage"),
+        nullable=False,
+    )
+    status: Mapped[RunStatus] = mapped_column(
+        Enum(RunStatus, name="run_status"),
+        nullable=False,
+    )
+    error_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ProcessingRun(id={self.id!r}, version={self.document_version_id!r}, "
+            f"stage={self.stage!r}, status={self.status!r})"
         )

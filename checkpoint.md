@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP17 — Document-processing state machine**.
+Completed foundation checkpoints are crossed out below. The **next implementation checkpoint is CP18 — Redis-backed worker and idempotent job execution**.
 
 The repository already has the product/architecture docs, monorepo skeleton, local Postgres/Redis/MinIO definitions, API health endpoint and CI, frontend review prototype, PR-first engineering rules, and a frontend lockfile. It does **not** yet have the real database-backed project/document/requirement pipeline.
 
@@ -137,7 +137,9 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP16 — Upload UI and document list~~
   - Status: DONE — PR #20
   - Branch: `cp16/upload-ui-document-list`
-- [ ] CP17 — Document-processing state machine
+- [x] ✅ ~~CP17 — Document-processing state machine~~
+  - Status: DONE — PR #21
+  - Branch: `cp17/document-processing-state-machine`
 - [ ] CP18 — Redis-backed worker and idempotent job execution
 
 ### Stage D — Source-preserving parsing, rendering, OCR, and document pages
@@ -769,9 +771,9 @@ Accept real tender files safely and create the processing handoff without doing 
 
 - Do not suppress server-side validation errors.
 
-## ⬜ Checkpoint 17 — Document-processing state machine
+## ✅ ~~Checkpoint 17 — Document-processing state machine~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #21
 
 **Plain-English outcome:** The product can always explain where an uploaded version is in processing.
 
@@ -796,6 +798,34 @@ Accept real tender files safely and create the processing handoff without doing 
 ### Guardrail
 
 - Never promote partial processing to READY without an explicit policy.
+
+### Implementation / PR note
+
+- **Branch:** `cp17/document-processing-state-machine`
+- **Extended `DocumentProcessingStatus` enum** (`db/models.py`): Added `QUEUED` ("queued") and `PARTIAL` ("partial"). Kept existing `UPLOADED`, `PROCESSING`, `PARSED`, `FAILED`. Final documented states: `uploaded` → `queued` → `processing` → `parsed` / `partial` / `failed`; `partial` and `failed` can retry back to `queued`.
+- **Added `ProcessingStage` enum** (`parse`, `ocr`, `cleanup`, `extract`) and `RunStatus` enum** (`started`, `running`, `completed`, `failed`, `retry`).
+- **Added `ProcessingRun` model**: tracks per-stage processing attempts with `run_id` (correlation), `attempt`, `stage`, `status`, `error_type`, `error_message`, `started_at`, `completed_at`. FK to `DocumentVersion` with `ON DELETE CASCADE`.
+- **Created `document/` service package** with `DocumentService`:
+  - `transition_to()` — guards invalid state transitions via `_ALLOWED_TRANSITIONS` map.
+  - `begin_run()` / `complete_run()` — creates and resolves `ProcessingRun` rows, automatically transitions `QUEUED` → `PROCESSING` when a worker picks up a job.
+  - `_reconcile_version_status()` — derives `DocumentVersion.processing_status` from the aggregate of all `ProcessingRun` rows using conservative rules: all stages completed → `PARSED`; some completed + some permanently failed → `PARTIAL`; all permanently failed → `FAILED`; any stage still running → stays `PROCESSING`; unattempted stages prevent premature promotion. Retry budget: max 5 attempts per stage.
+  - `get_version_or_raise()` / `get_runs()` / `list_project_versions()` — tenant-scoped queries.
+  - `_safe_transition()` — used during reconciliation to avoid raising on already-terminal states.
+- **Extended `DocumentVersionResponse`** with `parser_name`, `parser_version`, `ocr_name`, `ocr_version` fields.
+- **Added API endpoints:**
+  - `GET /projects/{id}/documents/{doc_id}/versions/{v}` — returns version detail with processing status.
+  - `GET /projects/{id}/documents/{doc_id}/versions/{v}/runs` — returns processing runs for a version.
+  - Both enforce org isolation (cross-tenant → 404).
+- **Migration `0006_processing_run`**: Creates `processing_stage` and `run_status` enums, `processing_runs` table (with indexes on `document_version_id`, `(document_version_id, stage)`, and `run_id`), and extends `doc_processing_status` enum with `queued`/`partial` (PostgreSQL `ALTER TYPE ADD VALUE`; SQLite stores enums as VARCHAR so no change needed). Downgrade drops the table and new enums but intentionally keeps the extended `doc_processing_status` values (PostgreSQL cannot drop enum values).
+- **Tests:** 23 new tests in `tests/test_document_processing.py`:
+  - 10 state-machine guard tests (valid + invalid transitions).
+  - 1 enum persistence test (QUEUED + PARTIAL round-trip).
+  - 3 service transition tests (valid, invalid-blocked, terminal-blocked).
+  - 3 ProcessingRun lifecycle + reconciliation tests (all stages complete → PARSED; some fail permanently → PARTIAL; all fail → FAILED).
+  - 4 API tests for `GET /documents/{doc_id}/versions/{v}` (found, not-found, cross-tenant, wrong-project).
+  - 2 API tests for `GET .../runs` (list runs, cross-tenant denied).
+  - 1 test verifying `GET /documents` shows correct processing status after upload.
+- **Verified:** `ruff check .` ✅, `mypy src/` ✅ (34 source files), `alembic upgrade head` ✅ (0001→0006), `pytest` ✅ (124 tests = 101 prior + 23 new).
 
 ## ⬜ Checkpoint 18 — Redis-backed worker and idempotent job execution
 
