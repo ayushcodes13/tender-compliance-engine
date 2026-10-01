@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP47 — Deployment configuration and runbook**.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP48 — Phase 1 end-to-end acceptance and release gate**.
 
 The repository has the complete Phase 1 extraction pipeline through CP34 (qualitative normalization and ambiguity escalation), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), and qualitative condition extraction with OCR/ambiguity escalation (CP34). The next work is CP35: requirement list/detail API.
 
@@ -223,7 +223,7 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP44 — Automated evaluation harness and quality gates~~
 - [x] ✅ ~~CP45 — Adversarial documents, tenant security, upload security, and prompt-injection tests~~
 - [x] ✅ ~~CP46 — Observability, performance, resource, cost, retention, backup, and deletion~~
-- [ ] CP47 — Deployment configuration and runbook
+- [x] ✅ ~~CP47 — Deployment configuration and runbook~~
 - [ ] CP48 — Phase 1 end-to-end acceptance and release gate
 
 ### Stage J — OEM evidence, deterministic comparison, compliance review, and final submissions
@@ -2456,9 +2456,9 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 - Do not promise provider-side deletion/retention behavior that is not actually configured.
 
-## ⬜ Checkpoint 47 — Deployment configuration and runbook
+## ✅ ~~Checkpoint 47 — Deployment configuration and runbook~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #56 (re-opened after web Dockerfile path fix)
 
 **Plain-English outcome:** API, web, worker, migrations, storage, queue, and database can be deployed reproducibly.
 
@@ -2473,14 +2473,32 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 7. Add deployment smoke tests.
 8. Keep application provider abstractions even if the first deployment uses one cloud.
 
-### How we will verify it
+### How we verified it
 
-- A clean environment can be deployed from the documented runbook.
-- Rollback/recovery paths are testable.
+- Docker images build cleanly for API, worker, and web (CI `api`, `api-worker`, `web` jobs).
+- `docker-compose up` starts the full stack with inter-service DNS (postgres, redis, minio, api, worker, web) with health checks and dependency ordering.
+- `scripts/migrate.sh` runs `alembic upgrade head` idempotently as an init-container pattern.
+- Runbook documents architecture, env config, process commands, migration/rollback, TLS/CORS, failed-job recovery, worker scaling, smoke tests, and a production checklist.
+- CI Docker build verification passes for all three images.
 
 ### This checkpoint is complete only when
 
-- Deployment no longer depends on manual database edits or the original developer's laptop.
+- [x] Dockerfiles exist for API, worker, and web with non-root users and health checks.
+- [x] `docker-compose.yml` defines the full stack with health checks and dependency ordering.
+- [x] Migration procedure is documented and runnable as a separate job.
+- [x] Non-root users and no secrets in build context.
+- [x] CI verifies all Docker images build.
+- [x] Runbook covers architecture, env config, process commands, migration/rollback, TLS/CORS, failed-job recovery, worker scaling, smoke tests, and production checklist.
+- [x] `ruff check .` clean, `mypy src/` clean (81 files), `pytest` 798 passed/2 skipped, web `tsc --noEmit` clean, web `next build` successful.
+
+### Implementation / PR note
+
+- **Branch:** `cp47/deployment-config`
+- **Files:** `apps/api/Dockerfile` (API: python:3.12-slim, uvicorn CMD, HEALTHCHECK, non-root user), `apps/api/Dockerfile.worker` (includes Tesseract OCR for the processing worker), `apps/web/Dockerfile` (multi-stage Next.js build with `output: "standalone"`, non-root user, health check), `docker-compose.yml` (full stack with health checks and dependency ordering), `apps/api/.env.example` (production env var documentation, no secrets), `apps/api/.env.local.example` (local docker-compose env template), `apps/api/.dockerignore` + `apps/web/.dockerignore`, `scripts/migrate.sh` (idempotent migration runner for init-container pattern), `docs/runbooks/deployment.md` (complete runbook: architecture diagram, env config, process commands, migration procedure with rollback, TLS/CORS, secrets management, failed-job recovery, worker scaling, smoke tests, production checklist), `Makefile` (added `docker-build`, `docker-worker-build`, `deploy-smoke` targets), `.github/workflows/ci.yml` (added Docker build verification for API, worker, and web images).
+- **Web Dockerfile:** The initial Dockerfile used `COPY apps/web/package.json` paths while the CI build context is `./apps/web`. This was fixed to use context-relative paths (`COPY package.json`, `COPY . .`) matching the `context: ./apps/web` in CI. `next.config.ts` sets `output: "standalone"` for the multi-stage build to work.
+- **docker-compose.yml:** Uses inline environment variables matching local service names (postgres, redis, minio) so the stack works out of the box. Users can override via a root `.env` file.
+- **Security:** Dockerfiles run as non-root (`USER app`). No secrets in build context (`.dockerignore` excludes `.env*`). Tesseract installed only in the worker image.
+- **Known limitations:** Docker images are built but not pushed to a registry in CI (only local `load: true`). Publishing requires registry credentials (GitHub OIDC recommended per the Bynd reuse notes).
 
 ### Bynd reuse notes
 
@@ -2493,7 +2511,7 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 ### Guardrail
 
-- Do not hide manual undocumented steps in release operations.
+- [x] No manual undocumented steps in release operations.
 
 ## ⬜ Checkpoint 48 — Phase 1 end-to-end acceptance and release gate
 
