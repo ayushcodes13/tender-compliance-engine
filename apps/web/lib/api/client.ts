@@ -83,10 +83,10 @@ export type UploadResponse = DocumentItem & {
 
 /** Requirement review state (Phase 1). */
 export type RequirementReviewState =
-  | "UNREVIEWED"
-  | "REVIEWED"
-  | "NEEDS_CLARIFICATION"
-  | "OCR_WARNING";
+  | "unreviewed"
+  | "reviewed"
+  | "needs_clarification"
+  | "ocr_warning";
 
 /** A single requirement in list view. */
 export type RequirementSummary = {
@@ -290,6 +290,19 @@ export type SourceAnchor = {
   source_text: string | null;
   bbox: { x: number; y: number; width: number; height: number } | null;
   ocr_confidence: number | null;
+};
+
+/** A single matrix row from the canonical Phase 1 projection (CP41). */
+export type MatrixRowResponse = {
+  serial: number;
+  requirement_id: string;
+  tender_requirement: string;
+  category: string | null;
+  clause: string | null;
+  source_page: number | null;
+  mandatory: boolean | null;
+  user_notes: string | null;
+  review_status: RequirementReviewState;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -694,4 +707,15 @@ export const api = {
     apiFetch(
       `/projects/${projectId}/documents/${documentId}/versions/${version}/review-counts`
     ).then((r) => expectJson<ReviewCountsResponse>(r)),
+
+  // --- Matrix projection (CP41) ---
+
+  fetchMatrix: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/matrix`
+    ).then((r) => expectJson<MatrixRowResponse[]>(r)),
 };
