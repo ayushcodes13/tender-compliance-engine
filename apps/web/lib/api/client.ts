@@ -364,6 +364,144 @@ export type EvidenceProposeRequest = {
   persist?: boolean;
 };
 
+/** Latest OEM/vendor document version attached to a project. */
+export type OemDocumentItem = {
+  document_id: string;
+  display_name: string;
+  document_type: string;
+  vendor_name: string | null;
+  product_name: string | null;
+  product_sku: string | null;
+  version_number: number;
+  sha256: string;
+  mime_type: string;
+  size_bytes: number;
+  processing_status: DocumentProcessingStatus;
+  parser_name: string | null;
+  parser_version: string | null;
+  ocr_name: string | null;
+  ocr_version: string | null;
+  created_at: string;
+};
+
+export type OemUploadResponse = {
+  stored_object_id: string;
+  document_id: string;
+  version_number: number;
+  storage_key: string;
+  filename: string;
+  content_type: string;
+  content_length: number;
+  checksum_sha256: string;
+  processing_status: DocumentProcessingStatus;
+  uploaded_at: string;
+};
+
+export type ComplianceStatus =
+  | "compliant"
+  | "non_compliant"
+  | "partial"
+  | "not_demonstrated"
+  | "conflict"
+  | "human_review_required";
+
+export type ComparisonResultResponse = {
+  verdict?: string | null;
+  tender_text?: string | null;
+  vendor_text?: string | null;
+  comparison_rule?: string | null;
+  conversion?: string | null;
+  reasons?: string[] | null;
+  tender_value?: number | null;
+  vendor_value?: number | null;
+  tender_unit?: string | null;
+  vendor_unit?: string | null;
+  normalized_tender_value?: number | null;
+  normalized_vendor_value?: number | null;
+  details?: Record<string, unknown> | null;
+};
+
+export type ComplianceAssessmentResponse = {
+  id: string;
+  project_id: string;
+  requirement_id: string;
+  evidence_id: string | null;
+  vendor_spec_id: string | null;
+  suggested_status: ComplianceStatus;
+  status: ComplianceStatus;
+  reason_code: string;
+  reason_text: string | null;
+  comparison_result: ComparisonResultResponse | null;
+  assessment_version: number;
+  is_confirmed_by_human: boolean;
+  reviewer_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssessmentCommentResponse = {
+  id: string;
+  assessment_id: string;
+  project_id: string;
+  author_id: string | null;
+  comment_type: string;
+  comment: string;
+  assessment_version: number;
+  created_at: string;
+};
+
+export type ReviewConflict = {
+  id: string;
+  conflict_type: string;
+  parameter: string | null;
+  entity: string | null;
+  resolution: "unresolved" | "accepted" | "rejected";
+  sources: Array<Record<string, unknown>>;
+  tender_claim: string | null;
+};
+
+export type ReviewClarification = {
+  id: string;
+  question: string;
+  context: Record<string, unknown>;
+  status: string;
+  asked_at: string;
+  answer: string | null;
+  answered_at: string | null;
+};
+
+export type ReviewDeviation = {
+  id: string;
+  deviation_type: string;
+  original_requirement: string;
+  proposed_alternative: string | null;
+  status: string;
+  proposed_at: string;
+  reviewed_at: string | null;
+};
+
+export type RequirementComplianceReview = {
+  requirement_id: string;
+  assessment: {
+    id: string;
+    suggested_status: ComplianceStatus;
+    status: ComplianceStatus;
+    reason_code: string;
+    reason_text: string | null;
+    is_confirmed_by_human: boolean;
+    reviewer_id: string | null;
+    reviewed_at: string | null;
+    assessment_version: number;
+    evidence_id: string | null;
+    vendor_spec_id: string | null;
+    comparison_result: ComparisonResultResponse | null;
+  };
+  conflicts: ReviewConflict[];
+  clarifications: ReviewClarification[];
+  deviations: ReviewDeviation[];
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Headers for the development identity mode. */
@@ -845,4 +983,128 @@ export const api = {
       `/projects/${projectId}/requirements/${requirementId}/evidence/${evidenceId}/curate?review_state=${reviewState}`,
       { method: "POST" }
     ).then((r) => expectJson<EvidenceResponse>(r)),
+
+  // --- OEM/vendor documents (CP49) ---
+
+  fetchOemDocuments: (projectId: string) =>
+    apiFetch(`/projects/${projectId}/oem-documents`).then((r) =>
+      expectJson<OemDocumentItem[]>(r)
+    ),
+
+  uploadOemDocument: (
+    projectId: string,
+    file: File,
+    metadata?: {
+      document_type?: string;
+      vendor_name?: string;
+      product_name?: string;
+      product_sku?: string;
+    }
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("document_type", metadata?.document_type ?? "datasheet");
+    if (metadata?.vendor_name) form.append("vendor_name", metadata.vendor_name);
+    if (metadata?.product_name) form.append("product_name", metadata.product_name);
+    if (metadata?.product_sku) form.append("product_sku", metadata.product_sku);
+    return apiFetchFile(`/projects/${projectId}/oem-documents/upload`, {
+      method: "POST",
+      body: form,
+    }).then((r) => expectJson<OemUploadResponse>(r));
+  },
+
+  // --- Human compliance review (CP54/CP56–CP58) ---
+
+  assessRequirement: (projectId: string, requirementId: string) =>
+    apiFetch(`/projects/${projectId}/requirements/${requirementId}/assess`, {
+      method: "POST",
+    }).then((r) => expectJson<ComplianceAssessmentResponse>(r)),
+
+  fetchComplianceAssessment: (projectId: string, requirementId: string) =>
+    apiFetch(
+      `/projects/${projectId}/requirements/${requirementId}/compliance-assessment`
+    ).then((r) => expectJson<ComplianceAssessmentResponse | null>(r)),
+
+  fetchRequirementComplianceReview: (
+    projectId: string,
+    requirementId: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/requirements/${requirementId}/review`
+    ).then((r) => expectJson<RequirementComplianceReview>(r)),
+
+  confirmAssessment: (projectId: string, assessmentId: string) =>
+    apiFetch(
+      `/projects/${projectId}/compliance-assessments/${assessmentId}/confirm`,
+      { method: "POST" }
+    ).then((r) => expectJson<ComplianceAssessmentResponse>(r)),
+
+  overrideAssessment: (
+    projectId: string,
+    assessmentId: string,
+    body: { status: ComplianceStatus; reason: string; evidence_id?: string | null }
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/compliance-assessments/${assessmentId}/override`,
+      { method: "POST", body: JSON.stringify(body) }
+    ).then((r) => expectJson<ComplianceAssessmentResponse>(r)),
+
+  reopenAssessment: (
+    projectId: string,
+    assessmentId: string,
+    reason?: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/compliance-assessments/${assessmentId}/reopen`,
+      {
+        method: "POST",
+        body: reason ? JSON.stringify({ comment: reason }) : undefined,
+      }
+    ).then((r) => expectJson<ComplianceAssessmentResponse>(r)),
+
+  fetchAssessmentComments: (projectId: string, assessmentId: string) =>
+    apiFetch(
+      `/projects/${projectId}/compliance-assessments/${assessmentId}/comments`
+    ).then((r) => expectJson<AssessmentCommentResponse[]>(r)),
+
+  addAssessmentComment: (
+    projectId: string,
+    assessmentId: string,
+    comment: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/compliance-assessments/${assessmentId}/comments`,
+      { method: "POST", body: JSON.stringify({ comment }) }
+    ).then((r) => expectJson<AssessmentCommentResponse>(r)),
+
+  resolveConflict: (
+    projectId: string,
+    conflictId: string,
+    resolution: "accepted" | "rejected",
+    notes?: string
+  ) =>
+    apiFetch(`/api/projects/${projectId}/conflicts/${conflictId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ resolution, notes: notes ?? null }),
+    }).then((r) => expectJson<Record<string, unknown>>(r)),
+
+  autoGenerateClarifications: (projectId: string, requirementId: string) =>
+    apiFetch(
+      `/api/projects/${projectId}/requirements/${requirementId}/clarifications/auto`,
+      { method: "POST" }
+    ).then((r) => expectJson<ReviewClarification[]>(r)),
+
+  reviewDeviation: (
+    projectId: string,
+    deviationId: string,
+    status: "accepted" | "rejected",
+    reviewNotes?: string
+  ) =>
+    apiFetch(`/api/projects/${projectId}/deviations/${deviationId}/review`, {
+      method: "POST",
+      body: JSON.stringify({
+        status,
+        review_notes: reviewNotes ?? null,
+      }),
+    }).then((r) => expectJson<Record<string, unknown>>(r)),
 };
