@@ -26,6 +26,9 @@ from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
     Membership,
+    OemDocument,
+    OemDocumentVersion,
+    OemTextSegment,
     Organization,
     ProcessingRun,
     ProcessingStage,
@@ -641,3 +644,83 @@ class TestFullProcessingFlow:
 
         finally:
             app.dependency_overrides.clear()
+
+    def test_oem_upload_then_worker_creates_searchable_segments(self, session_cm) -> None:
+        """Real OEM upload -> queue -> worker -> searchable source segments."""
+        fake_queue = FakeQueueAdapter()
+        shared_storage = FakeStorageAdapter()
+        app.dependency_overrides[get_storage_dep] = lambda: shared_storage
+        app.dependency_overrides[get_scanner_dep] = lambda: FakeScanner()
+        app.dependency_overrides[get_queue_adapter_dep] = lambda: fake_queue
+
+        try:
+            info = asyncio.run(_create_org_project(session_cm, status="tender_uploaded"))
+            headers = _headers(info["user_id"], info["org_id"])
+
+            upload = TestClient(app).post(
+                f"/projects/{info['project_id']}/oem-documents/upload",
+                files={"file": ("datasheet.pdf", _make_pdf(), "application/pdf")},
+                data={
+                    "document_type": "datasheet",
+                    "vendor_name": "Acme Instruments",
+                    "product_name": "Model X",
+                },
+                headers=headers,
+            )
+            assert upload.status_code == 201, upload.text
+            assert upload.json()["processing_status"] == "uploaded"
+
+            async def _run_worker() -> None:
+                sf = _get_session_factory()
+                worker = Worker(
+                    queue=fake_queue,
+                    session_factory=sf,  # type: ignore[arg-type]
+                    processor=JobProcessor(
+                        sf,
+                        parser=FakeParserAdapter(
+                            pages=[
+                                PageResult(
+                                    page_number=1,
+                                    text="Positioning resolution is 1 um.",
+                                    text_length=31,
+                                    ocr_needed=False,
+                                    warnings=[],
+                                    error=None,
+                                )
+                            ]
+                        ),
+                        storage=shared_storage,
+                    ),
+                    max_concurrency=1,
+                )
+                assert await worker.run_once() == 1
+
+            asyncio.run(_run_worker())
+
+            async def _verify() -> None:
+                sf = _get_session_factory()
+                async with sf() as session:
+                    version_result = await session.execute(
+                        select(OemDocumentVersion)
+                        .join(OemDocument, OemDocumentVersion.document_id == OemDocument.id)
+                        .where(OemDocument.project_id == info["project_id"])
+                    )
+                    version = version_result.scalar_one()
+                    assert version.processing_status == DocumentProcessingStatus.PARSED
+                    assert version.parser_name == "fake"
+                    assert version.parser_version == "test"
+
+                    segment_result = await session.execute(
+                        select(OemTextSegment).where(
+                            OemTextSegment.oem_document_version_id == version.id
+                        )
+                    )
+                    segments = list(segment_result.scalars().all())
+                    assert len(segments) == 1
+                    assert segments[0].page_number == 1
+                    assert segments[0].text == "Positioning resolution is 1 um."
+
+            asyncio.run(_verify())
+        finally:
+            app.dependency_overrides.clear()
+
