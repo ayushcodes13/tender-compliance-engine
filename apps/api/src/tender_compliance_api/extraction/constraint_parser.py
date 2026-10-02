@@ -204,9 +204,9 @@ _UNIT_QUANTITY: dict[str, str] = {
     "m": "length", "mm": "length", "cm": "length", "km": "length",
     "in": "length", "inch": "length", "inches": "length",
     "ft": "length", "mile": "length",
-    "v": "voltage", "volts": "voltage",
-    "a": "current", "amps": "current", "amp": "current",
-    "hz": "frequency",
+    "v": "voltage", "volts": "voltage", "kv": "voltage", "mv": "voltage",
+    "a": "current", "amps": "current", "amp": "current", "ma": "current",
+    "hz": "frequency", "khz": "frequency", "mhz": "frequency", "ghz": "frequency",
     "s": "time", "sec": "time", "seconds": "time",
     "ms": "time", "millisecond": "time", "milliseconds": "time",
     "minute": "time", "minutes": "time", "min": "time",
@@ -228,6 +228,7 @@ _NOUN_PARAM: dict[str, str] = {
     "time": "time", "duration": "time",
     "angle": "angle",
     "ratio": "percentage", "concentration": "percentage",
+    "accuracy": "accuracy", "resolution": "resolution", "precision": "precision",
 }
 
 # Max length for a trailing unit token (longer runs are prose, not a unit).
@@ -628,9 +629,15 @@ def parse_constraint(
         # Normal (non-corrupted) path
         num = _parse_number(num_tok, ocr_warning)
         qty = _quantity_for_unit(unit)
-        parameter = qty if qty is not None else (
-            _parameter_from_noun(fragment, m.start("num")) or "value"
-        )
+        # Prefer a noun-derived parameter when it is more specific than the
+        # unit-derived quantity.  E.g. "accuracy ≥ 0.5 %" → parameter "accuracy"
+        # (not "percentage"), so the comparison engine can distinguish accuracy
+        # from resolution even when both share the % unit.
+        noun_param = _parameter_from_noun(fragment, m.start("num"))
+        if qty is not None and noun_param is not None and noun_param != qty:
+            parameter = noun_param
+        else:
+            parameter = qty if qty is not None else (noun_param or "value")
         tol, tol_span = _extract_tolerance(fragment, end, ocr_warning)
         if tol_span is not None:
             used.append(tol_span)
