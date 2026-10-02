@@ -22,9 +22,9 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0022_compliance_assessment"
+_HEAD_REV = "0023_qualitative_reasoning"
 
-# Tables introduced by CP08..CP54 migrations (one table per checkpoint).
+# Tables introduced by CP08..CP55 migrations (one table per checkpoint).
 _APP_TABLES = {
     "organizations", "users", "memberships", "audit_logs", "projects",
     "stored_objects", "tender_documents", "document_versions",
@@ -37,6 +37,7 @@ _APP_TABLES = {
     "oem_documents", "oem_document_versions",
     "oem_text_segments", "evidence", "evidence_locations",
     "vendor_specs", "compliance_assessments",
+    "qualitative_assessments",
 }
 
 
