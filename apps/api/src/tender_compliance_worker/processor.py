@@ -22,14 +22,19 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    OemDocument,
+    OemDocumentVersion,
     ProcessingRun,
     ProcessingStage,
+    Project,
     RunStatus,
+    StoredObject,
 )
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.extraction.adapter import LlmAdapter
@@ -139,9 +144,18 @@ class JobProcessor:
 
             version = await self._get_version(session, version_id)
             if version is None:
-                raise ValueError(
-                    f"DocumentVersion {version_id} not found in org {org_id}"
+                oem_version = await self._get_oem_version(
+                    session, version_id, org_id
                 )
+                if oem_version is None:
+                    raise ValueError(
+                        f"Document version {version_id} not found in org {org_id}"
+                    )
+                await self._process_oem(
+                    session, svc, auth, oem_version
+                )
+                await session.commit()
+                return
 
             # Skip if already terminal — job was re-delivered after crash.
             if version.processing_status in (
@@ -562,6 +576,141 @@ class JobProcessor:
             error_message=None,
         )
 
+
+    async def _process_oem(
+        self,
+        session: AsyncSession,
+        svc: DocumentService,
+        auth: AuthContext,
+        version: OemDocumentVersion,
+    ) -> None:
+        """Parse an OEM version into searchable, source-linked text segments.
+
+        OEM jobs intentionally stop after source extraction/indexing. They do not
+        run tender requirement extraction or create tender ProcessingRun rows.
+        """
+        if version.processing_status in (
+            DocumentProcessingStatus.PARSED,
+            DocumentProcessingStatus.FAILED,
+        ):
+            return
+
+        previous = version.processing_status
+        version.processing_status = DocumentProcessingStatus.PROCESSING
+        audit = AuditService(session)
+        await audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="oem_document.processing_started",
+            entity_type="oem_document_version",
+            entity_id=version.id,
+            project_id=await svc._oem_project_id_for(version.document_id),  # noqa: SLF001
+            metadata={"from": previous.value, "to": "processing"},
+        )
+
+        stored_result = await session.execute(
+            select(StoredObject).where(
+                StoredObject.id == version.stored_object_id,
+                StoredObject.organization_id == auth.organization_id,
+            )
+        )
+        stored = stored_result.scalar_one_or_none()
+        if stored is None:
+            version.processing_status = DocumentProcessingStatus.FAILED
+            await audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="oem_document.processing_failed",
+                entity_type="oem_document_version",
+                entity_id=version.id,
+                project_id=await svc._oem_project_id_for(version.document_id),  # noqa: SLF001
+                metadata={"reason": "stored_object_missing"},
+            )
+            return
+
+        try:
+            data = await self._storage.get(stored.storage_key)
+            parsed = await self._parser.parse(data, version.mime_type)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("OEM parse failed for version %s: %s", version.id, exc)
+            version.processing_status = DocumentProcessingStatus.FAILED
+            await audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="oem_document.processing_failed",
+                entity_type="oem_document_version",
+                entity_id=version.id,
+                project_id=await svc._oem_project_id_for(version.document_id),  # noqa: SLF001
+                metadata={"reason": type(exc).__name__},
+            )
+            return
+
+        version.parser_name = parsed.parser_name
+        version.parser_version = parsed.parser_version
+
+        if parsed.fatal_error is not None:
+            version.processing_status = DocumentProcessingStatus.FAILED
+            await audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="oem_document.processing_failed",
+                entity_type="oem_document_version",
+                entity_id=version.id,
+                project_id=await svc._oem_project_id_for(version.document_id),  # noqa: SLF001
+                metadata={"reason": "parser_fatal_error"},
+            )
+            return
+
+        segments = [
+            (page.page_number, page.text)
+            for page in parsed.pages
+            if page.text.strip()
+        ]
+        await svc.create_oem_text_segments(
+            auth,
+            version.document_id,
+            version.version_number,
+            segments,
+        )
+
+        needs_review = any(
+            page.error is not None or page.ocr_needed for page in parsed.pages
+        )
+        version.processing_status = (
+            DocumentProcessingStatus.PARTIAL
+            if needs_review
+            else DocumentProcessingStatus.PARSED
+        )
+        await audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="oem_document.processing_completed",
+            entity_type="oem_document_version",
+            entity_id=version.id,
+            project_id=await svc._oem_project_id_for(version.document_id),  # noqa: SLF001
+            metadata={
+                "status": version.processing_status.value,
+                "page_count": parsed.page_count,
+                "segment_count": len(segments),
+            },
+        )
+
+    async def _get_oem_version(
+        self,
+        session: AsyncSession,
+        version_id: uuid.UUID,
+        organization_id: uuid.UUID,
+    ) -> OemDocumentVersion | None:
+        result = await session.execute(
+            select(OemDocumentVersion)
+            .join(OemDocument, OemDocumentVersion.document_id == OemDocument.id)
+            .join(Project, OemDocument.project_id == Project.id)
+            .where(
+                OemDocumentVersion.id == version_id,
+                Project.organization_id == organization_id,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def _get_version(
         self, session: AsyncSession, version_id: uuid.UUID
