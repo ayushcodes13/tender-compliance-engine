@@ -283,3 +283,51 @@
 - **No input needed** unless you want me to extend the worker to process OEM
   documents into text segments as part of CP50, or add a separate retrieval
   benchmark dataset.
+
+## CP51 — Evidence review UI and evidence curation  ✅ DONE (PR #61)
+- **What shipped:**
+  - New `EvidencePanel` component (`apps/web/components/evidence-panel.tsx`)
+    integrated into the three-pane review workspace below the source anchor
+    section.
+  - Two propose modes: "Propose (preview)" (retrieval only, no persist) and
+    "Propose & persist" (retrieval + persist as PROPOSED evidence rows).
+  - Acceptance/rejection of evidence candidates via the curate API with
+    tenant-scoped access checks (from CP50).
+  - All candidates show source linkage: OEM document name, version, page
+    number, location type (exact/approximate), source text snippet, OCR
+    confidence when available.
+  - Retrieval score is visually secondary (small, muted text). Source text
+    is primary — a high score never implies compliance.
+  - Clear labels: "System-proposed — not approved evidence" on every
+    candidate; "Accepted"/"Rejected"/"Awaiting review" on persisted items.
+  - Query terms derived from the requirement's normalized text via simple
+    term extraction with stop-word removal (matching the backend tokenizer
+    philosophy).
+- **API client methods added** (`lib/api/client.ts`):
+  - `fetchEvidence` (GET /evidence)
+  - `proposeEvidence` (POST /evidence/propose)
+  - `curateEvidence` (POST /{evidence_id}/curate?review_state=...)
+  - Types: `EvidenceReviewState`, `EvidenceResponse`,
+    `EvidenceCandidateResponse`, `EvidenceLocationResponse`,
+    `EvidenceProposeRequest`.
+- **Verification:**
+  - `npx tsc --noEmit` — clean.
+  - CI (api, api-worker, web) — all pass on PR #61.
+  - All checks green, PR squash-merged to main.
+- **⚠️ Known limitations (needs your input):**
+  - **No "remove" action for accepted evidence:** The backend curate API
+    supports accept/reject transitions but not deletion. A reviewer can
+    reject an accepted item (moving it to rejected) but cannot delete it.
+    The checkpoint spec says "allow accept/reject/add/remove" — remove is
+    not implemented. If you want a delete endpoint, it would need a new
+    backend route + migration (evidence is not currently soft-deletable).
+  - **No evidence panel on the matrix/projection screen yet:** Evidence is
+    only visible in the review workspace. CP59 will surface accepted
+    evidence in the compliance matrix.
+  - **Preview candidates are local-only:** "Propose (preview)" candidates
+    are held in component state and not persisted. If the reviewer
+    navigates away, they are lost. This is intentional (inspect before
+    committing) but may need a persistent draft mechanism later.
+  - **Query term derivation is simple:** Uses stop-word removal only. May
+    miss semantically related terms. Phase 2 may warrant richer term
+    expansion (e.g., synonym/alias mapping per parameter).

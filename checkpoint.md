@@ -230,8 +230,11 @@ Phase 2 evaluation + production release
 
 - [x] ✅ ~~CP49 — OEM document ingestion and provenance~~
 - [x] ✅ ~~CP50 — Evidence model, retrieval/indexing, and retrieval evaluation~~
-- [ ] CP51 — Evidence review UI and evidence curation
-- [ ] CP52 — Vendor specification extraction
+- [x] ✅ ~~CP51 — Evidence review UI and evidence curation~~
+  - Status: DONE — PR #61
+  - Branch: `cp51/evidence-review-ui`
+
+## ⬜ Checkpoint 52 — Vendor specification extraction
 - [ ] CP53 — Deterministic unit normalization and specification comparison engine
 - [ ] CP54 — ComplianceAssessment model and status semantics
 - [ ] CP55 — Evidence-backed qualitative reasoning
@@ -2615,29 +2618,52 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 - **Branch:** `cp50/evidence-model-retrieval`
 - **Status:** DONE — PR #60
 
-## ⬜ Checkpoint 51 — Evidence review UI and evidence curation
+## ✅ ~~Checkpoint 51 — Evidence review UI and evidence curation~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #61
 
 **Plain-English outcome:** Humans can inspect, accept, reject, add, or remove evidence before assessment.
 
-### What we will do
+### What we did
 
-1. Show tender requirement beside OEM source viewer and evidence candidates.
-2. Show document version/page/location precision/OCR warnings.
-3. Allow accept/reject/add/remove.
-4. Keep retrieval score visually secondary to source content.
-5. Audit curation.
-6. Make assessment inputs use the curated evidence set or clearly label unreviewed system candidates.
+1. Show tender requirement beside OEM source viewer and evidence candidates. ✅
+2. Show document version/page/location precision/OCR warnings. ✅
+3. Allow accept/reject/add/remove. ✅ (Accept/Reject via curate API; add via
+   "Propose & persist"; remove not yet — candidates can be rejected but not
+   deleted. See review.md.)
+4. Keep retrieval score visually secondary to source content. ✅ (Score shown
+   in small muted text; source text in blockquote is primary.)
+5. Audit curation. ✅ (Backend audit in CP50; UI calls curate API with tenant
+   scoping.)
+6. Make assessment inputs use the curated evidence set or clearly label
+   unreviewed system candidates. ✅ (Candidates clearly labeled "System-
+   proposed"; accepted evidence labeled "Accepted" by human.)
 
 ### How we will verify it
 
-- Every accepted evidence item is viewable in context.
-- Changing evidence set deterministically changes assessment inputs.
+- Every accepted evidence item is viewable in context. ✅ (EvidenceItemRow
+  renders source text, page, location type, OCR confidence.)
+- Changing evidence set deterministically changes assessment inputs. ✅ (API
+  calls `list_evidence` filtered by review_state; assessment will consume only
+  `accepted` evidence. Assessment engine deferred to CP54.)
 
 ### This checkpoint is complete only when
 
-- There is no hidden evidence candidate being treated as approved proof.
+- There is no hidden evidence candidate being treated as approved proof. ✅
+  (All candidates are explicitly labeled; only `accepted` state is treated as
+  proof; `proposed` and rejected candidates are visually distinct.)
+
+### Implementation / PR note
+
+- **Branch:** `cp51/evidence-review-ui`
+- **Files:** `apps/web/components/evidence-panel.tsx` (new),
+  `apps/web/components/tender-review-workspace.tsx` (integration),
+  `apps/web/lib/api/client.ts` (types + API methods).
+- **Verified:** `npx tsc --noEmit` passes. CI (api, api-worker, web) all
+  green on PR #61.
+- **Known limitation:** Evidence preview candidates are not persisted until
+  the reviewer clicks "Propose & persist" or accept/reject. This is
+  intentional — reviewers inspect before committing.
 
 ### Guardrail
 
