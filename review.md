@@ -392,3 +392,37 @@
   - **Query term derivation is simple:** Uses stop-word removal only. May
     miss semantically related terms. Phase 2 may warrant richer term
     expansion (e.g., synonym/alias mapping per parameter).
+
+## CP54 — ComplianceAssessment model and status semantics  ✅ DONE
+- **What shipped:**
+  - `ComplianceStatus` StrEnum: COMPLIANT, NON_COMPLIANT, PARTIAL,
+    NOT_DEMONSTRATED, CONFLICT, HUMAN_REVIEW_REQUIRED.
+  - `ComplianceAssessment` model with versioned assessments (append-only),
+    suggested_status vs status, reason_code/reason_text, comparison_result_json,
+    is_confirmed_by_human, reviewer_id, reviewed_at.
+  - Migration `0022_compliance_assessment` with tenant-scoped indexes +
+    unique constraint on (requirement_id, assessment_version).
+  - `ComplianceAssessmentService` (`compliance/service.py`):
+    `assess_requirement()`, `list_assessments()`, `get_latest_assessment()`,
+    `confirm_assessment()`.
+  - Verdict→status mapping: MATCH→COMPLIANT, CLOSE→PARTIAL,
+    MISMATCH→NON_COMPLIANT, INCOMPARABLE→HUMAN_REVIEW_REQUIRED,
+    NOT_DEMONSTRATED→NOT_DEMONSTRATED.
+  - API routes (`routes/compliance.py`): POST .../assess, GET
+    .../compliance-assessments, GET .../compliance-assessment, POST .../confirm.
+  - Registered `compliance_router` in `main.py`.
+  - 15 new tests.
+- **Adversarial review fixes:**
+  - Migration `0021` `now()` → `CURRENT_TIMESTAMP` (SQLite compatibility —
+    latent bug: no prior tests inserted VendorSpec rows via DB).
+  - `_parameter_from_noun` window expanded (4→12 tokens) so "accuracy" is
+    detected even when further from the number in clause structure.
+  - Test imports inlined (no cross-test-module imports — `tests/` has no
+    `__init__.py`, CI runs `pytest` without `tests` on path).
+- **Verification:** ruff clean, mypy clean (93 files), 941 passed / 2 skipped,
+  `npx tsc --noEmit` clean.
+- **Known limitations:**
+  - OEM worker gap (carried from CP52/CP53): no OEM text segments exist in
+    production. The assessment service is ready but has no real data to
+    compare until the worker is extended.
+  - No input needed unless you want the worker extension for OEM processing.

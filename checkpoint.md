@@ -245,7 +245,21 @@ Phase 2 evaluation + production release
   - 42 new tests covering operators, ranges, tolerance, percentage, parameter
     mismatch, wrong-metric-same-number, boundary equality, conversion explanation.
   - ruff/mypy/pytest/tsc all clean (926 passed, 2 skipped).
-- [ ] CP54 — ComplianceAssessment model and status semantics
+- [x] ✅ ~~CP54 — ComplianceAssessment model and status semantics~~
+  - Status: DONE — PR #64, merged
+  - `ComplianceStatus` enum: COMPLIANT, NON_COMPLIANT, PARTIAL,
+    NOT_DEMONSTRATED, CONFLICT, HUMAN_REVIEW_REQUIRED.
+  - `ComplianceAssessment` model with versioned assessments (append-only),
+    suggested_status vs status, reason_code/reason_text, comparison_result_json.
+  - `ComplianceAssessmentService`: assess_requirement, list_assessments,
+    get_latest_assessment, confirm_assessment.
+  - API routes: POST .../assess, GET .../compliance-assessments,
+    GET .../compliance-assessment, POST .../confirm.
+  - Mapping from ComparisonVerdict (CP53) to ComplianceStatus.
+  - 15 new tests covering no-evidence, versioning, deterministic comparison,
+    parameter mismatch, human confirmation, tenant isolation.
+  - Fixed migration 0021 `now()` → `CURRENT_TIMESTAMP` (SQLite compat).
+  - ruff/mypy/pytest/tsc all clean (941 passed, 2 skipped).
 - [ ] CP55 — Evidence-backed qualitative reasoning
 - [ ] CP56 — Conflict and contradiction detection
 - [ ] CP57 — Missing evidence, clarification questions, and deviations
@@ -2734,11 +2748,9 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - An LLM may not overrule deterministic math.
 
-## ⬜ Checkpoint 54 — ComplianceAssessment model and status semantics
+## ✅ ~~Checkpoint 54 — ComplianceAssessment model and status semantics~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
-
-**Plain-English outcome:** Compliance states exist only after evidence and deterministic comparison are real.
+**Status:** DONE — PR #64, merged
 
 ### What we will do
 
