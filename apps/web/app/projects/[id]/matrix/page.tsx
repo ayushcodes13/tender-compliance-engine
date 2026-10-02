@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { MatrixView } from "@/components/matrix-view";
+import { FinalMatrixView } from "@/components/final-matrix-view";
 import { api, DocumentItem, Project } from "@/lib/api/client";
 
 export default function ProjectMatrixPage() {
@@ -135,6 +136,12 @@ export default function ProjectMatrixPage() {
           </section>
 
           <MatrixView
+            projectId={projectId}
+            documentId={document.document_id}
+            version={document.version_number}
+          />
+
+          <FinalMatrixView
             projectId={projectId}
             documentId={document.document_id}
             version={document.version_number}
