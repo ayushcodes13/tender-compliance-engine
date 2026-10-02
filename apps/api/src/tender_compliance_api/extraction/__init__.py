@@ -97,6 +97,11 @@ from tender_compliance_api.extraction.schema import (
     TrustedSourceContext,
     UncertaintyLevel,
 )
+from tender_compliance_api.extraction.vendor_spec import (
+    VENDOR_SPEC_VERSION,
+    ParsedVendorSpec,
+    parse_vendor_specs,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - re-export only
     from tender_compliance_api.db.models import DocumentPage  # noqa: F401
@@ -159,11 +164,14 @@ __all__ = [
     "SourcedRequirementCandidate",
     "TrustedSourceContext",
     "UncertaintyLevel",
+    "VENDOR_SPEC_VERSION",
+    "ParsedVendorSpec",
     "build_source_windows",
     "conservative_normalized_text",
     "extract_from_windows",
     "parse_constraint",
     "parse_qualitative_conditions",
+    "parse_vendor_specs",
     "promotion_key",
     "reconcile",
     "resolve_sources",

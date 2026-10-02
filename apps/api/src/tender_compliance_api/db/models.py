@@ -1921,3 +1921,149 @@ class EvidenceLocation(Base):
             f"EvidenceLocation(evidence={self.evidence_id!r}, "
             f"page={self.page_number!r}, loc={self.location_type!r})"
         )
+
+
+class VendorSpecExtractionMethod(enum.StrEnum):
+    """How a :class:`VendorSpec` was produced (CP52)."""
+
+    DETERMINISTIC = "deterministic"
+    LLM = "llm"
+
+
+class VendorSpec(Base):
+    """A structured vendor specification extracted from OEM evidence (CP52).
+
+    One row per structured fact (e.g. "accuracy ±0.5 %", "resolution 0.01 mm")
+    parsed deterministically from an accepted :class:`Evidence` row's source
+    text.  Every vendor fact MUST point to its supporting evidence — the
+    foreign key is non-nullable and cascades on delete.
+
+    Source linkage is preserved at the same precision as
+    :class:`EvidenceLocation` (page, char offsets, source_text, ocr_confidence,
+    location_type) so "a structured vendor fact can always be traced back to
+    OEM source material" (checkpoint completion criterion).
+
+    The ``parameter`` field captures the conceptual quantity (e.g.
+    ``accuracy``, ``resolution``, ``mass``, ``temperature``) — never collapsing
+    distinct technical concepts that happen to share a unit (e.g. accuracy vs
+    resolution).  ``entity`` captures a product/model designation when present
+    in the source text.  ``conditions`` holds operating-condition context
+    (temperature, humidity, etc.) as structured JSON.
+
+    ``normalization_state`` reuses :class:`ConstraintNormalizationState` so
+    that ambiguous/OCR-derived specs are escalated to PARTIAL / NEEDS_REVIEW
+    rather than silently corrected.
+    """
+
+    __tablename__ = "vendor_specs"
+    __table_args__ = (
+        Index("ix_vendor_specs_evidence", "evidence_id"),
+        Index("ix_vendor_specs_requirement", "requirement_id"),
+        Index("ix_vendor_specs_parameter", "parameter"),
+        Index(
+            "ix_vendor_specs_evidence_parameter",
+            "evidence_id",
+            "parameter",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Every vendor fact must point to its supporting evidence.
+    evidence_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Link back to the tender requirement this spec helps assess.
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    oem_document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("oem_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    oem_text_segment_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True, index=True
+    )
+    # The conceptual quantity being specified (e.g. "accuracy", "resolution",
+    # "mass", "temperature").  Never collapsed with the unit.
+    parameter: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Optional product/model designation extracted from the source text
+    # (e.g. "Model XYZ-123").
+    entity: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Single numeric value (operator = / <= / >= etc.).
+    value: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    # Inclusive bounds for ranges / between operators.
+    lower_bound: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    upper_bound: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tolerance: Mapped[float | None] = mapped_column(
+        Numeric(18, 6), nullable=True
+    )
+    # Free-form qualitative statement for non-numeric specs
+    # (e.g. "CE marked", "IP65 rated").  Never inferred from vague prose.
+    qualitative_statement: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True
+    )
+    # Operating conditions context (e.g. {"ambient_temperature": "25°C"}).
+    conditions: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Verbatim source fragment this spec was parsed from — never fabricated.
+    source_text: Mapped[str] = mapped_column(String(2048), nullable=False)
+    source_page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    char_start: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    char_end: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    ocr_confidence: Mapped[float | None] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )
+    location_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="approximate",
+        server_default="approximate",
+    )
+    extraction_method: Mapped[VendorSpecExtractionMethod] = mapped_column(
+        Enum(
+            VendorSpecExtractionMethod,
+            name="vendor_spec_extraction_method",
+        ),
+        nullable=False,
+        default=VendorSpecExtractionMethod.DETERMINISTIC,
+        server_default=VendorSpecExtractionMethod.DETERMINISTIC.value,
+    )
+    extraction_version: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    normalization_state: Mapped[ConstraintNormalizationState] = mapped_column(
+        Enum(
+            ConstraintNormalizationState,
+            name="constraint_normalization_state",
+        ),
+        nullable=False,
+        default=ConstraintNormalizationState.UNNORMALIZED,
+        server_default=ConstraintNormalizationState.UNNORMALIZED.value,
+    )
+    issues: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"VendorSpec(evidence={self.evidence_id!r}, "
+            f"parameter={self.parameter!r}, "
+            f"value={self.value!r}, unit={self.unit!r})"
+        )

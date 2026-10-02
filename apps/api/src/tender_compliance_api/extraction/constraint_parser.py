@@ -208,6 +208,7 @@ _UNIT_QUANTITY: dict[str, str] = {
     "a": "current", "amps": "current", "amp": "current",
     "hz": "frequency",
     "s": "time", "sec": "time", "seconds": "time",
+    "ms": "time", "millisecond": "time", "milliseconds": "time",
     "minute": "time", "minutes": "time", "min": "time",
     "h": "time", "hour": "time", "hours": "time",
     "%": "percentage",
