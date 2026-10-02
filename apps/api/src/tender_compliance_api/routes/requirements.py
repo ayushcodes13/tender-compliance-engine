@@ -1293,12 +1293,11 @@ async def download_export(
         ExportFormat.DOCX.value: "tender_compliance_export.docx",
         ExportFormat.PDF.value: "tender_compliance_export.pdf",
     }
+    filename = filenames.get(export_format, "tender_compliance_export.bin")
     return Response(
         content=workbook_bytes,
         media_type=media_types.get(export_format, "application/octet-stream"),
         headers={
-            "Content-Disposition": (
-                f'attachment; filename="{filenames.get(export_format, "tender_compliance_export.bin")}"'
-            )
+            "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
