@@ -20,8 +20,8 @@ All canonical checkpoints CP00–CP61 are complete. This plan is a post-build ha
 | B | 2026-09-05 | Backend simplification | Remove dead/duplicate code and split only the highest-cost god-module boundaries without behavior changes; full backend suite green. |
 | C | 2026-09-07 | Human review UI completion | Browser exposes CP57–CP58 clarification/deviation/override/reopen/comment workflows needed for real review. |
 | D | 2026-09-09 | Final matrix/export/submission UI | Browser exposes CP59–CP61 final matrix, XLSX/DOCX/PDF export, and submission lock/approval lifecycle. |
-| E | 2026-09-11 | Real end-to-end journey tests | Automated user journey proves create project → upload → process → review → OEM evidence → assessment → final artifact/submission. |
-| F | 2026-09-13 | Adversarial hardening + release review | Expanded adversarial suite is green; findings fixed; manual-review checklist documents exactly what a human still needs to inspect. |
+| E | 2026-09-11 | Real end-to-end journey tests | **DONE — PR #76.** Fixed OEM upload → worker integration and added upload-driven regression coverage proving searchable OEM source creation. |
+| F | 2026-09-13 | Adversarial hardening + release review | **IN PROGRESS.** Remove unsafe raw-HTML rendering, add a CI invariant, refresh misleading worker documentation, and publish the final manual-review checklist. |
 
 ## Product reality test
 

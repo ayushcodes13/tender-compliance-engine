@@ -223,13 +223,9 @@ export function SourceViewer({
               ))}
 
               {page.cleaned_text && (
-                <div
-                  className="source-text-fallback"
-                  dangerouslySetInnerHTML={{
-                    __html: page.cleaned_text
-                      .replace(/\n/g, "<br />"),
-                  }}
-                />
+                <div className="source-text-fallback">
+                  {page.cleaned_text}
+                </div>
               )}
             </div>
 
