@@ -27,7 +27,7 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     User,
 )
-from tender_compliance_api.document import DocumentService
+from tender_compliance_api.document.service import DocumentService
 
 # ---------------------------------------------------------------------------
 # Helpers (mirror test_document_processing.py patterns)
@@ -370,7 +370,7 @@ class TestNormalizeRequirementConstraints:
     def test_tenant_isolation(self, session_cm) -> None:
         """A user from a different organization cannot normalize constraints
         for a requirement in another org's project."""
-        from tender_compliance_api.document import DocumentNotFoundError
+        from tender_compliance_api.document.service import DocumentNotFoundError
 
         user_id, org_id, project_id = _build_org_project(session_cm)
         req_id = _create_doc_version_and_requirement(
