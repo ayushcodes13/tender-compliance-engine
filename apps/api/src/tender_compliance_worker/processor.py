@@ -31,7 +31,7 @@ from tender_compliance_api.db.models import (
     ProcessingStage,
     RunStatus,
 )
-from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.extraction.adapter import LlmAdapter
 from tender_compliance_api.extraction.chunking import build_source_windows
 from tender_compliance_api.extraction.extractor import extract_from_windows
