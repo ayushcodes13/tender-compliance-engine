@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import func as sqla_func
 from sqlalchemy import select
@@ -16,8 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.db.models import (
+    AssessmentComment,
+    AssessmentCommentType,
+    ClarificationRequest,
     ComplianceAssessment,
     ComplianceStatus,
+    Conflict,
+    Deviation,
     DocumentVersion,
     Evidence,
     EvidenceReviewState,
@@ -363,6 +369,384 @@ class ComplianceAssessmentService:
         )
 
         return assessment
+
+    # ------------------------------------------------------------------
+    # CP58 — Human review: override, reopen, comments, combined review
+    # ------------------------------------------------------------------
+
+    async def _fetch_assessment(
+        self,
+        auth: AuthContext,
+        project_id: uuid.UUID,
+        assessment_id: uuid.UUID,
+    ) -> ComplianceAssessment | None:
+        """Fetch a single assessment, tenant-scoped. Shared by review methods."""
+        stmt = (
+            select(ComplianceAssessment)
+            .join(Project, ComplianceAssessment.project_id == Project.id)
+            .where(
+                ComplianceAssessment.id == assessment_id,
+                ComplianceAssessment.project_id == project_id,
+                Project.organization_id == auth.organization_id,
+            )
+        )
+        row = await self._session.execute(stmt)
+        return row.scalar_one_or_none()
+
+    async def _next_assessment_version(
+        self, requirement_id: uuid.UUID
+    ) -> int:
+        """Return the next assessment_version for a requirement."""
+        stmt = (
+            select(sqla_func.max(ComplianceAssessment.assessment_version)).where(
+                ComplianceAssessment.requirement_id == requirement_id,
+            )
+        )
+        row = await self._session.execute(stmt)
+        max_version = row.scalar_one_or_none()
+        return (max_version or 0) + 1
+
+    async def override_assessment(
+        self,
+        auth: AuthContext,
+        project_id: uuid.UUID,
+        assessment_id: uuid.UUID,
+        status: ComplianceStatus,
+        reason: str,
+        evidence_id: uuid.UUID | None = None,
+    ) -> ComplianceAssessment | None:
+        """Create a new assessment version with a human-overridden status.
+
+        The **original** assessment row is never modified — a new row with an
+        incremented ``assessment_version`` is created.  The original
+        ``suggested_status`` is preserved on the new row so the system's
+        deterministic suggestion remains auditable even after override.
+
+        ``status`` must be one of the six product-defined
+        :class:`ComplianceStatus` values.  The override is always the human's
+        deliberate choice — it cannot be ``suggested_status`` via this method
+        (use :meth:`confirm_assessment` instead, which does not create a new
+        version).
+        """
+        original = await self._fetch_assessment(auth, project_id, assessment_id)
+        if original is None:
+            return None
+
+        if status == original.suggested_status and evidence_id is None:
+            raise ValueError(
+                "Override status matches the suggested status; use "
+                "confirm_assessment instead, or specify a different status / "
+                "evidence."
+            )
+
+        new_version = await self._next_assessment_version(original.requirement_id)
+
+        overridden = ComplianceAssessment(
+            project_id=original.project_id,
+            requirement_id=original.requirement_id,
+            evidence_id=evidence_id if evidence_id is not None else original.evidence_id,
+            vendor_spec_id=original.vendor_spec_id,
+            suggested_status=original.suggested_status,
+            status=status,
+            reason_code="human_override",
+            reason_text=reason,
+            comparison_result_json=original.comparison_result_json,
+            assessment_version=new_version,
+            is_confirmed_by_human=True,
+            reviewer_id=auth.actor_id,
+            reviewed_at=datetime.now(UTC),
+        )
+        self._session.add(overridden)
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="compliance_assessment_overridden",
+            entity_type="compliance_assessment",
+            entity_id=overridden.id,
+            project_id=project_id,
+            metadata={
+                "original_assessment_id": str(original.id),
+                "original_status": original.status.value,
+                "overridden_status": status.value,
+                "assessment_version": new_version,
+            },
+        )
+
+        # Persist the override reason as an audit comment.
+        comment = AssessmentComment(
+            assessment_id=overridden.id,
+            project_id=project_id,
+            author_id=auth.actor_id,
+            comment_type=AssessmentCommentType.OVERRIDE_REASON,
+            comment=reason,
+            assessment_version=new_version,
+        )
+        self._session.add(comment)
+        await self._session.flush()
+
+        return overridden
+
+    async def reopen_assessment(
+        self,
+        auth: AuthContext,
+        project_id: uuid.UUID,
+        assessment_id: uuid.UUID,
+        reason: str | None = None,
+    ) -> ComplianceAssessment | None:
+        """Reopen a confirmed assessment for re-review.
+
+        Creates a new assessment version that reverts to the system's
+        ``suggested_status`` with ``is_confirmed_by_human=False``.  The
+        original confirmed assessment row is preserved (append-only).
+        """
+        original = await self._fetch_assessment(auth, project_id, assessment_id)
+        if original is None:
+            return None
+        if not original.is_confirmed_by_human:
+            raise ValueError(
+                "Only confirmed assessments can be reopened."
+            )
+
+        new_version = await self._next_assessment_version(original.requirement_id)
+
+        reopened = ComplianceAssessment(
+            project_id=original.project_id,
+            requirement_id=original.requirement_id,
+            evidence_id=original.evidence_id,
+            vendor_spec_id=original.vendor_spec_id,
+            suggested_status=original.suggested_status,
+            status=original.suggested_status,
+            reason_code="reopened",
+            reason_text=reason or "Assessment reopened for re-review.",
+            comparison_result_json=original.comparison_result_json,
+            assessment_version=new_version,
+            is_confirmed_by_human=False,
+            reviewer_id=auth.actor_id,
+            reviewed_at=datetime.now(UTC),
+        )
+        self._session.add(reopened)
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="compliance_assessment_reopened",
+            entity_type="compliance_assessment",
+            entity_id=reopened.id,
+            project_id=project_id,
+            metadata={
+                "original_assessment_id": str(original.id),
+                "assessment_version": new_version,
+            },
+        )
+
+        if reason:
+            comment = AssessmentComment(
+                assessment_id=reopened.id,
+                project_id=project_id,
+                author_id=auth.actor_id,
+                comment_type=AssessmentCommentType.REOPEN_REASON,
+                comment=reason,
+                assessment_version=new_version,
+            )
+            self._session.add(comment)
+            await self._session.flush()
+
+        return reopened
+
+    async def add_comment(
+        self,
+        auth: AuthContext,
+        project_id: uuid.UUID,
+        assessment_id: uuid.UUID,
+        comment: str,
+        comment_type: AssessmentCommentType = AssessmentCommentType.COMMENT,
+    ) -> AssessmentComment | None:
+        """Add a reviewer comment to an assessment, tenant-scoped."""
+        assessment = await self._fetch_assessment(
+            auth, project_id, assessment_id
+        )
+        if assessment is None:
+            return None
+
+        ac = AssessmentComment(
+            assessment_id=assessment_id,
+            project_id=project_id,
+            author_id=auth.actor_id,
+            comment_type=comment_type,
+            comment=comment,
+            assessment_version=assessment.assessment_version,
+        )
+        self._session.add(ac)
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="assessment_comment_added",
+            entity_type="assessment_comment",
+            entity_id=ac.id,
+            project_id=project_id,
+            metadata={
+                "assessment_id": str(assessment_id),
+                "comment_type": comment_type.value,
+            },
+        )
+        return ac
+
+    async def list_comments(
+        self,
+        auth: AuthContext,
+        project_id: uuid.UUID,
+        assessment_id: uuid.UUID,
+    ) -> list[AssessmentComment]:
+        """List all comments for an assessment, tenant-scoped and ordered."""
+        stmt = (
+            select(AssessmentComment)
+            .join(Project, AssessmentComment.project_id == Project.id)
+            .where(
+                AssessmentComment.assessment_id == assessment_id,
+                AssessmentComment.project_id == project_id,
+                Project.organization_id == auth.organization_id,
+            )
+            .order_by(AssessmentComment.created_at.asc())
+        )
+        rows = await self._session.execute(stmt)
+        return list(rows.scalars().all())
+
+    async def get_requirement_review(
+        self,
+        auth: AuthContext,
+        project_id: uuid.UUID,
+        requirement_id: uuid.UUID,
+    ) -> dict[str, Any] | None:
+        """Combined review view for a single requirement.
+
+        Returns the latest compliance assessment (with its deterministic
+        comparison details) plus all related CP56 conflicts, CP57
+        clarifications, and CP57 deviations — everything a human reviewer needs
+        to make a final determination in one query.
+        """
+        assessment = await self.get_latest_assessment(
+            auth, project_id, requirement_id
+        )
+        if assessment is None:
+            return None
+
+        conflict_stmt = (
+            select(Conflict)
+            .join(Project, Conflict.project_id == Project.id)
+            .where(
+                Conflict.requirement_id == requirement_id,
+                Conflict.project_id == project_id,
+                Project.organization_id == auth.organization_id,
+            )
+            .order_by(Conflict.id)
+        )
+        conflict_rows = await self._session.execute(conflict_stmt)
+        conflicts = list(conflict_rows.scalars().all())
+
+        clarification_stmt = (
+            select(ClarificationRequest)
+            .join(Project, ClarificationRequest.project_id == Project.id)
+            .where(
+                ClarificationRequest.requirement_id == requirement_id,
+                ClarificationRequest.project_id == project_id,
+                Project.organization_id == auth.organization_id,
+            )
+            .order_by(ClarificationRequest.asked_at.desc())
+        )
+        clarification_rows = await self._session.execute(clarification_stmt)
+        clarifications = list(clarification_rows.scalars().all())
+
+        deviation_stmt = (
+            select(Deviation)
+            .join(Project, Deviation.project_id == Project.id)
+            .where(
+                Deviation.requirement_id == requirement_id,
+                Deviation.project_id == project_id,
+                Project.organization_id == auth.organization_id,
+            )
+            .order_by(Deviation.proposed_at.desc())
+        )
+        deviation_rows = await self._session.execute(deviation_stmt)
+        deviations = list(deviation_rows.scalars().all())
+
+        comparison = (
+            assessment.comparison_result_json
+            if isinstance(assessment.comparison_result_json, dict)
+            else None
+        )
+
+        return {
+            "requirement_id": str(requirement_id),
+            "assessment": {
+                "id": str(assessment.id),
+                "suggested_status": assessment.suggested_status.value,
+                "status": assessment.status.value,
+                "reason_code": assessment.reason_code,
+                "reason_text": assessment.reason_text,
+                "is_confirmed_by_human": assessment.is_confirmed_by_human,
+                "reviewer_id": (
+                    str(assessment.reviewer_id) if assessment.reviewer_id else None
+                ),
+                "reviewed_at": (
+                    assessment.reviewed_at.isoformat()
+                    if assessment.reviewed_at
+                    else None
+                ),
+                "assessment_version": assessment.assessment_version,
+                "evidence_id": (
+                    str(assessment.evidence_id)
+                    if assessment.evidence_id
+                    else None
+                ),
+                "vendor_spec_id": (
+                    str(assessment.vendor_spec_id)
+                    if assessment.vendor_spec_id
+                    else None
+                ),
+                "comparison_result": comparison,
+            },
+            "conflicts": [
+                {
+                    "id": str(c.id),
+                    "conflict_type": c.conflict_type,
+                    "parameter": c.parameter,
+                    "entity": c.entity,
+                    "resolution": c.resolution.value,
+                    "sources": c.sources,
+                    "tender_claim": c.tender_claim,
+                }
+                for c in conflicts
+            ],
+            "clarifications": [
+                {
+                    "id": str(c.id),
+                    "question": c.question,
+                    "context": c.context,
+                    "status": c.status.value,
+                    "asked_at": c.asked_at.isoformat(),
+                    "answer": c.answer,
+                    "answered_at": c.answered_at.isoformat() if c.answered_at else None,
+                }
+                for c in clarifications
+            ],
+            "deviations": [
+                {
+                    "id": str(d.id),
+                    "deviation_type": d.deviation_type.value,
+                    "original_requirement": d.original_requirement,
+                    "proposed_alternative": d.proposed_alternative,
+                    "status": d.status.value,
+                    "proposed_at": d.proposed_at.isoformat(),
+                    "reviewed_at": d.reviewed_at.isoformat() if d.reviewed_at else None,
+                }
+                for d in deviations
+            ],
+        }
 
 
 def _vendor_spec_to_parsed(vs: VendorSpec) -> ParsedVendorSpec:
