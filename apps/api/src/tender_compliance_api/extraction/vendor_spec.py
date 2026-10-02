@@ -80,6 +80,8 @@ _SPEC_LABELS: dict[str, str] = {
     "mass": "mass",
     "dimensions": "dimensions",
     "size": "dimensions",
+    "length": "length",
+    "distance": "length",
     "response time": "response_time",
     "rise time": "rise_time",
     "fall time": "fall_time",
@@ -117,22 +119,25 @@ _SPEC_LABELS: dict[str, str] = {
 # Note: _TOK_NUM is wrapped in (?:...) because it contains an alternation
 # ("|") that would otherwise split the pattern and prevent [^.\n]* from
 # applying to the full number match.
+# We use [^\n]* (not [^.\n]*) because vendor spec values frequently contain
+# decimal periods (e.g. "5 V ± 0.5 V") that would be truncated by a period-
+# excluding character class.
 _OP_CHAR = r"≤|≥|>=|≤|<|>|=|≠|!="
 _SPEC_COLON_RE = re.compile(
     r"(?P<label>[A-Za-z][A-Za-z][A-Za-z\s/-]+?)"
     r"\s*:\s*"
-    r"(?P<value>(?:±|" + _OP_CHAR + r")?\s*(?:" + _TOK_NUM + r")\b[^.\n]*)",
+    r"(?P<value>(?:±|" + _OP_CHAR + r")?\s*(?:" + _TOK_NUM + r")\b[^\n]*)",
     re.IGNORECASE,
 )
 
 # Pattern: "Label <operator> <value>" (no colon), e.g. "Resolution ≤ 0.01 mm"
-# The value captures everything up to end-of-line or sentence end.
+# The value captures everything up to end-of-line.
 _SPEC_OPERATOR_RE = re.compile(
     r"(?P<label>[A-Za-z][A-Za-z][A-Za-z\s/-]+?)"
     r"\s*"
     r"(?:" + _OP_CHAR + r")"
     r"\s*"
-    r"(?P<value>(?:" + _TOK_NUM + r")\s*[^.\n]*)",
+    r"(?P<value>(?:" + _TOK_NUM + r")\s*[^\n]*)",
     re.IGNORECASE,
 )
 
