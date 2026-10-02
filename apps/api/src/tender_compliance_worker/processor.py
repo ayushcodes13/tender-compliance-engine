@@ -5,11 +5,13 @@
 It is deliberately separated from the polling loop so it can be
 unit-tested without Redis.
 
-For CP19 the PARSE stage performs real PDF text extraction via a
-:class:`ParserAdapter`, storing one :class:`DocumentPage` per page.
-The OCR, CLEANUP, and EXTRACT stages remain placeholders — they are
-completed as no-ops until their respective checkpoints implement
-real behavior.
+The worker now executes the production ingestion path: PARSE stores source
+pages and applies deterministic structural cleanup during page persistence,
+OCR handles pages flagged as scanned, and EXTRACT runs the configured
+source-bounded requirement extractor.  CLEANUP remains an explicit audit
+stage, but its transformation is intentionally performed inside
+`DocumentService.store_pages` so raw and cleaned page text are persisted
+together atomically.
 """
 
 from __future__ import annotations
@@ -224,8 +226,10 @@ class JobProcessor:
                         session, svc, auth, version, run_id
                     )
                 else:
-                    # Placeholder stages (e.g. CLEANUP) — complete as no-op
-                    # until their checkpoint implements real behavior.
+                    # CLEANUP is an audit/state-machine boundary.  The actual
+                    # deterministic header/footer cleanup is applied inside
+                    # DocumentService.store_pages during PARSE so raw and
+                    # cleaned text are written together atomically.
                     await svc.complete_run(
                         auth,
                         document_id=version.document_id,

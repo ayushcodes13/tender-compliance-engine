@@ -97,6 +97,12 @@ jobs:
           node-version: "20"
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
+      - name: Reject unsafe raw HTML rendering of untrusted document content
+        run: |
+          if grep -R --line-number --include='*.tsx' --include='*.ts' "dangerouslySetInnerHTML" app components; then
+            echo "dangerouslySetInnerHTML is forbidden in the tender UI: uploaded document text is untrusted."
+            exit 1
+          fi
       - run: npm run build
       - name: Docker build
         uses: docker/build-push-action@v6
