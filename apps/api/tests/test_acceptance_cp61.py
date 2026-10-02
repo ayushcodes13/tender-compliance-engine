@@ -223,6 +223,34 @@ class TestEndToEndAcceptance:
         )
         assert download.status_code == 200
         assert download.content[:4] == b"%PDF"
+        assert download.headers["content-type"] == "application/pdf"
+        assert download.headers["content-disposition"].endswith(
+            'filename="tender_compliance_export.pdf"'
+        )
+
+    def test_final_docx_export_has_truthful_download_metadata(self):
+        ctx = _setup_full_project()
+
+        resp = client.post(
+            f"/projects/{ctx['project_id']}/documents/{ctx['doc_id']}/versions/{ctx['version_number']}/final-matrix/exports",
+            headers=_headers(ctx["user_id"], ctx["org_id"]),
+            params={"fmt": "docx"},
+        )
+        assert resp.status_code == 200
+        export_id = resp.json()["id"]
+
+        download = client.get(
+            f"/projects/{ctx['project_id']}/documents/{ctx['doc_id']}/versions/{ctx['version_number']}/exports/{export_id}",
+            headers=_headers(ctx["user_id"], ctx["org_id"]),
+        )
+        assert download.status_code == 200
+        assert download.content[:2] == b"PK"
+        assert download.headers["content-type"] == (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        assert download.headers["content-disposition"].endswith(
+            'filename="tender_compliance_export.docx"'
+        )
 
     def test_tenant_isolation_on_submission(self):
         ctx = _setup_full_project()
