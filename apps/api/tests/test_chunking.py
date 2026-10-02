@@ -21,11 +21,13 @@ import uuid
 import pytest
 
 from tender_compliance_api.db.models import DocumentPage
-from tender_compliance_api.extraction import (
-    LocationType,
+from tender_compliance_api.extraction.chunking import (
     SourceWindow,
-    TrustedSourceContext,
     build_source_windows,
+)
+from tender_compliance_api.extraction.schema import (
+    LocationType,
+    TrustedSourceContext,
 )
 
 _ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
