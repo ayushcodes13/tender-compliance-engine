@@ -265,7 +265,10 @@ def _parameter_from_noun(fragment: str, num_pos: int) -> str | None:
 
     before = fragment[:num_pos]
     tokens = re.findall(r"[A-Za-z]+(?:'[a-z]+)?", before)
-    for tok in reversed(tokens[-4:]):
+    # Search a wider window (up to 12 preceding tokens) so that a parameter
+    # noun like "accuracy" is not missed when the clause structure puts it
+    # further back (e.g. "the accuracy *shall be* at least 99 %").
+    for tok in reversed(tokens[-12:]):
         if tok.lower() in _NOUN_PARAM:
             return _NOUN_PARAM[tok.lower()]
     return None

@@ -2067,3 +2067,140 @@ class VendorSpec(Base):
             f"parameter={self.parameter!r}, "
             f"value={self.value!r}, unit={self.unit!r})"
         )
+
+
+class ComplianceStatus(enum.StrEnum):
+    """System-assessed compliance status for a tender requirement (CP54).
+
+    These are the product-defined statuses.  Each assessment is paired with
+    a ``reason_code`` and ``reason_text`` for traceability.
+
+    - ``COMPLIANT``: Evidence demonstrates the requirement is met.
+    - ``NON_COMPLIANT``: Evidence demonstrates the requirement is violated
+      (same dimension, value outside constraint).
+    - ``PARTIAL``: Some evidence supports the requirement but gaps remain.
+    - ``NOT_DEMONSTRATED``: No evidence was found for this requirement.
+    - ``CONFLICT``: Multiple accepted evidence items conflict.
+    - ``HUMAN_REVIEW_REQUIRED``: Engine cannot evaluate deterministically.
+    """
+
+    COMPLIANT = "compliant"
+    NON_COMPLIANT = "non_compliant"
+    PARTIAL = "partial"
+    NOT_DEMONSTRATED = "not_demonstrated"
+    CONFLICT = "conflict"
+    HUMAN_REVIEW_REQUIRED = "human_review_required"
+
+
+class ComplianceAssessment(Base):
+    """A deterministic system assessment of one tender requirement vs vendor evidence (CP54).
+
+    Each row represents the **system suggestion** for a requirement.  A
+    reviewer can later confirm or override it.  Assessments are versioned:
+    when evidence or vendor specs change, a new assessment row is created
+    (the previous row is never modified — append-only history).
+
+    The assessment is derived from the deterministic comparison engine (CP53)
+    — the ``comparison_result_json`` column stores the full
+    :class:`~tender_compliance_api.extraction.spec_comparison.ComparisonResult`
+    for auditability.
+    """
+
+    __tablename__ = "compliance_assessments"
+    __table_args__ = (
+        Index("ix_compliance_assessments_project", "project_id"),
+        Index("ix_compliance_assessments_requirement", "requirement_id"),
+        Index("ix_compliance_assessments_status", "status"),
+        UniqueConstraint(
+            "requirement_id",
+            "assessment_version",
+            name="uq_compliance_assessments_requirement_version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("evidence.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    vendor_spec_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("vendor_specs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # System suggestion (before human confirmation).
+    suggested_status: Mapped[ComplianceStatus] = mapped_column(
+        Enum(ComplianceStatus, name="compliance_status"),
+        nullable=False,
+    )
+    # Final status — equals suggested_status until a human confirms/overrides.
+    status: Mapped[ComplianceStatus] = mapped_column(
+        Enum(ComplianceStatus, name="compliance_status"),
+        nullable=False,
+    )
+    # Machine-readable reason for the status (e.g. "range_containment",
+    # "parameter_mismatch", "no_evidence_found").
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Human-readable explanation of the verdict and its inputs.
+    reason_text: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Full ComparisonResult details (verdict, conversion, reasons, values).
+    comparison_result_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    # Assessment version number — increments when a new assessment is
+    # generated for the same requirement (evidence/specs changed).
+    assessment_version: Mapped[int] = mapped_column(Integer(), nullable=False)
+    # System suggested status is confirmed by a human (never fabricated).
+    is_confirmed_by_human: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False
+    )
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    vendor_spec: Mapped[VendorSpec | None] = relationship(
+        "VendorSpec", backref="compliance_assessments", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ComplianceAssessment(req={self.requirement_id!r}, "
+            f"status={self.status.value!r}, "
+            f"version={self.assessment_version})"
+        )
+        return (
+            f"VendorSpec(evidence={self.evidence_id!r}, "
+            f"parameter={self.parameter!r}, "
+            f"value={self.value!r}, unit={self.unit!r})"
+        )

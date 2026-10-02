@@ -97,7 +97,7 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()"),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Index("ix_vendor_specs_evidence", "evidence_id"),
         sa.Index("ix_vendor_specs_requirement", "requirement_id"),
