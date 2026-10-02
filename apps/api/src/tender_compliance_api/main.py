@@ -10,6 +10,9 @@ from tender_compliance_api.logs import get_logger, log_event, set_correlation_id
 from tender_compliance_api.routes.compliance import (
     router as compliance_router,
 )
+from tender_compliance_api.routes.conflicts import (
+    router as conflicts_router,
+)
 from tender_compliance_api.routes.evidence import router as evidence_router
 from tender_compliance_api.routes.health import router as health_router
 from tender_compliance_api.routes.oem_documents import router as oem_documents_router
@@ -86,4 +89,5 @@ app.include_router(requirements_router)
 app.include_router(source_viewer_router)
 app.include_router(vendor_specs_router)
 app.include_router(compliance_router)
+app.include_router(conflicts_router)
 app.include_router(reasoning_router)

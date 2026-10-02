@@ -461,3 +461,24 @@
     adapter but it is not implemented.
   - Attribution mismatch detection is heuristic (regex on "model XXX").
     False positives are possible but only when an explicit mismatch is found.
+
+## CP56 — Conflict and contradiction detection  ✅ DONE (PR #66, merged)
+- **Default shipped:** Three deterministic detection strategies:
+  parameter_value conflict (unit-normalized via CP53 Pint adapter),
+  concept_mismatch (accuracy vs resolution), and tender_vendor linguistic
+  contradiction (affirmation vs negation via regex).  No LLM used.
+- **All sources preserved:** Every conflicting evidence item + vendor spec
+  stored as JSON in `Conflict.sources` — the system never discards
+  inconvenient evidence.
+- **No silent resolution:** Conflicts start as UNRESOLVED. Only human
+  ACCEPTED/REJECTED actions change the state. UNRESOLVED cannot be set
+  via the resolve method.
+- **No input needed** unless you want an LLM-based contradiction detector
+  for nuanced linguistic cases (requires `openai` package, not added).
+- **Verification:** ruff clean, mypy clean (97 files), 978 passed / 2 skipped.
+- **Known limitations:**
+  - Unit equivalence relies on Pint. If Pint is unavailable, unit conversion
+    falls back to exact-match — could produce false conflicts for equivalent
+    values in different units.
+  - Tender-vendor detection uses regex heuristics; may miss nuanced
+    linguistic contradictions (e.g. "compliance pending" vs "fully certified").
