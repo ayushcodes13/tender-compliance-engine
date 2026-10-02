@@ -318,6 +318,52 @@ export type ExportArtifactResponse = {
   generated_at: string | null;
 };
 
+/** Evidence review state (Phase 2 — curation, not compliance). */
+export type EvidenceReviewState = "proposed" | "accepted" | "rejected";
+
+/** A source location anchor for persisted evidence. */
+export type EvidenceLocationResponse = {
+  page_number: number;
+  clause_number: string | null;
+  char_start: number | null;
+  char_end: number | null;
+  location_type: string;
+  source_text: string | null;
+  ocr_confidence: number | null;
+};
+
+/** A persisted evidence candidate with its locations. */
+export type EvidenceResponse = {
+  id: string;
+  oem_document_version_id: string;
+  score: number | null;
+  retrieval_method: string;
+  review_state: EvidenceReviewState;
+  created_at: string;
+  locations: EvidenceLocationResponse[];
+};
+
+/** A proposed evidence candidate returned by retrieval. */
+export type EvidenceCandidateResponse = {
+  oem_document_version_id: string;
+  oem_document_display_name: string | null;
+  oem_document_type: string | null;
+  version_number: number;
+  score: number;
+  matched_terms: string[];
+  page_number: number;
+  char_start: number | null;
+  char_end: number | null;
+  source_text: string | null;
+};
+
+/** Request body for proposing evidence. */
+export type EvidenceProposeRequest = {
+  query_terms: string[];
+  k?: number;
+  persist?: boolean;
+};
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Headers for the development identity mode. */
@@ -761,4 +807,42 @@ export const api = {
     }
     return resp.blob();
   },
+
+  // --- Evidence (CP50/CP51) ---
+
+  fetchEvidence: (
+    projectId: string,
+    requirementId: string,
+    params?: { review_state?: string }
+  ) => {
+    const q = new URLSearchParams();
+    if (params?.review_state) q.set("review_state", params.review_state);
+    return apiFetch(
+      `/projects/${projectId}/requirements/${requirementId}/evidence${q.toString() ? `?${q.toString()}` : ""}`
+    ).then((r) => expectJson<EvidenceResponse[]>(r));
+  },
+
+  proposeEvidence: (
+    projectId: string,
+    requirementId: string,
+    body: EvidenceProposeRequest
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/requirements/${requirementId}/evidence/propose`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    ).then((r) => expectJson<EvidenceCandidateResponse[]>(r)),
+
+  curateEvidence: (
+    projectId: string,
+    requirementId: string,
+    evidenceId: string,
+    reviewState: string
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/requirements/${requirementId}/evidence/${evidenceId}/curate?review_state=${reviewState}`,
+      { method: "POST" }
+    ).then((r) => expectJson<EvidenceResponse>(r)),
 };
