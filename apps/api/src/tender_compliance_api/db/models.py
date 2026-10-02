@@ -2454,8 +2454,235 @@ class Conflict(Base):
             f"Conflict(req={self.requirement_id!r}, type={self.conflict_type!r}, "
             f"resolution={self.resolution.value!r})"
         )
+
+
+# ---------------------------------------------------------------------------
+# CP57 — Clarification requests and deviations
+# ---------------------------------------------------------------------------
+
+
+class ClarificationStatus(enum.StrEnum):
+    """Lifecycle state of a clarification request (CP57).
+
+    ``PENDING`` means the question has been asked but not yet answered.
+    ``ANSWERED`` means a human has provided an answer.  ``EXPIRED`` means
+    the request was not answered within the project's response window
+    (if one is configured) — the requirement remains unresolved.
+    """
+
+    PENDING = "pending"
+    ANSWERED = "answered"
+    EXPIRED = "expired"
+
+
+class DeviationType(enum.StrEnum):
+    """Category of a vendor deviation from the original requirement (CP57)."""
+
+    SCOPE = "scope"
+    """Vendor proposes to exclude or narrow the scope of the requirement."""
+
+    VALUE = "value"
+    """Vendor proposes a different numeric value / range than required."""
+
+    CAPABILITY = "capability"
+    """Vendor lacks the required capability altogether."""
+
+    OTHER = "other"
+    """Other type of deviation."""
+
+
+class DeviationStatus(enum.StrEnum):
+    """Review state of a deviation (CP57)."""
+
+    PROPOSED = "proposed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class ClarificationRequest(Base):
+    """A question posed when evidence is insufficient or ambiguous (CP57).
+
+    Clarification requests are **not** the same as conflicts (CP56).  A
+    conflict means two sources say different things.  A clarification
+    request means we don't have enough information to make any determination.
+
+    The ``context`` JSON carries structured metadata about *why* the
+    question is being asked (e.g. ``{"reason": "missing_evidence",
+    "parameter": "accuracy"}`` or ``{"reason": "conflict",
+    "conflict_id": "..."}``).  This is audit information, not
+    machine-processable evidence.
+    """
+
+    __tablename__ = "clarification_requests"
+    __table_args__ = (
+        Index(
+            "ix_clarification_requests_project", "project_id"
+        ),
+        Index(
+            "ix_clarification_requests_requirement", "requirement_id"
+        ),
+        Index(
+            "ix_clarification_requests_status", "status"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requirement_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # The question text — verbatim, never synthesized.
+    question: Mapped[str] = mapped_column(String(2048), nullable=False)
+    # Structured metadata about why the question is being asked.
+    context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    status: Mapped[ClarificationStatus] = mapped_column(
+        Enum(ClarificationStatus, name="clarification_status"),
+        nullable=False,
+        default=ClarificationStatus.PENDING,
+        server_default=ClarificationStatus.PENDING.value,
+    )
+    # Evidence IDs that were examined but found insufficient.
+    related_evidence_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    # Conflict IDs that triggered the clarification request.
+    related_conflict_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    asked_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    asked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    # The answer provided by a human / OEM.
+    answer: Mapped[str | None] = mapped_column(String(4096), nullable=True)
+    answered_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
         return (
-            f"VendorSpec(evidence={self.evidence_id!r}, "
-            f"parameter={self.parameter!r}, "
-            f"value={self.value!r}, unit={self.unit!r})"
+            f"ClarificationRequest(req={self.requirement_id!r}, "
+            f"status={self.status.value!r}, "
+            f"asked_at={self.asked_at!r})"
+        )
+
+
+class Deviation(Base):
+    """A vendor deviation from the original tender requirement (CP57).
+
+    A deviation is a proposal to change the rule — different scope, value,
+    or capability.  It must be explicitly ACCEPTED or REJECTED by a human
+    reviewer.  The ``original_requirement`` field preserves the verbatim
+    source text of the requirement being deviated from.
+    """
+
+    __tablename__ = "deviations"
+    __table_args__ = (
+        Index(
+            "ix_deviations_project", "project_id"
+        ),
+        Index(
+            "ix_deviations_requirement", "requirement_id"
+        ),
+        Index(
+            "ix_deviations_status", "status"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    deviation_type: Mapped[DeviationType] = mapped_column(
+        Enum(DeviationType, name="deviation_type"),
+        nullable=False,
+    )
+    # Verbatim text of the original requirement — preserved for review.
+    original_requirement: Mapped[str] = mapped_column(
+        String(2048), nullable=False
+    )
+    # What the vendor proposes instead.
+    proposed_alternative: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    # Rationale for the deviation (e.g. technical impossibility, cost).
+    rationale: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    status: Mapped[DeviationStatus] = mapped_column(
+        Enum(DeviationStatus, name="deviation_status"),
+        nullable=False,
+        default=DeviationStatus.PROPOSED,
+        server_default=DeviationStatus.PROPOSED.value,
+    )
+    proposed_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_notes: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Deviation(req={self.requirement_id!r}, type={self.deviation_type.value!r}, "
+            f"status={self.status.value!r})"
         )

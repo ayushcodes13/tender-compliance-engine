@@ -482,3 +482,34 @@
     values in different units.
   - Tender-vendor detection uses regex heuristics; may miss nuanced
     linguistic contradictions (e.g. "compliance pending" vs "fully certified").
+
+## CP57 — Missing evidence, clarification questions, and deviations  ✅ DONE (PR #67, merged)
+- **Adversarial review notes (reviewed as the agent):**
+  - Tenant isolation: `create_clarification` / `answer_clarification` /
+    `list/get` join through `Project` and filter on `organization_id`.
+    `edit_clarification` reuses `_fetch_clarification` which is tenant-scoped.
+    Cross-org edit returns `None` (tested). ✅
+  - No fabrication: clarification `question` is stored verbatim — auto-generated
+    questions embed only the verbatim `raw_source`/`normalized_text` of the
+    requirement, never synthesized claims. ✅
+  - No negative technical claim: the auto-gen question states "No accepted
+    evidence was found…" (an evidence-state fact), not a product non-compliance. ✅
+  - ANSWERED clarifications are locked from further editing (cannot edit →
+    ValueError). Only PENDING clarifications can be edited. ✅
+  - `updated_at` now set on answer (previously missing — fixed during review). ✅
+  - Clarification `context` `reason` is a free string, not an enum. Stable
+    reason codes are used (missing_evidence, conflict, ambiguous_requirement)
+    but enforcement is by convention, not schema. Acceptable for CP57; could be
+    hardened to an enum in a future PR. 🟡
+  - `EXPIRED` status is defined but has no expiration job. Requirements remain
+    unresolved (not auto-expired) — conservative by design. ✅
+- **Default shipped:** `MissingEvidenceService` with clarification lifecycle
+  (PENDING→ANSWERED, +EXPIRED defined) + deviation lifecycle (PROPOSED→
+  ACCEPTED/REJECTED). `auto_generate_clarifications` scans for missing evidence,
+  CP56 conflicts, and UNCERTAIN qualitative assessments. PATCH endpoint added
+  for human editing of auto-generated questions.
+- **No input needed** — all CP57 behavior is deterministic; no LLM/adapter
+  provider needed.
+- **Verification:** ruff clean, mypy clean (99 files), pytest 997 passed,
+  2 skipped. Critical quality gates still pass (invented_negative_rate=0,
+  numeric_fidelity=0).

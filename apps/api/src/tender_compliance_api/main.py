@@ -15,6 +15,9 @@ from tender_compliance_api.routes.conflicts import (
 )
 from tender_compliance_api.routes.evidence import router as evidence_router
 from tender_compliance_api.routes.health import router as health_router
+from tender_compliance_api.routes.missing_evidence import (
+    router as missing_evidence_router,
+)
 from tender_compliance_api.routes.oem_documents import router as oem_documents_router
 from tender_compliance_api.routes.projects import router as projects_router
 from tender_compliance_api.routes.reasoning import router as reasoning_router
@@ -90,4 +93,5 @@ app.include_router(source_viewer_router)
 app.include_router(vendor_specs_router)
 app.include_router(compliance_router)
 app.include_router(conflicts_router)
+app.include_router(missing_evidence_router)
 app.include_router(reasoning_router)
