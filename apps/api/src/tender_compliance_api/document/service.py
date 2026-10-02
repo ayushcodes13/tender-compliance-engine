@@ -33,6 +33,7 @@ from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
     ExportArtifact,
+    ExportFormat,
     ExportStatus,
     ExtractionCandidate,
     ExtractionDiagnostics,
@@ -1391,6 +1392,192 @@ class DocumentService:
 
         version = await self.get_version_or_raise(auth, document_id, version_number)
         return await project_final_matrix_rows(self._session, version.id)
+
+    # ------------------------------------------------------------------
+    # Final matrix export — XLSX, DOCX, PDF (CP60)
+    # ------------------------------------------------------------------
+
+    async def export_final_matrix(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        *,
+        export_format: ExportFormat = ExportFormat.XLSX,
+        storage: ObjectStorageAdapter | None = None,
+    ) -> ExportArtifact:
+        """Generate a final-compliance-matrix deliverable and persist it (CP60).
+
+        Uses the canonical ``project_final_matrix_rows`` projection (CP59) —
+        no duplicated column logic.  The artifact bytes are written to object
+        storage and an :class:`ExportArtifact` metadata row records the actor,
+        format, requirement count, checksum, and timestamp.
+
+        Each export creates a **new** ``ExportArtifact`` row — previous exports
+        are never mutated (append-only history).
+
+        If generation fails, an ``ExportArtifact`` with
+        ``status=FAILED`` and ``error_message`` is recorded.
+        """
+        from tender_compliance_api.matrix.projection import (  # noqa: PLC0415
+            project_final_matrix_rows,
+        )
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        project_id = await self._project_id_for(document_id)
+
+        rows = await project_final_matrix_rows(self._session, version.id)
+
+        if storage is None:
+            storage = _resolve_storage()
+
+        try:
+            fmt = export_format.value
+            if export_format == ExportFormat.XLSX:
+                from tender_compliance_api.export.final_xlsx import (  # noqa: PLC0415
+                    build_final_matrix_workbook,
+                    save_workbook_bytes,
+                )
+
+                wb, checksum = build_final_matrix_workbook(
+                    rows,
+                    project_name=str(document_id),
+                    document_id=document_id,
+                    version_number=version_number,
+                    actor_id=auth.actor_id,
+                    requirement_count=len(rows),
+                )
+                artifact_bytes = save_workbook_bytes(wb)
+                content_type = (
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                )
+                ext = "xlsx"
+            elif export_format == ExportFormat.DOCX:
+                from tender_compliance_api.export.final_docx import (  # noqa: PLC0415
+                    build_final_matrix_docx,
+                )
+
+                artifact_bytes = build_final_matrix_docx(
+                    rows,
+                    project_name=str(document_id),
+                    document_id=document_id,
+                    version_number=version_number,
+                    actor_id=auth.actor_id,
+                    requirement_count=len(rows),
+                )
+                content_type = (
+                    "application/vnd.openxmlformats-"
+                    "officedocument.wordprocessingml.document"
+                )
+                ext = "docx"
+            elif export_format == ExportFormat.PDF:
+                from tender_compliance_api.export.final_pdf import (  # noqa: PLC0415
+                    build_final_matrix_pdf,
+                )
+
+                artifact_bytes = build_final_matrix_pdf(
+                    rows,
+                    project_name=str(document_id),
+                    document_id=document_id,
+                    version_number=version_number,
+                    actor_id=auth.actor_id,
+                    requirement_count=len(rows),
+                )
+                content_type = "application/pdf"
+                ext = "pdf"
+            else:
+                raise ValueError(f"Unsupported export format: {export_format}")
+
+            # Store the artifact bytes.
+            storage_key = build_key(
+                org_id=auth.organization_id,
+                project_id=project_id,
+                document_id=document_id,
+                version=version_number,
+                original_filename=f"final_matrix_v{version_number}.{ext}",
+            )
+            obj_info = await storage.put(
+                storage_key,
+                artifact_bytes,
+                content_type=content_type,
+            )
+
+            stored_obj = StoredObject(
+                organization_id=auth.organization_id,
+                project_id=project_id,
+                document_id=document_id,
+                storage_key=storage_key,
+                filename=f"final_matrix_v{version_number}.{ext}",
+                content_type=obj_info.content_type,
+                content_length=obj_info.content_length,
+                checksum_sha256=obj_info.checksum_sha256,
+                etag=obj_info.etag,
+            )
+            self._session.add(stored_obj)
+            await self._session.flush()
+
+            artifact = ExportArtifact(
+                document_version_id=version.id,
+                stored_object_id=stored_obj.id,
+                actor_id=auth.actor_id,
+                status=ExportStatus.COMPLETED,
+                requirement_count=len(rows),
+                workbook_sha256=obj_info.checksum_sha256,
+                export_format=export_format,
+            )
+            self._session.add(artifact)
+            await self._session.flush()
+
+            await self._audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="final_matrix.export",
+                entity_type="export",
+                entity_id=artifact.id,
+                project_id=project_id,
+                metadata={
+                    "document_id": str(document_id),
+                    "version_number": version_number,
+                    "format": fmt,
+                    "requirement_count": len(rows),
+                    "sha256": obj_info.checksum_sha256,
+                    "storage_key": storage_key,
+                },
+            )
+
+            return artifact
+
+        except Exception as exc:
+            artifact = ExportArtifact(
+                document_version_id=version.id,
+                stored_object_id=None,
+                actor_id=auth.actor_id,
+                status=ExportStatus.FAILED,
+                error_message=str(exc)[:2048],
+                requirement_count=len(rows),
+                workbook_sha256="",
+                export_format=export_format,
+            )
+            self._session.add(artifact)
+            await self._session.flush()
+
+            await self._audit.log(
+                organization_id=auth.organization_id,
+                actor_id=auth.actor_id,
+                action="final_matrix.export.failed",
+                entity_type="export",
+                entity_id=artifact.id,
+                project_id=project_id,
+                metadata={
+                    "document_id": str(document_id),
+                    "version_number": version_number,
+                    "format": export_format.value,
+                    "error": str(exc)[:512],
+                },
+            )
+
+            raise
 
     # ------------------------------------------------------------------
     # Matrix XLSX export (CP42)

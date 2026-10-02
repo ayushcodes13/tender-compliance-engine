@@ -1658,6 +1658,14 @@ class ExportStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+class ExportFormat(enum.StrEnum):
+    """Format of a generated export artifact (CP42, extended in CP60)."""
+
+    XLSX = "xlsx"
+    DOCX = "docx"
+    PDF = "pdf"
+
+
 class ExportArtifact(Base):
     """Record of a matrix XLSX export for a document version (CP42).
 
@@ -1703,6 +1711,17 @@ class ExportArtifact(Base):
     error_message: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     requirement_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
     workbook_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    export_format: Mapped[ExportFormat] = mapped_column(
+        Enum(
+            ExportFormat,
+            name="export_format",
+            native_enum=False,
+            values_callable=lambda e: [x.value for x in e],
+        ),
+        nullable=False,
+        default=ExportFormat.XLSX,
+        server_default=ExportFormat.XLSX.value,
+    )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

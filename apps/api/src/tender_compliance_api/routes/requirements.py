@@ -25,6 +25,7 @@ from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.db.models import (
     DocumentVersion,
     ExportArtifact,
+    ExportFormat,
     ExportStatus,
     Requirement,
     RequirementReviewState,
@@ -1109,6 +1110,7 @@ class ExportArtifactResponse(BaseModel):
     requirement_count: int
     workbook_sha256: str
     generated_at: datetime | None
+    export_format: str | None = None
 
 
 @router.post(
@@ -1148,6 +1150,65 @@ async def create_export(
                     )
                 ),
                 ExportArtifact.status == ExportStatus.FAILED,
+            )
+            .order_by(ExportArtifact.generated_at.desc())
+        )
+        failing_artifact = result.scalar_one_or_none()
+        if failing_artifact is None:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Export failed: {exc}",
+            ) from exc
+        await session.commit()
+        return ExportArtifactResponse.model_validate(failing_artifact)
+
+    await session.commit()
+    return ExportArtifactResponse.model_validate(artifact)
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/final-matrix/exports",
+    response_model=ExportArtifactResponse,
+    response_model_exclude_none=True,
+)
+async def create_final_matrix_export(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    fmt: ExportFormat = Query(  # noqa: B008
+        default=ExportFormat.XLSX,
+        description="Export format: xlsx, docx, or pdf",
+    ),
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> ExportArtifactResponse:
+    """Generate a final-compliance-matrix export (CP60).
+
+    Uses the canonical final matrix projection (CP59).  Supports XLSX, DOCX,
+    and PDF formats.  The artifact is stored immutably in object storage and
+    an audit event is logged.  If generation fails, a FAILED artifact is
+    recorded and the error is propagated.
+    """
+    svc = DocumentService(session)
+    try:
+        artifact = await svc.export_final_matrix(
+            auth, document_id, version_number, export_format=fmt,
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        result = await session.execute(
+            select(ExportArtifact)
+            .where(
+                ExportArtifact.document_version_id == (
+                    select(DocumentVersion.id)
+                    .where(
+                        DocumentVersion.document_id == document_id,
+                        DocumentVersion.version_number == version_number,
+                    )
+                ),
+                ExportArtifact.status == ExportStatus.FAILED,
+                ExportArtifact.export_format == fmt,
             )
             .order_by(ExportArtifact.generated_at.desc())
         )

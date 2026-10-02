@@ -501,6 +501,68 @@
     reason codes are used (missing_evidence, conflict, ambiguous_requirement)
     but enforcement is by convention, not schema. Acceptable for CP57; could be
     hardened to an enum in a future PR. 🟡
+
+## CP58 — Human compliance review and audit  ✅ DONE (PR #68, merged)
+- **What shipped:** Migration `0026_human_review_audit` adds `assessment_comments`
+  table. `AssessmentComment` model + `AssessmentCommentType` enum. Service
+  methods: `override_assessment` (append-only new version, preserves
+  suggested_status), `reopen_assessment` (reverts to unconfirmed),
+  `add_comment` / `list_comments`, `get_requirement_review` (combined dashboard).
+  Routes: POST …/override, POST …/reopen, POST …/comments, GET …/comments,
+  GET …/requirements/{id}/review.
+- **Verification:** ruff/mypy/pytest clean. 1009 passed, 2 skipped.
+  Quality gates: invented_negative_rate=0, numeric_fidelity=0.
+- **Known limitations:** No input needed.
+
+## CP59 — Final compliance matrix and submission projection  ✅ DONE (PR #69, merged)
+- **What shipped:** `FinalMatrixRow` dataclass (28 columns: Phase 1 + Phase 2
+  vendor-response/evidence/assessment/review-state).
+  `project_final_matrix_rows()` canonical projection. `DocumentService.get_final_matrix_rows()`
+  tenant-scoped method. `GET …/final-matrix` route + `FinalMatrixRowResponse` schema.
+  Phase 2 fields are `None` when state doesn't exist (not fabricated).
+- **Verification:** ruff/mypy clean. 1022 passed, 2 skipped. Quality gates pass.
+- **Known limitations:** No input needed.
+
+## CP60 — Final XLSX, DOCX, and PDF outputs  ✅ DONE (PR #70, merged)
+- **What shipped:**
+  - Migration `0027_final_export_outputs`: `export_format` VARCHAR(16) + CHECK
+    constraint, batch mode for SQLite compatibility.
+  - `ExportFormat` StrEnum (XLSX, DOCX, PDF) + `export_format` column on
+    `ExportArtifact` (`values_callable` to serialize to lowercase matching CHECK).
+  - `export/final_pdf.py`: PyMuPDF-based PDF writer with paginated table layout,
+    title page metadata, column headers, row data, separator lines, footers.
+  - `document/service.py`: `export_final_matrix()` — format-dispatched writer,
+    immutable artifact storage, SHA-256 from actual bytes, append-only
+    (new `ExportArtifact` per export), failure recording.
+  - `routes/requirements.py`: `POST …/final-matrix/exports?fmt=xlsx|docx|pdf`
+    route returning `ExportArtifactResponse` (now includes `export_format`).
+- **Adversarial review notes:**
+  - Tenant isolation: `export_final_matrix` calls `get_version_or_raise` which
+    is tenant-scoped (404 on cross-org access). ✅
+  - No fabrication: Phase 2 fields that are `None` render as empty cells,
+    never as default values. ✅
+  - Append-only: each export creates a new `ExportArtifact` row; previous
+    exports are never mutated. ✅
+  - SHA-256 computed from actual bytes via `obj_info.checksum_sha256` (storage
+    adapter), not trusted from any provider. ✅
+  - Failure handling: FAILED artifact recorded + audit event + exception re-raised. ✅
+  - PDF pagination: uses `pymupdf.Rect` for text boxes and `pymupdf.Point`
+    for draw lines (fixed from initial `halatin` API error). ✅
+- **Verification:** ruff: clean. mypy --strict: clean (102 files). pytest 1032
+  passed, 2 skipped. Eval harness: 50 passed.
+  Quality gates: invented_negative_rate=0, numeric_fidelity=0.
+- **⚠️ Known limitations:**
+  - PDF writer uses a simplified pagination model; very long requirement text
+    may overflow its cell without wrapping. Acceptable for CP60; a richer
+    layout engine would be needed for production-grade PDF rendering. 🟡
+  - DOCX writer uses `Table Grid` style with bold header runs instead of
+    `docx.oxml.OxmlElement("w:shd")` direct styling (rejected during review
+    for complexity). Functional but less visually polished. 🟡
+- **No input needed** unless you want production-grade PDF layout or DOCX
+  header shading improvements.
+
+## CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release  🟡 pending
+- Next checkpoint. See checkpoint.md for details.
   - `EXPIRED` status is defined but has no expiration job. Requirements remain
     unresolved (not auto-expired) — conservative by design. ✅
 - **Default shipped:** `MissingEvidenceService` with clarification lifecycle
