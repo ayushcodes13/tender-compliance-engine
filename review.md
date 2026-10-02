@@ -513,3 +513,54 @@
 - **Verification:** ruff clean, mypy clean (99 files), pytest 997 passed,
   2 skipped. Critical quality gates still pass (invented_negative_rate=0,
   numeric_fidelity=0).
+
+## CP58 — Human compliance review and audit  ✅ DONE (PR #68, merged)
+- **Adversarial review notes (reviewed as the agent):**
+  - **Append-only assessments:** `override_assessment` and `reopen_assessment`
+    create NEW `ComplianceAssessment` rows with incremented `assessment_version`.
+    The original assessment row is never modified — provenance and system
+    suggestion are preserved indefinitely. ✅
+  - **No silent correction:** Override records the human's verbatim `reason_text`
+    as both the assessment's `reason_text` AND as an `AssessmentComment` of type
+    `OVERRIDE_REASON`. The system's `suggested_status` is never overwritten —
+    the reviewer's `status` and the system's `suggested_status` always coexist. ✅
+  - **Override guardrail:** Overriding with the same status as `suggested_status`
+    (and no new evidence) raises `ValueError` — this forces the reviewer to either
+    use `confirm_assessment` (accept) or pick a genuinely different status. ✅
+  - **Reopen guardrail:** Only confirmed assessments (`is_confirmed_by_human=True`)
+    can be reopened; attempting to reopen an unconfirmed assessment raises
+    `ValueError`. ✅
+  - **Tenant isolation:** `_fetch_assessment` joins `ComplianceAssessment →
+    Requirement → DocumentVersion → TenderDocument → Project` and filters on
+    `Project.organization_id`. `get_requirement_review` applies the same
+    tenant-scoped join. Cross-org access returns `None` (tested). ✅
+  - **No fabrication of source locations:** Comments, overrides, and reopens
+    are linked to actual `requirement_id` / `assessment_id` UUID — no synthetic
+    page or clause numbers are invented. ✅
+  - **Combined review view preserves all evidence:** `get_requirement_review`
+    returns conflicts with their full `sources` JSON array (both conflicting
+    vendor specs preserved), clarifications, and deviations — nothing is
+    collapsed or discarded. ✅
+  - **Phase 1 boundary respected:** No vendor-compliance status is emitted.
+    Override statuses use the existing `ComplianceStatus` enum (compliant/
+    non_compliant/partial/not_demonstrated/conflict). `human_override` and
+    `reopened` are reason_code values, not new statuses — no Phase 2
+    "vendor-compliant" semantics are introduced. ✅
+- **Default shipped:** `AssessmentComment` model + `AssessmentCommentType` enum
+  (comment/note/override_reason/reopen_reason). `ComplianceAssessmentService`
+  methods: `override_assessment`, `reopen_assessment`, `add_comment`,
+  `list_comments`, `get_requirement_review`. Routes: POST …/override,
+  POST …/reopen, POST …/comments, GET …/comments, GET …/reviews.
+- **No input needed** — CP58 is deterministic; no LLM/provider dependency.
+- **Verification:** ruff clean, mypy clean (99 source files), pytest 1009
+  passed, 2 skipped. Critical quality gates still pass (invented_negative_rate=0,
+  numeric_fidelity=0).
+- **Known limitations:**
+  - The web UI (apps/web) does NOT yet wire up the CP58 override/reopen/comment
+    endpoints. The frontend compliance review UI from CP35–CP40 shows assessment
+    status but lacks the human-in-the-loop controls. UI wiring is deferred to
+    CP59 (matrix) or a dedicated UI checkpoint — see 🟡 below.
+  - 🟡 `get_requirement_review` returns qualitative assessments but does not
+    currently render the qualitative verdict's `verdict`/`reason` text in full —
+    only the latest `QualitativeAssessment` row is surfaced. Acceptable for the
+    dashboard; full qualitative rendering can be added when needed.

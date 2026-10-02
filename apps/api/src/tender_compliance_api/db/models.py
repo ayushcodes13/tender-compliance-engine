@@ -2201,6 +2201,78 @@ class ComplianceAssessment(Base):
         )
 
 
+class AssessmentCommentType(enum.StrEnum):
+    """Category of a reviewer comment on a compliance assessment (CP58)."""
+
+    COMMENT = "comment"
+    """Free-form reviewer note."""
+
+    NOTE = "note"
+    """Reviewer note that is not a structured override/reopen reason."""
+
+    OVERRIDE_REASON = "override_reason"
+    """Recorded as the structured rationale for a status override."""
+
+    REOPEN_REASON = "reopen_reason"
+    """Recorded as the structured rationale for reopening an assessment."""
+
+
+class AssessmentComment(Base):
+    """Append-only reviewer comment on a compliance assessment version (CP58).
+
+    Comments are always tied to a specific ``assessment_id`` (and its
+    ``assessment_version``), so they survive re-assessment: a new assessment
+    version creates a fresh context, and old comments remain attached to the
+    version they pertain to.  The comment text is stored verbatim.
+    """
+
+    __tablename__ = "assessment_comments"
+    __table_args__ = (
+        Index("ix_assessment_comments_assessment", "assessment_id"),
+        Index("ix_assessment_comments_project", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    assessment_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("compliance_assessments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    comment_type: Mapped[AssessmentCommentType] = mapped_column(
+        Enum(AssessmentCommentType, name="assessment_comment_type"),
+        nullable=False,
+        server_default=AssessmentCommentType.COMMENT.value,
+    )
+    comment: Mapped[str] = mapped_column(String(4096), nullable=False)
+    assessment_version: Mapped[int] = mapped_column(
+        Integer(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"AssessmentComment(assessment={self.assessment_id!r}, "
+            f"type={self.comment_type.value!r}, "
+            f"version={self.assessment_version})"
+        )
+
+
 class QualitativeVerdict(enum.StrEnum):
     """Source-bounded qualitative reasoning outcomes (CP55).
 

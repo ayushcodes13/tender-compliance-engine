@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP58 — Human compliance review and audit** (Phase 2). Phase 2 (Stage J) is in progress through CP57; CP58 is the next checkpoint.
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP59 — Final compliance matrix and submission projection** (Phase 2).
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -333,7 +333,43 @@ Phase 2 evaluation + production release
     uncertain), deviation lifecycle (propose/accept/reject/lock), tenant isolation
     (create + edit), no fabrication (verbatim question + original_requirement).
   - ruff/mypy/pytest all clean (997 passed, 2 skipped).
-- [ ] CP58 — Human compliance review and audit
+- [x] ✅ ~~CP58 — Human compliance review and audit~~
+  - Status: DONE — PR #68
+  - Branch: `cp58/human-review-audit`
+  - Migration `0026_human_review_audit`: `assessment_comments` table (id,
+    assessment_id FK, project_id FK, author_id FK→users, comment_type enum,
+    comment text, assessment_version, created_at). Additive — does not modify
+    the append-only `compliance_assessments` table.
+  - `db/models.py`: `AssessmentCommentType` enum (comment, note, override_reason,
+    reopen_reason) + `AssessmentComment` ORM model.
+  - `compliance/service.py` additions to `ComplianceAssessmentService`:
+    - `override_assessment` — creates a NEW assessment version (append-only)
+      with a human-chosen status, preserving the original `suggested_status`.
+      Records override reason as an audit comment. Raises ValueError if the
+      override status matches the suggested status (use confirm instead).
+    - `reopen_assessment` — creates a new version reverting to unconfirmed
+      state (is_confirmed_by_human=False). Raises ValueError if the current
+      assessment is not confirmed.
+    - `add_comment` / `list_comments` — append-only reviewer comments,
+      tenant-scoped, linked to assessment version.
+    - `get_requirement_review` — combined dashboard: latest assessment with
+      deterministic comparison details + all CP56 conflicts + CP57
+      clarifications + CP57 deviations for a requirement, single tenant-scoped
+      query.
+    - Internal helpers `_fetch_assessment`, `_next_assessment_version`.
+  - `routes/compliance.py` additions: POST …/override, POST …/reopen,
+    POST …/comments, GET …/comments, GET …/requirements/{id}/review.
+  - Adversarial review: all new mutations create new versions (never modify
+    the original assessment row); override requires status ≠ suggested; reopen
+    requires confirmed state; all queries tenant-scoped via Project join.
+  - 12 tests covering: override creates new version + preserves original +
+    audit comment + evidence re-link; override same-status raises; unknown
+    assessment returns None; reopen confirmed; reopen unconfirmed raises;
+    add/list comments; unknown assessment comment returns None; combined
+    review view (assessment + conflicts + clarifications + deviations);
+    no-assessment returns None; cross-org override denied.
+  - ruff/mypy/pytest all clean (1009 passed, 2 skipped). Critical quality
+    gates still pass (invented_negative_rate=0, numeric_fidelity=0).
 - [ ] CP59 — Final compliance matrix and submission projection
 - [ ] CP60 — Final XLSX, DOCX, and PDF outputs
 - [ ] CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
@@ -2957,9 +2993,9 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Do not turn missing evidence into a negative technical claim.
 
-## ⬜ Checkpoint 58 — Human compliance review and audit
+## ✅ ~~Checkpoint 58 — Human compliance review and audit~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #68, merged.
 
 **Plain-English outcome:** A reviewer controls the final assessment state and can see all evidence/comparison history.
 
