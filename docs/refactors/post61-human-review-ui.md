@@ -1,7 +1,5 @@
 # Post-CP61 human compliance review UI
 
-Historical planning slot: 2026-09-07. This is a planning label only; GitHub's real timestamp is authoritative.
-
 ## User outcome
 
 A browser user can provide OEM evidence material and complete the human review actions that already exist in the backend.

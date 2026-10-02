@@ -10,18 +10,17 @@ All canonical checkpoints CP00–CP61 are complete. This plan is a post-build ha
 - Refactors must preserve product behavior unless the PR explicitly fixes a demonstrated bug.
 - Do not add new product subsystems merely because the completed checkpoint plan mentioned them.
 - Prefer deletion, consolidation, and direct user-flow improvements over new abstractions.
-- Real GitHub timestamps are authoritative. Historical reference dates below are planning labels only and are not backdated GitHub metadata.
 
 ## Planned PR sequence
 
-| PR | Historical reference slot | Scope | Exit condition |
-| --- | --- | --- | --- |
-| A | 2026-09-03 | Repository truth + cleanup | Docs match current CP61 implementation; temporary PR artifacts removed; current user-facing gaps recorded. |
-| B | 2026-09-05 | Backend simplification | Remove dead/duplicate code and split only the highest-cost god-module boundaries without behavior changes; full backend suite green. |
-| C | 2026-09-07 | Human review UI completion | Browser exposes CP57–CP58 clarification/deviation/override/reopen/comment workflows needed for real review. |
-| D | 2026-09-09 | Final matrix/export/submission UI | Browser exposes CP59–CP61 final matrix, XLSX/DOCX/PDF export, and submission lock/approval lifecycle. |
-| E | 2026-09-11 | Real end-to-end journey tests | **DONE — PR #76.** Fixed OEM upload → worker integration and added upload-driven regression coverage proving searchable OEM source creation. |
-| F | 2026-09-13 | Adversarial hardening + release review | **DONE — PR #77 (pending merge).** Removed unsafe raw-HTML source rendering, added a CI invariant, corrected worker-stage documentation, and published the final manual-review checklist. |
+| PR | Scope | Exit condition |
+| --- | --- | --- |
+| A | Repository truth + cleanup | **DONE — PR #72.** Docs match current CP61 implementation; temporary PR artifacts removed; current user-facing gaps recorded. |
+| B | Backend simplification | **DONE — PR #73.** Reduced unnecessary backend import coupling without behavior changes; full backend suite remained green. |
+| C | Human review UI completion | **DONE — PR #74.** Browser exposes clarification/deviation/override/reopen/comment workflows needed for real review. |
+| D | Final matrix/export/submission UI | **DONE — PR #75.** Browser exposes final matrix, XLSX/DOCX/PDF export, and submission lock/approval lifecycle. |
+| E | Real end-to-end journey tests | **DONE — PR #76.** Fixed OEM upload → worker integration and added upload-driven regression coverage proving searchable OEM source creation. |
+| F | Adversarial hardening + release review | **DONE — PR #77.** Removed unsafe raw-HTML source rendering, added a CI invariant, corrected worker-stage documentation, and published the final manual-review checklist. |
 
 ## Product reality test
 
