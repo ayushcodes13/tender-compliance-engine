@@ -55,7 +55,7 @@ from tender_compliance_api.db.models import (
     TenderDocumentType,
 )
 from tender_compliance_api.db.session import get_session
-from tender_compliance_api.document import (
+from tender_compliance_api.document.service import (
     DocumentNotFoundError,
     DocumentService,
     TransitionError,
