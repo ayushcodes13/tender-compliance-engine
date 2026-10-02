@@ -21,6 +21,9 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { SourceViewer } from "@/components/source-viewer";
+import { EvidencePanel } from "@/components/evidence-panel";
+
 import {
   api,
   DocumentItem,
@@ -29,7 +32,6 @@ import {
   RequirementListResponse,
   SourceAnchor,
 } from "@/lib/api/client";
-import { SourceViewer } from "@/components/source-viewer";
 
 /** Status for the local UI state (mirrors backend RequirementReviewState). */
 type RequirementStatus = "unreviewed" | "reviewed" | "needs_clarification" | "ocr_warning";
@@ -312,6 +314,40 @@ export function TenderReviewWorkspace(props: {
   // Use the first source anchor's page for source viewer navigation, if available.
   const selectedSources = detail?.sources ?? [];
   const sourcePage = selectedSources[0]?.page_number ?? 1;
+
+  // Derive query terms from the requirement's normalized text for evidence
+  // retrieval. This is a simple term extraction: lowercase, strip punctuation,
+  // remove common English stop words. The retrieval engine on the backend
+  // uses the same stop-word logic, so these terms feed directly into
+  // deterministic TF-IDF search over OEM documents.
+  const STOP_WORDS = new Set([
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
+    "with", "at", "by", "from", "is", "are", "was", "were", "be", "been",
+    "has", "have", "had", "must", "shall", "should", "will", "may", "can",
+  ]);
+  const queryTerms = useMemo(() => {
+    const rawText =
+      detail?.normalized_text ?? selectedSummary?.normalized_text ?? "";
+    if (!rawText) return [];
+    const tokens = rawText
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
+    // Deduplicate while preserving order, cap at 20 terms.
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const t of tokens) {
+      if (!seen.has(t)) {
+        seen.add(t);
+        unique.push(t);
+      }
+    }
+    return unique.slice(0, 20);
+  }, [detail?.normalized_text, selectedSummary?.normalized_text]);
+
+  // Trigger evidence refresh from parent (e.g. after requirement review update).
+  const [evidenceRevision, setEvidenceRevision] = useState(0);
+  const refreshEvidence = () => setEvidenceRevision((n) => n + 1);
 
   return (
     <div className="project-workspace">
@@ -633,6 +669,16 @@ export function TenderReviewWorkspace(props: {
                 Locate in source
               </button>
             </section>
+
+            {/* Evidence review panel (CP51) */}
+            {selectedId ? (
+              <EvidencePanel
+                projectId={projectId}
+                requirementId={selectedId}
+                queryTerms={queryTerms}
+                onEvidenceChanged={refreshEvidence}
+              />
+            ) : null}
 
             <section className="evidence-section">
               <div className="evidence-section-heading">
