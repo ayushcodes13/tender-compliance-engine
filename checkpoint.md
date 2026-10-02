@@ -290,7 +290,24 @@ Phase 2 evaluation + production release
     source-bounded evidence_ids, FakeReasoner, versioning, human confirmation,
     tenant isolation, no fabrication.
   - ruff/mypy/pytest all clean (962 passed, 2 skipped).
-- [ ] CP56 — Conflict and contradiction detection
+- [x] ✅ ~~CP56 — Conflict and contradiction detection~~
+  - Status: DONE — PR #66, merged
+  - Branch: `cp56/conflict-detection`
+  - `ConflictResolution` enum (UNRESOLVED, ACCEPTED, REJECTED) + `Conflict` model
+    (table `conflicts`). All conflicting sources preserved in JSON `sources`.
+  - `ConflictDetectionService`: detect_conflicts, record_conflicts,
+    list_conflicts, get_conflict, resolve_conflict, detect_and_record.
+  - Three detection strategies:
+    1. parameter_value — same parameter, different non-equivalent numeric
+       values (unit-normalized via CP53 `_unit_adapter`).
+    2. concept_mismatch — different conceptual parameters, same unit
+       (accuracy vs resolution).
+    3. tender_vendor — direct linguistic contradiction (affirmation vs negation).
+  - API routes: GET …/conflicts, POST …/detect-conflicts (persist flag),
+    GET …/conflicts/{id}, POST …/conflicts/{id}/resolve.
+  - Migration `0024_conflict_detection`.
+  - 16 new tests. ruff/mypy/pytest all clean (978 passed, 2 skipped).
+- [ ] CP57 — Missing evidence, clarification questions, and deviations
 - [ ] CP57 — Missing evidence, clarification questions, and deviations
 - [ ] CP58 — Human compliance review and audit
 - [ ] CP59 — Final compliance matrix and submission projection

@@ -2346,6 +2346,114 @@ class QualitativeAssessment(Base):
             f"verdict={self.verdict.value!r}, "
             f"version={self.assessment_version})"
         )
+
+
+class ConflictResolution(enum.StrEnum):
+    """Resolution state for a detected conflict (CP56).
+
+    ``UNRESOLVED`` means the conflict has not yet been reviewed.  ``ACCEPTED``
+    and ``REJECTED`` are the two possible human decisions — but the system
+    never silently picks by priority, set union, or arrival order.  Both
+    conflicting sources are always preserved.
+    """
+
+    UNRESOLVED = "unresolved"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class Conflict(Base):
+    """A detected contradiction between vendor claims for a requirement (CP56).
+
+    Conflicts are persistent and auditable.  EVERY conflicting source is
+    preserved in the ``sources`` JSON array — the system never discards
+    inconvenient evidence to silently resolve a conflict.
+
+    ``conflict_type`` classifies the contradiction:
+    - ``parameter_value`` — same parameter, different numeric values across
+      accepted evidence items (e.g. one datasheet says 25 °C, another says 30 °C).
+    - ``concept_mismatch`` — same unit but different conceptual parameter
+      (e.g. accuracy vs resolution).
+    - ``tender_vendor`` — the requirement text and evidence text directly
+      contradict (e.g. "shall be CE marked" vs "not CE marked").
+
+    Conflict is NOT automatically non-compliance — a reviewer must
+    investigate and resolve.
+    """
+
+    __tablename__ = "conflicts"
+    __table_args__ = (
+        Index("ix_conflicts_requirement", "requirement_id"),
+        Index("ix_conflicts_type", "conflict_type"),
+        Index("ix_conflicts_resolution", "resolution"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Classifies the contradiction.
+    conflict_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    # The conceptual parameter in conflict (e.g. "temperature", "accuracy").
+    parameter: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Product/model entity in conflict (optional).
+    entity: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # JSON array of source descriptors — preserves ALL conflicting sources.
+    # Each entry: {"evidence_id", "vendor_spec_id", "source_text", "value",
+    # "unit", "oem_document_version_id", "source_page_number"}
+    sources: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False
+    )
+    # The relevant requirement text — preserved for side-by-side review.
+    tender_claim: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    # Optional link to the vendor spec that originated the conflict detection.
+    tender_vendor_spec_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("vendor_specs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolution: Mapped[ConflictResolution] = mapped_column(
+        Enum(ConflictResolution, name="conflict_resolution"),
+        nullable=False,
+        default=ConflictResolution.UNRESOLVED,
+        server_default=ConflictResolution.UNRESOLVED.value,
+    )
+    resolution_notes: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Conflict(req={self.requirement_id!r}, type={self.conflict_type!r}, "
+            f"resolution={self.resolution.value!r})"
+        )
         return (
             f"VendorSpec(evidence={self.evidence_id!r}, "
             f"parameter={self.parameter!r}, "
