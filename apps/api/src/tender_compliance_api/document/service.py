@@ -41,6 +41,7 @@ from tender_compliance_api.db.models import (
     ExtractionRunStatus,
     OemDocument,
     OemDocumentVersion,
+    OemTextSegment,
     ProcessingRun,
     ProcessingStage,
     Project,
@@ -1944,6 +1945,69 @@ class DocumentService:
             )
 
         return run_id
+
+    async def create_oem_text_segments(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+        segments: list[tuple[int, str]],
+    ) -> int:
+        """Create searchable text segments for an OEM document version (CP50).
+
+        Called during OEM document processing (PARSE/CLEANUP stage) to index
+        page text into :class:`OemTextSegment` rows.  Each tuple is
+        ``(page_number, text)``.  Segments replace any existing segments
+        for the same version (idempotent reprocessing).
+
+        Args:
+            auth: Authenticated context (organization-scoped).
+            document_id: The OEM document UUID.
+            version_number: The version number.
+            segments: List of ``(page_number, text)`` tuples.
+
+        Returns:
+            The number of ``OemTextSegment`` rows created.
+        """
+        version = await self.get_oem_version_or_raise(
+            auth, document_id, version_number
+        )
+
+        # Idempotent: delete existing segments before recreating.
+        await self._session.execute(
+            delete(OemTextSegment).where(
+                OemTextSegment.oem_document_version_id == version.id
+            )
+        )
+
+        for page_number, text in segments:
+            self._session.add(
+                OemTextSegment(
+                    oem_document_version_id=version.id,
+                    page_number=page_number,
+                    segment_index=0,
+                    start_char=0,
+                    end_char=len(text),
+                    text=text,
+                )
+            )
+
+        await self._session.flush()
+
+        await self._audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="oem_document.segments_created",
+            entity_type="oem_document_version",
+            entity_id=version.id,
+            project_id=await self._oem_project_id_for(version.document_id),
+            metadata={
+                "num_segments": len(segments),
+                "total_chars": sum(len(t) for _, t in segments),
+            },
+        )
+
+        return len(segments)
 
     async def requeue_version(
         self,
