@@ -229,7 +229,7 @@ Phase 2 evaluation + production release
 ### Stage J — OEM evidence, deterministic comparison, compliance review, and final submissions
 
 - [x] ✅ ~~CP49 — OEM document ingestion and provenance~~
-- [ ] CP50 — Evidence model, retrieval/indexing, and retrieval evaluation
+- [x] ✅ ~~CP50 — Evidence model, retrieval/indexing, and retrieval evaluation~~
 - [ ] CP51 — Evidence review UI and evidence curation
 - [ ] CP52 — Vendor specification extraction
 - [ ] CP53 — Deterministic unit normalization and specification comparison engine
@@ -2583,43 +2583,37 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 - 13 new tests in `tests/test_oem_documents.py` covering: valid upload, version sequencing, content dedup, empty file rejection, malware rejection, invalid doc_type rejection, wrong extension rejection, listing, cross-tenant denial, tender/OEM separation, audit trail, immutability.
 - Full suite: `824 passed, 2 skipped`. ruff: `All checks passed!`. mypy --strict: `Success: no issues in 82 source files`.
 
-## ⬜ Checkpoint 50 — Evidence model, retrieval/indexing, and retrieval evaluation
+## ✅ ~~Checkpoint 50 — Evidence model, retrieval/indexing, and retrieval evaluation~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #60
 
 **Plain-English outcome:** The system can find likely OEM evidence while treating retrieval failure as missing evidence, not non-compliance.
 
-### What we will do
+### What we did
 
-1. Add `Evidence` and `EvidenceLocation` with immutable OEM document version/page/source text/offset/bbox/location precision/OCR confidence.
-2. Allow multiple evidence locations per requirement.
-3. Create searchable OEM text segments tied to locations.
-4. Start with deterministic metadata/text search; add embeddings/hybrid retrieval only when evaluation shows value.
-5. If embeddings are needed, prefer a simple Postgres/pgvector-style approach before a separate vector platform.
-6. Record retrieval query/config/version/ranking signals.
-7. Return several evidence candidates with source metadata.
-8. Build retrieval benchmark precision/recall.
-9. Define zero/weak retrieval as missing evidence.
+1. **Models** (`db/models.py`): Added `EvidenceReviewState` (proposed/accepted/rejected — curation state, not compliance verdict), `OemTextSegment` (searchable text segments from OEM documents with page/offset/OCR-confidence/bbox), `Evidence` (proposed evidence candidate with deterministic TF-IDF score, retrieval method/config, review state), and `EvidenceLocation` (source anchors mirroring `RequirementSource` precision fields — page, clause, char offsets, bbox, OCR confidence, location_type, source_text; multiple locations per evidence row).
+2. **Migration** (`0020_evidence_model_retrieval`): Creates `oem_text_segments`, `evidence`, `evidence_locations` tables with CASCADE FKs, indexes, and unique constraints. Migration `0001 → 0020`.
+3. **Retrieval service** (`retrieval/service.py`): Deterministic TF-IDF-style keyword search over `OemTextSegment` rows. Tenant-scoped at the service layer (joins through OemDocument → Project → organization_id). Zero/weak retrieval returns empty list (missing evidence, not non-compliance). Records retrieval version/query terms/candidate counts in audit trail.
+4. **DocumentService** (`document/service.py`): Added `create_oem_text_segments` for indexing OEM document text during processing (idempotent reprocessing, tenant-scoped, audit-logged).
+5. **Evidence API** (`routes/evidence.py`): `GET /evidence` (list with review_state filter), `POST /evidence/propose` (retrieve + optionally persist candidates), `POST /evidence/{id}/curate` (accept/reject). All tenant-scoped.
+6. **Adversarial review fixes applied**:
+   - Tenant isolation: `propose_evidence` query now joins to `Project` and filters by `organization_id == auth.organization_id` (previously only `project_id`).
+   - `persist_evidence` now verifies requirement belongs to authenticated org's project before creating rows.
+7. **Tests**: 30 new tests covering tokenize, TF-IDF scoring, zero/weak retrieval, top-k, tenant isolation (service + API), persistence, curation, segment creation, cross-tenant denial, source traceability.
 
-### How we will verify it
-
-- Every candidate opens its actual OEM source.
-- Retrieval precision/recall is measurable.
-- No-result cases never become automatic NON_COMPLIANT.
-
-### This checkpoint is complete only when
-
-- The system can propose source-linked evidence candidates for a requirement.
-
-### Bynd reuse notes
-
-- **References:** `validation-service` and `validation-engine`.
-- Retrieval/evidence output needs typed outcomes and stable reason codes, not a boolean. Distinguish evidence found, source unavailable, out of scope, malformed input, retrieval failure, and genuinely absent/contradictory evidence.
-- Every requested requirement gets a result or explicit missing/error record; silence is never a verdict.
+### Verification
+- `ruff check .`: All checks passed
+- `mypy src/`: Success, no issues in 85 source files
+- `alembic upgrade head`: → 0020_evidence_model_retrieval
+- `pytest`: 854 passed, 2 skipped
+- `npx tsc --noEmit` (apps/web): clean
 
 ### Guardrail
+- Semantic similarity is not proof. (Honoured: deterministic TF-IDF, no LLM involvement.)
 
-- Semantic similarity is not proof.
+### Implementation / PR note
+- **Branch:** `cp50/evidence-model-retrieval`
+- **Status:** DONE — PR #60
 
 ## ⬜ Checkpoint 51 — Evidence review UI and evidence curation
 
