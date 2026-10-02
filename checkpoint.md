@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP49 — OEM document ingestion and provenance** (Phase 2).
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP50 — Evidence model, retrieval/indexing, and retrieval evaluation** (Phase 2).
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -228,7 +228,7 @@ Phase 2 evaluation + production release
 
 ### Stage J — OEM evidence, deterministic comparison, compliance review, and final submissions
 
-- [ ] CP49 — OEM document ingestion and provenance
+- [x] ✅ ~~CP49 — OEM document ingestion and provenance~~
 - [ ] CP50 — Evidence model, retrieval/indexing, and retrieval evaluation
 - [ ] CP51 — Evidence review UI and evidence curation
 - [ ] CP52 — Vendor specification extraction

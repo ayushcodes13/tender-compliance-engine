@@ -1712,3 +1712,212 @@ class ExportArtifact(Base):
             f"ExportArtifact(version={self.document_version_id!r}, "
             f"status={self.status!r}, count={self.requirement_count})"
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — Evidence retrieval and curation (CP50)
+# ---------------------------------------------------------------------------
+
+
+class EvidenceReviewState(enum.StrEnum):
+    """Curation state of a proposed evidence candidate (CP50).
+
+    ``PROPOSED`` means the retrieval engine surfaced this candidate but no
+    human has accepted or rejected it yet.  ``ACCEPTED`` and ``REJECTED``
+    are the two possible human decisions.  This is a *curation* state, not a
+    compliance verdict — compliance assessment is Phase 2.
+    """
+
+    PROPOSED = "proposed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class OemTextSegment(Base):
+    """A searchable text segment extracted from an OEM document version.
+
+    Segments are produced by the parsing/cleanup pipeline (CP21/CP23) and
+    enable deterministic keyword retrieval against OEM source material.
+    Each segment is tied to a specific OEM document version's immutable
+    bytes — never to a tender document.
+
+    The ``text`` column holds the cleaned, searchable text.  ``start_char``
+    and ``end_char`` are offsets into the page's full text, allowing exact
+    reconstruction of the source excerpt (requirement: "Every candidate opens
+    its actual OEM source").
+    """
+
+    __tablename__ = "oem_text_segments"
+    __table_args__ = (
+        Index("ix_oem_segments_version", "oem_document_version_id"),
+        Index("ix_oem_segments_page", "oem_document_version_id", "page_number"),
+        UniqueConstraint(
+            "oem_document_version_id",
+            "page_number",
+            "segment_index",
+            name="uq_oem_segments_lookup",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    oem_document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("oem_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    segment_index: Mapped[int] = mapped_column(Integer(), nullable=False)
+    start_char: Mapped[int] = mapped_column(Integer(), nullable=False)
+    end_char: Mapped[int] = mapped_column(Integer(), nullable=False)
+    text: Mapped[str] = mapped_column(String(), nullable=False)
+    ocr_confidence: Mapped[float | None] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )
+    bbox: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class Evidence(Base):
+    """A proposed evidence candidate linking an OEM source to a requirement.
+
+    One row per (requirement, oem_document_version) pair returned by the
+    retrieval engine.  The actual source location is recorded via
+    :class:`EvidenceLocation` children — a single evidence row can have
+    multiple locations (the requirement may span multiple pages or segments).
+
+    ``review_state`` tracks whether a human has curated the candidate.
+    ``score`` and ``retrieval_config`` are recorded so the retrieval
+    query/config/version/ranking signals are auditable (CP50.6).
+    """
+
+    __tablename__ = "evidence"
+    __table_args__ = (
+        Index("ix_evidence_requirement", "requirement_id"),
+        Index("ix_evidence_oem_version", "oem_document_version_id"),
+        Index("ix_evidence_review_state", "review_state"),
+        Index(
+            "ix_evidence_requirement_score",
+            "requirement_id",
+            "score",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    oem_document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("oem_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Rank score from the retrieval engine (0.0–1.0). Always recorded —
+    # never fabricated; NULL only if the retrieval method did not produce
+    # a score (rare, but supported for future retrieval methods).
+    score: Mapped[float | None] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )
+    retrieval_method: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="keyword"
+    )
+    # JSON config/version/ranking signals for auditability (CP50.6).
+    retrieval_config: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    review_state: Mapped[EvidenceReviewState] = mapped_column(
+        Enum(EvidenceReviewState, name="evidence_review_state"),
+        nullable=False,
+        default=EvidenceReviewState.PROPOSED,
+        server_default=EvidenceReviewState.PROPOSED.value,
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    locations: Mapped[list[EvidenceLocation]] = relationship(
+        "EvidenceLocation",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Evidence(req={self.requirement_id!r}, "
+            f"oem_version={self.oem_document_version_id!r}, "
+            f"state={self.review_state!r})"
+        )
+
+
+class EvidenceLocation(Base):
+    """A source location within an OEM document that supports an :class:`Evidence` row.
+
+    Mirrors :class:`RequirementSource`'s precision-preserving fields:
+    ``location_type`` records the strongest precision actually known,
+    ``source_text`` is the verbatim excerpt, and ``ocr_confidence`` is NULL
+    unless the segment was OCR-derived.
+    """
+
+    __tablename__ = "evidence_locations"
+    __table_args__ = (
+        Index("ix_evidence_locations_evidence", "evidence_id"),
+        Index("ix_evidence_locations_segment", "oem_text_segment_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    evidence_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    oem_text_segment_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True, index=True
+    )
+    oem_document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("oem_document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    char_start: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    char_end: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    bbox: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ocr_confidence: Mapped[float | None] = mapped_column(
+        Numeric(5, 4), nullable=True
+    )
+    location_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="approximate",
+        server_default="approximate",
+    )
+    source_text: Mapped[str | None] = mapped_column(String(8192), nullable=True)
+
+    evidence: Mapped[Evidence] = relationship(
+        "Evidence", back_populates="locations", lazy="selectin"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"EvidenceLocation(evidence={self.evidence_id!r}, "
+            f"page={self.page_number!r}, loc={self.location_type!r})"
+        )
