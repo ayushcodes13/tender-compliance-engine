@@ -21,7 +21,7 @@ All canonical checkpoints CP00–CP61 are complete. This plan is a post-build ha
 | C | 2026-09-07 | Human review UI completion | Browser exposes CP57–CP58 clarification/deviation/override/reopen/comment workflows needed for real review. |
 | D | 2026-09-09 | Final matrix/export/submission UI | Browser exposes CP59–CP61 final matrix, XLSX/DOCX/PDF export, and submission lock/approval lifecycle. |
 | E | 2026-09-11 | Real end-to-end journey tests | **DONE — PR #76.** Fixed OEM upload → worker integration and added upload-driven regression coverage proving searchable OEM source creation. |
-| F | 2026-09-13 | Adversarial hardening + release review | **IN PROGRESS.** Remove unsafe raw-HTML rendering, add a CI invariant, refresh misleading worker documentation, and publish the final manual-review checklist. |
+| F | 2026-09-13 | Adversarial hardening + release review | **DONE — PR #77 (pending merge).** Removed unsafe raw-HTML source rendering, added a CI invariant, corrected worker-stage documentation, and published the final manual-review checklist. |
 
 ## Product reality test
 
