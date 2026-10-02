@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0027_final_export_outputs"
+_HEAD_REV = "0028_submission_approval_locking"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -40,7 +40,7 @@ _APP_TABLES = {
     "qualitative_assessments",
     "conflicts",
     "clarification_requests", "deviations",
-    "assessment_comments",
+    "assessment_comments", "submissions",
 }
 
 

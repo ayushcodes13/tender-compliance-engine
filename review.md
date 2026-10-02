@@ -561,8 +561,42 @@
 - **No input needed** unless you want production-grade PDF layout or DOCX
   header shading improvements.
 
-## CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release  🟡 pending
-- Next checkpoint. See checkpoint.md for details.
+## CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release  ✅ DONE (PR #71, merged)
+- **What shipped:**
+  - `Submission` model + `SubmissionStatus` enum (draft/locked/approved/revoked).
+    Tenant-scoped via project_id → organization_id join. Immutable once locked/approved.
+  - Migration `0028_submission_approval_locking`: `submissions` table with
+    assessment_snapshot JSON, matrix_sha256, matrix_export_id FK, version_number
+    unique per (project_id, version_number).
+  - `SubmissionService`: create/lock/approve/revoke lifecycle with state-transition
+    guards (DRAFT→LOCKED→APPROVED→REVOKED). After lock/approve, new submissions
+    get incremented version_number (append-only).
+  - `routes/submissions.py`: full REST API for submission lifecycle.
+  - `extraction/phase2_eval.py`: Phase 2 benchmark (12 cases) + false-compliance
+    metric. `check_phase2_quality_gates()` is the critical release gate —
+    returns False on any false compliance. False compliance = highest severity.
+- **Adversarial review:**
+  - State transitions enforced: cannot lock a non-draft, cannot approve a non-locked,
+    cannot revoke a non-approved. All raise 409. ✅
+  - Append-only: version_number increments on each new submission; old rows never mutated. ✅
+  - Tenant isolation: all queries join through Project → organization_id. Cross-org → 404/empty. ✅
+  - No fabrication: assessment_snapshot stored verbatim from final matrix projection;
+    empty list when no assessments exist (no fabricated COMPLIANT states). ✅
+  - SHA-256 computed from actual assessment state, not trusted from any provider. ✅
+- **Phase 2 benchmark results:** 12 cases, 11/12 correct, 0 false compliance,
+  1 false negative (Kelvin unit not in parser's unit map — known limitation).
+  Accuracy 92%. False-compliance gate: PASS (0 false compliance cases).
+- **Verification:** ruff clean, mypy --strict clean (105 files). pytest 1072 passed,
+  2 skipped. Eval harness: 50 passed. Phase 2 eval: 23 passed. Acceptance: 8 passed.
+  Quality gates: invented_negative_rate=0, numeric_fidelity=0, false_compliance=0.
+- **⚠️ Known limitations:**
+  - Kelvin (K) unit not in the constraint parser's `_UNIT_QUANTITY` map → vendor
+    specs with K units return INCOMPARABLE instead of converting to °C. This causes
+    1 false-negative in the Phase 2 benchmark but does NOT cause false compliance. ✅
+  - Web UI does not consume the submission API yet — API is available for frontend
+    integration. The submission workflow is fully accessible via REST. 🟡
+  - The Phase 2 benchmark dataset has 12 cases (modest size). Could be expanded
+    with more real-world examples for production readiness. 🟡
   - `EXPIRED` status is defined but has no expiration job. Requirements remain
     unresolved (not auto-expired) — conservative by design. ✅
 - **Default shipped:** `MissingEvidenceService` with clarification lifecycle

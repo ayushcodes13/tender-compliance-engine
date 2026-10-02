@@ -2777,3 +2777,99 @@ class Deviation(Base):
             f"Deviation(req={self.requirement_id!r}, type={self.deviation_type.value!r}, "
             f"status={self.status.value!r})"
         )
+
+
+class SubmissionStatus(enum.StrEnum):
+    """Lifecycle states for a submission (CP61).
+
+    DRAFT → LOCKED → APPROVED → REVOKED
+    After LOCKED or APPROVED, later changes create a new submission with an
+    incremented version_number rather than mutating the existing one.
+    """
+
+    DRAFT = "draft"
+    LOCKED = "locked"
+    APPROVED = "approved"
+    REVOKED = "revoked"
+
+
+class Submission(Base):
+    """Immutable snapshot of the final compliance matrix at a milestone (CP61).
+
+    A submission captures the approved state of the final matrix for a
+    document version.  Once locked or approved, the snapshot is immutable —
+    later changes create a new submission version.
+
+    ``assessment_snapshot`` stores a JSON array of requirement-level
+    assessment IDs and their versions so a signed-off submission can be
+    reproduced exactly even as assessments evolve.
+    """
+
+    __tablename__ = "submissions"
+    __table_args__ = (
+        Index("ix_submissions_project", "project_id"),
+        Index("ix_submissions_status", "status"),
+        UniqueConstraint(
+            "project_id", "version_number", name="uq_submissions_project_version"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    status: Mapped[SubmissionStatus] = mapped_column(
+        Enum(
+            SubmissionStatus,
+            name="submission_status",
+            native_enum=False,
+            values_callable=lambda e: [x.value for x in e],
+        ),
+        nullable=False,
+        default=SubmissionStatus.DRAFT,
+        server_default=SubmissionStatus.DRAFT.value,
+    )
+    approver_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True,
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    assessment_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON(), nullable=False,
+    )
+    matrix_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    matrix_export_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("export_artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"Submission(project={self.project_id!r}, v={self.version_number}, "
+            f"status={self.status.value!r})"
+        )
+
