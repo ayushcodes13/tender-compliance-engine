@@ -394,7 +394,36 @@ Phase 2 evaluation + production release
   - 13 tests in `tests/test_final_matrix.py`.
   - ruff clean, mypy clean (99 files), pytest 1022 passed, 2 skipped. Critical
     quality gates pass (invented_negative_rate=0, numeric_fidelity=0).
-- [ ] CP60 — Final XLSX, DOCX, and PDF outputs
+- [x] ✅ ~~CP60 — Final XLSX, DOCX, and PDF outputs~~
+  - Status: DONE — PR #70
+  - Branch: `cp60/final-outputs`
+  - Migration `0027_final_export_outputs`: adds `export_format` VARCHAR(16) column
+    with CHECK constraint `IN ('xlsx', 'docx', 'pdf')` to `export_artifacts`
+    table (batch mode for SQLite compatibility). `down_revision = "0026_human_review_audit"`.
+  - `db/models.py`: `ExportFormat` StrEnum (XLSX="xlsx", DOCX="docx", PDF="pdf") +
+    `export_format` column on `ExportArtifact` with `values_callable` to ensure
+    StrEnum serializes to lowercase values matching the CHECK constraint.
+  - `export/final_pdf.py`: `build_final_matrix_pdf()` using PyMuPDF — paginated
+    table layout with title page metadata and Phase 2 column data. Uses
+    `pymupdf.Rect` for text boxes, `pymupdf.Point` for draw lines. Presentation
+    only — never recomputes or invents compliance facts.
+  - `export/final_xlsx.py`: existing XLSX writer (already created in earlier
+    steps) with `FINAL_MATRIX_COLUMNS` (28 columns), `build_final_matrix_workbook()`,
+    `save_workbook_bytes()`.
+  - `export/final_docx.py`: existing DOCX writer using python-docx with Table Grid
+    style, bold header runs, Pt(8) body text.
+  - `document/service.py`: `export_final_matrix()` — tenant-scoped, generates
+    XLSX/DOCX/PDF bytes, stores in object storage, creates `ExportArtifact` row
+    with `export_format`. Append-only: each export creates a new row. Failure
+    recorded as FAILED artifact.
+  - `routes/requirements.py`: `POST .../final-matrix/exports?fmt=xlsx|docx|pdf`
+    route returning `ExportArtifactResponse` (now includes `export_format` field).
+  - `export/__init__.py`: updated docstring.
+  - 10 new tests in `tests/test_final_export.py` covering XLSX/DOCX/PDF generation,
+    content validation via openpyxl/zipfile/PDF magic bytes, append-only semantics,
+    tenant isolation, default format, no-fabrication (missing evidence → empty cells).
+  - ruff/mypy clean. pytest 1032 passed, 2 skipped. Quality gates pass
+    (invented_negative_rate=0, numeric_fidelity=0).
 - [ ] CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
 
 ---
