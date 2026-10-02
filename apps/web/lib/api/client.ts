@@ -316,6 +316,63 @@ export type ExportArtifactResponse = {
   requirement_count: number;
   workbook_sha256: string;
   generated_at: string | null;
+  export_format?: "xlsx" | "docx" | "pdf" | null;
+};
+
+export type FinalMatrixRowResponse = {
+  serial: number;
+  requirement_id: string;
+  tender_requirement: string;
+  category: string | null;
+  clause: string | null;
+  source_page: number | null;
+  mandatory: boolean | null;
+  user_notes: string | null;
+  review_status: string;
+  normalized_text: string;
+  raw_source: string;
+  uncertainty: string;
+  ocr_warning: boolean;
+  evidence_id: string | null;
+  evidence_score: number | null;
+  evidence_oem_document: string | null;
+  evidence_oem_version: number | null;
+  vendor_spec_parameter: string | null;
+  vendor_spec_value: number | null;
+  vendor_spec_unit: string | null;
+  vendor_spec_lower_bound: number | null;
+  vendor_spec_upper_bound: number | null;
+  vendor_spec_source_text: string | null;
+  vendor_spec_source_page: number | null;
+  vendor_spec_extraction_method: string | null;
+  vendor_spec_issues: string[] | null;
+  assessment_status: ComplianceStatus | null;
+  assessment_suggested_status: ComplianceStatus | null;
+  assessment_reason_code: string | null;
+  assessment_reason_text: string | null;
+  assessment_is_confirmed: boolean | null;
+  assessment_reviewer_id: string | null;
+  assessment_reviewed_at: string | null;
+  assessment_version: number | null;
+  has_unresolved_conflict: boolean;
+  clarification_statuses: string[];
+  deviation_statuses: string[];
+};
+
+export type SubmissionResponse = {
+  id: string;
+  project_id: string;
+  document_version_id: string;
+  version_number: number;
+  status: "draft" | "locked" | "approved" | "revoked";
+  approver_id: string | null;
+  approved_at: string | null;
+  assessment_snapshot: Array<Record<string, unknown>>;
+  matrix_sha256: string;
+  matrix_export_id: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 /** Evidence review state (Phase 2 — curation, not compliance). */
@@ -1107,4 +1164,78 @@ export const api = {
         review_notes: reviewNotes ?? null,
       }),
     }).then((r) => expectJson<Record<string, unknown>>(r)),
+
+  // --- Final compliance matrix / exports / submissions (CP59–CP61) ---
+
+  fetchFinalMatrix: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/final-matrix`
+    ).then((r) => expectJson<FinalMatrixRowResponse[]>(r)),
+
+  createFinalMatrixExport: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    format: "xlsx" | "docx" | "pdf"
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/final-matrix/exports?fmt=${format}`,
+      { method: "POST" }
+    ).then((r) => expectJson<ExportArtifactResponse>(r)),
+
+  downloadExport: async (
+    projectId: string,
+    documentId: string,
+    version: number,
+    exportId: string
+  ): Promise<Blob> => {
+    const resp = await fetch(
+      `${API_URL}/projects/${projectId}/documents/${documentId}/versions/${version}/exports/${exportId}`,
+      { headers: devHeaders() }
+    );
+    if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+    return resp.blob();
+  },
+
+  fetchSubmissions: (projectId: string) =>
+    apiFetch(`/projects/${projectId}/submissions/`).then((r) =>
+      expectJson<SubmissionResponse[]>(r)
+    ),
+
+  createSubmission: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/submissions/${documentId}/versions/${version}`,
+      { method: "POST" }
+    ).then((r) => expectJson<SubmissionResponse>(r)),
+
+  lockSubmission: (projectId: string, submissionId: string) =>
+    apiFetch(`/projects/${projectId}/submissions/${submissionId}/lock`, {
+      method: "POST",
+    }).then((r) => expectJson<SubmissionResponse>(r)),
+
+  approveSubmission: (projectId: string, submissionId: string) =>
+    apiFetch(`/projects/${projectId}/submissions/${submissionId}/approve`, {
+      method: "POST",
+    }).then((r) => expectJson<SubmissionResponse>(r)),
+
+  revokeSubmission: (
+    projectId: string,
+    submissionId: string,
+    reason?: string
+  ) => {
+    const q = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+    return apiFetch(
+      `/projects/${projectId}/submissions/${submissionId}/revoke${q}`,
+      { method: "POST" }
+    ).then((r) => expectJson<SubmissionResponse>(r));
+  },
+
 };

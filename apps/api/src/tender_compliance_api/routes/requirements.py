@@ -1259,7 +1259,7 @@ async def download_export(
     auth: AuthContext = Depends(get_auth_context),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> Any:
-    """Download the XLSX workbook for a completed export (CP42)."""
+    """Download a completed XLSX/DOCX/PDF export with truthful HTTP metadata."""
     svc = DocumentService(session)
     try:
         workbook_bytes = await svc.download_export(
@@ -1273,15 +1273,31 @@ async def download_export(
             detail=f"Export download failed: {exc}",
         ) from exc
 
+    artifact = await session.get(ExportArtifact, export_id)
+    export_format = (
+        artifact.export_format.value
+        if artifact is not None and artifact.export_format is not None
+        else ExportFormat.XLSX.value
+    )
+    media_types = {
+        ExportFormat.XLSX.value: (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        ExportFormat.DOCX.value: (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        ExportFormat.PDF.value: "application/pdf",
+    }
+    filenames = {
+        ExportFormat.XLSX.value: "tender_compliance_export.xlsx",
+        ExportFormat.DOCX.value: "tender_compliance_export.docx",
+        ExportFormat.PDF.value: "tender_compliance_export.pdf",
+    }
+    filename = filenames.get(export_format, "tender_compliance_export.bin")
     return Response(
         content=workbook_bytes,
-        media_type=(
-            "application/vnd.openxmlformats-"
-            "officedocument.spreadsheetml.sheet"
-        ),
+        media_type=media_types.get(export_format, "application/octet-stream"),
         headers={
-            "Content-Disposition": (
-                'attachment; filename="tender_matrix_export.xlsx"'
-            )
+            "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
