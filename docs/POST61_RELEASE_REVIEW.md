@@ -1,7 +1,5 @@
 # Post-CP61 release review and manual acceptance checklist
 
-Historical planning slot: **2026-09-13**. This is a planning label only; GitHub timestamps remain truthful.
-
 ## What this hardening pass proved
 
 The product is no longer validated only through database-seeded checkpoint tests.

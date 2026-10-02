@@ -1,7 +1,5 @@
 # Real user end-to-end hardening
 
-Historical planning slot: 2026-09-11. Planning label only; GitHub timestamps remain real.
-
 ## Confirmed blocker
 
 OEM upload enqueues an `OemDocumentVersion.id`, but the worker currently resolves only tender `DocumentVersion` IDs. A normal OEM upload therefore cannot become `OemTextSegment` evidence and breaks the actual user journey.

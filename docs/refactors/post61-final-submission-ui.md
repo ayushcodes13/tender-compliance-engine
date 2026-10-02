@@ -1,7 +1,5 @@
 # Post-CP61 final matrix / export / submission UI
 
-Historical planning slot: 2026-09-09. This is a planning label only; GitHub timestamps stay truthful.
-
 ## Scope
 
 - expose CP59 final matrix in the browser;
