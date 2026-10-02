@@ -2,7 +2,7 @@
 
 Evidence-first technical tender compliance software for engineering, procurement, and technical sales teams.
 
-> **Status:** Phase 1 foundation. The current scope is tender ingestion, requirement extraction, normalization, traceable citations, human review, compliance-matrix generation, and export preparation. Vendor/OEM compliance assessment belongs to Phase 2.
+> **Status:** CP00–CP61 are implemented. The backend now covers tender ingestion through evidence-backed compliance, final exports, and submission approval/versioning. The main remaining product work is post-build simplification, browser wiring for the completed Phase 2 review/submission APIs, and stronger end-to-end/adversarial verification.
 
 ## Why this exists
 
@@ -60,20 +60,15 @@ Excel export
 - Generate a structured compliance matrix.
 - Export reviewed requirements to Excel.
 
-### Explicitly out of scope for Phase 1
+### Phase 1 boundary
 
-- Vendor/OEM compliance claims.
-- Semantic retrieval over OEM documents.
-- Requirement-to-OEM evidence matching.
-- Automated compliant/non-compliant decisions.
-- Contradiction detection across OEM documents.
-- OEM clarification generation.
+Phase 1 remains the tender-only workflow above. It does not itself claim vendor/OEM compliance.
 
-Those are designed into the architecture as future interfaces, not implemented prematurely.
+## Implemented Phase 2
 
-## Planned Phase 2
+The repository now also implements OEM/vendor document ingestion, source-preserving evidence retrieval and curation, vendor specification extraction, deterministic unit/numerical comparison, evidence-backed qualitative reasoning, conflict detection, missing-evidence clarifications and deviations, human compliance review/audit, final matrix projection, XLSX/DOCX/PDF outputs, and versioned submission approval/locking.
 
-Phase 2 adds OEM/vendor document ingestion, source-preserving evidence retrieval, deterministic numerical comparison, evidence-backed compliance reasoning, contradiction detection, missing-information detection, clarification questions, and final submission-ready exports.
+The backend APIs and tests for these capabilities are implemented. The post-CP61 hardening plan intentionally treats **browser completion and true end-to-end usability** as separate work: some later Phase 2 APIs are not yet exposed completely through the web UI.
 
 The eventual assessment states are:
 
@@ -112,18 +107,18 @@ The eventual assessment states are:
 
 ## Tech direction
 
-The starter architecture uses:
+The implemented architecture uses:
 
 - **Backend:** Python + FastAPI
 - **Frontend:** React + Next.js + TypeScript
 - **Database:** PostgreSQL
 - **Object storage:** S3-compatible storage (MinIO locally)
-- **Async infrastructure:** Redis-backed queue interface (worker integration is a later milestone)
+- **Async infrastructure:** Redis-backed queue + worker for document processing
 - **Document processing:** parser/OCR adapters behind interfaces
 - **LLM use:** structured requirement extraction and language interpretation only where appropriate
-- **Export:** Excel first; DOCX/PDF later
+- **Export:** Phase 1 XLSX plus final XLSX/DOCX/PDF submission outputs
 
-The goal is to keep the MVP simple while leaving clean seams for Phase 2.
+The post-CP61 hardening goal is to keep this complete implementation understandable: simplify boundaries, remove dead ceremony, and prove the user journey end to end.
 
 ## Local development
 
@@ -167,15 +162,11 @@ make web-dev
 
 Open `http://localhost:3000`.
 
-## Current API surface
+## Current product/API surface
 
-The initial API intentionally contains only the foundation needed to verify the app boots correctly:
+The API now includes health, projects, tender/OEM uploads, processing/retry, requirements and source viewing, evidence, vendor specifications, compliance assessments, qualitative reasoning, conflicts, clarifications/deviations, final matrix/exports, and submission lifecycle endpoints.
 
-```text
-GET /health
-```
-
-Project creation, upload, document-processing, requirement, citation, review, and export endpoints are planned milestone-by-milestone in `docs/ROADMAP.md`.
+The web app already supports the core project/tender requirement-review experience, but the final Phase 2 human-review/submission surfaces still need to be wired completely. See `docs/POST61_HARDENING_PLAN.md` for the focused post-build work.
 
 ## Definition of trustworthy behavior
 
@@ -210,6 +201,7 @@ Work should follow [Canonical checkpoint plan](checkpoint.md) from the first unc
 
 - [Canonical checkpoint plan](checkpoint.md)
 - [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
+- [Post-CP61 hardening plan](docs/POST61_HARDENING_PLAN.md)
 
 - [Phase 1 PRD](docs/PRD.md)
 - [Architecture](docs/ARCHITECTURE.md)

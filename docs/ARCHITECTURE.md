@@ -78,12 +78,16 @@ Core concepts:
 - review state
 - audit event
 
-Later:
+Implemented Phase 2 domain concepts:
 
-- OEM document/evidence
+- OEM document/version
+- evidence/evidence location
+- vendor specification
 - compliance assessment
+- conflict
 - deviation
 - clarification request
+- submission/version approval
 
 ### Adapters
 
@@ -158,24 +162,15 @@ Even in Phase 1 deterministic code should own:
 
 Phase 2 extends deterministic logic to numerical/unit comparisons.
 
-## Phase 2 seams
+## Phase 2 implementation
 
-The following concepts are designed but not implemented yet:
+Phase 2 is implemented in the backend: OEM document/version ingestion, text-segment retrieval and evidence curation, vendor specification extraction, deterministic unit/numeric comparison, qualitative reasoning, conflict detection, clarification/deviation workflows, human compliance review, final matrix/export, and submission locking/approval.
 
-- OEM document/version
-- evidence/evidence location
-- vendor specification
-- compliance assessment
-- contradiction
-- deviation
-- clarification request
-- semantic retrieval index
+The immutable document/location model is reused for OEM evidence. Retrieval currently uses a deterministic text-ranking service; an external vector database is not required for the implemented product. Post-CP61 work focuses on simplifying service boundaries and completing the browser-visible review/submission workflow.
 
-The Phase 1 document/location model should be reusable for OEM material.
+## API groups
 
-## API direction
-
-Initial groups:
+Core groups include:
 
 ```text
 /health
