@@ -20,23 +20,27 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from tender_compliance_api.db.models import DocumentPage
-from tender_compliance_api.extraction import (
-    CandidateRecord,
-    ExtractionOutcome,
-    ExtractionResponse,
-    FakeLlmAdapter,
+from tender_compliance_api.extraction.adapter import (
+    ExtractResult,
     LlmAdapter,
+    LlmCallConfig,
     LlmCallError,
     LlmCallResult,
-    RequirementCandidate,
-    RequirementType,
-    SourceWindow,
-    TrustedSourceContext,
-    UncertaintyLevel,
+)
+from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
+from tender_compliance_api.extraction.extractor import (
+    CandidateRecord,
+    ExtractionOutcome,
     extract_from_windows,
 )
-from tender_compliance_api.extraction.adapter import ExtractResult, LlmCallConfig
-from tender_compliance_api.extraction.chunking import build_source_windows
+from tender_compliance_api.extraction.fake import FakeLlmAdapter
+from tender_compliance_api.extraction.prompts import ExtractionResponse
+from tender_compliance_api.extraction.schema import (
+    RequirementCandidate,
+    RequirementType,
+    TrustedSourceContext,
+    UncertaintyLevel,
+)
 
 ORG_ID = uuid.uuid4()
 DOC_ID = uuid.uuid4()

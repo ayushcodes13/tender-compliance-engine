@@ -31,7 +31,7 @@ from tender_compliance_api.db.models import (
     RequirementReviewState,
 )
 from tender_compliance_api.db.session import get_session
-from tender_compliance_api.document import (
+from tender_compliance_api.document.service import (
     ConcurrentEditError,
     DocumentNotFoundError,
     DocumentService,

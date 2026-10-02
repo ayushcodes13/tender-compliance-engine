@@ -37,8 +37,7 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     User,
 )
-from tender_compliance_api.document import DocumentService
-from tender_compliance_api.document.service import DocumentNotFoundError
+from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.ocr import (
     FakeOcrAdapter,
     OcrAdapter,

@@ -1,15 +1,6 @@
-"""Document domain: processing state machine and version persistence (CP17)."""
+"""Document processing domain.
 
-from tender_compliance_api.document.service import (
-    ConcurrentEditError,
-    DocumentNotFoundError,
-    DocumentService,
-    TransitionError,
-)
-
-__all__ = [
-    "DocumentService",
-    "DocumentNotFoundError",
-    "TransitionError",
-    "ConcurrentEditError",
-]
+Import `DocumentService` and domain errors from `document.service` directly.
+The package initializer stays side-effect free so importing a document submodule
+does not eagerly import the full orchestration service.
+"""

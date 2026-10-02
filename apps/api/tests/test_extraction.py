@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from tender_compliance_api.extraction import (
+from tender_compliance_api.extraction.schema import (
     CandidateValidationError,
     LocationType,
     RequirementCandidate,

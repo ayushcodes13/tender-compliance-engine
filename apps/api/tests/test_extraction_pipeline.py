@@ -45,26 +45,32 @@ from tender_compliance_api.db.models import (
     User,
 )
 from tender_compliance_api.document.service import DocumentService
-from tender_compliance_api.extraction import (
-    EXTRACTION_SYSTEM_PROMPT,
-    PROMPT_VERSION,
-    SCHEMA_VERSION,
-    CandidateRecord,
-    ExtractionOutcome,
-    ExtractionResponse,
+from tender_compliance_api.extraction.adapter import (
     ExtractResult,
-    FakeLlmAdapter,
     LlmAdapter,
     LlmCallConfig,
     LlmCallResult,
-    OpenAiLlmAdapter,
+)
+from tender_compliance_api.extraction.chunking import SourceWindow
+from tender_compliance_api.extraction.extractor import (
+    CandidateRecord,
+    ExtractionOutcome,
+    extract_from_windows,
+)
+from tender_compliance_api.extraction.fake import FakeLlmAdapter
+from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
+from tender_compliance_api.extraction.prompts import (
+    EXTRACTION_SYSTEM_PROMPT,
+    PROMPT_VERSION,
+    SCHEMA_VERSION,
+    ExtractionResponse,
+)
+from tender_compliance_api.extraction.requirement import promotion_key
+from tender_compliance_api.extraction.schema import (
     RequirementCandidate,
     RequirementType,
-    SourceWindow,
     TrustedSourceContext,
     UncertaintyLevel,
-    extract_from_windows,
-    promotion_key,
 )
 from tender_compliance_api.storage.keys import build_key
 
