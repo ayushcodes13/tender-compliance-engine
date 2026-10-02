@@ -30,7 +30,7 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     User,
 )
-from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.document.service import TransitionError, _is_valid_transition
 from tender_compliance_api.main import app
 from tender_compliance_api.queue import DEFAULT_QUEUE, FakeQueueAdapter
