@@ -107,18 +107,18 @@ The eventual assessment states are:
 
 ## Tech direction
 
-The starter architecture uses:
+The implemented architecture uses:
 
 - **Backend:** Python + FastAPI
 - **Frontend:** React + Next.js + TypeScript
 - **Database:** PostgreSQL
 - **Object storage:** S3-compatible storage (MinIO locally)
-- **Async infrastructure:** Redis-backed queue interface (worker integration is a later milestone)
+- **Async infrastructure:** Redis-backed queue + worker for document processing
 - **Document processing:** parser/OCR adapters behind interfaces
 - **LLM use:** structured requirement extraction and language interpretation only where appropriate
-- **Export:** Excel first; DOCX/PDF later
+- **Export:** Phase 1 XLSX plus final XLSX/DOCX/PDF submission outputs
 
-The goal is to keep the MVP simple while leaving clean seams for Phase 2.
+The post-CP61 hardening goal is to keep this complete implementation understandable: simplify boundaries, remove dead ceremony, and prove the user journey end to end.
 
 ## Local development
 
