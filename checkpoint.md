@@ -260,7 +260,36 @@ Phase 2 evaluation + production release
     parameter mismatch, human confirmation, tenant isolation.
   - Fixed migration 0021 `now()` → `CURRENT_TIMESTAMP` (SQLite compat).
   - ruff/mypy/pytest/tsc all clean (941 passed, 2 skipped).
-- [ ] CP55 — Evidence-backed qualitative reasoning
+- [x] ✅ ~~CP55 — Evidence-backed qualitative reasoning~~
+  - Status: DONE — PR #65, merged
+  - Branch: `cp55/qualitative-reasoning`
+  - `QualitativeVerdict` enum: SUPPORT, MISMATCH, UNSUPPORTED, CONFLICT,
+    INSUFFICIENT_EVIDENCE, UNCERTAIN.
+  - `QualitativeAssessment` model (table `qualitative_assessments`): versioned
+    (append-only), links to requirement/evidence/compliance_assessment; records
+    `attribution_mismatches` (JSON), `evidence_ids` (JSON of UUID strings),
+    `source_contradiction` (bool), `model_version` / `prompt_version` /
+    `reasoning_version`, `is_confirmed_by_human` / `reviewer_id` / `reviewed_at`.
+  - `QualitativeReasoner` ABC port + `RuleBasedQualitativeReasoner` (deterministic
+    default, only CI reasoner) + `FakeQualitativeReasoner` (test seam).  LLM
+    reasoner is a future lazy-loaded adapter.
+  - `QualitativeReasoningService`: tenant-scoped `assess_qualitative`,
+    `confirm_assessment`, `get_latest_assessment`, `list_assessments`.
+    Source-bounded: reasoner receives ONLY cited evidence source texts — never
+    the full OEM document body.  Numeric verdicts from CP53/CP54 mirrored as
+    authoritative (MATCH→SUPPORT, MISMATCH→MISMATCH, etc.).
+  - Attribution mismatch detection (entity/model, operating conditions).
+  - Source contradiction detection (same parameter, different values across
+    evidence items → CONFLICT).
+  - API routes: POST …/qualitative-assess, GET …/qualitative-assessment,
+    GET …/qualitative-assessments, POST …/qualitative-assessments/{id}/confirm.
+  - Migration `0023_qualitative_reasoning`.
+  - 21 new tests covering: enum semantics, numeric authority, no-evidence
+    → INSUFFICIENT_EVIDENCE, supporting/negating/silent evidence, OCR warning
+    → UNCERTAIN, attribution mismatch, source contradiction preservation,
+    source-bounded evidence_ids, FakeReasoner, versioning, human confirmation,
+    tenant isolation, no fabrication.
+  - ruff/mypy/pytest all clean (962 passed, 2 skipped).
 - [ ] CP56 — Conflict and contradiction detection
 - [ ] CP57 — Missing evidence, clarification questions, and deviations
 - [ ] CP58 — Human compliance review and audit

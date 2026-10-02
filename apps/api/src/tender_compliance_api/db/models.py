@@ -2199,6 +2199,153 @@ class ComplianceAssessment(Base):
             f"status={self.status.value!r}, "
             f"version={self.assessment_version})"
         )
+
+
+class QualitativeVerdict(enum.StrEnum):
+    """Source-bounded qualitative reasoning outcomes (CP55).
+
+    These describe whether cited *language* evidence supports, contradicts,
+    or fails to address a requirement.  They are deliberately separate from
+    the numeric ``ComparisonVerdict`` (CP53) — deterministic numeric results
+    remain authoritative and are never overridden by qualitative reasoning.
+
+    - ``SUPPORT`` — cited evidence text explicitly addresses the
+      requirement in a supporting way.
+    - ``MISMATCH`` — cited evidence text explicitly contradicts the
+      requirement.
+    - ``UNSUPPORTED`` — cited evidence does not address the requirement
+      (the requirement is silent on the evidence's scope).
+    - ``CONFLICT`` — multiple cited sources contradict each other for the
+      same conceptual parameter.
+    - ``INSUFFICIENT_EVIDENCE`` — no accepted evidence exists or the
+      evidence is too narrow to judge.
+    - ``UNCERTAIN`` — reasoning is uncertain (OCR, ambiguity) — never
+      silently downgraded to a confident verdict.
+    """
+
+    SUPPORT = "support"
+    MISMATCH = "mismatch"
+    UNSUPPORTED = "unsupported"
+    CONFLICT = "conflict"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    UNCERTAIN = "uncertain"
+
+
+class QualitativeAssessment(Base):
+    """Source-bounded qualitative reasoning result for a tender requirement (CP55).
+
+    Produced by :class:`~tender_compliance_api.compliance.reasoning.
+    QualitativeReasoningService`.  Unlike the deterministic numeric
+    comparison (CP53/CP54), qualitative reasoning interprets *language* —
+    but only the cited, accepted evidence text is ever consulted.  The
+    model/adapter NEVER receives the full OEM document body; it receives
+    only the per-segment source texts that have been accepted as evidence.
+
+    ``evidence_ids`` records the exact list of evidence UUIDs the reasoning
+    consulted, so "the model cannot cite a source not supplied" (checkpoint
+    verification criterion) is enforceable by test.
+
+    Deterministic numeric results (``ComparisonResult`` /
+    ``ComplianceAssessment``) remain authoritative: when a numeric verdict
+    of MATCH/MISMATCH/CLOSE/PARTIAL already exists, the qualitative verdict
+    mirrors it rather than re-evaluating the numbers.
+    """
+
+    __tablename__ = "qualitative_assessments"
+    __table_args__ = (
+        Index("ix_qualitative_assessments_project", "project_id"),
+        Index("ix_qualitative_assessments_requirement", "requirement_id"),
+        Index("ix_qualitative_assessments_verdict", "verdict"),
+        Index(
+            "ix_qualitative_assessments_compliance",
+            "compliance_assessment_id",
+        ),
+        UniqueConstraint(
+            "requirement_id",
+            "assessment_version",
+            name="uq_qualitative_assessments_requirement_version",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("evidence.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    compliance_assessment_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("compliance_assessments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    verdict: Mapped[QualitativeVerdict] = mapped_column(
+        Enum(QualitativeVerdict, name="qualitative_verdict"),
+        nullable=False,
+    )
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason_text: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    # Structured list of attribution/scope mismatches, e.g.
+    # [{"field": "entity", "requirement": "Model X", "evidence": "Model Y"}].
+    attribution_mismatches: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    # Exact list of evidence UUID strings the reasoning consulted.  The
+    # model is never allowed to cite a source not in this list.
+    # Stored as JSON array of UUID strings (JSON has no native UUID type).
+    evidence_ids: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    source_contradiction: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    reasoning_version: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    assessment_version: Mapped[int] = mapped_column(Integer(), nullable=False)
+    is_confirmed_by_human: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"QualitativeAssessment(req={self.requirement_id!r}, "
+            f"verdict={self.verdict.value!r}, "
+            f"version={self.assessment_version})"
+        )
         return (
             f"VendorSpec(evidence={self.evidence_id!r}, "
             f"parameter={self.parameter!r}, "

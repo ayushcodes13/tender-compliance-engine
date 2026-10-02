@@ -426,3 +426,38 @@
     production. The assessment service is ready but has no real data to
     compare until the worker is extended.
   - No input needed unless you want the worker extension for OEM processing.
+
+## CP55 — Evidence-backed qualitative reasoning  ✅ DONE (PR #65, merged)
+- **Default shipped:** `RuleBasedQualitativeReasoner` as the deterministic
+  default reasoner (only one exercised by CI).  A `QualitativeReasoner` ABC
+  port is defined, with `FakeQualitativeReasoner` for test-seam injection.
+  `OpenAiQualitativeReasoner` is NOT implemented (no `openai` dependency); the
+  port is ready for a future lazy-loaded adapter but all CP55 reasoning is
+  rule-based and deterministic.
+- **Source-bounded:** the reasoner receives ONLY the verbatim source texts of
+  accepted evidence items (via `QualitativeReasoningContext.evidence_texts`
+  + `vendor_spec_texts`).  It never receives the full OEM document body.
+  The persisted `evidence_ids` column is populated from the DB query result,
+  not from reasoner output — so the model can never cite a source it wasn't
+  given.
+- **Numeric authority:** when a CP53/CP54 compliance assessment exists with
+  verdict MATCH/MISMATCH/CLOSE/NOT_DEMONSTRATED, the qualitative verdict
+  mirrors it directly (no re-evaluation).  INCOMPARABLE triggers the
+  rule-based reasoner on evidence text.
+- **Attribution mismatch:** entity/model checks (`_check_entity_attribution`)
+  and operating-condition checks (`_check_conditions_attribution`) flag
+  explicit mismatches conservatively (never inferred from absence).
+- **Source contradiction:** `_detect_source_contradiction` compares vendor
+  specs with the same parameter across evidence items; conflicting values
+  escalate to CONFLICT and preserve all evidence IDs.
+- **No input needed** unless you want the OpenAI LLM reasoner adapter (requires
+  `OPENAI_API_KEY` + `openai` package, both lazy-loaded).
+- **Verification:** ruff clean, mypy clean (95 files), 962 passed / 2 skipped.
+- **Known limitations:**
+  - Rule-based reasoner uses regex keyword matching for support/contradiction
+    detection.  For nuanced qualitative requirements (standards compliance,
+    material grades), the deterministic rules may return UNSUPPORTED where
+    an LLM reasoner would find support.  The port is ready for an LLM
+    adapter but it is not implemented.
+  - Attribution mismatch detection is heuristic (regex on "model XXX").
+    False positives are possible but only when an explicit mismatch is found.
