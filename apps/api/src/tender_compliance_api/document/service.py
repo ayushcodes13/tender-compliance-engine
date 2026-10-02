@@ -92,7 +92,7 @@ from tender_compliance_api.storage.fake import FakeStorageAdapter
 from tender_compliance_api.storage.keys import build_key
 
 if TYPE_CHECKING:
-    from tender_compliance_api.matrix.projection import MatrixRow
+    from tender_compliance_api.matrix.projection import FinalMatrixRow, MatrixRow
     from tender_compliance_api.ocr.adapter import OcrAdapter
     from tender_compliance_api.parser.adapter import ParseResult
     from tender_compliance_api.renderer.adapter import RenderResult
@@ -1373,6 +1373,24 @@ class DocumentService:
 
         version = await self.get_version_or_raise(auth, document_id, version_number)
         return await project_matrix_rows(self._session, version.id)
+
+    async def get_final_matrix_rows(
+        self,
+        auth: AuthContext,
+        document_id: uuid.UUID,
+        version_number: int,
+    ) -> list[FinalMatrixRow]:
+        """Return the final (Phase 2) compliance matrix projection (CP59).
+
+        Delegates to :func:`project_final_matrix_rows` so that both the
+        final matrix UI and the CP60 exporter share one code path.
+        """
+        from tender_compliance_api.matrix.projection import (  # noqa: PLC0415
+            project_final_matrix_rows,
+        )
+
+        version = await self.get_version_or_raise(auth, document_id, version_number)
+        return await project_final_matrix_rows(self._session, version.id)
 
     # ------------------------------------------------------------------
     # Matrix XLSX export (CP42)
