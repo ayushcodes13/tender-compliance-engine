@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SourceViewer } from "@/components/source-viewer";
 import { EvidencePanel } from "@/components/evidence-panel";
+import { ComplianceReviewPanel } from "@/components/compliance-review-panel";
 
 import {
   api,
@@ -677,6 +678,14 @@ export function TenderReviewWorkspace(props: {
                 requirementId={selectedId}
                 queryTerms={queryTerms}
                 onEvidenceChanged={refreshEvidence}
+              />
+            ) : null}
+
+            {/* Human compliance review (CP54/56–58) */}
+            {selectedId ? (
+              <ComplianceReviewPanel
+                projectId={projectId}
+                requirementId={selectedId}
               />
             ) : null}
 
