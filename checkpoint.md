@@ -424,7 +424,39 @@ Phase 2 evaluation + production release
     tenant isolation, default format, no-fabrication (missing evidence → empty cells).
   - ruff/mypy clean. pytest 1032 passed, 2 skipped. Quality gates pass
     (invented_negative_rate=0, numeric_fidelity=0).
-- [ ] CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
+- [x] ✅ ~~CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release~~
+  - Status: DONE — PR #71
+  - Branch: `cp61/submission-lock-eval`
+  - Migration `0028_submission_approval_locking`: `submissions` table with
+    `SubmissionStatus` enum (draft/locked/approved/revoked), `assessment_snapshot`
+    (JSON), `matrix_sha256`, `matrix_export_id` FK. Batch mode for SQLite.
+    `down_revision = "0027_final_export_outputs"`.
+  - `db/models.py`: `SubmissionStatus` StrEnum + `Submission` model with
+    `values_callable` for correct lowercase enum serialization. Tenant-scoped
+    via project_id → organization_id join.
+  - `submission/service.py`: `SubmissionService` with `create_submission`
+    (draft snapshot), `lock_submission` (immutable), `approve_submission`
+    (records approver/timestamp), `revoke_submission`, `get_submission`,
+    `list_submissions`, `get_latest_submission`, `compute_matrix_sha256`.
+    All state transitions enforced (DRAFT→LOCKED→APPROVED→REVOKED).
+  - `routes/submissions.py`: POST …/submissions/{doc_id}/versions/{ver},
+    POST …/submissions/{id}/lock, POST …/submissions/{id}/approve,
+    POST …/submissions/{id}/revoke, GET …/submissions/{id}, GET …/submissions/.
+  - `extraction/phase2_eval.py`: Phase 2 benchmark dataset (12 cases) +
+    `run_phase2_eval()` measuring false compliance, false non-compliance,
+    accuracy. `check_phase2_quality_gates()` returns False if any
+    false-compliance case is detected. False compliance = highest severity
+    gate (zero tolerance).
+  - `tests/test_submission.py`: 9 tests covering lifecycle, append-only
+    versioning, tenant isolation, state-transition guards, no fabrication.
+  - `tests/test_phase2_eval.py`: 23 tests covering dataset integrity,
+    eval report, false-compliance gate, individual case verification,
+    determinism, accuracy threshold.
+  - `tests/test_acceptance_cp61.py`: 8 end-to-end tests covering full
+    workflow (final matrix → submission → lock → approve → export),
+    tenant isolation, false-compliance gate, no fabrication.
+  - ruff/mypy clean. pytest 1072 passed, 2 skipped. Quality gates pass
+    (invented_negative_rate=0, numeric_fidelity=0, false_compliance=0).
 
 ---
 
