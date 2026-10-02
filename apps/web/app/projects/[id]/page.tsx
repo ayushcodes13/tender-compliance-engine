@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
+import { OemDocumentsPanel } from "@/components/oem-documents-panel";
 import {
   api,
   Project,
@@ -573,6 +574,9 @@ export default function ProjectPage() {
                 </button>
               )}
             </div>
+
+            {/* ----- OEM/vendor evidence sources ----- */}
+            <OemDocumentsPanel projectId={project.id} disabled={isArchived} />
           </div>
         </div>
       </div>
