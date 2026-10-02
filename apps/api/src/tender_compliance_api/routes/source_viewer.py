@@ -34,7 +34,7 @@ from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import RequirementSource
 from tender_compliance_api.db.session import get_session
-from tender_compliance_api.document import DocumentNotFoundError, DocumentService
+from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 from tender_compliance_api.storage.fake import FakeStorageAdapter
 
