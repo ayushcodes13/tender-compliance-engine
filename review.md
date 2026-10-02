@@ -314,6 +314,37 @@
   - CP34 qualitative parser requires trailing punctuation for CE marking.
   - No input needed unless you want the CP34 fix or worker extension.
 
+## CP53 — Deterministic unit normalization and specification comparison engine  ✅ DONE
+- **What shipped:**
+  - `extraction/spec_comparison.py` — deterministic comparison engine:
+    - `ComparisonVerdict` enum: MATCH/CLOSE/MISMATCH/INCOMPARABLE/NOT_DEMONSTRATED
+    - `ComparisonResult` dataclass with verbatim source text, conversion
+      info, reasons, normalized values, and details
+    - `_UnitAdapter` — Pint-backed unit conversion + dimensional compatibility
+    - `compare_spec()` / `compare_specs()` — compares ParsedConstraint vs
+      ParsedVendorSpec
+    - Exact equality, ≤/≥/</> bounds, BETWEEN range containment,
+      tolerance-aware comparison, percentage comparison with operator support
+    - Parameter compatibility: vendor params (supply_voltage) mapped to base
+      quantities (voltage); accuracy vs resolution INCOMPARABLE even with
+      same unit
+  - `constraint_parser.py` — added `accuracy`/`resolution`/`precision` to
+    `_NOUN_PARAM` (prefers noun param over generic unit-derived param),
+    added `ms`/`kHz`/`MHz`/`GHz`/`kV`/`mV`/`mA` to `_UNIT_QUANTITY`
+  - `pyproject.toml` — added `pint>=0.23,<1.0` dependency
+  - `tests/test_spec_comparison.py` — 42 tests
+- **Adversarial review fixes:**
+  - `_TOK_NUM` alternation grouping (shared fix from CP52)
+  - 501 line-length violations fixed with `_rule()` helper
+- **Verification:** ruff clean, mypy clean (90 files), 926 passed / 2 skipped,
+  tsc clean.
+- **Known limitations:**
+  - OEM worker gap (carried from CP52/CP53): no OEM text segments exist in
+    production; comparison engine ready but no data to compare until worker
+    extended.
+  - Temperature conversion direction depends on which side specifies the unit.
+  - No input needed unless you want worker extension for OEM processing.
+
 ## CP51 — Evidence review UI and evidence curation  ✅ DONE (PR #61)
 - **What shipped:**
   - New `EvidencePanel` component (`apps/web/components/evidence-panel.tsx`)

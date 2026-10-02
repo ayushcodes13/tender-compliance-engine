@@ -239,7 +239,12 @@ Phase 2 evaluation + production release
   - Parser fixes: regex `_TOK_NUM` alternation grouping, `≥` operator support, `%` unit capture, `ms` unit added to constraint parser, negative range sign recovery, bare-number-without-unit PARTIAL escalation, tolerance issue stripping for vendor specs.
   - 30 vendor spec parser tests + 13 migration tests added (884 total passed, 2 skipped).
 - [x] CP52 — Vendor specification extraction
-- [ ] CP53 — Deterministic unit normalization and specification comparison engine
+- [x] ✅ ~~CP53 — Deterministic unit normalization and specification comparison engine~~
+  - Status: DONE — PR #63, merged
+  - Engine uses Pint behind a domain adapter for unit conversion.
+  - 42 new tests covering operators, ranges, tolerance, percentage, parameter
+    mismatch, wrong-metric-same-number, boundary equality, conversion explanation.
+  - ruff/mypy/pytest/tsc all clean (926 passed, 2 skipped).
 - [ ] CP54 — ComplianceAssessment model and status semantics
 - [ ] CP55 — Evidence-backed qualitative reasoning
 - [ ] CP56 — Conflict and contradiction detection
@@ -2699,11 +2704,9 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Do not infer a missing specification from marketing language.
 
-## ⬜ Checkpoint 53 — Deterministic unit normalization and specification comparison engine
+## ✅ ~~Checkpoint 53 — Deterministic unit normalization and specification comparison engine~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
-
-**Plain-English outcome:** Comparable tender/vendor values are evaluated in code with explicit rules.
+**Status:** DONE — PR #63, merged
 
 ### What we will do
 
