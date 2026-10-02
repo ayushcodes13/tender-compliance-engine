@@ -14,6 +14,9 @@ from tender_compliance_api.routes.projects import router as projects_router
 from tender_compliance_api.routes.requirements import router as requirements_router
 from tender_compliance_api.routes.source_viewer import router as source_viewer_router
 from tender_compliance_api.routes.uploads import router as uploads_router
+from tender_compliance_api.routes.vendor_specs import (
+    router as vendor_specs_router,
+)
 
 logger = get_logger("main")
 
@@ -77,3 +80,4 @@ app.include_router(oem_documents_router)
 app.include_router(evidence_router)
 app.include_router(requirements_router)
 app.include_router(source_viewer_router)
+app.include_router(vendor_specs_router)

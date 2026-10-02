@@ -284,6 +284,36 @@
   documents into text segments as part of CP50, or add a separate retrieval
   benchmark dataset.
 
+## CP52 — Vendor specification extraction  ✅ DONE
+- **What shipped:**
+  - `VendorSpec` SQLAlchemy model + `VendorSpecExtractionMethod` StrEnum.
+  - Migration `0021_vendor_spec_extraction` for `vendor_specs` table.
+  - `parse_vendor_specs()` deterministic parser with colon/operator/range/
+    qualitative/entity/condition extraction.
+  - `VENDOR_SPEC_VERSION = "cp52-deterministic-v1"` pinned on every spec.
+  - `VendorSpecService` with `extract_specs_for_evidence` and
+    `list_vendor_specs` methods.
+  - API routes: `GET /vendor-specs` and `POST /vendor-specs/extract`.
+  - 30 new parser tests + 3 migration tests.
+- **Parser fixes (adversarial review):**
+  - `_TOK_NUM` alternation not wrapped in `(?:...)` — broke regex suffix
+    matching (`[^.\n]*`, unit patterns). Fixed by wrapping.
+  - Added `≥` to `_OP_CHAR` (was missing alongside `≤`).
+  - Added `ms` (milliseconds) to `_UNIT_QUANTITY` in constraint_parser.py.
+  - Negative range sign recovery: `-10 to +55` → lower bound negated,
+    flagged `negative_sign_recovered`.
+  - Tolerance issue stripped for vendor specs (± is a legitimate spec,
+    not an escalation).
+  - Bare number without unit → PARTIAL with `no_unit` issue.
+- **Verification:** ruff clean, mypy clean (89 files), 884 passed / 2 skipped,
+  `npx tsc --noEmit` clean.
+- **Known limitations:**
+  - OEM worker gap (carried from CP50): `JobProcessor` handles
+    `DocumentVersion` but not `OemDocumentVersion`. Specs service is ready
+    but not wired into worker pipeline.
+  - CP34 qualitative parser requires trailing punctuation for CE marking.
+  - No input needed unless you want the CP34 fix or worker extension.
+
 ## CP51 — Evidence review UI and evidence curation  ✅ DONE (PR #61)
 - **What shipped:**
   - New `EvidencePanel` component (`apps/web/components/evidence-panel.tsx`)

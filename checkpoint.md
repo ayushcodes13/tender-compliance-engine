@@ -233,8 +233,12 @@ Phase 2 evaluation + production release
 - [x] ✅ ~~CP51 — Evidence review UI and evidence curation~~
   - Status: DONE — PR #61
   - Branch: `cp51/evidence-review-ui`
-
-## ⬜ Checkpoint 52 — Vendor specification extraction
+- [x] ✅ ~~CP52 — Vendor specification extraction~~
+  - Status: DONE
+  - Branch: `cp52/vendor-spec-extraction`
+  - Parser fixes: regex `_TOK_NUM` alternation grouping, `≥` operator support, `%` unit capture, `ms` unit added to constraint parser, negative range sign recovery, bare-number-without-unit PARTIAL escalation, tolerance issue stripping for vendor specs.
+  - 30 vendor spec parser tests + 13 migration tests added (884 total passed, 2 skipped).
+- [x] CP52 — Vendor specification extraction
 - [ ] CP53 — Deterministic unit normalization and specification comparison engine
 - [ ] CP54 — ComplianceAssessment model and status semantics
 - [ ] CP55 — Evidence-backed qualitative reasoning
@@ -2669,11 +2673,9 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - High retrieval score must never be shown as compliant.
 
-## ⬜ Checkpoint 52 — Vendor specification extraction
+## ✅ ~~Checkpoint 52 — Vendor specification extraction~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
-
-**Plain-English outcome:** Accepted OEM evidence becomes structured vendor facts without losing its supporting source.
+**Status:** DONE — merged
 
 ### What we will do
 
