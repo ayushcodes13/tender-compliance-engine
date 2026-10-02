@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP59 — Final compliance matrix and submission projection** (Phase 2).
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP60 — Final XLSX, DOCX, and PDF outputs** (Phase 2).
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -370,7 +370,30 @@ Phase 2 evaluation + production release
     no-assessment returns None; cross-org override denied.
   - ruff/mypy/pytest all clean (1009 passed, 2 skipped). Critical quality
     gates still pass (invented_negative_rate=0, numeric_fidelity=0).
-- [ ] CP59 — Final compliance matrix and submission projection
+- [x] ✅ ~~CP59 — Final compliance matrix and submission projection~~
+  - Status: DONE — PR #69
+  - Branch: `cp59/final-matrix-projection`
+  - New `FinalMatrixRow` dataclass in `matrix/projection.py` extending Phase 1
+    `MatrixRow` columns with vendor-response/evidence/assessment/review-state
+    fields. All Phase 2 columns are `None` when state doesn't exist (not
+    fabricated).
+  - `project_final_matrix_rows()` — single canonical projection that batch-queries
+    non-superseded requirements + latest accepted evidence/vendor spec + latest
+    assessment (highest version) + unresolved conflicts + clarification/deviation
+    statuses. Used by both UI route and CP60 exporter.
+  - `DocumentService.get_final_matrix_rows()` — tenant-scoped, delegates to the
+    projection.
+  - API route: `GET /projects/{id}/documents/{doc_id}/versions/{ver}/final-matrix`
+    returning `FinalMatrixRowResponse` (Pydantic schema). Registered in
+    `routes/requirements.py`.
+  - Adversarial review: Phase 1 columns preserved verbatim; override status
+    (latest version) reflected while suggested_status always preserved; all
+    Phase 2 fields None when no state (not fabricated); superseded excluded;
+    conflict/clarification/deviation state visible per row; tenant isolation
+    via Project/org join (cross-org → 404); deterministic ordering.
+  - 13 tests in `tests/test_final_matrix.py`.
+  - ruff clean, mypy clean (99 files), pytest 1022 passed, 2 skipped. Critical
+    quality gates pass (invented_negative_rate=0, numeric_fidelity=0).
 - [ ] CP60 — Final XLSX, DOCX, and PDF outputs
 - [ ] CP61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
 
@@ -3023,35 +3046,66 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Never erase the original system assessment/evidence when a human overrides it.
 
-## ⬜ Checkpoint 59 — Final compliance matrix and submission projection
+## ✅ ~~Checkpoint 59 — Final compliance matrix and submission projection~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #69.
 
 **Plain-English outcome:** The matrix expands from tender requirements into evidence-backed vendor-response rows while preserving original source columns.
 
-### What we will do
+### What we did
+1. Kept all original Phase 1 tender columns verbatim in `FinalMatrixRow`.
+2. Added vendor response/specification fields (parameter, value, unit, bounds,
+   source text, extraction method, issues).
+3. Added evidence citations (evidence_id, score, OEM document/version).
+4. Added assessment status (latest version: status, suggested_status, reason_code,
+   reason_text, is_confirmed, reviewer_id, reviewed_at, version).
+5. Added conflict/clarification/deviation state per row.
+6. Added reviewer/approval metadata (reviewer_id, reviewed_at) where available.
+7. Used one canonical final projection (`project_final_matrix_rows`) for UI and
+   exports — zero business-logic duplication.
+8. Kept unresolved requirements visible (Phase 2 fields are `None`, not hidden).
 
-1. Keep original tender columns.
-2. Add vendor response/specification fields.
-3. Add evidence citations.
-4. Add assessment status.
-5. Add deviation and clarification state.
-6. Add reviewer/approval metadata where appropriate.
-7. Use one canonical final projection for UI and exports.
-8. Keep unresolved requirements visible.
+### Implementation notes
+- **`matrix/projection.py`**: New `FinalMatrixRow` frozen dataclass +
+  `project_final_matrix_rows()` batch-query function (8 batched queries, no
+  N+1). Latest evidence by `created_at DESC`; latest assessment by
+  `assessment_version DESC`; conflict count filters `UNRESOLVED` only;
+  clarifications/deviations grouped by requirement with sorted statuses.
+- **`document/service.py`**: `get_final_matrix_rows()` delegates to the
+  projection via `get_version_or_raise` (tenant-scoped).
+- **`routes/requirements.py`**: `FinalMatrixRowResponse` Pydantic schema +
+  `GET /projects/{id}/documents/{doc_id}/versions/{ver}/final-matrix` route.
+- Phase 1 `MatrixRow` / `project_matrix_rows` / Phase 1 route unchanged.
 
-### How we will verify it
-
-- Final matrix rows trace to tender source plus OEM evidence/assessment versions.
-- UI and export use the same projection.
+### How we verified it
+- `FinalMatrixRow` preserves all Phase 1 columns (tested).
+- Missing evidence → all Phase 2 fields `None` (tested, no fabrication).
+- Evidence + vendor spec provenance linked per row (tested).
+- System assessment populated (tested, status=compliant).
+- Human override reflected: status=non_compliant, suggested_status=compliant,
+  version=2 (tested).
+- Conflict/clarification/deviation visible per row (tested).
+- Resolved conflict not flagged as unresolved (tested).
+- Superseded excluded (tested).
+- Display_order drives ordering (tested).
+- Endpoint: rows returned, tenant isolation (404), empty, not-found (tested).
 
 ### This checkpoint is complete only when
-
-- The matrix is the authoritative submission view, not a separate manually edited spreadsheet.
+- The matrix is the authoritative submission view, not a separate manually edited spreadsheet. ✅
 
 ### Guardrail
+- Do not hide unresolved/not-demonstrated/conflict rows. ✅
 
-- Do not hide unresolved/not-demonstrated/conflict rows.
+### Known limitations
+- The matrix is a summary view; full conflict sources/details are available
+  via the CP58 `GET /projects/{id}/requirements/{rid}/review` endpoint.
+- Web UI does not yet consume the final-matrix endpoint (deferred to CP59 UI
+  or CP60/CP61).
+
+### Verification
+- ruff clean, mypy --strict clean (99 source files).
+- pytest 1022 passed, 2 skipped.
+- Critical quality gates pass (invented_negative_rate=0, numeric_fidelity=0).
 
 ## ⬜ Checkpoint 60 — Final XLSX, DOCX, and PDF outputs
 

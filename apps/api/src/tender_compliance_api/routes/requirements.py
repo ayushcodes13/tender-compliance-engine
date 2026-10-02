@@ -1008,8 +1008,91 @@ async def get_matrix(
 
 
 # ---------------------------------------------------------------------------
-# XLSX export (CP42)
+# Final compliance matrix projection (CP59)
 # ---------------------------------------------------------------------------
+
+
+class FinalMatrixRowResponse(BaseModel):
+    """A single row in the final (Phase 2) compliance matrix (CP59).
+
+    Extends the Phase 1 columns with vendor response/specification,
+    evidence, assessment, and review-state summary fields.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # --- Phase 1 columns ---
+    serial: int
+    requirement_id: UUID
+    tender_requirement: str
+    category: str | None
+    clause: str | None
+    source_page: int | None
+    mandatory: bool | None
+    user_notes: str | None
+    review_status: str
+    normalized_text: str
+    raw_source: str
+    uncertainty: str
+    ocr_warning: bool
+
+    # --- Phase 2: Evidence + Vendor Spec ---
+    evidence_id: UUID | None
+    evidence_score: float | None
+    evidence_oem_document: str | None
+    evidence_oem_version: int | None
+
+    # --- Phase 2: Vendor Spec ---
+    vendor_spec_parameter: str | None
+    vendor_spec_value: float | None
+    vendor_spec_unit: str | None
+    vendor_spec_lower_bound: float | None
+    vendor_spec_upper_bound: float | None
+    vendor_spec_source_text: str | None
+    vendor_spec_source_page: int | None
+    vendor_spec_extraction_method: str | None
+    vendor_spec_issues: list[str] | None
+
+    # --- Phase 2: Assessment ---
+    assessment_status: str | None
+    assessment_suggested_status: str | None
+    assessment_reason_code: str | None
+    assessment_reason_text: str | None
+    assessment_is_confirmed: bool | None
+    assessment_reviewer_id: UUID | None
+    assessment_reviewed_at: datetime | None
+    assessment_version: int | None
+
+    # --- Phase 2: Review state summary ---
+    has_unresolved_conflict: bool
+    clarification_statuses: list[str]
+    deviation_statuses: list[str]
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/final-matrix",
+    response_model=list[FinalMatrixRowResponse],
+    response_model_exclude_none=True,
+)
+async def get_final_matrix(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> list[FinalMatrixRowResponse]:
+    """Return the final (Phase 2) compliance matrix projection (CP59).
+
+    Keeps the original Phase 1 tender columns and layers on vendor response,
+    evidence citation, assessment status, conflict/clarification/deviation
+    state, and reviewer metadata.  Unresolved requirements remain visible.
+    """
+    svc = DocumentService(session)
+    try:
+        rows = await svc.get_final_matrix_rows(auth, document_id, version_number)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [FinalMatrixRowResponse.model_validate(r) for r in rows]
 
 
 class ExportArtifactResponse(BaseModel):

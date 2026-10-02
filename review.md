@@ -564,3 +564,52 @@
     currently render the qualitative verdict's `verdict`/`reason` text in full —
     only the latest `QualitativeAssessment` row is surfaced. Acceptable for the
     dashboard; full qualitative rendering can be added when needed.
+
+## CP59 — Final compliance matrix and submission projection  ✅ DONE (PR #69, merged)
+- **Adversarial review notes (reviewed as the agent):**
+  - **Phase 1 columns preserved verbatim:** All original Phase 1 fields
+    (serial, requirement_id, tender_requirement, category, clause, source_page,
+    mandatory, user_notes, review_status, normalized_text, raw_source,
+    uncertainty, ocr_warning) are included in `FinalMatrixRow` unchanged. The
+    Phase 1 `MatrixRow` type and `project_matrix_rows()` function are untouched. ✅
+  - **No fabrication:** Every Phase 2 column is `None` when the corresponding
+    state does not exist (no evidence, no assessment, etc.) — never a fabricated
+    default. Tested explicitly: a requirement with no evidence returns
+    `assessment_status=None`, `vendor_spec_value=None`, etc. ✅
+  - **Latest version authoritative:** The projection selects the assessment with
+    the highest `assessment_version` (latest override/confirmed state wins).
+    `suggested_status` is always preserved alongside the latest `status` — a
+    human override to NON_COMPLIANT is reflected while the system's COMPLIANT
+    suggestion is still visible. ✅
+  - **Append-only (read-only projection):** `project_final_matrix_rows()` is a
+    pure read query — it creates/modifies/deletes nothing. No race conditions,
+    no mutation of existing data. ✅
+  - **Tenant isolation:** `get_final_matrix_rows()` delegates to
+    `get_version_or_raise()` which performs tenant-scoped lookup via
+    `DocumentVersion → TenderDocument → Project → organization_id`. Cross-org
+    access returns 404 (tested). ✅
+  - **No hiding unresolved state:** Requirements with no evidence, conflicts,
+    clarifications, or deviations remain visible — they just have `None`/`False`
+    /empty values. The guardrail "do not hide unresolved rows" is respected. ✅
+  - **Conflict sources preserved:** The matrix surfaces `has_unresolved_conflict`
+    (boolean) — the full conflict sources JSON is available via the CP58
+    `get_requirement_review` endpoint. Nothing is collapsed or discarded at the
+    matrix level; the matrix is a summary, not the full evidence detail. ✅
+  - **Deterministic ordering:** `display_order ASC NULLS LAST, created_at DESC,
+    id ASC` — same as Phase 1. Tested. ✅
+  - **Superseded excluded:** `superseded.is_(False)` filter applied — consistent
+    with Phase 1 matrix. Tested. ✅
+  - **Phase 1/Phase 2 boundary:** No Phase 2 vendor-compliance verdict is
+    emitted in the Phase 1 matrix (`MatrixRow` unchanged). The `FinalMatrixRow`
+    uses only the existing `ComplianceStatus` enum — no new statuses introduced. ✅
+- **Default shipped:** `FinalMatrixRow` dataclass + `project_final_matrix_rows()`
+  in `matrix/projection.py`. `DocumentService.get_final_matrix_rows()`. Route:
+  `GET /projects/{id}/documents/{doc_id}/versions/{ver}/final-matrix`.
+- **No input needed** — CP59 is a pure read projection; no LLM/provider dependency.
+- **Verification:** ruff clean, mypy clean (99 source files), pytest 1022 passed,
+  2 skipped. Critical quality gates pass (invented_negative_rate=0, numeric_fidelity=0).
+- **Known limitations:**
+  - Web UI does not yet consume the final-matrix endpoint — deferred to a web
+    integration checkpoint. The API is available for CP60 to consume.
+  - The matrix is a summary view (boolean conflict flag + status lists, not full
+    conflict source JSON). Full evidence detail is at the CP58 review endpoint.

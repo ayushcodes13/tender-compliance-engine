@@ -1,5 +1,20 @@
-"""Phase 1 compliance matrix projection (CP41)."""
+"""Compliance matrix projection (CP41, CP59).
 
-from tender_compliance_api.matrix.projection import MatrixRow, project_matrix_rows
+CP41 provides the Phase 1 tender-only matrix columns.
+CP59 provides the final submission matrix with vendor-response,
+evidence, assessment, and review-state columns.
+"""
 
-__all__ = ["MatrixRow", "project_matrix_rows"]
+from tender_compliance_api.matrix.projection import (
+    FinalMatrixRow,
+    MatrixRow,
+    project_final_matrix_rows,
+    project_matrix_rows,
+)
+
+__all__ = [
+    "FinalMatrixRow",
+    "MatrixRow",
+    "project_final_matrix_rows",
+    "project_matrix_rows",
+]
