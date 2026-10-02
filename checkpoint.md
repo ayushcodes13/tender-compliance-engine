@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP50 — Evidence model, retrieval/indexing, and retrieval evaluation** (Phase 2).
+Completed checkpoints are crossed out below. The **next implementation checkpoint is CP58 — Human compliance review and audit** (Phase 2). Phase 2 (Stage J) is in progress through CP57; CP58 is the next checkpoint.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -307,8 +307,32 @@ Phase 2 evaluation + production release
     GET …/conflicts/{id}, POST …/conflicts/{id}/resolve.
   - Migration `0024_conflict_detection`.
   - 16 new tests. ruff/mypy/pytest all clean (978 passed, 2 skipped).
-- [ ] CP57 — Missing evidence, clarification questions, and deviations
-- [ ] CP57 — Missing evidence, clarification questions, and deviations
+- [x] ✅ ~~CP57 — Missing evidence, clarification questions, and deviations~~
+  - Status: DONE — PR #67
+  - Branch: `cp57/missing-evidence-clarifications`
+  - Migration `0025_missing_evidence_clarifications`: `clarification_requests`
+    (PENDING/ANSWERED/EXPIRED lifecycle, verbatim `question`, structured
+    `context` JSON, `related_evidence_ids`/`related_conflict_ids`, audit
+    metadata) + `deviations` (PROPOSED/ACCEPTED/REJECTED, deviation_type scope/
+    value/capability/other, verbatim `original_requirement`).
+  - `MissingEvidenceService`: create_clarification, answer_clarification,
+    edit_clarification (PENDING-only, ANSWERED locked), list/get clarifications,
+    auto_generate_clarifications (missing evidence → missing_evidence reason,
+    CP56 conflicts → conflict reason, UNCERTAIN qualitative → ambiguous_requirement
+    reason), create_deviation, review_deviation, list/get deviations.
+  - Every query tenant-scoped via Project.organization_id join. All mutations
+    audited via AuditService. Question text stored verbatim — never synthesized.
+  - API routes (routes/missing_evidence.py): POST/GET/PATCH/ANSWER
+    …/clarifications, POST/GET/REVIEW …/deviations. Registered in main.py.
+  - Adversarial review fixes applied during CP57: added edit_clarification
+    (PATCH endpoint) so human reviewers can refine auto-generated questions
+    before they reach the OEM; locked ANSWERED clarifications from further
+    edits; set updated_at on answer.
+  - 19 tests covering: create/answer/edit clarifications, cannot re-answer,
+    cannot edit answered, list filters, auto-gen (missing evidence / conflict /
+    uncertain), deviation lifecycle (propose/accept/reject/lock), tenant isolation
+    (create + edit), no fabrication (verbatim question + original_requirement).
+  - ruff/mypy/pytest all clean (997 passed, 2 skipped).
 - [ ] CP58 — Human compliance review and audit
 - [ ] CP59 — Final compliance matrix and submission projection
 - [ ] CP60 — Final XLSX, DOCX, and PDF outputs
@@ -2898,9 +2922,9 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Conflict is not automatically non-compliance.
 
-## ⬜ Checkpoint 57 — Missing evidence, clarification questions, and deviations
+## ✅ ~~Checkpoint 57 — Missing evidence, clarification questions, and deviations~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE — PR #67, merged.
 
 **Plain-English outcome:** Unresolved gaps become precise workflow items instead of false compliance/non-compliance.
 
