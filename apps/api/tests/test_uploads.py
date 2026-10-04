@@ -27,6 +27,7 @@ from tender_compliance_api.db.models import (
 from tender_compliance_api.main import app
 from tender_compliance_api.queue.fake import FakeQueueAdapter
 from tender_compliance_api.routes.uploads import get_queue_adapter, get_scanner, get_storage_adapter
+from tender_compliance_api.scan.adapter import MalwareScannerUnavailableError
 from tender_compliance_api.scan.fake import (
     TEST_INFECTED_SIGNATURE,
     FakeScanner,
@@ -529,3 +530,36 @@ class TestUploadAuthorization:
         )
 
         assert response.status_code == 404
+
+
+class _UnavailableScanner(FakeScanner):
+    async def scan(self, filename: str, data: bytes):
+        raise MalwareScannerUnavailableError("scanner offline")
+
+
+def test_scanner_outage_rejects_tender_upload(session_cm) -> None:
+    """A scanner outage is retryable and never accepts an unscanned tender."""
+    headers, project_id = _build_auth_headers(session_cm)
+    original = app.dependency_overrides[get_scanner]
+    app.dependency_overrides[get_scanner] = lambda: _UnavailableScanner()
+    try:
+        response = client.post(
+            f"/projects/{project_id}/upload",
+            files={"file": ("tender.pdf", _make_valid_pdf(), "application/pdf")},
+            headers=headers,
+        )
+        assert response.status_code == 503
+        assert "Upload was not accepted" in response.json()["detail"]
+
+        async def _verify() -> None:
+            async with session_cm() as session:
+                stored = (
+                    await session.execute(
+                        select(StoredObject).where(StoredObject.project_id == project_id)
+                    )
+                ).scalars().all()
+                assert stored == []
+
+        asyncio.run(_verify())
+    finally:
+        app.dependency_overrides[get_scanner] = original
