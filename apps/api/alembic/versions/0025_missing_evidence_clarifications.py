@@ -24,6 +24,21 @@ depends_on: str | None = None
 
 
 def upgrade() -> None:
+    # Alembic creates its internal version column as VARCHAR(32) by default.
+    # This repository predates the PostgreSQL production smoke test and this
+    # revision identifier is 36 characters long. Widen the version column
+    # before Alembic records this revision so a fresh PostgreSQL migration
+    # chain can continue without rewriting historical revision identifiers.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.alter_column(
+            "alembic_version",
+            "version_num",
+            existing_type=sa.String(length=32),
+            type_=sa.String(length=128),
+            existing_nullable=False,
+        )
+
     # —  — clarification_requests —  —
     op.create_table(
         "clarification_requests",
