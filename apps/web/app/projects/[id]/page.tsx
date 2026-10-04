@@ -344,7 +344,7 @@ export default function ProjectPage() {
                 {error ?? "Project not found"}
               </strong>
               <Link
-                href="/"
+                href="/dashboard"
                 className="button button-secondary button-small"
               >
                 Back to projects
@@ -361,7 +361,7 @@ export default function ProjectPage() {
       {/* ----- Topbar ----- */}
       <header className="project-topbar">
         <div className="project-breadcrumbs">
-          <Link href="/" className="breadcrumb-back" aria-label="Back to projects">
+          <Link href="/dashboard" className="breadcrumb-back" aria-label="Back to projects">
             <ArrowLeft size={15} aria-hidden="true" />
           </Link>
           <span className="breadcrumb-muted">Projects</span>

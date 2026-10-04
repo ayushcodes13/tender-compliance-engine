@@ -67,7 +67,7 @@ export default function ProjectReviewPage() {
     return (
       <AppShell>
         <div style={{ padding: "48px" }}>
-          <Link href="/" className="breadcrumb-back" aria-label="Back to projects">
+          <Link href="/dashboard" className="breadcrumb-back" aria-label="Back to projects">
             <ArrowLeft size={15} aria-hidden="true" />
           </Link>
           <div

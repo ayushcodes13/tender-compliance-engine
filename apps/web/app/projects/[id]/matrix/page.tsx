@@ -69,7 +69,7 @@ export default function ProjectMatrixPage() {
     return (
       <AppShell>
         <div style={{ padding: "48px" }}>
-          <Link href="/" className="breadcrumb-back" aria-label="Back to projects">
+          <Link href="/dashboard" className="breadcrumb-back" aria-label="Back to projects">
             <ArrowLeft size={15} aria-hidden="true" />
           </Link>
           <div className="empty-list" style={{ marginTop: "24px" }}>
@@ -93,7 +93,7 @@ export default function ProjectMatrixPage() {
     <AppShell>
       <header className="project-topbar">
         <div className="project-breadcrumbs">
-          <Link href="/" className="breadcrumb-back" aria-label="Back to projects">
+          <Link href="/dashboard" className="breadcrumb-back" aria-label="Back to projects">
             <ArrowLeft size={15} aria-hidden="true" />
           </Link>
           <span className="breadcrumb-muted">Projects</span>
