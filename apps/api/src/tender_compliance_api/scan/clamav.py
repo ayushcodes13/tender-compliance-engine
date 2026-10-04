@@ -13,7 +13,7 @@ from tender_compliance_api.scan.adapter import (
 )
 
 
-class ClamAvScanner(MalwareScanner):
+class ClamAVScanner(MalwareScanner):
     """Scan upload bytes through an internal clamd TCP service."""
 
     _chunk_size = 1024 * 1024
