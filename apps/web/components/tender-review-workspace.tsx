@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SourceViewer } from "@/components/source-viewer";
 import { EvidencePanel } from "@/components/evidence-panel";
 import { ComplianceReviewPanel } from "@/components/compliance-review-panel";
+import { ProjectFlowNav } from "@/components/project-flow-nav";
 
 import {
   api,
@@ -128,6 +129,20 @@ export function TenderReviewWorkspace(props: {
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
+  const [vendorReady, setVendorReady] = useState(false);
+
+  useEffect(() => {
+    void api
+      .fetchOemDocuments(projectId)
+      .then((items) =>
+        setVendorReady(
+          items.some((item) =>
+            ["parsed", "partial", "ocr_warning"].includes(item.processing_status)
+          )
+        )
+      )
+      .catch(() => setVendorReady(false));
+  }, [projectId]);
 
   // Fetch requirements list from the real API.
   const { data: reqList, loading, error } = useRequirements(
@@ -371,6 +386,15 @@ export function TenderReviewWorkspace(props: {
           </Link>
         </div>
       </header>
+
+      <div className="review-flow-strip">
+        <ProjectFlowNav
+          projectId={projectId}
+          current="review"
+          tenderReady
+          vendorReady={vendorReady}
+        />
+      </div>
 
       <div className="project-tabs" role="tablist" aria-label="Project sections">
         <button className="project-tab project-tab-active" role="tab" aria-selected="true" type="button">
