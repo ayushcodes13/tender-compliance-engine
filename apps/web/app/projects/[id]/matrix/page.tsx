@@ -125,10 +125,7 @@ export default function ProjectMatrixPage() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-              <p className="eyebrow">Step 4 · Final output</p>
-              <h1 className="display-heading">
-                Compliance sheet — {project.name}
-              </h1>
+              <h1>Compliance sheet — {project.name}</h1>
               <p className="page-description">
                 Review the source-linked final matrix, resolve any remaining
                 unresolved rows, and export XLSX, DOCX, or PDF. Tender source:

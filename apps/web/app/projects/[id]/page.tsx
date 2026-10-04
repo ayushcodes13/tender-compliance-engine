@@ -343,8 +343,7 @@ export default function ProjectPage() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-              <p className="eyebrow">Project</p>
-              <h1 className="display-heading">{project.name}</h1>
+              <h1>{project.name}</h1>
               <p className="page-description">
                 Add the tender and vendor/OEM sources, review the evidence-backed
                 decisions, then export the final compliance sheet. Current status:
@@ -356,32 +355,32 @@ export default function ProjectPage() {
           <nav className="workflow-steps" aria-label="Tender compliance workflow">
             <a href="#tender-sources" className="workflow-step workflow-step-active">
               <span>1</span>
-              <div><strong>Tender</strong><small>What must be met</small></div>
+              <div><strong>Tender</strong></div>
             </a>
             <a href="#vendor-sources" className="workflow-step">
               <span>2</span>
-              <div><strong>Vendor / OEM</strong><small>Evidence + compliance sheet</small></div>
+              <div><strong>Vendor / OEM</strong></div>
             </a>
             {hasDocuments ? (
               <Link href={`/projects/${project.id}/review`} className="workflow-step">
                 <span>3</span>
-                <div><strong>Review</strong><small>Requirements + evidence</small></div>
+                <div><strong>Review</strong></div>
               </Link>
             ) : (
               <div className="workflow-step workflow-step-disabled">
                 <span>3</span>
-                <div><strong>Review</strong><small>Upload tender first</small></div>
+                <div><strong>Review</strong></div>
               </div>
             )}
             {hasDocuments ? (
               <Link href={`/projects/${project.id}/matrix`} className="workflow-step">
                 <span>4</span>
-                <div><strong>Compliance sheet</strong><small>Review + export</small></div>
+                <div><strong>Compliance sheet</strong></div>
               </Link>
             ) : (
               <div className="workflow-step workflow-step-disabled">
                 <span>4</span>
-                <div><strong>Compliance sheet</strong><small>After review</small></div>
+                <div><strong>Compliance sheet</strong></div>
               </div>
             )}
           </nav>
