@@ -8,7 +8,6 @@ import io
 import zipfile
 
 from docx import Document
-
 from pypdf import PdfWriter
 
 from tender_compliance_api.validation.models import FileFormat
