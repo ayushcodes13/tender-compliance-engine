@@ -38,7 +38,6 @@ def upgrade() -> None:
         "proposed", "accepted", "rejected",
         name="evidence_review_state",
     )
-    evidence_review_state.create(op.get_bind(), checkfirst=True)
 
     # --- oem_text_segments ---
     op.create_table(
@@ -102,7 +101,7 @@ def upgrade() -> None:
         sa.Column("retrieval_config", sa.JSON(), nullable=True),
         sa.Column(
             "review_state",
-            sa.String(16),
+            evidence_review_state,
             nullable=False,
             server_default="proposed",
         ),

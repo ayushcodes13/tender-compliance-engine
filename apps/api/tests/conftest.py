@@ -59,6 +59,21 @@ def _clear_fake_storage():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_test_storage(monkeypatch):
+    """Keep tests on the in-memory storage adapter even when local .env exists."""
+    monkeypatch.setenv("OBJECT_STORAGE_ENDPOINT", "")
+    monkeypatch.setenv("OBJECT_STORAGE_ACCESS_KEY", "")
+    monkeypatch.setenv("OBJECT_STORAGE_SECRET_KEY", "")
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "")
+
+    from tender_compliance_api.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def session_cm():
     """Return an async context manager yielding a fresh :class:`AsyncSession`.

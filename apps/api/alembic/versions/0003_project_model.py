@@ -48,8 +48,6 @@ _PROJECT_STATUS_ENUM = sa.Enum(
 
 def upgrade() -> None:
     """Create projects table and add project_id to audit_logs."""
-    _PROJECT_STATUS_ENUM.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "projects",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -58,17 +56,7 @@ def upgrade() -> None:
         sa.Column("external_tender_id", sa.String(length=255), nullable=True),
         sa.Column(
             "status",
-            sa.Enum(
-                "draft",
-                "tender_uploaded",
-                "documents_processing",
-                "requirements_extracted",
-                "review_in_progress",
-                "matrix_ready",
-                "exported",
-                "archived",
-                name="project_status",
-            ),
+            _PROJECT_STATUS_ENUM,
             server_default="draft",
             nullable=False,
         ),

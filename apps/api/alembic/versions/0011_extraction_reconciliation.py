@@ -47,7 +47,7 @@ def upgrade() -> None:
     op.add_column(
         "extraction_candidates",
         sa.Column(
-            "deduped", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            "deduped", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
     )
     op.add_column(

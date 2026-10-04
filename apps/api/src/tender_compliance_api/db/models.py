@@ -20,7 +20,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -31,9 +30,27 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy import UUID as SaUUID
+from sqlalchemy import Enum as _SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tender_compliance_api.db.base import Base
+
+
+def _enum_values_callable(enum_cls: type[enum.Enum]) -> list[str]:
+    """Persist enum values, not Python member names.
+
+    PostgreSQL native ENUM migrations use lowercase StrEnum values such as
+    "draft". SQLAlchemy otherwise serializes member names such as "DRAFT".
+    """
+    return [str(member.value) for member in enum_cls]
+
+
+class Enum(_SAEnum):
+    """SQLAlchemy Enum configured to persist Enum.value consistently."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("values_callable", _enum_values_callable)
+        super().__init__(*args, **kwargs)
 
 
 class ProjectStatus(enum.StrEnum):

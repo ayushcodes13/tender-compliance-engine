@@ -53,8 +53,6 @@ def upgrade() -> None:
         op.execute("ALTER TYPE doc_processing_status ADD VALUE 'partial'")
 
     # --- Create new enums ---
-    _PROCESSING_STAGE_ENUM.create(op.get_bind(), checkfirst=True)
-    _RUN_STATUS_ENUM.create(op.get_bind(), checkfirst=True)
 
     # --- Create processing_runs table ---
     op.create_table(
