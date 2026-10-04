@@ -1,13 +1,12 @@
 "use client";
 
-import { FileCheck2, Files, LayoutGrid, Settings2 } from "lucide-react";
+import { LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 const navigation = [
   { href: "/", label: "Projects", icon: LayoutGrid },
-  { href: "/projects/demo", label: "Review", icon: FileCheck2 },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -24,7 +23,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           {navigation.map((item) => {
             const Icon = item.icon;
             const active =
-              item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/");
+              item.href === "/"
+                ? pathname === "/" || pathname.startsWith("/projects/")
+                : pathname === item.href || pathname.startsWith(item.href + "/");
 
             return (
               <Link
@@ -41,14 +42,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="rail-footer">
-          <button className="rail-icon-button" type="button" aria-label="Documents">
-            <Files size={19} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <button className="rail-icon-button" type="button" aria-label="Settings">
-            <Settings2 size={19} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <div className="profile-dot" aria-label="Devayush Rout">
-            DR
+          <div className="profile-dot" aria-label="Single workspace">
+            TC
           </div>
         </div>
       </aside>

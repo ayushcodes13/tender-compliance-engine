@@ -79,6 +79,10 @@ export default function Home() {
 
   const activeProjects = projects.filter((p) => p.status !== "archived");
   const archivedProjects = projects.filter((p) => p.status === "archived");
+  const inReviewProjects = projects.filter((p) => p.status === "review_in_progress");
+  const readyProjects = projects.filter(
+    (p) => p.status === "matrix_ready" || p.status === "exported"
+  );
 
   const openDialog = () => {
     setNewName("");
@@ -161,7 +165,7 @@ export default function Home() {
         <div>
           <p className="topbar-kicker">Tender Compliance Engine</p>
           <p className="topbar-context">
-            Phase 1 · Requirement extraction and review
+            Tender → OEM evidence → Compliance
           </p>
         </div>
         <button
@@ -182,8 +186,8 @@ export default function Home() {
               <p className="eyebrow">Workspace</p>
               <h1 className="display-heading">Tender projects</h1>
               <p className="page-description">
-                Turn technical tender documents into source-linked requirements
-                before any compliance decision is made.
+                Upload a tender, verify its requirements, attach OEM evidence,
+                review compliance, and export the final submission.
               </p>
             </div>
           </section>
@@ -195,16 +199,16 @@ export default function Home() {
               <span className="summary-label">Active tenders</span>
             </div>
             <div className="summary-item">
-              <span className="summary-value">—</span>
-              <span className="summary-label">Requirements extracted</span>
+              <span className="summary-value">{inReviewProjects.length}</span>
+              <span className="summary-label">In review</span>
             </div>
             <div className="summary-item">
-              <span className="summary-value">—</span>
-              <span className="summary-label">Need review</span>
+              <span className="summary-value">{readyProjects.length}</span>
+              <span className="summary-label">Matrix ready</span>
             </div>
             <div className="summary-item">
-              <span className="summary-value">—</span>
-              <span className="summary-label">Reviewed</span>
+              <span className="summary-value">{archivedProjects.length}</span>
+              <span className="summary-label">Archived</span>
             </div>
           </section>
 
