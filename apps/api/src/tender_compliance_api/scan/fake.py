@@ -22,6 +22,9 @@ class FakeScanner(MalwareScanner):
     upload data.
     """
 
+    async def ready(self) -> bool:
+        return True
+
     async def scan(
         self, filename: str, data: bytes
     ) -> ScanResult:
