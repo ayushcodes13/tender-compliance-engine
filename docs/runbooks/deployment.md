@@ -13,7 +13,7 @@ The stack starts:
 
 - PostgreSQL;
 - Redis;
-- MinIO object storage;
+- a shared durable filesystem volume for source files and exports;
 - Alembic migrations;
 - FastAPI API;
 - background OCR/document worker;
@@ -23,7 +23,8 @@ The backend runs in `single_workspace` mode. The browser talks only to the
 web app; Next.js proxies API traffic over the internal container network.
 
 The only **external secret** required by this bundled pilot is
-`OPENAI_API_KEY`.
+`OPENAI_API_KEY`. PostgreSQL/Redis run locally in Compose and document bytes
+persist in the named `object_data` volume shared by API and worker.
 
 ```bash
 cp .env.example .env
@@ -71,18 +72,18 @@ Next.js web
 FastAPI API ───── PostgreSQL
    │
    ├───────────── Redis
-   └───────────── S3 / MinIO
-                     ▲
-                     │
-                  Worker
-             parser / OCR / LLM
+   └──── shared object_data volume ────┐
+                                       │
+                                    Worker
+                               parser / OCR / LLM
 ```
 
 ## Readiness vs health
 
 - `GET /health` — process liveness.
 - `GET /ready` — checks the dependencies needed to serve the product,
-  including database, queue, object storage, and production AI configuration.
+  including database, queue, durable document storage, and production AI
+configuration.
 - Browser/deployment checks should prefer
   `GET /api/backend/ready` through the web app because that proves both the
   frontend proxy and backend dependencies are reachable.
@@ -120,17 +121,19 @@ Private pilot:
 OPENAI_API_KEY=<real key>
 ```
 
-The remaining values in `.env.example` have bundled local defaults. Change
-those defaults before exposing infrastructure outside a trusted pilot host.
+The remaining values in `.env.example` have bundled local defaults. Cloud
+deployments can opt into the existing S3-compatible adapter by setting
+`OBJECT_STORAGE_ENDPOINT` plus credentials. Change all bundled defaults before
+exposing infrastructure outside a trusted pilot host.
 
 Public deployment should inject all secrets through the deployment platform or
 a secrets manager.
 
 ## Backups
 
-Before production schema changes, back up PostgreSQL. Persist/backup the object
-store independently as it contains originals, rendered pages, and generated
-exports.
+Before production schema changes, back up PostgreSQL. Back up the
+`object_data` volume independently because it contains originals, rendered
+pages, and generated exports.
 
 Example database backup for the bundled stack:
 

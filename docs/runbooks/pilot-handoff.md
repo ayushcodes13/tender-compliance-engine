@@ -7,8 +7,8 @@ This is the shortest path from the repository to a usable one-customer pilot.
 - Docker with Docker Compose.
 - An OpenAI API key.
 
-You do **not** need to create PostgreSQL, Redis, MinIO, database users, migration
-tables, or a login account manually for this mode.
+You do **not** need to create PostgreSQL, Redis, object-storage credentials,
+database users, migration tables, or a login account manually for this mode.
 
 ## Start the product
 
@@ -112,7 +112,7 @@ docker compose up
 ```
 
 Do **not** use `docker compose down -v` on a customer pilot unless you intend
-to delete the PostgreSQL/Redis/MinIO Docker volumes.
+to delete the PostgreSQL, Redis, and document-storage Docker volumes.
 
 ## Before the first paying pilot
 
