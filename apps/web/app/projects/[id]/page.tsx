@@ -63,6 +63,50 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 }
 
+function documentProcessingMeta(
+  status: DocumentItem["processing_status"]
+): { label: string; className: string; help: string } {
+  switch (status) {
+    case "uploaded":
+    case "queued":
+      return {
+        label: "Waiting to process",
+        className: "status-neutral",
+        help: "The document is safely uploaded and waiting for the worker.",
+      };
+    case "processing":
+      return {
+        label: "Processing",
+        className: "status-warning",
+        help: "Parsing, OCR, and requirement extraction are running.",
+      };
+    case "parsed":
+      return {
+        label: "Ready for review",
+        className: "status-reviewed",
+        help: "Processing completed. Review the extracted requirements next.",
+      };
+    case "ocr_warning":
+      return {
+        label: "Ready with OCR warning",
+        className: "status-warning",
+        help: "Processing completed, but OCR-sensitive source text needs review.",
+      };
+    case "partial":
+      return {
+        label: "Partially processed",
+        className: "status-warning",
+        help: "Some processing completed. You can review what is available or retry.",
+      };
+    case "failed":
+      return {
+        label: "Processing failed",
+        className: "status-error",
+        help: "Processing stopped safely. No compliance result was invented.",
+      };
+  }
+}
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
@@ -84,6 +128,8 @@ export default function ProjectPage() {
     null
   );
   const [dragOver, setDragOver] = useState(false);
+  const [retryingVersion, setRetryingVersion] = useState<string | null>(null);
+  const [processingActionError, setProcessingActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -124,6 +170,10 @@ export default function ProjectPage() {
 
   const isArchived = project?.status === "archived";
   const hasDocuments = documents.length > 0;
+  const latestDocument = documents.length > 0 ? documents[documents.length - 1] : null;
+  const latestDocumentReady = latestDocument
+    ? ["parsed", "partial", "ocr_warning"].includes(latestDocument.processing_status)
+    : false;
   const hasProcessingDocuments = documents.some((doc) =>
     ["uploaded", "queued", "processing"].includes(doc.processing_status)
   );
@@ -199,6 +249,27 @@ export default function ProjectPage() {
       );
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleRetryProcessing(doc: DocumentItem) {
+    if (!project || isArchived) return;
+    const key = `${doc.document_id}-${doc.version_number}`;
+    setRetryingVersion(key);
+    setProcessingActionError(null);
+    try {
+      await api.retryDocumentProcessing(
+        project.id,
+        doc.document_id,
+        doc.version_number
+      );
+      await Promise.all([loadDocuments(), loadProject()]);
+    } catch (err) {
+      setProcessingActionError(
+        err instanceof Error ? err.message : "Could not retry document processing"
+      );
+    } finally {
+      setRetryingVersion(null);
     }
   }
 
@@ -320,7 +391,7 @@ export default function ProjectPage() {
               {actionLoading === "archive" ? "Archiving…" : "Archive"}
             </button>
           )}
-          {hasDocuments ? (
+          {latestDocumentReady ? (
             <>
               <Link
                 href={`/projects/${project.id}/review`}
@@ -361,7 +432,7 @@ export default function ProjectPage() {
               <span>2</span>
               <div><strong>Vendor / OEM</strong></div>
             </a>
-            {hasDocuments ? (
+            {latestDocumentReady ? (
               <Link href={`/projects/${project.id}/review`} className="workflow-step">
                 <span>3</span>
                 <div><strong>Review</strong></div>
@@ -372,7 +443,7 @@ export default function ProjectPage() {
                 <div><strong>Review</strong></div>
               </div>
             )}
-            {hasDocuments ? (
+            {latestDocumentReady ? (
               <Link href={`/projects/${project.id}/matrix`} className="workflow-step">
                 <span>4</span>
                 <div><strong>Compliance sheet</strong></div>
@@ -560,13 +631,31 @@ export default function ProjectPage() {
             {/* ----- Document list ----- */}
             <div className="doclist-section">
               <div className="section-title-row">
-                <h2>Tender source versions</h2>
+                <div>
+                  <h2>Tender source versions</h2>
+                  <p>
+                    {hasProcessingDocuments
+                      ? "Processing updates automatically."
+                      : latestDocumentReady
+                        ? "Latest tender is ready for review."
+                        : documents.length > 0
+                          ? "Check the latest processing result below."
+                          : "Upload a tender to begin."}
+                  </p>
+                </div>
                 <p>
                   {documents.length === 1
                     ? "1 document version"
                     : `${documents.length} document versions`}
                 </p>
               </div>
+
+              {processingActionError ? (
+                <div className="upload-error-banner" role="alert">
+                  <AlertCircle size={14} aria-hidden="true" />
+                  {processingActionError}
+                </div>
+              ) : null}
 
               {docsLoading ? (
                 <div className="empty-state">
@@ -596,21 +685,62 @@ export default function ProjectPage() {
                       <th>Size</th>
                       <th>Status</th>
                       <th>Uploaded</th>
+                      <th>Next step</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {documents.map((doc) => (
-                      <tr key={`${doc.document_id}-${doc.version_number}`}>
-                        <td>
-                          <File size={14} aria-hidden="true" />
-                          {doc.display_name}
-                        </td>
-                        <td>v{doc.version_number}</td>
-                        <td>{formatBytes(doc.size_bytes)}</td>
-                        <td>{doc.processing_status}</td>
-                        <td>{formatDate(doc.created_at)}</td>
-                      </tr>
-                    ))}
+                    {documents.map((doc) => {
+                      const processing = documentProcessingMeta(doc.processing_status);
+                      const retryKey = `${doc.document_id}-${doc.version_number}`;
+                      const canRetry = ["failed", "partial"].includes(doc.processing_status);
+                      const isReady = ["parsed", "partial", "ocr_warning"].includes(
+                        doc.processing_status
+                      );
+
+                      return (
+                        <tr key={retryKey}>
+                          <td>
+                            <File size={14} aria-hidden="true" />
+                            {doc.display_name}
+                          </td>
+                          <td>v{doc.version_number}</td>
+                          <td>{formatBytes(doc.size_bytes)}</td>
+                          <td>
+                            <span className={`status-pill ${processing.className}`}>
+                              {processing.label}
+                            </span>
+                            <div className="field-help">{processing.help}</div>
+                          </td>
+                          <td>{formatDate(doc.created_at)}</td>
+                          <td>
+                            {canRetry ? (
+                              <button
+                                className="button button-secondary button-small"
+                                type="button"
+                                disabled={retryingVersion !== null || isArchived}
+                                onClick={() => void handleRetryProcessing(doc)}
+                              >
+                                <RefreshCw
+                                  size={12}
+                                  aria-hidden="true"
+                                  className={retryingVersion === retryKey ? "spin" : undefined}
+                                />
+                                {retryingVersion === retryKey ? "Retrying…" : "Retry processing"}
+                              </button>
+                            ) : isReady ? (
+                              <Link
+                                href={`/projects/${project.id}/review`}
+                                className="button button-secondary button-small"
+                              >
+                                Review requirements
+                              </Link>
+                            ) : (
+                              <span className="field-help">Updates automatically</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

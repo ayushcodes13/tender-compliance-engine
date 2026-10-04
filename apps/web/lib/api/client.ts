@@ -80,6 +80,11 @@ export type UploadResponse = DocumentItem & {
   uploaded_at: string;
 };
 
+export type RetryProcessingResponse = {
+  run_id: string;
+  status: DocumentProcessingStatus;
+};
+
 /** Requirement review state (Phase 1). */
 export type RequirementReviewState =
   | "unreviewed"
@@ -694,6 +699,16 @@ export const api = {
       body: form,
     }).then((r) => expectJson<UploadResponse>(r));
   },
+
+  retryDocumentProcessing: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/retry`,
+      { method: "POST" }
+    ).then((r) => expectJson<RetryProcessingResponse>(r)),
 
   // --- Requirements (CP35) ---
 
