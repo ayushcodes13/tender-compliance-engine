@@ -47,6 +47,14 @@ class ObjectStorageAdapter(ABC):
     (e.g. boto3) are bridged inside the concrete implementation.
     """
 
+    async def ready(self) -> None:
+        """Raise when the backing storage is unavailable.
+
+        The default implementation is a no-op for in-memory/test providers.
+        Production providers should perform a lightweight provider-level check.
+        """
+        return None
+
     @abstractmethod
     async def put(
         self, key: str, data: bytes, content_type: str

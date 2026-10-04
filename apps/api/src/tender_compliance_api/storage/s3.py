@@ -72,6 +72,10 @@ class S3StorageAdapter(ObjectStorageAdapter):
             if error_code not in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
                 raise
 
+    async def ready(self) -> None:
+        """Verify the configured bucket is reachable without mutating data."""
+        await asyncio.to_thread(self._client.head_bucket, Bucket=self._bucket)
+
     # ------------------------------------------------------------------
     # ObjectStorageAdapter interface
     # ------------------------------------------------------------------
