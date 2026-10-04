@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FilePlus2, FileText } from "lucide-react";
+import {
+  ArrowRight,
+  FileCheck2,
+  FilePlus2,
+  FileText,
+  SearchCheck,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
@@ -39,6 +46,29 @@ function formatDate(date: string): string {
     day: "numeric",
   });
 }
+
+const buyerFlow = [
+  {
+    icon: FileText,
+    title: "Upload tender",
+    copy: "PDF or DOCX. Parsing and OCR keep every requirement tied to its source.",
+  },
+  {
+    icon: FileCheck2,
+    title: "Add vendor evidence",
+    copy: "Upload OEM documents or an existing vendor compliance sheet.",
+  },
+  {
+    icon: SearchCheck,
+    title: "Review decisions",
+    copy: "Check the tender requirement, vendor evidence, comparison, and open issues.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Export safely",
+    copy: "Produce XLSX, DOCX, or PDF without hiding unresolved rows.",
+  },
+] as const;
 
 const activeStatusPills: Record<Project["status"], string> = {
   draft: "status-pill status-neutral",
@@ -177,27 +207,70 @@ export default function Home() {
 
       <div className="page-scroll">
         <div className="page-container">
-          {/* ----- Heading ----- */}
-          <section className="page-heading">
-            <div>
-              <h1>Projects</h1>
-              <p className="page-description">
-                Upload a tender, verify its requirements, attach OEM evidence,
-                review compliance, and export the final submission.
-              </p>
-            </div>
-          </section>
+          {(!loading && !error && projects.length === 0) ? (
+            <section className="home-onboarding">
+              <div className="home-onboarding-copy">
+                <p className="eyebrow">Tender compliance, without the spreadsheet hunt</p>
+                <h1>Go from tender documents to a reviewable compliance sheet.</h1>
+                <p>
+                  Upload the tender, attach OEM or vendor evidence, review every
+                  source-linked decision, and export the final submission.
+                </p>
+                <div className="home-onboarding-actions">
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={openDialog}
+                  >
+                    <FilePlus2 size={15} aria-hidden="true" />
+                    Create tender project
+                  </button>
+                  <span>PDF / DOCX in · XLSX / DOCX / PDF out</span>
+                </div>
+              </div>
 
-          {/* ----- Summary line ----- */}
-          <p className="summary-inline">
-            {loading
-              ? "Loading…"
-              : error
-                ? "Error"
-                : projects.length === 0
-                  ? "No projects yet"
-                  : `${projects.length} total project${projects.length === 1 ? "" : "s"}`}
-          </p>
+              <div className="buyer-flow" aria-label="Product workflow">
+                {buyerFlow.map((step, index) => {
+                  const Icon = step.icon;
+                  return (
+                    <div className="buyer-flow-step" key={step.title}>
+                      <div className="buyer-flow-number">{index + 1}</div>
+                      <Icon size={18} aria-hidden="true" />
+                      <div>
+                        <strong>{step.title}</strong>
+                        <p>{step.copy}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className="page-heading">
+                <div>
+                  <h1>Projects</h1>
+                  <p className="page-description">
+                    Upload a tender, verify its requirements, attach OEM evidence,
+                    review compliance, and export the final submission.
+                  </p>
+                </div>
+              </section>
+
+              <div className="project-summary-strip">
+                <span><strong>{activeProjects.length}</strong> active</span>
+                <span><strong>{inReviewProjects.length}</strong> in review</span>
+                <span><strong>{readyProjects.length}</strong> ready / exported</span>
+                <span className="project-summary-total">
+                  {loading
+                    ? "Loading…"
+                    : error
+                      ? "Could not load projects"
+                      : `${projects.length} total`}
+                </span>
+              </div>
+            </>
+          )}
 
           {/* ----- Loading ----- */}
           {loading && (
@@ -218,15 +291,6 @@ export default function Home() {
               >
                 Retry
               </button>
-            </div>
-          )}
-
-          {/* ----- Empty ----- */}
-          {!loading && !error && projects.length === 0 && (
-            <div className="empty-state">
-              <FileText size={32} aria-hidden="true" />
-              <strong>No projects yet</strong>
-              <p>Create a tender project to get started.</p>
             </div>
           )}
 
