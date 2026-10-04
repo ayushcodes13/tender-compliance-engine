@@ -108,14 +108,14 @@ export function FinalMatrixView(props: {
   };
 
   if (loading) {
-    return <div className="matrix-loading"><RefreshCw size={20} className="spin" /> Loading final compliance matrix…</div>;
+    return <div className="matrix-loading"><RefreshCw size={20} className="spin" /> Loading final compliance sheet…</div>;
   }
 
   return (
     <section style={{ marginTop: 28 }}>
       <div className="section-title-row">
         <div>
-          <h2>Final compliance matrix</h2>
+          <h2>Final compliance sheet</h2>
           <p>Evidence-backed status plus unresolved review state.</p>
         </div>
         <button className="button button-secondary button-small" type="button" onClick={() => void reload()}>

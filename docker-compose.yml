@@ -59,7 +59,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       OBJECT_STORAGE_LOCAL_PATH: /app/object-storage
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env before starting the pilot}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
     volumes:
@@ -87,7 +87,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tce}:${POSTGRES_PASSWORD:-tce-password}@postgres:5432/${POSTGRES_DB:-tce}
       REDIS_URL: redis://redis:6379/0
       OBJECT_STORAGE_LOCAL_PATH: /app/object-storage
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env before starting the pilot}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
     volumes:

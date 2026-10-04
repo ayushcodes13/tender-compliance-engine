@@ -15,8 +15,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="app-frame">
       <aside className="app-rail" aria-label="Product navigation">
-        <Link href="/" className="product-mark" aria-label="Tender Compliance Engine">
-          <img src="/tce-mark.svg" alt="" width="44" height="44" />
+        <Link href="/" className="product-brand" aria-label="Tender Compliance Engine">
+          <span className="product-mark">
+            <img src="/tce-mark.svg" alt="" width="30" height="30" />
+          </span>
+          <span className="product-brand-copy">
+            <strong>Tender Compliance</strong>
+            <small>Source-linked review</small>
+          </span>
         </Link>
 
         <nav className="rail-nav">
@@ -42,8 +48,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="rail-footer">
-          <div className="profile-dot" aria-label="Single workspace">
-            TC
+          <div className="workspace-chip" aria-label="Single workspace private pilot">
+            <div className="profile-dot">TC</div>
+            <div>
+              <strong>Private workspace</strong>
+              <span>Single-customer pilot</span>
+            </div>
           </div>
         </div>
       </aside>

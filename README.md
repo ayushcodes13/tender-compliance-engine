@@ -42,7 +42,7 @@ Deterministic numeric / unit comparison
     ↓
 Evidence-backed compliance review
     ↓
-Final compliance matrix
+Final compliance sheet
     ↓
 XLSX / DOCX / PDF submission
 ```
@@ -61,6 +61,7 @@ Next.js backend proxy.
 cp .env.example .env
 # Put your real key in .env:
 OPENAI_API_KEY=...
+docker compose config   # validates the one required external secret
 docker compose up --build
 ```
 
@@ -101,7 +102,7 @@ services and a real identity provider.
 
 ### Outputs
 
-- final compliance matrix in the browser;
+- final compliance sheet in the browser;
 - XLSX;
 - DOCX;
 - PDF;
