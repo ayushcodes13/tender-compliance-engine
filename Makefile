@@ -1,7 +1,9 @@
-.PHONY: help infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
+.PHONY: help start stop infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
 
 help:
 	@echo "Tender Compliance Engine"
+	@echo "  make start          Build and start the complete product stack"
+	@echo "  make stop           Stop the complete product stack"
 	@echo "  make infra-up       Start Postgres, Redis and MinIO"
 	@echo "  make infra-down     Stop local infrastructure"
 	@echo "  make api-install    Install API package + dev dependencies"
@@ -17,6 +19,12 @@ help:
 	@echo "  make docker-build   Build API Docker image"
 	@echo "  make docker-worker-build  Build worker Docker image"
 	@echo "  make deploy-smoke   Run deployment smoke tests"
+
+start:
+	docker compose up --build -d
+
+stop:
+	docker compose down
 
 infra-up:
 	docker compose -f infra/docker-compose.yml up -d

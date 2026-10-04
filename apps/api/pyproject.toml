@@ -24,6 +24,7 @@ dependencies = [
   "uvicorn[standard]>=0.32,<1.0",
   "alembic>=1.13,<2.0",
   "redis>=5.0,<6.0",
+  "openai>=1.54,<3.0",
 ]
 
 [project.optional-dependencies]

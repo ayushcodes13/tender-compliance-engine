@@ -1,13 +1,16 @@
-"""Auth request-context boundary and dev-mode identity resolver.
+"""Authentication request-context boundary.
 
-The single ``resolve_auth_context`` function is the entry point for turning
-a request into a verified :class:`AuthContext`.  All later services and
-routes depend on this — never on raw browser-supplied IDs.
+Two deliberately small modes are supported:
 
-Dev-mode identity (``app_env == "development"``) reads identity from
-``X-Dev-User-Id`` / ``X-Dev-Organization-Id`` headers for local development
-only.  Production deployments will plug in a real auth provider (OIDC/JWT)
-but keep the same ``AuthContext`` output shape.
+* development_headers keeps the existing local/test identity headers and
+  still verifies an existing membership.
+* single_workspace bootstraps one configured owner/workspace. This makes a
+  private beta deployment usable without a separate identity provider or
+  manual database seeding.
+
+Any other mode denies by default. A public multi-user deployment should replace
+single_workspace with a real OIDC/JWT integration while keeping the same
+AuthContext boundary.
 """
 
 from __future__ import annotations
@@ -20,14 +23,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
-from tender_compliance_api.config import get_settings
+from tender_compliance_api.config import Settings, get_settings
 from tender_compliance_api.db.models import Membership, Organization, User
 
-# Dev-mode identity headers (development-only).
 DEV_USER_HEADER: Final = "x-dev-user-id"
 DEV_ORG_HEADER: Final = "x-dev-organization-id"
 
-# Constrained set of roles a membership may hold.
 ROLE_OWNER: Final = "owner"
 ROLE_ADMIN: Final = "admin"
 ROLE_MEMBER: Final = "member"
@@ -37,28 +38,71 @@ VALID_ROLES: Final = frozenset(
 )
 
 
+async def _single_workspace_context(
+    session: AsyncSession, settings: Settings
+) -> AuthContext | None:
+    """Ensure and return the configured single-workspace owner identity."""
+    try:
+        user_id = uuid.UUID(settings.single_workspace_user_id)
+        org_id = uuid.UUID(settings.single_workspace_org_id)
+    except (TypeError, ValueError):
+        return None
+
+    user = await session.get(User, user_id)
+    if user is None:
+        user = User(
+            id=user_id,
+            auth_provider="single_workspace",
+            auth_provider_user_id=str(user_id),
+            full_name="Workspace Owner",
+        )
+        session.add(user)
+
+    org = await session.get(Organization, org_id)
+    if org is None:
+        org = Organization(id=org_id, name=settings.single_workspace_org_name)
+        session.add(org)
+
+    await session.flush()
+
+    membership_result = await session.execute(
+        select(Membership).where(
+            Membership.organization_id == org_id,
+            Membership.user_id == user_id,
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    if membership is None:
+        session.add(
+            Membership(
+                organization_id=org_id,
+                user_id=user_id,
+                role=ROLE_OWNER,
+            )
+        )
+        await session.flush()
+        roles = frozenset({ROLE_OWNER})
+    else:
+        roles = frozenset({membership.role})
+
+    return AuthContext(
+        actor_id=user_id,
+        organization_id=org_id,
+        roles=roles,
+    )
+
+
 async def resolve_auth_context(
     session: AsyncSession,
     headers: Mapping[str, str],
 ) -> AuthContext | None:
-    """Resolve a verified authorization context from request headers.
-
-    **Development mode** (``app_env == "development"``): reads
-    ``X-Dev-User-Id`` and ``X-Dev-Organization-Id``, resolving/creating the
-    ``User`` and ``Organization`` rows on the fly.  Membership is **verified**
-    (not auto-created) — the browser-supplied org ID is never trusted
-    without a confirmed membership row.
-
-    **Non-development mode**: returns ``None`` (deny-by-default).  A real
-    auth provider integration will replace this in a later checkpoint.
-
-    Returns:
-        An :class:`AuthContext` when a valid, verified actor is found,
-        or ``None`` when the actor cannot be resolved (deny-by-default).
-    """
+    """Resolve a verified authorization context for one request."""
     settings = get_settings()
-    if settings.app_env != "development":
-        # Dev-only identity mode: production requires a real auth provider.
+
+    if settings.auth_mode == "single_workspace":
+        return await _single_workspace_context(session, settings)
+
+    if settings.auth_mode != "development_headers" or settings.app_env != "development":
         return None
 
     user_id_str = headers.get(DEV_USER_HEADER)
@@ -72,7 +116,6 @@ async def resolve_auth_context(
     except (ValueError, TypeError):
         return None
 
-    # --- Resolve or create the User (dev convenience) ---
     user = await session.get(User, user_id)
     if user is None:
         user = User(
@@ -83,14 +126,12 @@ async def resolve_auth_context(
         session.add(user)
         await session.flush()
 
-    # --- Resolve or create the Organization (dev convenience) ---
     org = await session.get(Organization, org_id)
     if org is None:
         org = Organization(id=org_id, name=f"Dev Organization {org_id}")
         session.add(org)
         await session.flush()
 
-    # --- Verify membership (never trust the header without this) ---
     result = await session.execute(
         select(Membership.role).where(
             Membership.organization_id == org_id,
@@ -99,18 +140,16 @@ async def resolve_auth_context(
     )
     roles_raw = result.fetchall()
     if not roles_raw:
-        return None  # No membership → deny
-
-    roles = frozenset(row[0] for row in roles_raw)
+        return None
 
     return AuthContext(
         actor_id=user_id,
         organization_id=org_id,
-        roles=roles,
+        roles=frozenset(row[0] for row in roles_raw),
     )
 
 
 def assert_valid_role(role: str) -> None:
-    """Raise ``ValueError`` if *role* is not a recognized membership role."""
+    """Raise ValueError if role is not a recognized membership role."""
     if role not in VALID_ROLES:
         raise ValueError(f"Unknown role: {role!r}")

@@ -69,7 +69,7 @@ class FileSignatureRule(FileValidationRule):
     def check(
         self, filename: str, content_type: str | None, data: bytes
     ) -> list[str]:
-        if len(data) < 5:
+        if len(data) < 4:
             return ["File is too small to contain a valid header"]
         for _fmt, magic in MAGIC_BYTES.items():
             if data.startswith(magic):

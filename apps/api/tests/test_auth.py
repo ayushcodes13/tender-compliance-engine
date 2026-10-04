@@ -397,3 +397,43 @@ def test_audit_events_org_scoped():
             assert system_event.actor_type == "SYSTEM"
 
     asyncio.run(_run())
+
+
+
+def test_single_workspace_bootstraps_owner_without_headers(monkeypatch):
+    """Private-beta mode creates its one owner/org/membership on first request."""
+    user_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+    monkeypatch.setattr(
+        "tender_compliance_api.auth.service.get_settings",
+        lambda: Settings(
+            app_env="production",
+            auth_mode="single_workspace",
+            single_workspace_user_id=str(user_id),
+            single_workspace_org_id=str(org_id),
+            single_workspace_org_name="Pilot Workspace",
+        ),
+    )
+
+    async def _run():
+        async with asynccontextmanager(get_session)() as session:
+            auth = await resolve_auth_context(session, {})
+            assert auth is not None
+            assert auth.actor_id == user_id
+            assert auth.organization_id == org_id
+            assert auth.roles == frozenset({"owner"})
+
+            membership = (
+                await session.execute(
+                    select(Membership).where(
+                        Membership.organization_id == org_id,
+                        Membership.user_id == user_id,
+                    )
+                )
+            ).scalar_one()
+            assert membership.role == "owner"
+
+            again = await resolve_auth_context(session, {})
+            assert again == auth
+
+    asyncio.run(_run())

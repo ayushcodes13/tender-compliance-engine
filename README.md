@@ -73,7 +73,8 @@ No agent framework is required for this workflow. No vector database is required
 | --- | --- | --- |
 | Tender PDF | ✅ Supported | Digital and scanned/mixed PDFs; OCR is applied when required |
 | OEM/vendor PDF | ✅ Supported | Datasheets, manuals, brochures, test reports, certificates, proposals, quotations |
-| DOCX parsing | 🟡 Implemented behind the parser | The parser/worker support DOCX, but the current upload validation gate still accepts PDF only. This is tracked as production-wiring work and should not be advertised to customers until the upload path is enabled end to end. |
+| Tender DOCX | ✅ Supported | Paragraphs and tables are preserved in source order; page numbers are not fabricated because DOCX has no stable physical pagination |
+| OEM/vendor DOCX | ✅ Supported | Uses the same immutable source and evidence pipeline as OEM/vendor PDFs |
 | Images / PPT / arbitrary office files | — Not supported | Convert to PDF before upload for now |
 
 ### Outputs
@@ -165,18 +166,22 @@ Then open:
 http://localhost:3000
 ```
 
-The current development identity flow uses development headers and requires a local membership seed. The production-readiness pass is simplifying this so a fresh self-hosted deployment can bootstrap a single workspace without manual database work.
+For the bundled private-beta deployment, the backend bootstraps one owner/workspace automatically. No manual membership seed is required. Development-header auth remains available for tests and direct local development.
 
 ## AI configuration
 
-The runtime adapter reads:
+The bundled stack needs one external AI credential:
 
 ```bash
+cp .env.example .env
+# edit .env and set:
 OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-4o
+docker compose up --build
 ```
 
-The API key is never committed. A production-wiring pass is in progress to make this configuration consistent across the root environment, API container, and worker container.
+Migrations run before the API starts, the object-storage bucket is created on API startup, and the same OpenAI configuration is supplied to the processing worker. Then open `http://localhost:3000`.
+
+This **single-workspace mode is designed for private pilots and one-customer deployments**. It is not a substitute for a real identity provider when the product is exposed as a public multi-user SaaS.
 
 ## Quality gates
 
@@ -199,10 +204,9 @@ The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_R
 
 The remaining focus is deliberately commercial and practical:
 
-1. remove the last environment/bootstrap friction;
-2. make the UI feel like a finished product;
-3. run representative real tender + OEM documents through the deployed product;
-4. fix only the issues those real runs expose.
+1. make the UI feel like a finished product;
+2. run representative real tender + OEM documents through the deployed product;
+3. fix only the issues those real runs expose.
 
 We are **not** adding agent orchestration, a vector database, or a new RAG platform unless real customer usage proves one is necessary.
 

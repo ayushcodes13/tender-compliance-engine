@@ -205,9 +205,11 @@ def create_worker(
         ocr = TesseractOcrAdapter()
 
     if llm is None:
-        # OpenAiLlmAdapter construction is lazy (openai imported on first
-        # call), so this never fails at startup without the package; a real
-        # call requires OPENAI_API_KEY at extraction time (CP28).
+        if settings.app_env != "development" and not settings.openai_api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is required for the production worker. "
+                "Set it in the environment before starting the stack."
+            )
         llm = OpenAiLlmAdapter()
 
     return Worker(

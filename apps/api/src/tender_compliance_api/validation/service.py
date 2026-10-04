@@ -1,17 +1,10 @@
-"""Validation orchestration service (CP13).
-
-Runs all registered :class:`FileValidationRule` instances against an
-uploaded file and returns an aggregated :class:`ValidationResult`.
-
-The service is synchronous in its public API (rules are CPU-bound);
-the async upload route wraps the call in ``asyncio.to_thread`` when
-needed.
-"""
+"""Upload validation orchestration."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
+from tender_compliance_api.validation.docx import DocxValidationRule
 from tender_compliance_api.validation.models import (
     MAGIC_BYTES,
     MIME_TYPES,
@@ -26,17 +19,11 @@ from tender_compliance_api.validation.rules import (
     FileValidationRule,
 )
 
-DEFAULT_MAX_FILE_BYTES = 50 * 1024 * 1024  # 50 MB
+DEFAULT_MAX_FILE_BYTES = 50 * 1024 * 1024
 
 
 class ValidationService:
-    """Orchestrates file-validation rules.
-
-    Args:
-        max_bytes: Maximum allowed file size in bytes.
-        max_pdf_pages: Maximum allowed PDF page count.
-        extra_rules: Additional rules to run after the built-in set.
-    """
+    """Run fail-closed validation for PDF and DOCX uploads."""
 
     def __init__(
         self,
@@ -50,6 +37,7 @@ class ValidationService:
             FileSignatureRule(),
             FileSizeRule(max_bytes),
             PdfValidationRule(max_pages=max_pdf_pages),
+            DocxValidationRule(),
         ]
         if extra_rules:
             self._rules.extend(extra_rules)
@@ -57,21 +45,10 @@ class ValidationService:
     def validate(
         self, filename: str, content_type: str | None, data: bytes
     ) -> ValidationResult:
-        """Run all rules and return an aggregated result.
-
-        Returns a :class:`ValidationResult` with ``valid=True`` when no
-        rule reported a hard error.  The ``detected_format`` and
-        ``detected_content_type`` fields are populated from the file
-        signature, not the browser-supplied content type.
-        """
         errors: list[str] = []
-
         for rule in self._rules:
-            rule_errors = rule.check(filename, content_type, data)
-            if rule_errors:
-                errors.extend(rule_errors)
+            errors.extend(rule.check(filename, content_type, data))
 
-        # Infer format and content type from the signature.
         detected_format: FileFormat | None = None
         detected_content_type: str | None = None
         for fmt, magic in MAGIC_BYTES.items():
@@ -81,7 +58,7 @@ class ValidationService:
                 break
 
         return ValidationResult(
-            valid=(len(errors) == 0),
+            valid=not errors,
             errors=errors,
             detected_format=detected_format,
             detected_content_type=detected_content_type,
