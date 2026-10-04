@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.queue import DEFAULT_QUEUE, QueueAdapter
-from tender_compliance_api.routes.uploads import get_queue_adapter, get_storage_adapter
+from tender_compliance_api.routes.uploads import (
+    get_queue_adapter,
+    get_scanner,
+    get_storage_adapter,
+)
+from tender_compliance_api.scan.adapter import MalwareScanner
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 
 router = APIRouter(tags=["system"])
@@ -36,6 +41,7 @@ async def readiness(
     session: AsyncSession = Depends(get_session),  # noqa: B008
     queue: QueueAdapter = Depends(get_queue_adapter),  # noqa: B008
     storage: ObjectStorageAdapter = Depends(get_storage_adapter),  # noqa: B008
+    scanner: MalwareScanner = Depends(get_scanner),  # noqa: B008
 ) -> ReadinessResponse | JSONResponse:
     """Return whether the stack can accept and process document work.
 
@@ -69,6 +75,16 @@ async def readiness(
     except Exception:
         components["object_storage"] = "unavailable"
         failures.append("object_storage")
+
+    try:
+        if await scanner.ready():
+            components["malware_scanner"] = "ready"
+        else:
+            components["malware_scanner"] = "unavailable"
+            failures.append("malware_scanner")
+    except Exception:
+        components["malware_scanner"] = "unavailable"
+        failures.append("malware_scanner")
 
     if settings.app_env == "production":
         if settings.openai_api_key.strip():
