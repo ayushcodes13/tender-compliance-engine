@@ -5,10 +5,25 @@ import { AlertCircle, Check, File, RefreshCw, Upload } from "lucide-react";
 
 import { api, OemDocumentItem, OemUploadResponse } from "@/lib/api/client";
 
+const DOCUMENT_TYPES = [
+  ["datasheet", "Datasheet"],
+  ["brochure", "Brochure"],
+  ["manual", "Manual"],
+  ["certificate", "Certificate"],
+  ["test_report", "Test report"],
+  ["quotation", "Quotation"],
+  ["proposal", "Proposal"],
+  ["other", "Other / compliance sheet"],
+] as const;
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function statusLabel(status: string): string {
+  return status.replaceAll("_", " ").replace(/^./, (value) => value.toUpperCase());
 }
 
 export function OemDocumentsPanel(props: {
@@ -23,16 +38,17 @@ export function OemDocumentsPanel(props: {
   const [success, setSuccess] = useState<OemUploadResponse | null>(null);
   const [vendorName, setVendorName] = useState("");
   const [productName, setProductName] = useState("");
+  const [documentType, setDocumentType] = useState("datasheet");
 
-  const reload = async () => {
-    setLoading(true);
+  const reload = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       setItems(await api.fetchOemDocuments(projectId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load OEM documents");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -41,6 +57,17 @@ export function OemDocumentsPanel(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
+  const hasProcessingItems = items.some((item) =>
+    ["uploaded", "queued", "processing"].includes(item.processing_status)
+  );
+
+  useEffect(() => {
+    if (!hasProcessingItems) return;
+    const timer = window.setInterval(() => void reload(false), 2500);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasProcessingItems, projectId]);
+
   const upload = async (file: File) => {
     if (disabled || uploading) return;
     setUploading(true);
@@ -48,12 +75,12 @@ export function OemDocumentsPanel(props: {
     setSuccess(null);
     try {
       const result = await api.uploadOemDocument(projectId, file, {
-        document_type: "datasheet",
+        document_type: documentType,
         vendor_name: vendorName.trim() || undefined,
         product_name: productName.trim() || undefined,
       });
       setSuccess(result);
-      await reload();
+      await reload(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "OEM upload failed");
     } finally {
@@ -65,8 +92,11 @@ export function OemDocumentsPanel(props: {
     <div className="doclist-section">
       <div className="section-title-row">
         <div>
-          <h2>OEM / vendor sources</h2>
-          <p>Evidence comes only from these separately versioned source documents.</p>
+          <h2>OEM / vendor evidence</h2>
+          <p>
+            Upload the documents you would rely on in the bid. Evidence is
+            always tied back to these immutable source versions.
+          </p>
         </div>
         <button
           className="button button-secondary button-small"
@@ -79,31 +109,46 @@ export function OemDocumentsPanel(props: {
         </button>
       </div>
 
-      <div className="detail-row" style={{ gap: 12, alignItems: "flex-end" }}>
-        <label style={{ flex: 1 }}>
+      <div className="oem-upload-grid">
+        <label>
+          <span className="detail-label">Document type</span>
+          <select
+            value={documentType}
+            onChange={(event) => setDocumentType(event.target.value)}
+            disabled={disabled || uploading}
+          >
+            {DOCUMENT_TYPES.map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
           <span className="detail-label">Vendor</span>
           <input
             value={vendorName}
             onChange={(e) => setVendorName(e.target.value)}
-            placeholder="Optional vendor name"
+            placeholder="e.g. Acme Instruments"
             disabled={disabled || uploading}
           />
         </label>
-        <label style={{ flex: 1 }}>
-          <span className="detail-label">Product</span>
+        <label>
+          <span className="detail-label">Product / model</span>
           <input
             value={productName}
             onChange={(e) => setProductName(e.target.value)}
-            placeholder="Optional product / model"
+            placeholder="e.g. Model X"
             disabled={disabled || uploading}
           />
         </label>
-        <label className="button button-secondary button-small" style={{ cursor: disabled ? "not-allowed" : "pointer" }}>
+        <label
+          className="button button-secondary button-small oem-upload-button"
+          style={{ cursor: disabled ? "not-allowed" : "pointer" }}
+        >
           <Upload size={13} aria-hidden="true" />
-          {uploading ? "Uploading…" : "Upload OEM PDF"}
+          {uploading ? "Uploading…" : "Upload source"}
           <input
             type="file"
-            accept="application/pdf"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             style={{ display: "none" }}
             disabled={disabled || uploading}
             onChange={(e) => {
@@ -114,11 +159,12 @@ export function OemDocumentsPanel(props: {
           />
         </label>
       </div>
+      <p className="field-help">PDF or DOCX · datasheets, manuals, certificates, test reports, proposals, quotations, or existing vendor compliance sheets.</p>
 
       {success ? (
         <div className="upload-success-banner">
           <Check size={14} aria-hidden="true" />
-          Uploaded {success.filename} as OEM source v{success.version_number}.
+          Uploaded {success.filename} as OEM source v{success.version_number}. Processing will update automatically.
         </div>
       ) : null}
       {error ? (
@@ -133,14 +179,15 @@ export function OemDocumentsPanel(props: {
       ) : items.length === 0 ? (
         <div className="empty-state">
           <File size={22} aria-hidden="true" />
-          <strong>No OEM/vendor documents yet.</strong>
-          <p>Upload a datasheet, manual, certificate, test report, or proposal before reviewing evidence.</p>
+          <strong>No OEM/vendor evidence yet.</strong>
+          <p>Add the source material that should support the vendor response.</p>
         </div>
       ) : (
         <table className="doclist-table">
           <thead>
             <tr>
               <th>Source</th>
+              <th>Type</th>
               <th>Vendor / product</th>
               <th>Version</th>
               <th>Size</th>
@@ -151,10 +198,11 @@ export function OemDocumentsPanel(props: {
             {items.map((item) => (
               <tr key={`${item.document_id}-${item.version_number}`}>
                 <td><File size={13} aria-hidden="true" /> {item.display_name}</td>
+                <td>{statusLabel(item.document_type)}</td>
                 <td>{[item.vendor_name, item.product_name].filter(Boolean).join(" · ") || "—"}</td>
                 <td>v{item.version_number}</td>
                 <td>{formatBytes(item.size_bytes)}</td>
-                <td>{item.processing_status}</td>
+                <td><span className="status-pill status-neutral">{statusLabel(item.processing_status)}</span></td>
               </tr>
             ))}
           </tbody>

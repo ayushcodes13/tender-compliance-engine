@@ -2084,3 +2084,127 @@ button {
 .topnav-tab.button-primary {
   border-bottom-color: var(--accent, #3b82f6);
 }
+
+
+/* ---- Production workflow polish ---- */
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: -8px 0 24px;
+}
+
+.workflow-step {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.workflow-step:hover {
+  border-color: #cdd9f7;
+  background: #fbfcff;
+}
+
+.workflow-step > span {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workflow-step strong,
+.workflow-step small {
+  display: block;
+}
+
+.workflow-step strong {
+  color: var(--primary);
+  font-size: 12px;
+}
+
+.workflow-step small {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.workflow-step-active {
+  border-color: #c8d7fb;
+  background: #f5f8ff;
+}
+
+.workflow-step-active > span {
+  background: var(--brand);
+  color: white;
+}
+
+.workflow-step-disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.oem-upload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.2fr auto;
+  gap: 10px;
+  align-items: end;
+  margin: 14px 0 6px;
+}
+
+.oem-upload-grid label {
+  min-width: 0;
+}
+
+.oem-upload-grid input,
+.oem-upload-grid select {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.oem-upload-button {
+  min-height: 36px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.product-error {
+  max-width: 560px;
+  padding: 48px 0;
+}
+
+.product-error h1 {
+  margin: 8px 0 10px;
+  color: var(--primary);
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+.product-error > p:not(.eyebrow) {
+  max-width: 480px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+@media (max-width: 900px) {
+  .workflow-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .oem-upload-grid {
+    grid-template-columns: 1fr;
+  }
+}

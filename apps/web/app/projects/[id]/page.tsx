@@ -123,6 +123,21 @@ export default function ProjectPage() {
   }
 
   const isArchived = project?.status === "archived";
+  const hasDocuments = documents.length > 0;
+  const hasProcessingDocuments = documents.some((doc) =>
+    ["uploaded", "queued", "processing"].includes(doc.processing_status)
+  );
+
+  useEffect(() => {
+    if (!hasProcessingDocuments) return;
+    const timer = window.setInterval(() => {
+      void loadDocuments();
+      void loadProject();
+    }, 2500);
+    return () => window.clearInterval(timer);
+    // Poll only while a document is actively moving through the worker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasProcessingDocuments, projectId]);
 
   async function handleRename() {
     if (!project || !draftName.trim() || saving) return;
@@ -305,26 +320,22 @@ export default function ProjectPage() {
               {actionLoading === "archive" ? "Archiving…" : "Archive"}
             </button>
           )}
-          <Link
-            href={`/projects/${project.id}/review`}
-            className="icon-button"
-            aria-label="Open review workspace"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2 12s9-7 20-0v0" />
-              <path d="M2 12v0" />
-            </svg>
-          </Link>
+          {hasDocuments ? (
+            <>
+              <Link
+                href={`/projects/${project.id}/review`}
+                className="button button-secondary button-small"
+              >
+                Review requirements
+              </Link>
+              <Link
+                href={`/projects/${project.id}/matrix`}
+                className="button button-primary button-small"
+              >
+                Compliance matrix
+              </Link>
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -339,6 +350,35 @@ export default function ProjectPage() {
               </p>
             </div>
           </section>
+
+          <nav className="workflow-steps" aria-label="Tender compliance workflow">
+            <Link href={`/projects/${project.id}`} className="workflow-step workflow-step-active">
+              <span>1</span>
+              <div><strong>Sources</strong><small>Tender + OEM files</small></div>
+            </Link>
+            {hasDocuments ? (
+              <Link href={`/projects/${project.id}/review`} className="workflow-step">
+                <span>2</span>
+                <div><strong>Review</strong><small>Requirements + evidence</small></div>
+              </Link>
+            ) : (
+              <div className="workflow-step workflow-step-disabled">
+                <span>2</span>
+                <div><strong>Review</strong><small>Upload tender first</small></div>
+              </div>
+            )}
+            {hasDocuments ? (
+              <Link href={`/projects/${project.id}/matrix`} className="workflow-step">
+                <span>3</span>
+                <div><strong>Compliance</strong><small>Matrix + exports</small></div>
+              </Link>
+            ) : (
+              <div className="workflow-step workflow-step-disabled">
+                <span>3</span>
+                <div><strong>Compliance</strong><small>After review</small></div>
+              </div>
+            )}
+          </nav>
 
           {/* ----- Project details panel ----- */}
           <div className="detail-panel">
@@ -480,7 +520,7 @@ export default function ProjectPage() {
                     <strong>Drop to upload</strong>
                   ) : (
                     <>
-                      <strong>Drag & drop a PDF here</strong>
+                      <strong>Drag & drop a PDF or DOCX here</strong>
                       <span
                         style={{
                           fontSize: 12,
@@ -494,11 +534,11 @@ export default function ProjectPage() {
                 </div>
                 <input
                   type="file"
-                  accept="application/pdf"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={handleFileChange}
                   disabled={uploading || isArchived}
                   className="upload-input"
-                  aria-label="Choose PDF file"
+                  aria-label="Choose PDF or DOCX file"
                 />
               </div>
             </div>

@@ -289,7 +289,7 @@ export function TenderReviewWorkspace(props: {
       <div className="project-workspace">
         <header className="project-topbar">
           <div className="project-breadcrumbs">
-            <Link href="/" className="breadcrumb-back" aria-label="Back to projects">
+            <Link href={`/projects/${projectId}`} className="breadcrumb-back" aria-label="Back to project">
               <ArrowLeft size={15} aria-hidden="true" />
             </Link>
             <span className="breadcrumb-muted">Projects</span>
@@ -370,9 +370,9 @@ export function TenderReviewWorkspace(props: {
             <Check size={13} aria-hidden="true" />
             Live data
           </span>
-          <button className="icon-button" type="button" aria-label="Project options">
-            <MoreHorizontal size={17} aria-hidden="true" />
-          </button>
+          <Link href={`/projects/${projectId}/matrix`} className="button button-primary button-small">
+            Open matrix
+          </Link>
         </div>
       </header>
 
@@ -381,13 +381,24 @@ export function TenderReviewWorkspace(props: {
           Requirements
           <span>{reqList.total}</span>
         </button>
-        <button className="project-tab" role="tab" aria-selected="false" type="button" disabled>
-          Documents
-          <span>1</span>
-        </button>
-        <button className="project-tab" role="tab" aria-selected="false" type="button" disabled>
+        <Link
+          href={`/projects/${projectId}`}
+          className="project-tab"
+          role="tab"
+          aria-selected="false"
+        >
+          Sources
+          <span>↗</span>
+        </Link>
+        <Link
+          href={`/projects/${projectId}/matrix`}
+          className="project-tab"
+          role="tab"
+          aria-selected="false"
+        >
           Matrix
-        </button>
+          <span>↗</span>
+        </Link>
 
         <div className="review-navigator" aria-label="Review queue navigation">
           <span className="review-navigator-label">
@@ -605,7 +616,9 @@ export function TenderReviewWorkspace(props: {
               </div>
 
               <div className="source-reference">
-                <span className="pdf-glyph">PDF</span>
+                <span className="pdf-glyph">
+                  {document?.mime_type.includes("wordprocessing") ? "DOCX" : "PDF"}
+                </span>
                 <div>
                   <strong>{document?.display_name ?? "Technical Tender"}</strong>
                   <p>
