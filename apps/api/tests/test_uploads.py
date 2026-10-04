@@ -540,7 +540,8 @@ class _UnavailableScanner(FakeScanner):
 def test_scanner_outage_rejects_tender_upload(session_cm) -> None:
     """A scanner outage is retryable and never accepts an unscanned tender."""
     headers, project_id = _build_auth_headers(session_cm)
-    original = app.dependency_overrides[get_scanner]
+    had_override = get_scanner in app.dependency_overrides
+    original = app.dependency_overrides.get(get_scanner)
     app.dependency_overrides[get_scanner] = lambda: _UnavailableScanner()
     try:
         response = client.post(
@@ -562,4 +563,7 @@ def test_scanner_outage_rejects_tender_upload(session_cm) -> None:
 
         asyncio.run(_verify())
     finally:
-        app.dependency_overrides[get_scanner] = original
+        if had_override and original is not None:
+            app.dependency_overrides[get_scanner] = original
+        else:
+            app.dependency_overrides.pop(get_scanner, None)
