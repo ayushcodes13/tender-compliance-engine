@@ -189,6 +189,37 @@ class TestOemUpload:
 
         asyncio.run(_verify())
 
+    def test_vendor_compliance_sheet_is_first_class_source(self, session_cm) -> None:
+        """Existing vendor compliance sheets remain evidence, but are classified explicitly."""
+        headers, project_id = _build_auth_headers(session_cm)
+        pdf_data = _make_valid_pdf()
+
+        resp = client.post(
+            f"/projects/{project_id}/oem-documents/upload",
+            files={"file": ("vendor-compliance.pdf", pdf_data, "application/pdf")},
+            data={
+                "document_type": "compliance_sheet",
+                "vendor_name": "Acme Corp",
+                "product_name": "Model X",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+
+        async def _verify() -> None:
+            async with session_cm() as session:
+                doc = (
+                    await session.execute(
+                        select(OemDocument).where(
+                            OemDocument.project_id == project_id,
+                            OemDocument.display_name == "vendor-compliance.pdf",
+                        )
+                    )
+                ).scalar_one()
+                assert doc.document_type == OemDocumentType.COMPLIANCE_SHEET
+
+        asyncio.run(_verify())
+
     def test_version_sequencing(self, session_cm) -> None:
         """Uploading the same filename twice creates v1 and v2."""
         headers, project_id = _build_auth_headers(session_cm)

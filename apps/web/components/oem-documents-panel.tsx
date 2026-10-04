@@ -13,7 +13,8 @@ const DOCUMENT_TYPES = [
   ["test_report", "Test report"],
   ["quotation", "Quotation"],
   ["proposal", "Proposal"],
-  ["other", "Other / compliance sheet"],
+  ["compliance_sheet", "Vendor compliance sheet"],
+  ["other", "Other"],
 ] as const;
 
 function formatBytes(bytes: number): string {
@@ -159,7 +160,7 @@ export function OemDocumentsPanel(props: {
           />
         </label>
       </div>
-      <p className="field-help">PDF or DOCX · datasheets, manuals, certificates, test reports, proposals, quotations, or existing vendor compliance sheets.</p>
+      <p className="field-help">PDF or DOCX · datasheets, manuals, certificates, test reports, proposals, quotations, or vendor compliance sheets.</p>
 
       {success ? (
         <div className="upload-success-banner">

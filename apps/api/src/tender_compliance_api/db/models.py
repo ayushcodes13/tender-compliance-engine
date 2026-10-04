@@ -472,7 +472,7 @@ class OemDocumentType(enum.StrEnum):
     """Logical classification of an OEM/source document.
 
     These are vendor-supplied materials (datasheets, brochures, manuals,
-    certificates, test reports, quotations, proposals) that later serve
+    certificates, test reports, quotations, proposals, compliance sheets) that later serve
     as evidence for compliance assessment.  They are kept strictly separate
     from tender documents (AGENTS.md: "Tender and OEM sources must remain
     distinguishable").
@@ -485,6 +485,7 @@ class OemDocumentType(enum.StrEnum):
     TEST_REPORT = "test_report"
     QUOTATION = "quotation"
     PROPOSAL = "proposal"
+    COMPLIANCE_SHEET = "compliance_sheet"
     OTHER = "other"
 
 
