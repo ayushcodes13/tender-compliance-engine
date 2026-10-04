@@ -169,7 +169,6 @@ export default function ProjectPage() {
   }
 
   const isArchived = project?.status === "archived";
-  const hasDocuments = documents.length > 0;
   const latestDocument = documents.length > 0 ? documents[documents.length - 1] : null;
   const latestDocumentReady = latestDocument
     ? ["parsed", "partial", "ocr_warning"].includes(latestDocument.processing_status)
@@ -723,7 +722,6 @@ export default function ProjectPage() {
                                 <RefreshCw
                                   size={12}
                                   aria-hidden="true"
-                                  className={retryingVersion === retryKey ? "spin" : undefined}
                                 />
                                 {retryingVersion === retryKey ? "Retrying…" : "Retry processing"}
                               </button>
