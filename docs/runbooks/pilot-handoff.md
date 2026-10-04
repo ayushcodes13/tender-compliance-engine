@@ -97,6 +97,18 @@ Expected top-level status:
 
 The endpoint also reports dependency-level readiness.
 
+Production processes also validate configuration **before** serving traffic.
+Outside the bundled Compose stack, production will refuse to start rather than
+silently substituting in-memory adapters when any of these are missing:
+
+- PostgreSQL (`DATABASE_URL`);
+- Redis (`REDIS_URL`);
+- durable local or S3-compatible object storage;
+- `OPENAI_API_KEY`;
+- the currently supported private-pilot `AUTH_MODE=single_workspace`.
+
+The bundled Compose file supplies everything except the OpenAI key.
+
 ## Stop/restart
 
 Stop while keeping data:

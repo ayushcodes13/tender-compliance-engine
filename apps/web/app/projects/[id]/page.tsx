@@ -17,6 +17,7 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { OemDocumentsPanel } from "@/components/oem-documents-panel";
+import { ProjectFlowNav } from "@/components/project-flow-nav";
 import {
   api,
   Project,
@@ -130,6 +131,7 @@ export default function ProjectPage() {
   const [dragOver, setDragOver] = useState(false);
   const [retryingVersion, setRetryingVersion] = useState<string | null>(null);
   const [processingActionError, setProcessingActionError] = useState<string | null>(null);
+  const [oemSourceCount, setOemSourceCount] = useState(0);
 
   useEffect(() => {
     if (!projectId) return;
@@ -281,7 +283,7 @@ export default function ProjectPage() {
         e.target.value = "";
       }
     },
-    [uploading]
+    [project, uploading]
   );
 
   const handleDrop = useCallback(
@@ -289,13 +291,13 @@ export default function ProjectPage() {
       e.preventDefault();
       e.stopPropagation();
       setDragOver(false);
-      if (uploading || !project) return;
+      if (uploading || !project || isArchived) return;
       const file = e.dataTransfer.files?.[0];
       if (file) {
         void handleUpload(file);
       }
     },
-    [uploading]
+    [uploading, project, isArchived]
   );
 
   const handleDragOver = useCallback(
@@ -422,38 +424,12 @@ export default function ProjectPage() {
             </div>
           </section>
 
-          <nav className="workflow-steps" aria-label="Tender compliance workflow">
-            <a href="#tender-sources" className="workflow-step workflow-step-active">
-              <span>1</span>
-              <div><strong>Tender</strong></div>
-            </a>
-            <a href="#vendor-sources" className="workflow-step">
-              <span>2</span>
-              <div><strong>Vendor / OEM</strong></div>
-            </a>
-            {latestDocumentReady ? (
-              <Link href={`/projects/${project.id}/review`} className="workflow-step">
-                <span>3</span>
-                <div><strong>Review</strong></div>
-              </Link>
-            ) : (
-              <div className="workflow-step workflow-step-disabled">
-                <span>3</span>
-                <div><strong>Review</strong></div>
-              </div>
-            )}
-            {latestDocumentReady ? (
-              <Link href={`/projects/${project.id}/matrix`} className="workflow-step">
-                <span>4</span>
-                <div><strong>Compliance sheet</strong></div>
-              </Link>
-            ) : (
-              <div className="workflow-step workflow-step-disabled">
-                <span>4</span>
-                <div><strong>Compliance sheet</strong></div>
-              </div>
-            )}
-          </nav>
+          <ProjectFlowNav
+            projectId={project.id}
+            current={latestDocumentReady ? "vendor" : "tender"}
+            tenderReady={latestDocumentReady}
+            vendorReady={oemSourceCount > 0}
+          />
 
           {/* ----- Project details panel ----- */}
           <div className="detail-panel">
@@ -758,7 +734,19 @@ export default function ProjectPage() {
             </div>
 
             {/* ----- OEM/vendor evidence sources ----- */}
-            <OemDocumentsPanel projectId={project.id} disabled={isArchived} />
+            <OemDocumentsPanel
+              projectId={project.id}
+              disabled={isArchived}
+              onItemsChange={(items) =>
+                setOemSourceCount(
+                  items.filter((item) =>
+                    ["parsed", "partial", "ocr_warning"].includes(
+                      item.processing_status
+                    )
+                  ).length
+                )
+              }
+            />
           </div>
         </div>
       </div>

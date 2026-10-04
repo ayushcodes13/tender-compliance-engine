@@ -47,7 +47,11 @@ from tender_compliance_api.routes.uploads import (
     get_scanner,
     get_storage_adapter,
 )
-from tender_compliance_api.scan.adapter import MalwareScanner, ScanResult
+from tender_compliance_api.scan.adapter import (
+    MalwareScanner,
+    MalwareScannerUnavailableError,
+    ScanResult,
+)
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 from tender_compliance_api.validation.models import ValidationResult
 from tender_compliance_api.validation.service import ValidationService
@@ -191,7 +195,27 @@ async def upload_oem_document(
         )
 
     # --- Scan for malware ---
-    scan_result: ScanResult = await scanner.scan(filename, data)
+    try:
+        scan_result: ScanResult = await scanner.scan(filename, data)
+    except MalwareScannerUnavailableError:
+        audit = AuditService(session)
+        await audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="oem_document.upload_rejected",
+            entity_type="project",
+            entity_id=project_id,
+            project_id=project_id,
+            metadata={
+                "reason": "malware_scanner_unavailable",
+                "filename": filename,
+            },
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Malware scanner unavailable. Upload was not accepted; retry shortly.",
+        ) from None
     if not scan_result.clean:
         audit = AuditService(session)
         await audit.log(

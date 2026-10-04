@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { FinalMatrixView } from "@/components/final-matrix-view";
+import { ProjectFlowNav } from "@/components/project-flow-nav";
 import { api, DocumentItem, Project } from "@/lib/api/client";
 
 export default function ProjectMatrixPage() {
@@ -16,6 +17,7 @@ export default function ProjectMatrixPage() {
   const [document, setDocument] = useState<DocumentItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [vendorReady, setVendorReady] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -24,10 +26,17 @@ export default function ProjectMatrixPage() {
       setLoading(true);
       setError(null);
       try {
-        const proj = await api.fetchProject(projectId);
+        const [proj, docs, oemDocs] = await Promise.all([
+          api.fetchProject(projectId),
+          api.fetchDocuments(projectId),
+          api.fetchOemDocuments(projectId),
+        ]);
         setProject(proj);
-
-        const docs = await api.fetchDocuments(projectId);
+        setVendorReady(
+          oemDocs.some((item) =>
+            ["parsed", "partial", "ocr_warning"].includes(item.processing_status)
+          )
+        );
         // Pick the latest version with a parsed status; fall back to newest.
         const parsed = docs
           .filter((d) => d.processing_status === "parsed")
@@ -130,6 +139,13 @@ export default function ProjectMatrixPage() {
               </p>
             </div>
           </section>
+
+          <ProjectFlowNav
+            projectId={projectId}
+            current="compliance"
+            tenderReady
+            vendorReady={vendorReady}
+          />
 
           <FinalMatrixView
             projectId={projectId}

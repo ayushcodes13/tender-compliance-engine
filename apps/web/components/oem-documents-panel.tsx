@@ -30,8 +30,9 @@ function statusLabel(status: string): string {
 export function OemDocumentsPanel(props: {
   projectId: string;
   disabled?: boolean;
+  onItemsChange?: (items: OemDocumentItem[]) => void;
 }) {
-  const { projectId, disabled = false } = props;
+  const { projectId, disabled = false, onItemsChange } = props;
   const [items, setItems] = useState<OemDocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -45,7 +46,9 @@ export function OemDocumentsPanel(props: {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      setItems(await api.fetchOemDocuments(projectId));
+      const nextItems = await api.fetchOemDocuments(projectId);
+      setItems(nextItems);
+      onItemsChange?.(nextItems);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load OEM documents");
     } finally {

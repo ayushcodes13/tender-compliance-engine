@@ -185,12 +185,11 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
 
   await expect(
     page.getByRole("heading", {
-      name: /From Tender Documents to a Source-Linked Compliance Sheet/,
+      name: "Go from tender documents to a reviewable compliance sheet.",
     })
   ).toBeVisible();
   await expect(page.getByText("PDF / DOCX in · XLSX / DOCX / PDF out")).toBeVisible();
 
-  await page.goto("/dashboard");
   await page.getByRole("button", { name: "Create tender project" }).click();
   await page.getByPlaceholder("Project name").fill("Pilot Tender");
   await page.getByRole("button", { name: "Create", exact: true }).click();
@@ -212,6 +211,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Compliance sheet" }).first()
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Step 2 Vendor \/ OEM/ })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Step 3 Review/ })
   ).toBeVisible();
 
   await page.getByLabel("Document type").selectOption("compliance_sheet");
@@ -235,6 +240,13 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     page.getByRole("heading", { name: "Compliance sheet — Pilot Tender" })
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Final compliance sheet" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Step 4 Compliance sheet/ })
+  ).toHaveAttribute("aria-current", "step");
+  const summary = page.getByLabel("Compliance sheet summary");
+  await expect(summary.getByText("Total requirements")).toBeVisible();
+  await expect(summary.getByText("Compliant", { exact: true })).toBeVisible();
+  await expect(summary.getByText("Needs attention")).toBeVisible();
   await expect(page.getByText("Positioning resolution shall be 1 µm or better.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Export XLSX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export DOCX" })).toBeVisible();

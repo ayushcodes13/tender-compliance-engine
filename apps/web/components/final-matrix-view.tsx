@@ -14,6 +14,19 @@ type ExportFormat = "xlsx" | "docx" | "pdf";
 const statusLabel = (value: string | null) =>
   value ? value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unassessed";
 
+const statusTone = (value: string | null) => {
+  if (value === "compliant") return "status-pill status-reviewed";
+  if (value === "non_compliant") return "status-pill status-error";
+  if (
+    value === "conflict" ||
+    value === "human_review_required" ||
+    value === "not_demonstrated"
+  ) {
+    return "status-pill status-warning";
+  }
+  return "status-pill status-neutral";
+};
+
 export function FinalMatrixView(props: {
   projectId: string;
   documentId: string;
@@ -57,6 +70,22 @@ export function FinalMatrixView(props: {
           row.assessment_status === "human_review_required" ||
           row.assessment_status === "not_demonstrated"
       ),
+    [rows]
+  );
+
+  const summary = useMemo(
+    () => ({
+      compliant: rows.filter(
+        (row) =>
+          row.assessment_is_confirmed && row.assessment_status === "compliant"
+      ).length,
+      nonCompliant: rows.filter(
+        (row) =>
+          row.assessment_is_confirmed &&
+          row.assessment_status === "non_compliant"
+      ).length,
+      confirmed: rows.filter((row) => row.assessment_is_confirmed).length,
+    }),
     [rows]
   );
 
@@ -125,14 +154,49 @@ export function FinalMatrixView(props: {
 
       {error ? <div className="upload-error-banner" role="alert"><AlertCircle size={14} />{error}</div> : null}
 
-      <div className="normalized-card" style={{ marginBottom: 12 }}>
-        <p>
-          <strong>{rows.length}</strong> requirements · <strong>{unresolved.length}</strong> still require attention
-        </p>
-        <p className="field-help">
-          Final export does not mean every row is compliant.
-        </p>
+      <div className="compliance-summary-grid" aria-label="Compliance sheet summary">
+        <div className="compliance-summary-card">
+          <span>Total requirements</span>
+          <strong>{rows.length}</strong>
+          <small>{summary.confirmed} human-confirmed</small>
+        </div>
+        <div className="compliance-summary-card compliance-summary-good">
+          <span>Compliant</span>
+          <strong>{summary.compliant}</strong>
+          <small>Confirmed against evidence</small>
+        </div>
+        <div className="compliance-summary-card compliance-summary-bad">
+          <span>Non-compliant</span>
+          <strong>{summary.nonCompliant}</strong>
+          <small>Confirmed technical gaps</small>
+        </div>
+        <div className="compliance-summary-card compliance-summary-warning">
+          <span>Needs attention</span>
+          <strong>{unresolved.length}</strong>
+          <small>Unconfirmed, missing evidence, or conflict</small>
+        </div>
       </div>
+
+      {unresolved.length > 0 ? (
+        <div className="compliance-attention-banner" role="status">
+          <AlertCircle size={15} aria-hidden="true" />
+          <div>
+            <strong>{unresolved.length} rows still need review.</strong>
+            <span>
+              They remain visible in exports. Generating a file does not mark
+              them compliant.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="compliance-ready-banner" role="status">
+          <CheckCircle size={15} aria-hidden="true" />
+          <div>
+            <strong>Every row has a human-confirmed assessment.</strong>
+            <span>Review the final source links before locking a submission.</span>
+          </div>
+        </div>
+      )}
 
       <div className="matrix-container">
         <table className="matrix-table">
@@ -165,7 +229,9 @@ export function FinalMatrixView(props: {
                   </td>
                   <td>{row.evidence_oem_document ? `${row.evidence_oem_document} · v${row.evidence_oem_version ?? "?"}` : "—"}</td>
                   <td>
-                    <strong>{statusLabel(row.assessment_status)}</strong>
+                    <span className={statusTone(row.assessment_status)}>
+                      {statusLabel(row.assessment_status)}
+                    </span>
                     {row.assessment_reason_text ? <div className="field-help">{row.assessment_reason_text}</div> : null}
                   </td>
                   <td>
@@ -181,7 +247,12 @@ export function FinalMatrixView(props: {
         </table>
       </div>
 
-      <div className="matrix-actions" style={{ flexWrap: "wrap" }}>
+      <div className="export-panel">
+        <div>
+          <strong>Export compliance sheet</strong>
+          <p>Download the current source-linked matrix. Unresolved rows remain visible.</p>
+        </div>
+        <div className="matrix-actions" style={{ flexWrap: "wrap" }}>
         {(["xlsx", "docx", "pdf"] as ExportFormat[]).map((format) => (
           <button
             key={format}
@@ -194,6 +265,7 @@ export function FinalMatrixView(props: {
             {busy === `export-${format}` ? "Generating…" : `Export ${format.toUpperCase()}`}
           </button>
         ))}
+        </div>
       </div>
 
       <div className="detail-panel" style={{ marginTop: 20 }}>

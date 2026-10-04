@@ -51,8 +51,8 @@ No agent framework is required for this workflow. No vector database is required
 
 ## Fastest pilot start
 
-For a private pilot, Docker Compose starts PostgreSQL, Redis, migrations, the
-API, OCR worker, and web app together. Original documents, rendered pages, and
+For a private pilot, Docker Compose starts PostgreSQL, Redis, ClamAV, migrations,
+the API, OCR worker, and web app together. Original documents, rendered pages, and
 exports persist in one shared Docker volume, so there is no separate object-
 storage service to configure. Browser requests stay same-origin through the
 Next.js backend proxy.
@@ -134,12 +134,13 @@ FastAPI API
       ├── local volume    originals / rendered pages / exports (pilot)
       ├── S3 adapter       optional cloud object storage
       ├── Redis worker    document processing jobs
+      ├── ClamAV          upload malware scanning
       ├── Tesseract       OCR
       └── OpenAI adapter  structured language extraction / bounded reasoning
 ```
 
 The private-pilot runtime is one web app, one API, one worker, PostgreSQL,
-Redis, and a shared durable filesystem volume. The same storage abstraction can
+Redis, ClamAV, and a shared durable filesystem volume. The same storage abstraction can
 use S3-compatible object storage for a later cloud deployment. It is not a
 microservice mesh.
 
@@ -224,6 +225,7 @@ CI checks the parts that matter most for this product:
 - frontend TypeScript and production build;
 - API, worker, and web Docker builds;
 - a full bundled Docker Compose startup + same-origin readiness smoke;
+- a real ClamAV clean/infected scan in the bundled production stack;
 - unsafe raw-HTML rendering guard.
 
 The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_REVIEW.md](docs/POST61_RELEASE_REVIEW.md).
