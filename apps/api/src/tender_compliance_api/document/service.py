@@ -25,7 +25,6 @@ from sqlalchemy.orm import selectinload
 
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
-from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import (
     Category,
     ConstraintNormalizationState,
