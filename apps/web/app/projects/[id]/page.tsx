@@ -281,7 +281,7 @@ export default function ProjectPage() {
         e.target.value = "";
       }
     },
-    [uploading]
+    [project, uploading]
   );
 
   const handleDrop = useCallback(
@@ -289,13 +289,13 @@ export default function ProjectPage() {
       e.preventDefault();
       e.stopPropagation();
       setDragOver(false);
-      if (uploading || !project) return;
+      if (uploading || !project || isArchived) return;
       const file = e.dataTransfer.files?.[0];
       if (file) {
         void handleUpload(file);
       }
     },
-    [uploading]
+    [uploading, project, isArchived]
   );
 
   const handleDragOver = useCallback(
