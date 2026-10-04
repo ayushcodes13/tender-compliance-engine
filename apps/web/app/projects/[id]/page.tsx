@@ -37,7 +37,7 @@ function statusLabel(status: Project["status"]): string {
     case "review_in_progress":
       return "In review";
     case "matrix_ready":
-      return "Matrix ready";
+      return "Compliance sheet ready";
     case "exported":
       return "Exported";
     case "archived":
@@ -332,7 +332,7 @@ export default function ProjectPage() {
                 href={`/projects/${project.id}/matrix`}
                 className="button button-primary button-small"
               >
-                Compliance matrix
+                Compliance sheet
               </Link>
             </>
           ) : null}

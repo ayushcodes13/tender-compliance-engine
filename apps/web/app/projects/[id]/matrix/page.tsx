@@ -1,20 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, AlertCircle, RefreshCw } from "lucide-react";
+import { useParams } from "next/navigation";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
-import { MatrixView } from "@/components/matrix-view";
 import { FinalMatrixView } from "@/components/final-matrix-view";
 import { api, DocumentItem, Project } from "@/lib/api/client";
 
 export default function ProjectMatrixPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const router = useRouter();
-
   const [project, setProject] = useState<Project | null>(null);
   const [document, setDocument] = useState<DocumentItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +75,7 @@ export default function ProjectMatrixPage() {
           <div className="empty-list" style={{ marginTop: "24px" }}>
             <AlertCircle size={18} aria-hidden="true" />
             <strong>
-              {error ?? "No document available for matrix"}
+              {error ?? "No tender available for compliance sheet"}
             </strong>
             {error ? <span>{error}</span> : null}
             <Link href={`/projects/${projectId}`}>
@@ -127,18 +124,12 @@ export default function ProjectMatrixPage() {
             <div>
               <h1>Compliance sheet — {project.name}</h1>
               <p className="page-description">
-                Review the source-linked final matrix, resolve any remaining
+                Review the source-linked compliance sheet, resolve any remaining
                 unresolved rows, and export XLSX, DOCX, or PDF. Tender source:
                 {" "}v{document.version_number} · {document.display_name}
               </p>
             </div>
           </section>
-
-          <MatrixView
-            projectId={projectId}
-            documentId={document.document_id}
-            version={document.version_number}
-          />
 
           <FinalMatrixView
             projectId={projectId}
