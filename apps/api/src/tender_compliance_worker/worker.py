@@ -162,8 +162,9 @@ def create_worker(
 ) -> Worker:
     """Create a :class:`Worker` with production defaults.
 
-    Uses :class:`RedisQueueAdapter` when ``REDIS_URL`` is configured;
-    otherwise falls back to :class:`FakeQueueAdapter`.  Defaults:
+    Production validates its durable database, Redis queue, object storage,
+    model credential, and pilot auth mode before constructing the worker.
+    Development may still fall back to :class:`FakeQueueAdapter`.  Defaults:
     :class:`CompositeParserAdapter` dispatching to
     :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
     (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
@@ -172,6 +173,7 @@ def create_worker(
     :class:`FakeLlmAdapter` for tests.
     """
     settings = get_settings()
+    settings.validate_runtime_configuration()
     if queue is None:
         if settings.redis_url:
             queue = RedisQueueAdapter(settings.redis_url)

@@ -33,6 +33,7 @@ logger = get_logger("main")
 async def lifespan(app: FastAPI) -> Any:
     """Initialize durable dependencies and dispose them on shutdown."""
     settings = get_settings()
+    settings.validate_runtime_configuration()
     if settings.database_url:
         init_engine(settings.database_url)
 
