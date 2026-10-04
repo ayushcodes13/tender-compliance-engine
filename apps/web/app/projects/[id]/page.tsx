@@ -346,36 +346,42 @@ export default function ProjectPage() {
               <p className="eyebrow">Project</p>
               <h1 className="display-heading">{project.name}</h1>
               <p className="page-description">
-                Workflow status: {statusLabel(project.status)}.
+                Add the tender and vendor/OEM sources, review the evidence-backed
+                decisions, then export the final compliance sheet. Current status:
+                {" "}{statusLabel(project.status)}.
               </p>
             </div>
           </section>
 
           <nav className="workflow-steps" aria-label="Tender compliance workflow">
-            <Link href={`/projects/${project.id}`} className="workflow-step workflow-step-active">
+            <a href="#tender-sources" className="workflow-step workflow-step-active">
               <span>1</span>
-              <div><strong>Sources</strong><small>Tender + OEM files</small></div>
-            </Link>
+              <div><strong>Tender</strong><small>What must be met</small></div>
+            </a>
+            <a href="#vendor-sources" className="workflow-step">
+              <span>2</span>
+              <div><strong>Vendor / OEM</strong><small>Evidence + compliance sheet</small></div>
+            </a>
             {hasDocuments ? (
               <Link href={`/projects/${project.id}/review`} className="workflow-step">
-                <span>2</span>
+                <span>3</span>
                 <div><strong>Review</strong><small>Requirements + evidence</small></div>
               </Link>
             ) : (
               <div className="workflow-step workflow-step-disabled">
-                <span>2</span>
+                <span>3</span>
                 <div><strong>Review</strong><small>Upload tender first</small></div>
               </div>
             )}
             {hasDocuments ? (
               <Link href={`/projects/${project.id}/matrix`} className="workflow-step">
-                <span>3</span>
-                <div><strong>Compliance</strong><small>Matrix + exports</small></div>
+                <span>4</span>
+                <div><strong>Compliance sheet</strong><small>Review + export</small></div>
               </Link>
             ) : (
               <div className="workflow-step workflow-step-disabled">
-                <span>3</span>
-                <div><strong>Compliance</strong><small>After review</small></div>
+                <span>4</span>
+                <div><strong>Compliance sheet</strong><small>After review</small></div>
               </div>
             )}
           </nav>
@@ -480,8 +486,17 @@ export default function ProjectPage() {
             </div>
 
             {/* ----- Upload section ----- */}
-            <div className="upload-section">
-              <h2 className="detail-section-title">Upload documents</h2>
+            <div className="upload-section source-section-anchor" id="tender-sources">
+              <div className="source-section-heading">
+                <div>
+                  <p className="eyebrow">Step 1 · Tender</p>
+                  <h2 className="detail-section-title">Tender documents</h2>
+                  <p className="field-help">
+                    Upload the tender, RFQ, or technical specification that defines
+                    what the proposed product must meet.
+                  </p>
+                </div>
+              </div>
 
               {uploadSuccess && (
                 <div className="upload-success-banner">
@@ -520,7 +535,7 @@ export default function ProjectPage() {
                     <strong>Drop to upload</strong>
                   ) : (
                     <>
-                      <strong>Drag & drop a PDF or DOCX here</strong>
+                      <strong>Drag & drop the tender PDF or DOCX here</strong>
                       <span
                         style={{
                           fontSize: 12,
@@ -546,7 +561,7 @@ export default function ProjectPage() {
             {/* ----- Document list ----- */}
             <div className="doclist-section">
               <div className="section-title-row">
-                <h2>Documents</h2>
+                <h2>Tender source versions</h2>
                 <p>
                   {documents.length === 1
                     ? "1 document version"
