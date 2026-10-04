@@ -13,6 +13,8 @@ def _production_settings(**overrides: str) -> Settings:
         "redis_url": "redis://redis:6379/0",
         "object_storage_local_path": "/app/object-storage",
         "openai_api_key": "test-key-not-real",
+        "malware_scanner_mode": "clamav",
+        "clamav_host": "clamav",
     }
     values.update(overrides)
     return Settings(**values)
@@ -71,3 +73,17 @@ def test_s3_endpoint_satisfies_durable_storage_requirement() -> None:
     )
 
     settings.validate_runtime_configuration()
+
+
+def test_production_requires_real_malware_scanner() -> None:
+    settings = _production_settings(malware_scanner_mode="fake")
+
+    with pytest.raises(RuntimeConfigurationError, match="MALWARE_SCANNER_MODE=clamav"):
+        settings.validate_runtime_configuration()
+
+
+def test_production_requires_clamav_host() -> None:
+    settings = _production_settings(clamav_host="")
+
+    with pytest.raises(RuntimeConfigurationError, match="CLAMAV_HOST is required"):
+        settings.validate_runtime_configuration()

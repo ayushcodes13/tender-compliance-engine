@@ -204,6 +204,7 @@ jobs:
 
           data = json.loads(Path("/tmp/tce-ready.json").read_text())
           assert data["status"] == "ready", data
+          assert data["components"]["malware_scanner"] == "ready", data
           PY
               then
                 ready=1
@@ -223,6 +224,30 @@ jobs:
           curl --fail --silent --show-error http://localhost:3000/ >/dev/null
           cat /tmp/tce-ready.json
           docker compose ps
+      - name: Verify real malware scanner
+        run: |
+          set -euo pipefail
+          docker compose exec -T api python - <<'PY'
+          import asyncio
+
+          from tender_compliance_api.routes.uploads import get_scanner
+
+          EICAR = (
+              b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-"
+              b"ANTIVIRUS-TEST-FILE!$H+H*"
+          )
+
+          async def main() -> None:
+              scanner = get_scanner()
+              assert await scanner.ready()
+              clean = await scanner.scan("clean.txt", b"tender compliance smoke")
+              assert clean.clean is True
+              infected = await scanner.scan("eicar.com", EICAR)
+              assert infected.clean is False
+              assert infected.threat_name
+
+          asyncio.run(main())
+          PY
       - name: Verify browser security headers
         run: |
           set -euo pipefail

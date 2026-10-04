@@ -11,6 +11,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
+class MalwareScannerUnavailableError(RuntimeError):
+    """Raised when an upload cannot be scanned safely.
+
+    Upload callers must fail closed on this error. A scanner outage is not
+    permission to accept an unscanned tender or OEM document.
+    """
+
+
 @dataclass(frozen=True)
 class ScanResult:
     """Outcome of scanning a file for malware.
@@ -32,7 +40,11 @@ class MalwareScanner(ABC):
     """
 
     @abstractmethod
+    async def ready(self) -> bool:
+        """Return whether the scanner can accept work right now."""
+
+    @abstractmethod
     async def scan(
         self, filename: str, data: bytes
     ) -> ScanResult:
-        """Scan ``data`` for malware and return a :class:`ScanResult`."""
+        """Scan data for malware and return a ScanResult."""

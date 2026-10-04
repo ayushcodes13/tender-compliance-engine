@@ -25,3 +25,4 @@ def test_ready_reports_components() -> None:
     assert payload["components"]["database"] == "ready"
     assert payload["components"]["queue"] == "ready"
     assert payload["components"]["object_storage"] == "ready"
+    assert payload["components"]["malware_scanner"] == "ready"
