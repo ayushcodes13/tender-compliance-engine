@@ -167,6 +167,16 @@ jobs:
       OPENAI_API_KEY: ci-placeholder-not-a-real-key
     steps:
       - uses: actions/checkout@v4
+      - name: Verify one-key Compose contract
+        run: |
+          set -euo pipefail
+          if OPENAI_API_KEY= docker compose config >/tmp/compose-empty.out 2>/tmp/compose-empty.err; then
+            echo "Compose unexpectedly accepted an empty OPENAI_API_KEY."
+            cat /tmp/compose-empty.out
+            exit 1
+          fi
+          grep -q "OPENAI_API_KEY" /tmp/compose-empty.err
+          docker compose config >/dev/null
       - name: Start complete bundled product
         run: docker compose up -d --build
       - name: Wait for web and same-origin readiness
