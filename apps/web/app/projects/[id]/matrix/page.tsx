@@ -125,8 +125,7 @@ export default function ProjectMatrixPage() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-              <p className="eyebrow">Matrix</p>
-              <h1 className="display-heading">
+              <h1>
                 Compliance Matrix — {project.name}
               </h1>
               <p className="page-description">

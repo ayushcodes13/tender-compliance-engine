@@ -183,8 +183,7 @@ export default function Home() {
           {/* ----- Heading ----- */}
           <section className="page-heading">
             <div>
-              <p className="eyebrow">Workspace</p>
-              <h1 className="display-heading">Tender projects</h1>
+              <h1>Projects</h1>
               <p className="page-description">
                 Upload a tender, verify its requirements, attach OEM evidence,
                 review compliance, and export the final submission.
@@ -192,41 +191,16 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ----- Summary strip (real data where available) ----- */}
-          <section className="summary-strip" aria-label="Project summary">
-            <div className="summary-item">
-              <span className="summary-value">{activeProjects.length}</span>
-              <span className="summary-label">Active tenders</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-value">{inReviewProjects.length}</span>
-              <span className="summary-label">In review</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-value">{readyProjects.length}</span>
-              <span className="summary-label">Matrix ready</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-value">{archivedProjects.length}</span>
-              <span className="summary-label">Archived</span>
-            </div>
-          </section>
-
-          {/* ----- Section title ----- */}
-          <div className="section-title-row">
-            <div>
-              <h2>Recent projects</h2>
-              <p>
-                {loading
-                  ? "Loading…"
-                  : error
-                    ? "Error"
-                    : projects.length === 0
-                      ? "No projects yet"
-                      : `${projects.length} total`}
-              </p>
-            </div>
-          </div>
+          {/* ----- Summary line ----- */}
+          <p className="summary-inline">
+            {loading
+              ? "Loading…"
+              : error
+                ? "Error"
+                : projects.length === 0
+                  ? "No projects yet"
+                  : `${projects.length} total project${projects.length === 1 ? "" : "s"}`}
+          </p>
 
           {/* ----- Loading ----- */}
           {loading && (

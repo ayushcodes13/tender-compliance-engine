@@ -18,7 +18,6 @@ export default function ErrorPage({
         <div className="page-container">
           <div className="product-error">
             <AlertTriangle size={30} aria-hidden="true" />
-            <p className="eyebrow">Something went wrong</p>
             <h1>We could not load this workspace.</h1>
             <p>{error.message || "The request failed unexpectedly."}</p>
             <div className="inline-actions">

@@ -116,7 +116,7 @@ export function FinalMatrixView(props: {
       <div className="section-title-row">
         <div>
           <h2>Final compliance matrix</h2>
-          <p>Evidence-backed status plus unresolved review state. Nothing unresolved is hidden.</p>
+          <p>Evidence-backed status plus unresolved review state.</p>
         </div>
         <button className="button button-secondary button-small" type="button" onClick={() => void reload()}>
           <RefreshCw size={12} aria-hidden="true" /> Refresh
@@ -130,7 +130,7 @@ export function FinalMatrixView(props: {
           <strong>{rows.length}</strong> requirements · <strong>{unresolved.length}</strong> still require attention
         </p>
         <p className="field-help">
-          Final export does not mean every row is compliant. Not demonstrated, conflicts, and human-review-required rows remain explicit.
+          Final export does not mean every row is compliant.
         </p>
       </div>
 

@@ -366,10 +366,6 @@ export function TenderReviewWorkspace(props: {
         </div>
 
         <div className="project-topbar-actions">
-          <span className="saved-state">
-            <Check size={13} aria-hidden="true" />
-            Live data
-          </span>
           <Link href={`/projects/${projectId}/matrix`} className="button button-primary button-small">
             Open matrix
           </Link>
@@ -437,7 +433,7 @@ export function TenderReviewWorkspace(props: {
           <div className="pane-heading">
             <div>
               <h1>Requirements</h1>
-              <p>{reqList.total} extracted · source linked</p>
+              <p>{reqList.total} extracted</p>
             </div>
             <button className="icon-button" type="button" aria-label="Requirement filters">
               <SlidersHorizontal size={16} aria-hidden="true" />
@@ -580,10 +576,7 @@ export function TenderReviewWorkspace(props: {
         {/* Right pane: evidence and review */}
         <aside className="evidence-pane" aria-label="Requirement evidence and review">
           <div className="evidence-header">
-            <div>
-              <p className="eyebrow">Review</p>
-              <h2>Requirement evidence</h2>
-            </div>
+            <h2>Requirement evidence</h2>
             <span className={statusClass(selectedStatus)}>
               {statusLabel(selectedStatus)}
             </span>

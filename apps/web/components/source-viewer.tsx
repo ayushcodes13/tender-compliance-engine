@@ -185,10 +185,7 @@ export function SourceViewer({
           </div>
           <div className="source-toolbar-controls">
             {page.ocr_needed && (
-              <span
-                className="precision-pill"
-                style={{ background: "#fef3c7", color: "#92400e" }}
-              >
+              <span className="precision-pill status-warning">
                 OCR text only
               </span>
             )}
