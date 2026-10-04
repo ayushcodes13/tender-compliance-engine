@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
   FileCheck2,
   FilePlus2,
   FileText,
