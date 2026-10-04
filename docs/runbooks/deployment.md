@@ -29,6 +29,7 @@ persist in the named `object_data` volume shared by API and worker.
 ```bash
 cp .env.example .env
 # set OPENAI_API_KEY in .env
+docker compose config   # fails immediately if the key is still empty
 docker compose up --build
 ```
 
@@ -40,8 +41,8 @@ Readiness through the same path used by the browser:
 curl -fsS http://localhost:3000/api/backend/ready
 ```
 
-The API and MinIO admin endpoints bind to localhost in this mode; they are not
-intended as public interfaces.
+The API binds to localhost in this mode; the browser uses the same-origin
+Next.js proxy and the shared document volume is internal to the Docker stack.
 
 ### 2. Public multi-customer SaaS
 
