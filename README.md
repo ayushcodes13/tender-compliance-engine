@@ -58,14 +58,15 @@ storage service to configure. Browser requests stay same-origin through the
 Next.js backend proxy.
 
 ```bash
-cp .env.example .env
-# Put your real key in .env:
-OPENAI_API_KEY=...
-docker compose config   # validates the one required external secret
-docker compose up --build
+OPENAI_API_KEY=sk-... make pilot-start
 ```
 
-Then open **http://localhost:3000**.
+That one command validates the runtime configuration, builds and starts the
+complete stack, waits for the browser-facing readiness endpoint, and prints the
+product URL. It never writes or prints the API key.
+
+If you prefer a local environment file, copy `.env.example` to `.env`, set
+`OPENAI_API_KEY`, and run `make pilot-start`.
 
 For this bundled single-workspace pilot, the OpenAI key is the only external
 secret you must provide. Public multi-customer SaaS should later replace the
@@ -201,11 +202,11 @@ For the bundled private-beta deployment, the backend bootstraps one owner/worksp
 The bundled stack needs one external AI credential:
 
 ```bash
-cp .env.example .env
-# edit .env and set:
-OPENAI_API_KEY=...
-docker compose up --build
+OPENAI_API_KEY=sk-... make pilot-start
 ```
+
+A local `.env` file is optional; use one only if you prefer not to pass the
+key through the shell environment.
 
 Migrations run before the API starts, the shared document volume is verified on
 startup, and the same OpenAI configuration is supplied to the processing
