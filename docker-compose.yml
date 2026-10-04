@@ -27,7 +27,7 @@ services:
       retries: 10
 
   minio:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-05-24T17-08-30Z}
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z}
     command: server /data --console-address ":9001"
     restart: unless-stopped
     environment:
