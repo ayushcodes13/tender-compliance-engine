@@ -89,7 +89,7 @@ from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
-from tender_compliance_api.storage.fake import FakeStorageAdapter
+from tender_compliance_api.storage.factory import create_storage_adapter
 from tender_compliance_api.storage.keys import build_key
 
 if TYPE_CHECKING:
@@ -113,17 +113,7 @@ def _resolve_storage() -> ObjectStorageAdapter:
     a plain function so the service layer can call it without depending
     on FastAPI's dependency-injection machinery.
     """
-    settings = get_settings()
-    if not settings.object_storage_endpoint:
-        return FakeStorageAdapter()
-    from tender_compliance_api.storage.s3 import S3StorageAdapter  # noqa: PLC0415
-
-    return S3StorageAdapter(
-        endpoint_url=settings.object_storage_endpoint,
-        access_key=settings.object_storage_access_key,
-        secret_key=settings.object_storage_secret_key,
-        bucket=settings.object_storage_bucket,
-    )
+    return create_storage_adapter()
 
 
 class DocumentNotFoundError(Exception):

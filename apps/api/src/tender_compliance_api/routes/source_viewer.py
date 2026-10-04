@@ -31,12 +31,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
-from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import RequirementSource
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
-from tender_compliance_api.storage.fake import FakeStorageAdapter
+from tender_compliance_api.storage.factory import create_storage_adapter
 
 router = APIRouter(prefix="/projects", tags=["source-viewer"])
 
@@ -44,22 +43,10 @@ router = APIRouter(prefix="/projects", tags=["source-viewer"])
 def get_storage_adapter() -> ObjectStorageAdapter:
     """Return the configured storage adapter (FakeStorageAdapter by default).
 
-    Uses :class:`FakeStorageAdapter` when no endpoint is configured
-    (development / CI).  In production this returns an S3StorageAdapter.
+    Uses the configured durable filesystem/S3 provider, with the in-memory
+    fake reserved for unconfigured development/tests.
     """
-    settings = get_settings()
-    if not settings.object_storage_endpoint:
-        return FakeStorageAdapter()
-    # Imported lazily so tests never need boto3 credentials configured.
-    from tender_compliance_api.storage.s3 import S3StorageAdapter
-
-    return S3StorageAdapter(
-        endpoint_url=settings.object_storage_endpoint,
-        access_key=settings.object_storage_access_key,
-        secret_key=settings.object_storage_secret_key,
-        bucket=settings.object_storage_bucket,
-        region=settings.object_storage_region,
-    )
+    return create_storage_adapter()
 
 
 # ---------------------------------------------------------------------------

@@ -74,7 +74,7 @@ from tender_compliance_api.queue.redis import RedisQueueAdapter
 from tender_compliance_api.scan.adapter import MalwareScanner, ScanResult
 from tender_compliance_api.scan.fake import FakeScanner
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
-from tender_compliance_api.storage.fake import FakeStorageAdapter
+from tender_compliance_api.storage.factory import create_storage_adapter
 from tender_compliance_api.storage.keys import build_key
 from tender_compliance_api.validation.models import ValidationResult
 from tender_compliance_api.validation.service import ValidationService
@@ -90,24 +90,10 @@ router = APIRouter(prefix="/projects", tags=["uploads"])
 def get_storage_adapter() -> ObjectStorageAdapter:
     """Return an ObjectStorageAdapter based on configuration.
 
-    Uses :class:`FakeStorageAdapter` when no endpoint is configured
-    (development / CI).  In production this returns an
-    :class:`S3StorageAdapter`.
+    Production pilots may use durable local filesystem storage; cloud
+    deployments may use S3. Development/tests fall back to the in-memory fake.
     """
-    settings = get_settings()
-    if not settings.object_storage_endpoint:
-        return FakeStorageAdapter()
-    # Imported lazily so tests never need boto3 credentials configured.
-    from tender_compliance_api.storage.s3 import S3StorageAdapter
-
-    adapter = S3StorageAdapter(
-        endpoint_url=settings.object_storage_endpoint,
-        access_key=settings.object_storage_access_key,
-        secret_key=settings.object_storage_secret_key,
-        bucket=settings.object_storage_bucket,
-        region=settings.object_storage_region,
-    )
-    return adapter
+    return create_storage_adapter()
 
 
 def get_scanner() -> MalwareScanner:

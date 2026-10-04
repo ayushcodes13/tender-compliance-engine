@@ -761,23 +761,10 @@ def _default_parser() -> ParserAdapter:
 
 
 def _default_storage() -> ObjectStorageAdapter:
-    """Return the default production storage adapter (S3 or fake)."""
-    from tender_compliance_api.config import get_settings
+    """Return the configured durable storage adapter."""
+    from tender_compliance_api.storage.factory import create_storage_adapter
 
-    s = get_settings()
-    if not s.object_storage_endpoint:
-        from tender_compliance_api.storage.fake import FakeStorageAdapter
-
-        return FakeStorageAdapter()
-    from tender_compliance_api.storage.s3 import S3StorageAdapter
-
-    return S3StorageAdapter(
-        endpoint_url=s.object_storage_endpoint,
-        access_key=s.object_storage_access_key,
-        secret_key=s.object_storage_secret_key,
-        bucket=s.object_storage_bucket,
-        region=s.object_storage_region,
-    )
+    return create_storage_adapter()
 
 
 async def record_failure(

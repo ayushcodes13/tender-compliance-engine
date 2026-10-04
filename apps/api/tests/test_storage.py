@@ -12,6 +12,7 @@ import uuid
 from tender_compliance_api.db import StoredObject
 from tender_compliance_api.storage import (
     FakeStorageAdapter,
+    FileSystemStorageAdapter,
     ObjectStorageAdapter,
     build_key,
 )
@@ -206,3 +207,47 @@ def test_stored_object_persist_and_retrieve(session_cm) -> None:
             assert fetched.organization_id == org_id
 
     asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Durable filesystem adapter (private-pilot storage)
+# ---------------------------------------------------------------------------
+
+
+def test_filesystem_round_trip_shared_between_instances(tmp_path) -> None:
+    async def _run() -> None:
+        writer = FileSystemStorageAdapter(tmp_path)
+        reader = FileSystemStorageAdapter(tmp_path)
+        data = b"durable tender bytes"
+        info = await writer.put("org/project/tender.pdf", data, "application/pdf")
+        assert await reader.get(info.key) == data
+        head = await reader.head(info.key)
+        assert head.content_type == "application/pdf"
+        assert head.content_length == len(data)
+        assert head.checksum_sha256 == hashlib.sha256(data).hexdigest()
+
+    asyncio.run(_run())
+
+
+def test_filesystem_ready_and_delete(tmp_path) -> None:
+    async def _run() -> None:
+        adapter = FileSystemStorageAdapter(tmp_path / "objects")
+        await adapter.ready()
+        await adapter.put("a/b.txt", b"x", "text/plain")
+        await adapter.delete("a/b.txt")
+        try:
+            await adapter.get("a/b.txt")
+            raise AssertionError("Expected FileNotFoundError after delete")
+        except FileNotFoundError:
+            pass
+
+    asyncio.run(_run())
+
+
+def test_filesystem_rejects_path_escape(tmp_path) -> None:
+    adapter = FileSystemStorageAdapter(tmp_path)
+    try:
+        asyncio.run(adapter.put("../escape", b"bad", "text/plain"))
+        raise AssertionError("Expected ValueError for path traversal")
+    except ValueError:
+        pass
