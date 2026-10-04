@@ -53,6 +53,7 @@ class ObjectStorageAdapter(ABC):
         The default implementation is a no-op for in-memory/test providers.
         Production providers should perform a lightweight provider-level check.
         """
+        return None
 
     @abstractmethod
     async def put(
