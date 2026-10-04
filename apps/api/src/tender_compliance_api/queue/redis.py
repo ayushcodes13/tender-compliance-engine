@@ -170,5 +170,8 @@ class RedisQueueAdapter(QueueAdapter):
 
     async def close(self) -> None:
         if self._client is not None:
-            await self._client.close()
+            try:
+                await self._client.aclose()
+            except AttributeError:
+                await self._client.close()
             self._client = None
