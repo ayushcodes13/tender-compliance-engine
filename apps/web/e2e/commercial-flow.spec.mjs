@@ -206,8 +206,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   });
 
   await expect(page.getByText("tender.pdf", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Review requirements" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Compliance sheet" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Review requirements" }).first()
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Compliance sheet" }).first()
+  ).toBeVisible();
 
   await page.getByLabel("Document type").selectOption("compliance_sheet");
   await page.getByLabel("Vendor").fill("Acme Instruments");
@@ -221,9 +225,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(
     page.getByText(/Uploaded vendor-compliance\.pdf as OEM source v1/)
   ).toBeVisible();
-  await expect(page.getByText("Vendor compliance sheet")).toBeVisible();
+  await expect(page.getByText("Vendor compliance sheet").first()).toBeVisible();
 
-  await page.getByRole("link", { name: "Compliance sheet" }).click();
+  await page.getByRole("link", { name: "Compliance sheet" }).first().click();
 
   await expect(page).toHaveURL(/\/projects\/project-1\/matrix$/);
   await expect(
