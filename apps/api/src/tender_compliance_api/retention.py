@@ -333,7 +333,8 @@ def main() -> int:
             dry_run=args.dry_run,
         )
     )
-    print(f"Retention cleanup: {result}")
+    logger = get_logger("retention.cli")
+    logger.info("retention_cleanup_completed", extra={"result": result})
     return 0
 
 
