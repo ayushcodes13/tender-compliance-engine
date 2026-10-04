@@ -108,3 +108,10 @@ class QueueAdapter(abc.ABC):
     async def size(self, queue: str) -> int:
         """Return the approximate number of jobs (available + in-flight)."""
         raise NotImplementedError
+
+    async def close(self) -> None:
+        """Release provider resources when the adapter owns any.
+
+        In-memory providers do not need cleanup; network-backed providers may
+        override this method.
+        """

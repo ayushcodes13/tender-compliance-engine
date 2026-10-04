@@ -571,9 +571,22 @@ function devHeaders(): Record<string, string> {
   return headers;
 }
 
+const GENERIC_SERVICE_ERROR =
+  "We couldn't complete that request. Please try again. If it keeps failing, use the reference ID shown here when reporting it.";
+
+async function fetchApi(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${API_URL}${path}`, init);
+  } catch {
+    throw new Error(
+      "Cannot reach the Tender Compliance service. Check that the product stack is running, then retry."
+    );
+  }
+}
+
 /** Low-level wrapper around fetch that attaches the API base URL and dev headers. */
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
+  return fetchApi(path, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -583,17 +596,36 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   });
 }
 
-/** Parse a Response, throwing a descriptive Error on non-2xx. */
+/** Parse a Response, exposing useful validation errors but masking internals. */
 async function expectJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
+    const correlationId = response.headers.get("x-correlation-id");
     let detail: string | undefined;
     try {
       const body = (await response.json()) as { detail?: string };
-      detail = body.detail;
+      detail = typeof body.detail === "string" ? body.detail : undefined;
     } catch {
-      // response body is not JSON — fall back to status text
+      // Non-JSON errors intentionally fall through to status-based copy.
     }
-    throw new Error(detail ?? `HTTP ${response.status}: ${response.statusText}`);
+
+    if (response.status === 400 || response.status === 409 || response.status === 422) {
+      throw new Error(detail ?? "The request could not be accepted. Check the input and try again.");
+    }
+    if (response.status === 401) {
+      throw new Error("Your session is not authorized. Sign in again and retry.");
+    }
+    if (response.status === 403) {
+      throw new Error("You do not have access to this project or action.");
+    }
+    if (response.status === 404) {
+      throw new Error(detail ?? "The requested project or source could not be found.");
+    }
+    if (response.status === 413) {
+      throw new Error("That file is larger than the configured upload limit.");
+    }
+
+    const suffix = correlationId ? ` Reference: ${correlationId}.` : "";
+    throw new Error(`${GENERIC_SERVICE_ERROR}${suffix}`);
   }
   return response.json() as Promise<T>;
 }
@@ -608,7 +640,7 @@ async function apiFetchFile(
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  return fetch(`${API_URL}${path}`, {
+  return fetchApi(path, {
     ...init,
     headers: {
       ...devHeaders(),
