@@ -35,9 +35,11 @@ yarn-error.log*
 .vscode/
 
 # Local data / uploads
+# apps/web/lib/data/ contains typed design data objects — NOT ignored
+/.data/
+apps/api/data/
 .local/
 uploads/
-data/
 *.sqlite3
 test.db
 
