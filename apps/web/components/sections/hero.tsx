@@ -72,7 +72,7 @@ export function HeroSection() {
         </motion.p>
 
         <motion.div
-          className="mt-10 flex flex-col gap-4 sm:flex-row"
+          className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
           variants={item}
         >
           <Link href="/sign-up">
@@ -84,7 +84,7 @@ export function HeroSection() {
               {heroData.primaryCta}
             </motion.button>
           </Link>
-          <Link href="/features">
+          <Link href="/#features">
             <motion.button
               className="rounded-full border border-border bg-transparent px-8 py-3 text-sm font-semibold text-text-primary hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               whileHover={{ scale: 1.03 }}
@@ -94,6 +94,13 @@ export function HeroSection() {
             </motion.button>
           </Link>
         </motion.div>
+
+        <motion.p
+          className="mt-8 text-sm text-text-tertiary"
+          variants={item}
+        >
+          PDF / DOCX in · XLSX / DOCX / PDF out
+        </motion.p>
       </motion.div>
     </section>
   );
