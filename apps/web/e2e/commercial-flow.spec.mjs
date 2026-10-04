@@ -214,8 +214,8 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   ).toBeVisible();
 
   await page.getByLabel("Document type").selectOption("compliance_sheet");
-  await page.getByLabel("Vendor").fill("Acme Instruments");
-  await page.getByLabel("Product / model").fill("Model X");
+  await page.getByRole("textbox", { name: "Vendor", exact: true }).fill("Acme Instruments");
+  await page.getByRole("textbox", { name: "Product / model", exact: true }).fill("Model X");
   await page.locator("#vendor-sources input[type=file]").setInputFiles({
     name: "vendor-compliance.pdf",
     mimeType: "application/pdf",
