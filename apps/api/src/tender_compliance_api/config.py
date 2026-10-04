@@ -3,6 +3,10 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class RuntimeConfigurationError(RuntimeError):
+    """Raised when a production process would start with unsafe fallbacks."""
+
+
 class Settings(BaseSettings):
     """Runtime settings loaded from environment variables."""
 
@@ -59,6 +63,51 @@ class Settings(BaseSettings):
     retention_originals_days: int = 90
     retention_rendered_days: int = 30
     retention_exports_days: int = 30
+
+    @property
+    def is_production(self) -> bool:
+        """Return whether this process is running the production runtime contract."""
+        return self.app_env.strip().lower() == "production"
+
+    def production_configuration_errors(self) -> list[str]:
+        """Return missing/unsafe settings that would make production misleading.
+
+        Development intentionally supports in-memory adapters and header identity
+        for fast tests. Production does not: every user-visible upload must use a
+        durable database, queue, and object store, and extraction must have a
+        configured model credential.
+        """
+        if not self.is_production:
+            return []
+
+        errors: list[str] = []
+        if not self.database_url.strip():
+            errors.append("DATABASE_URL is required")
+        if not self.redis_url.strip():
+            errors.append("REDIS_URL is required")
+        if not (
+            self.object_storage_local_path.strip()
+            or self.object_storage_endpoint.strip()
+        ):
+            errors.append(
+                "durable object storage is required "
+                "(OBJECT_STORAGE_LOCAL_PATH or OBJECT_STORAGE_ENDPOINT)"
+            )
+        if not self.openai_api_key.strip():
+            errors.append("OPENAI_API_KEY is required")
+        if self.auth_mode.strip() != "single_workspace":
+            errors.append(
+                "AUTH_MODE=single_workspace is required for the current private-pilot production mode"
+            )
+        return errors
+
+    def validate_runtime_configuration(self) -> None:
+        """Fail before serving traffic when the production runtime is incomplete."""
+        errors = self.production_configuration_errors()
+        if errors:
+            raise RuntimeConfigurationError(
+                "Production runtime configuration is incomplete: " + "; ".join(errors)
+            )
 
     @property
     def cors_origins(self) -> list[str]:
