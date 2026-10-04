@@ -57,7 +57,7 @@ No agent framework is required for this workflow. No vector database is required
 | 2 | Upload the tender | Immutable source version + processing status |
 | 3 | Review extracted requirements | Source-linked technical requirements |
 | 4 | Correct/split/merge/reorder requirements | Auditable reviewed requirement set |
-| 5 | Upload OEM/vendor material | Searchable source-preserving OEM documents |
+| 5 | Upload OEM/vendor material or an existing vendor compliance sheet | Searchable source-preserving OEM evidence |
 | 6 | Review proposed evidence | Accepted/rejected evidence per requirement |
 | 7 | Run comparison | Deterministic numeric/unit result + bounded qualitative assessment |
 | 8 | Resolve conflicts/gaps | Conflict, clarification, deviation, or review state |
@@ -72,9 +72,9 @@ No agent framework is required for this workflow. No vector database is required
 | Input | Status | Notes |
 | --- | --- | --- |
 | Tender PDF | ✅ Supported | Digital and scanned/mixed PDFs; OCR is applied when required |
-| OEM/vendor PDF | ✅ Supported | Datasheets, manuals, brochures, test reports, certificates, proposals, quotations |
+| OEM/vendor PDF | ✅ Supported | Datasheets, manuals, brochures, test reports, certificates, proposals, quotations, and existing vendor compliance sheets |
 | Tender DOCX | ✅ Supported | Paragraphs and tables are preserved in source order; page numbers are not fabricated because DOCX has no stable physical pagination |
-| OEM/vendor DOCX | ✅ Supported | Uses the same immutable source and evidence pipeline as OEM/vendor PDFs |
+| OEM/vendor DOCX | ✅ Supported | Uses the same immutable source and evidence pipeline as OEM/vendor PDFs, including existing vendor compliance sheets |
 | Images / PPT / arbitrary office files | — Not supported | Convert to PDF before upload for now |
 
 ### Outputs
