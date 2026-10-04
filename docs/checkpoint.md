@@ -2768,7 +2768,7 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 ### Implementation / PR note
 - **Branch:** `cp48/acceptance-gate`
-- **Files:** `apps/api/src/tender_compliance_api/extraction/constraint_parser.py`, `qualitative.py`, `eval_harness.py`, `benchmark.py`, `apps/api/tests/test_constraint_parser.py`, `test_qualitative.py`, `test_constraint_normalization.py`, `test_eval_harness.py`, `test_acceptance_cp48.py`, `.github/workflows/ci.yml`, `docs/runbooks/cp48-release-notes.md`, `checkpoint.md`, `review.md`
+- **Files:** `apps/api/src/tender_compliance_api/extraction/constraint_parser.py`, `qualitative.py`, `eval_harness.py`, `benchmark.py`, `apps/api/tests/test_constraint_parser.py`, `test_qualitative.py`, `test_constraint_normalization.py`, `test_eval_harness.py`, `test_acceptance_cp48.py`, `.github/workflows/ci.yml`, `docs/runbooks/cp48-release-notes.md`, `docs/checkpoint.md`, `docs/review.md`
 - **Parser metrics improvement:** F1 0.24 → 0.81; invented negatives 2 → 0; precision 0.26 → 0.95.
 - **Acceptance test:** `tests/test_acceptance_cp48.py` exercises full Phase 1 loop end-to-end via real TestClient + SQLite.
 
@@ -2843,7 +2843,7 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 2. Show document version/page/location precision/OCR warnings. ✅
 3. Allow accept/reject/add/remove. ✅ (Accept/Reject via curate API; add via
    "Propose & persist"; remove not yet — candidates can be rejected but not
-   deleted. See review.md.)
+   deleted. See docs/review.md.)
 4. Keep retrieval score visually secondary to source content. ✅ (Score shown
    in small muted text; source text in blockquote is primary.)
 5. Audit curation. ✅ (Backend audit in CP50; UI calls curate API with tenant

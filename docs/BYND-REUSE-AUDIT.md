@@ -255,7 +255,7 @@ Updated checkpoints: **CP06, CP07, CP08, CP09, CP10, CP11, CP12, CP13, CP14, CP1
 
 ## How to use this audit while implementing
 
-1. Start from the first unchecked item in `checkpoint.md`.
+1. Start from the first unchecked item in `docs/checkpoint.md`.
 2. If that checkpoint has **Bynd reuse notes**, use the named repositories as design/test references.
 3. Re-verify the referenced implementation before relying on a detail; these repositories evolve.
 4. Implement the behavior fresh inside this repo's own adapters/services unless a concrete, license-compatible code-reuse decision is made.

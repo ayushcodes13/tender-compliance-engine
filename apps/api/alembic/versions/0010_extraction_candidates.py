@@ -50,13 +50,13 @@ def upgrade() -> None:
         sa.Column("clause_number", sa.String(length=64), nullable=True),
         sa.Column("group_hint", sa.String(length=64), nullable=True),
         sa.Column(
-            "ocr_warning", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            "ocr_warning", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
         sa.Column(
-            "is_valid", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            "is_valid", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
         sa.Column(
-            "persistable", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            "persistable", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
         sa.Column("rejection_reason", sa.String(length=1024), nullable=True),
         sa.Column(

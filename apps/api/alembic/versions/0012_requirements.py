@@ -47,7 +47,7 @@ def upgrade() -> None:
         sa.Column("uncertainty", sa.String(length=16), nullable=False),
         sa.Column("clause_number", sa.String(length=64), nullable=True),
         sa.Column(
-            "ocr_warning", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            "ocr_warning", sa.Boolean(), nullable=False, server_default=sa.false()
         ),
         # Phase 1 review state (UNREVIEWED/REVIEWED/NEEDS_CLARIFICATION/
         # OCR_WARNING) — stored as VARCHAR for SQLite compatibility.

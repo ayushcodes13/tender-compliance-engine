@@ -20,7 +20,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -31,9 +30,36 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy import UUID as SaUUID
+from sqlalchemy import Enum as _SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tender_compliance_api.db.base import Base
+
+
+def _enum_values_callable(enum_cls: type[enum.Enum]) -> list[str]:
+    """Return ``Enum`` database values from *enum_cls*.
+
+    SQLAlchemy 2.1.1's ``Enum`` type derives the list of permissible
+    database strings from the member **names** (via ``list(enum.__members__)``)
+    rather than the member **values**.  For ``StrEnum`` classes where
+    ``name != value`` (e.g. ``ProjectStatus.DRAFT`` with ``.value == 'draft'``)
+    this causes PostgreSQL's native ``ENUM`` type — whose DDL is defined in the
+    Alembic migrations using lowercase values — to reject the upper-case names
+    that SQLAlchemy sends on ``INSERT``/``UPDATE``.
+
+    Using ``values_callable`` to return each member's ``.value`` makes the
+    bind-processed payload match both the migration DDL and the
+    ``server_default=MyClass.MEMBER.value`` expressions in the model.
+    """
+    return [member.value for member in enum_cls]
+
+
+class Enum(_SAEnum):
+    """``sqlalchemy.Enum`` that serialises by ``.value`` by default."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("values_callable", _enum_values_callable)
+        super().__init__(*args, **kwargs)
 
 
 class ProjectStatus(enum.StrEnum):

@@ -40,7 +40,6 @@ def upgrade() -> None:
     # (document versions table already created it in 0005).
 
     # --- oem_documents table ---
-    oem_doc_type.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "oem_documents",
@@ -90,7 +89,6 @@ def upgrade() -> None:
         "uploaded", "queued", "processing", "parsed", "partial", "failed",
         name="oem_doc_processing_status",
     )
-    oem_processing_status.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "oem_document_versions",

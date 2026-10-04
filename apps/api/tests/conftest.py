@@ -59,6 +59,33 @@ def _clear_fake_storage():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_test_storage(monkeypatch):
+    """Ensure tests use ``FakeStorageAdapter``, not the real S3/MinIO backend.
+
+    The project ``~/.env`` (used for local hosting) configures
+    ``OBJECT_STORAGE_ENDPOINT`` so the API talks to MinIO.  During tests we
+    must not contact real object storage, so the env-var is overridden to
+    empty strings (which take priority over the ``.env`` file in
+    pydantic-settings) and the ``lru_cache`` on :func:`get_settings` is
+    cleared so the change takes effect for every test.
+
+    See AGENTS.md: uploaded documents are untrusted — tests must not depend
+    on external infrastructure.
+    """
+    # Empty string — env vars take priority over the .env file in
+    # pydantic-settings, so this overrides OBJECT_STORAGE_ENDPOINT=http://localhost:9000
+    monkeypatch.setenv("OBJECT_STORAGE_ENDPOINT", "")
+    monkeypatch.setenv("OBJECT_STORAGE_ACCESS_KEY", "")
+    monkeypatch.setenv("OBJECT_STORAGE_SECRET_KEY", "")
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "")
+
+    from tender_compliance_api.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def session_cm():
     """Return an async context manager yielding a fresh :class:`AsyncSession`.

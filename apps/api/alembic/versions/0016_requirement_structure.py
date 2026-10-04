@@ -48,7 +48,6 @@ def upgrade() -> None:
     )
 
     # Create the relation_type enum type (idempotent).
-    _RELATION_TYPE_ENUM.create(op.get_bind(), checkfirst=True)
 
     # Create requirement_relations table.
     op.create_table(

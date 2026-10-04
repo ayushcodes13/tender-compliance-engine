@@ -169,7 +169,7 @@ def create_worker(
     :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
     (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
     :class:`TesseractOcrAdapter` (CP21).  The LLM extraction default is
-    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``review.md``); inject a
+    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``docs/review.md``); inject a
     :class:`FakeLlmAdapter` for tests.
     """
     settings = get_settings()

@@ -16,7 +16,7 @@ Genuine per-page OCR failures (e.g. a corrupt image that PIL cannot open)
 are returned as an empty :class:`OcrResult` per the adapter contract.
 
 A real ``tesseract`` binary is a production system dependency (not a
-Python package) — see ``review.md``.
+Python package) — see ``docs/review.md``.
 """
 
 from __future__ import annotations

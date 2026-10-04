@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     redis_url: str = ""
 
     # OpenAI extraction/reasoning provider.
+    # The API key is read from the environment; it is never logged or
+    # committed. When empty, OpenAiLlmAdapter is still constructible (the
+    # call fails fast at extraction time with a typed LlmCallError).
+    # See docs/review.md for LLM extraction design notes.
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_model: str = "gpt-4o"

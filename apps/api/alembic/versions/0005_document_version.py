@@ -46,8 +46,6 @@ _TENDER_DOCUMENT_TYPE_ENUM = sa.Enum(
 
 def upgrade() -> None:
     """Create tender_documents and document_versions tables."""
-    _TENDER_DOCUMENT_TYPE_ENUM.create(op.get_bind(), checkfirst=True)
-    _DOC_PROCESSING_STATUS_ENUM.create(op.get_bind(), checkfirst=True)
 
     # --- tender_documents ---
     op.create_table(

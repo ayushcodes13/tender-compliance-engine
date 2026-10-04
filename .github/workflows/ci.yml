@@ -28,7 +28,7 @@ jobs:
         # is bounded by inherent deterministic-parser limitations (no bare-number
         # fabrication, no table-layout analysis, per-requirement rather than
         # cross-requirement context).  F1 is monitored in the eval report
-        # artifact but does not block merge.  See checkpoint.md CP48.
+        # artifact but does not block merge.  See docs/checkpoint.md CP48.
         run: |
           python -c "
           from tender_compliance_api.extraction.eval_harness import run_eval, format_text_report, check_quality_gates

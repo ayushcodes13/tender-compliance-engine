@@ -1,6 +1,6 @@
 """OpenAI extraction adapter (CP26).
 
-Production default per ``review.md``: OpenAI ``gpt-4o`` with structured output
+Production default per ``docs/review.md``: OpenAI ``gpt-4o`` with structured output
 parsed directly into the :class:`ExtractionResponse` schema.  This adapter is
 provider-agnostic only in that it implements the :class:`LlmAdapter` port — the
 model/service never imports OpenAI directly.
