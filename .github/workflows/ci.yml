@@ -8,6 +8,20 @@ on:
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tce_ci
+          POSTGRES_USER: tce
+          POSTGRES_PASSWORD: tce-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tce -d tce_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: apps/api
@@ -19,6 +33,37 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
+      - name: PostgreSQL migration + enum smoke
+        env:
+          DATABASE_URL: postgresql+asyncpg://tce:tce-password@localhost:5432/tce_ci
+        run: |
+          alembic -c alembic.ini upgrade head
+          python - <<'PY'
+          import asyncio
+          import os
+
+          from tender_compliance_api.db.models import Organization, Project, ProjectStatus
+          from tender_compliance_api.db.session import close_engine, get_session, init_engine
+
+          async def main() -> None:
+              init_engine(os.environ["DATABASE_URL"])
+              async for session in get_session():
+                  org = Organization(name="CI PostgreSQL Smoke")
+                  session.add(org)
+                  await session.flush()
+                  project = Project(
+                      organization_id=org.id,
+                      name="Enum serialization smoke",
+                      status=ProjectStatus.DRAFT,
+                  )
+                  session.add(project)
+                  await session.commit()
+                  assert project.status == ProjectStatus.DRAFT
+                  break
+              await close_engine()
+
+          asyncio.run(main())
+          PY
       - run: ruff check .
       - run: pytest
       - name: Run benchmark evaluation harness — critical quality gates
@@ -28,7 +73,7 @@ jobs:
         # is bounded by inherent deterministic-parser limitations (no bare-number
         # fabrication, no table-layout analysis, per-requirement rather than
         # cross-requirement context).  F1 is monitored in the eval report
-        # artifact but does not block merge.  See checkpoint.md CP48.
+        # artifact but does not block merge.  See docs/checkpoint.md CP48.
         run: |
           python -c "
           from tender_compliance_api.extraction.eval_harness import run_eval, format_text_report, check_quality_gates

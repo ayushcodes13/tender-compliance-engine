@@ -23,7 +23,6 @@ def upgrade() -> None:
     export_status_enum = sa.Enum(
         "completed", "failed", name="export_status", native_enum=False
     )
-    export_status_enum.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "export_artifacts",

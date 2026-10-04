@@ -86,15 +86,15 @@ A good PR should make review possible without reconstructing intent from the dif
 
 ## Canonical checkpoint plan
 
-`checkpoint.md` is the execution source of truth for planned product work.
+`docs/checkpoint.md` is the execution source of truth for planned product work.
 
 - Read it before starting a new implementation task.
 - Work from the first unchecked checkpoint unless new information requires the plan itself to change.
 - Follow checkpoints in order rather than silently skipping ahead.
 - A checkpoint is not done until its documented completion criteria are satisfied and relevant tests/CI pass.
-- In the same PR that completes a checkpoint, update `checkpoint.md`: check it off, strike through its title, and keep any useful implementation/PR note.
-- If a new requirement changes the sequence, update `checkpoint.md` explicitly in a PR before or alongside implementation.
-- `planning.md` is a symlink alias to the same canonical file; do not maintain a second divergent plan.
+- In the same PR that completes a checkpoint, update `docs/checkpoint.md`: check it off, strike through its title, and keep any useful implementation/PR note.
+- If a new requirement changes the sequence, update `docs/checkpoint.md` explicitly in a PR before or alongside implementation.
+- `docs/planning.md` is a symlink alias to the same canonical file; do not maintain a second divergent plan.
 - `docs/BYND-REUSE-AUDIT.md` is a reference catalog of reusable Bynd patterns. Use it for design/test ideas, but do not copy private/unlicensed code or introduce Bynd-internal dependencies without an explicit decision.
 ## Suggested boundaries
 

@@ -91,6 +91,27 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
+        # Ensure the alembic_version table has a wide enough version_num column.
+        # Alembic's default is VARCHAR(32), but some revision identifiers (e.g.
+        # "0025_missing_evidence_clarifications" = 37 chars) exceed that.
+        # On PostgreSQL this causes ``value too long for type character
+        # varying(32)``.  We create the table ourselves with VARCHAR(256) so
+        # that Alembic's own _ensure_version_table() finds it already exists
+        # and skips its default (narrower) DDL.  Created inside the
+        # transaction so it is committed together with the migrations.
+        from sqlalchemy import inspect as _inspect
+        from sqlalchemy import text as _text
+
+        inspector = _inspect(connection)
+        if "alembic_version" not in inspector.get_table_names():
+            connection.execute(
+                _text(
+                    "CREATE TABLE alembic_version ("
+                    "version_num VARCHAR(256) NOT NULL, "
+                    "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+                )
+            )
+
         context.run_migrations()
 
 

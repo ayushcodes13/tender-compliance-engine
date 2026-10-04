@@ -44,7 +44,7 @@ from tender_compliance_api.db.models import (
 class MatrixRow:
     """A single row in the Phase 1 compliance matrix.
 
-    Column order matches the canonical projection defined in checkpoint.md
+    Column order matches the canonical projection defined in docs/checkpoint.md
     (CP41).  All fields are read at query time — no business logic is
     duplicated in the exporter.
 

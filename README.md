@@ -221,6 +221,11 @@ These are references only. This repository does not copy private/unlicensed Bynd
 
 ## Documentation
 
+Work should follow [Canonical checkpoint plan](docs/checkpoint.md) from the first unchecked checkpoint. Completed checkpoints are crossed out there, and the plan is updated through PRs whenever product requirements or architecture change.
+
+- [Canonical checkpoint plan](docs/checkpoint.md)
+- [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
+- [Post-CP61 hardening plan](docs/POST61_HARDENING_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Product requirements](docs/PRD.md)
 - [Data model](docs/DATA_MODEL.md)
