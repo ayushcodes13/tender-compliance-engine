@@ -5,7 +5,9 @@ and password-protected PDFs.
 """
 
 import io
+import zipfile
 
+from docx import Document
 from pypdf import PdfWriter
 
 from tender_compliance_api.validation.models import FileFormat
@@ -136,3 +138,45 @@ class TestPdfValidationRule:
         result = svc.validate("multipage.pdf", "application/pdf", data)
         assert not result.valid
         assert any("page" in e.lower() for e in result.errors)
+
+
+# ---------------------------------------------------------------------------
+# DOCX upload validation
+# ---------------------------------------------------------------------------
+
+
+def _make_valid_docx() -> bytes:
+    buf = io.BytesIO()
+    doc = Document()
+    doc.add_paragraph("The instrument shall support 230 V AC.")
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def test_valid_docx_upload_passes_validation() -> None:
+    svc = ValidationService()
+    data = _make_valid_docx()
+    result = svc.validate(
+        "tender.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        data,
+    )
+    assert result.valid
+    assert result.detected_format == FileFormat.DOCX
+    assert result.detected_content_type == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
+def test_arbitrary_zip_renamed_docx_is_rejected() -> None:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr("hello.txt", "not a Word document")
+
+    result = ValidationService().validate(
+        "fake.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        buf.getvalue(),
+    )
+    assert not result.valid
+    assert any("required parts" in error.lower() for error in result.errors)

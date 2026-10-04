@@ -14,6 +14,17 @@ class Settings(BaseSettings):
     api_port: int = 8000
     database_url: str = ""
 
+    # Authentication. single_workspace is intentionally simple: it is for
+    # a private pilot / one-customer deployment and automatically bootstraps
+    # one owner membership. Public multi-user SaaS should use a real IdP.
+    auth_mode: str = "development_headers"
+    single_workspace_user_id: str = "00000000-0000-0000-0000-000000000001"
+    single_workspace_org_id: str = "00000000-0000-0000-0000-000000000002"
+    single_workspace_org_name: str = "Tender Compliance Workspace"
+
+    # Browser/API boundary.
+    cors_allowed_origins: str = "http://localhost:3000"
+
     # Object storage (S3-compatible, e.g. MinIO locally)
     object_storage_endpoint: str = ""
     object_storage_access_key: str = ""
@@ -24,10 +35,7 @@ class Settings(BaseSettings):
     # Redis (queue/broker seam)
     redis_url: str = ""
 
-    # LLM extraction (CP26) — OpenAI is the default provider (review.md).
-    # The API key is read from the environment; it is never logged or
-    # committed. When empty, OpenAiLlmAdapter is still constructible (the
-    # call fails fast at extraction time with a typed LlmCallError).
+    # OpenAI extraction/reasoning provider.
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_model: str = "gpt-4o"
@@ -37,18 +45,23 @@ class Settings(BaseSettings):
     max_concurrency: int = 4
 
     # Resource limits
-    upload_max_bytes: int = 50 * 1024 * 1024  # 50 MB
+    upload_max_bytes: int = 50 * 1024 * 1024
     max_pdf_pages: int = 500
     request_timeout_seconds: float = 30.0
 
     # Retention policy (in days)
-    # Original tender documents are retained for this long after the
-    # project is hard-deleted or the retention window expires.
     retention_originals_days: int = 90
-    # Rendered assets (page images, OCR output) are retained separately.
     retention_rendered_days: int = 30
-    # Export artifacts (XLSX workbooks) are retained for this long.
     retention_exports_days: int = 30
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Return normalized CORS origins from the comma-separated setting."""
+        return [
+            origin.strip().rstrip("/")
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache
