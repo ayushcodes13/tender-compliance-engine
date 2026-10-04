@@ -146,7 +146,7 @@ The core runtime is one web app, one API, one worker, PostgreSQL, Redis, and S3-
 ├── docs/                 architecture, evaluation, security, runbooks
 ├── infra/                local infrastructure
 ├── docker-compose.yml    complete local stack
-├── checkpoint.md         completed canonical build plan
+├── docs/checkpoint.md    completed canonical build plan
 ├── AGENTS.md             engineering rules
 └── README.md
 ```
@@ -214,6 +214,7 @@ CI checks the parts that matter most for this product:
 - cross-tenant security tests;
 - frontend TypeScript and production build;
 - API, worker, and web Docker builds;
+- a full bundled Docker Compose startup + same-origin readiness smoke;
 - unsafe raw-HTML rendering guard.
 
 The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_REVIEW.md](docs/POST61_RELEASE_REVIEW.md).
@@ -222,10 +223,12 @@ The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_R
 
 **CP00–CP61 are complete.** Post-build hardening PRs have also completed the browser compliance-review flow, final matrix/export/submission UI, real OEM upload → worker integration, and adversarial security review.
 
+The buyer-facing pilot flow is now explicit in the UI: **Tender → Vendor/OEM → Review → Compliance sheet**.
+
 The remaining focus is deliberately commercial and practical:
 
-1. make the UI feel like a finished product;
-2. run representative real tender + OEM documents through the deployed product;
+1. run representative real tender + OEM documents through the deployed product;
+2. complete the manual acceptance checklist on those documents;
 3. fix only the issues those real runs expose.
 
 We are **not** adding agent orchestration, a vector database, or a new RAG platform unless real customer usage proves one is necessary.

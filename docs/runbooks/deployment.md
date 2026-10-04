@@ -1,268 +1,177 @@
-# Deployment Runbook (CP47)
+# Deployment Runbook
 
-## Overview
+## Two deployment modes
 
-The Tender Compliance Engine is deployed as three services: API, worker,
-and web frontend, backed by PostgreSQL, Redis, and MinIO (S3-compatible
-object storage).
+Tender Compliance Engine deliberately has two deployment modes so the first
+customer does not require a full SaaS platform.
 
-## Architecture
+### 1. Private pilot / one-customer deployment
 
-```
-                    ┌─────────────┐
-                    │   Client    │
-                    └──────┬──────┘
-                           │  HTTPS
-                           ▼
-                    ┌─────────────┐
-                    │  Web (3000) │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │  API (8000) │
-                    └──────┬──────┘
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        ┌─────────┐ ┌─────────┐ ┌──────────┐
-        │ Postgre │ │  Redis  │ │  MinIO   │
-        │ SQL 5432│ │ 6379    │ │ 9000     │
-        └─────────┘ └─────────┘ └──────────┘
-              ▲
-              │
-        ┌─────────┐
-        │ Worker  │
-        └─────────┘
-```
+Use the repository-root `docker-compose.yml`.
 
-## Environment Configuration
+The stack starts:
 
-All configuration comes from environment variables (see
-`apps/api/.env.example`).  No secrets are in config files.
+- PostgreSQL;
+- Redis;
+- MinIO object storage;
+- Alembic migrations;
+- FastAPI API;
+- background OCR/document worker;
+- Next.js web app.
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
-| `OBJECT_STORAGE_ENDPOINT` | No | — | S3-compatible endpoint (empty = fake) |
-| `REDIS_URL` | No | — | Redis connection string (empty = fake) |
-| `OPENAI_API_KEY` | No | — | OpenAI API key for LLM extraction |
-| `CORS_ALLOWED_ORIGINS` | Yes | — | Comma-separated allowed web origins |
+The backend runs in `single_workspace` mode. The browser talks only to the
+web app; Next.js proxies API traffic over the internal container network.
 
-## Process Commands
+The only **external secret** required by this bundled pilot is
+`OPENAI_API_KEY`.
 
-### API
 ```bash
-python -m tender_compliance_api.main
-# Or with uvicorn:
-uvicorn tender_compliance_api.main:app --host 0.0.0.0 --port 8000
+cp .env.example .env
+# set OPENAI_API_KEY in .env
+docker compose up --build
 ```
 
-Health check: `GET /health` → `{"status": "ok", "service": "tender-compliance-api"}`
+Open: **http://localhost:3000**
 
-### Worker
+Readiness through the same path used by the browser:
+
 ```bash
-python -m tender_compliance_worker --max-concurrency 4
+curl -fsS http://localhost:3000/api/backend/ready
 ```
 
-The worker dequeues document-processing jobs from Redis, processes them
-(PARSE → OCR → CLEANUP → EXTRACT stages), and handles retries/acknowledgements.
+The API and MinIO admin endpoints bind to localhost in this mode; they are not
+intended as public interfaces.
 
-### Web Frontend
-```bash
-npm run dev   # development
-npm run build && npm start   # production
+### 2. Public multi-customer SaaS
+
+Do not expose the private-pilot defaults directly to the internet.
+
+Before public multi-tenant launch, replace the bundled defaults with:
+
+- a real identity provider instead of `single_workspace`;
+- managed/generated database, Redis, and object-storage credentials;
+- a secrets manager;
+- TLS and a real domain;
+- managed backups/retention;
+- production monitoring/error reporting;
+- malware scanning appropriate to the deployment.
+
+These are operational upgrades, not prerequisites for selling/running a
+private one-customer pilot.
+
+## Runtime architecture
+
+```text
+Browser
+   │
+   ▼
+Next.js web
+   │  /api/backend/* (same origin)
+   ▼
+FastAPI API ───── PostgreSQL
+   │
+   ├───────────── Redis
+   └───────────── S3 / MinIO
+                     ▲
+                     │
+                  Worker
+             parser / OCR / LLM
 ```
+
+## Readiness vs health
+
+- `GET /health` — process liveness.
+- `GET /ready` — checks the dependencies needed to serve the product,
+  including database, queue, object storage, and production AI configuration.
+- Browser/deployment checks should prefer
+  `GET /api/backend/ready` through the web app because that proves both the
+  frontend proxy and backend dependencies are reachable.
 
 ## Migrations
 
-Migrations are managed by Alembic and must be run explicitly before
-deploying a new API version.
+Alembic is the schema source of truth.
 
-### Apply migrations
-```bash
-cd apps/api
+The bundled Compose stack runs the `migrate` service **before** the API starts:
+
+```text
+PostgreSQL healthy
+      ↓
 alembic upgrade head
+      ↓
+API / worker
+      ↓
+web
 ```
 
-### Check current version
-```bash
-alembic current
+For a separately orchestrated production deployment, keep the same ordering:
+run a one-shot migration job before deploying the new API image. Do not run
+schema creation/migrations from every API replica at application startup.
+
+CI also applies the complete migration chain to PostgreSQL 16 and performs a
+real ORM insert so SQLite cannot hide PostgreSQL-specific enum/default issues.
+
+## Secrets
+
+Never commit secrets.
+
+Private pilot:
+
+```text
+OPENAI_API_KEY=<real key>
 ```
 
-### Create a new migration
-```bash
-alembic revision -m "CPNN — description"
-```
+The remaining values in `.env.example` have bundled local defaults. Change
+those defaults before exposing infrastructure outside a trusted pilot host.
 
-### Migration job (containerized deployment)
-In a container orchestration system, run migrations as a one-shot
-init-container or job BEFORE starting the API:
+Public deployment should inject all secrets through the deployment platform or
+a secrets manager.
 
-```yaml
-initContainers:
-  - name: migrate
-    image: ghcr.io/your-org/tender-compliance-api:v1.2.3
-    command: ["alembic", "upgrade", "head"]
-    envFrom:
-      - secretRef:
-          name: tce-secrets
-      - configMapRef:
-          name: tce-config
-```
+## Backups
 
-### Backup before migration
-Always take a PostgreSQL base backup before applying schema migrations:
-```bash
-pg_dump -h postgres -U tce tce > backup-$(date +%Y%m%d-%H%M%S).sql
-```
+Before production schema changes, back up PostgreSQL. Persist/backup the object
+store independently as it contains originals, rendered pages, and generated
+exports.
 
-## Rollback Procedures
-
-### Application rollback (code)
-```bash
-# Redeploy the previous image tag
-kubectl set image deployment/api api=ghcr.io/your-org/tender-compliance-api:v1.2.2
-```
-
-### Schema rollback
-```bash
-# Downgrade one revision
-alembic downgrade -1
-
-# Or downgrade to a specific revision
-alembic downgrade 0017_export_artifacts
-```
-
-**Warning**: Schema downgrades may lose data if newer migrations added
-columns/tables with existing data.  Always restore from backup rather
-than downgrading when data loss is possible.
-
-### Failed deployment rollback
-1. Redeploy the previous container image.
-2. If the schema was migrated, downgrade to the previous revision.
-3. If data was lost, restore from the most recent backup.
-
-## TLS and CORS
-
-- TLS is terminated at the reverse proxy / load balancer (nginx, Caddy,
-  or cloud LB).  The API does not serve TLS directly.
-- CORS is enforced via `CORS_ALLOWED_ORIGINS` environment variable.
-- The API sets security headers: `X-Content-Type-Options: nosniff`,
-  `X-Frame-Options: DENY`.
-
-## Secrets Management
-
-**Never commit secrets.**  Use one of:
-- Environment variables injected by the orchestration platform
-- A secrets manager (AWS Secrets Manager, GCP Secret Manager, etc.)
-- GitHub OIDC / workload identity for cloud provider credentials
-
-For local development, use `.env` files (git-ignored).  For production,
-use the orchestration platform's secrets injection.
-
-## Failed-Job Recovery
-
-When a worker fails to process a job:
-
-1. The job is automatically retried up to `MAX_RETRIES` (default: 5).
-2. After max retries, the `DocumentVersion.processing_status` is set to
-   `FAILED` and the `ProcessingRun` table records the error type/category.
-3. Manual recovery: POST to `versions/{ver}/retry` to re-enqueue the job.
-4. To find failed jobs:
-   ```bash
-   python -c "
-   from tender_compliance_api.db.session import get_session
-   from sqlalchemy import select
-   from tender_compliance_api.db.models import DocumentVersion, DocumentProcessingStatus
-   async with get_session() as s:
-       result = await s.execute(
-           select(DocumentVersion).where(
-               DocumentVersion.processing_status == DocumentProcessingStatus.FAILED
-           )
-       )
-       for v in result.scalars():
-           print(v.id, v.processing_status)
-   "
-   ```
-
-## Worker Scaling
-
-Workers are stateless and can be scaled horizontally:
+Example database backup for the bundled stack:
 
 ```bash
-# Scale to N workers
-python -m tender_compliance_worker --max-concurrency N
-
-# In Kubernetes, adjust the replica count:
-kubectl scale deployment/worker --replicas=3
+docker compose exec -T postgres \
+  pg_dump -U tce tce > "tce-$(date +%Y%m%d-%H%M%S).sql"
 ```
 
-Each worker claims jobs from Redis via visibility-timeout locking.
-Additional workers automatically pick up pending jobs.
+Named Docker volumes keep pilot data across restarts. `docker compose down -v`
+**deletes** those volumes; do not use `-v` on a customer system unless deletion
+is intentional.
 
-Monitor: `GET /metrics` for `queue_depth` and `job_failures_total`.
+## Failed document jobs
 
-## Deployment Smoke Tests
+Document jobs have explicit persisted processing states and bounded retries.
+A failed job remains visible as failed instead of turning into an empty or
+fabricated compliance result. Use the supported retry endpoint/UI action after
+fixing the underlying source/provider problem.
 
-Run after deployment to verify:
+## Scaling
 
-```bash
-#!/bin/bash
-set -e
+The current commercial target does not require a microservice mesh.
 
-API_URL="${API_URL:-http://localhost:8000}"
+- API/web can be replicated when needed.
+- Workers are stateless job consumers and can be scaled horizontally.
+- Keep one-document job isolation and bounded worker concurrency.
 
-# 1. Health check
-echo "Checking health..."
-curl -sf "${API_URL}/health" | python -c "import sys,json; assert json.load(sys.stdin)['status']=='ok'"
+Scale only after real pilot load demonstrates a bottleneck.
 
-# 2. Auth denied without headers
-echo "Checking auth..."
-curl -sf -o /dev/null -w "%{http_code}" "${API_URL}/projects" | grep -q 401
+## Release verification
 
-# 3. Metrics endpoint
-echo "Checking metrics..."
-curl -sf "${API_URL}/metrics" | python -c "import sys,json; d=json.load(sys.stdin); assert 'gauges' in d"
+Required automated release checks:
 
-# 4. Migration head is current
-echo "Checking migration version..."
-cd apps/api && alembic current
+- PostgreSQL full migration + ORM enum smoke;
+- backend test/evaluation suite;
+- zero-false-compliance critical gates;
+- frontend typecheck + production build;
+- API, worker, and web container builds;
+- full bundled Compose startup;
+- `http://localhost:3000/api/backend/ready` returns `status=ready`.
 
-echo "All smoke tests passed."
-```
-
-## Production Checklist
-
-Before cutting over:
-- [ ] All environment variables set (DATABASE_URL, STORAGE credentials, etc.)
-- [ ] CORS origins configured for production domain
-- [ ] TLS configured at the proxy layer
-- [ ] Migrations applied: `alembic upgrade head`
-- [ ] Health check passes: `GET /health`
-- [ ] Database backup configured (WAL archiving + periodic base backup)
-- [ ] Object storage bucket versioning enabled
-- [ ] Worker process running and consuming from Redis
-- [ ] Smoke tests pass
-- [ ] Rollback plan documented
-
-## Local development with docker-compose
-
-The repository-root `docker-compose.yml` provides a full local stack (postgres,
-redis, minio, api, worker, web). It uses inline environment variables matching
-the service names, so `docker-compose up --build` works out of the box:
-
-```bash
-docker compose up --build
-# API:      http://localhost:8000
-# Web:      http://localhost:3000
-# MinIO:    http://localhost:9000  (console: http://localhost:9001)
-```
-
-Before uploading real documents, apply migrations:
-
-```bash
-docker compose exec api alembic upgrade head
-```
-
-For infrastructure-only (no api/worker/web containers), use the Makefile target:
-`make infra-up` (uses `infra/docker-compose.yml`). The app services are then
-started locally via `make api-dev` and `npm run dev` (apps/web).
+After those checks, use
+[POST61_RELEASE_REVIEW.md](../POST61_RELEASE_REVIEW.md) with real customer-like
+documents before calling a release accepted.
