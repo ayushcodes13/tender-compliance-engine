@@ -2,14 +2,13 @@
  * Frontend API client for the Tender Compliance Engine backend.
  *
  * This module is the single boundary between the React/Next.js frontend and
- * the FastAPI backend. All API calls go through {@link apiFetch}, which
- * attaches the development identity headers and serializes JSON bodies.
+ * the FastAPI backend. Browser traffic defaults to the same-origin
+ * `/api/backend/*` proxy so deployments do not need to expose the API or
+ * configure browser CORS just to run the product.
  *
- * Dev identity: In development, the backend resolves identity from the
- * `X-Dev-User-Id` / `X-Dev-Organization-Id` headers. The backend auto-creates
- * the User and Organization rows but **requires** a Membership row to already
- * exist. Use `.env.local` with matching UUIDs and seed a Membership in your
- * local database before the frontend can talk to the API.
+ * Development identity headers remain supported when explicitly configured.
+ * The bundled Docker pilot uses backend `single_workspace` mode instead, so
+ * no browser identity headers or manual membership seed are required.
  */
 
 export type ProjectStatus =
@@ -559,7 +558,7 @@ export type RequirementComplianceReview = {
   deviations: ReviewDeviation[];
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api/backend";
 
 /** Headers for the development identity mode. */
 function devHeaders(): Record<string, string> {
