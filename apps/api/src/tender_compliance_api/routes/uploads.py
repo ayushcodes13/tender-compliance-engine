@@ -76,7 +76,7 @@ from tender_compliance_api.scan.adapter import (
     MalwareScannerUnavailableError,
     ScanResult,
 )
-from tender_compliance_api.scan.clamav import ClamAvScanner
+from tender_compliance_api.scan.clamav import ClamAVScanner
 from tender_compliance_api.scan.fake import FakeScanner
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 from tender_compliance_api.storage.factory import create_storage_adapter
@@ -108,7 +108,7 @@ def get_scanner() -> MalwareScanner:
     if mode == "fake":
         return FakeScanner()
     if mode == "clamav":
-        return ClamAvScanner(
+        return ClamAVScanner(
             host=settings.clamav_host,
             port=settings.clamav_port,
             timeout_seconds=settings.malware_scan_timeout_seconds,
