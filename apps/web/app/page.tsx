@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FilePlus2, FileText, MoreHorizontal } from "lucide-react";
+import { FilePlus2, FileText } from "lucide-react";
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
@@ -23,7 +23,7 @@ function statusLabel(status: Project["status"]): string {
     case "review_in_progress":
       return "In review";
     case "matrix_ready":
-      return "Matrix ready";
+      return "Compliance sheet ready";
     case "exported":
       return "Exported";
     case "archived":
@@ -134,9 +134,6 @@ export default function Home() {
         <div className="project-card-top">
           <span className="document-glyph">
             <FileText size={18} strokeWidth={1.8} aria-hidden="true" />
-          </span>
-          <span className="icon-button" aria-hidden="true">
-            <MoreHorizontal size={17} />
           </span>
         </div>
 
