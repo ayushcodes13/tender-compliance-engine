@@ -216,7 +216,11 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error -D /tmp/tce-headers -o /dev/null http://localhost:3000/
           tr -d '\r' < /tmp/tce-headers > /tmp/tce-headers-normalized
-          grep -Eiq '^x-content-type-options: nosniff      - name: Show bundled stack logs on failure
+          grep -Eiq '^x-content-type-options: nosniff$' /tmp/tce-headers-normalized
+          grep -Eiq '^x-frame-options: DENY$' /tmp/tce-headers-normalized
+          grep -Eiq '^referrer-policy: strict-origin-when-cross-origin$' /tmp/tce-headers-normalized
+          grep -Eiq '^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\)$' /tmp/tce-headers-normalized
+      - name: Show bundled stack logs on failure
         if: failure()
         run: docker compose logs --no-color --tail=250
       - name: Stop bundled product
