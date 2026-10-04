@@ -1,12 +1,27 @@
 "use client";
 
-import { LayoutGrid } from "lucide-react";
+import {
+  BarChart3,
+  FileText,
+  Gavel,
+  LayoutGrid,
+  MessageCircle,
+  Settings,
+  Shield,
+  Upload,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 const navigation = [
-  { href: "/", label: "Projects", icon: LayoutGrid },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/dashboard/documents", label: "Documents", icon: FileText },
+  { href: "/dashboard/requirements", label: "Requirements", icon: Gavel },
+  { href: "/dashboard/matrix", label: "Compliance Matrix", icon: BarChart3 },
+  { href: "/dashboard/evidence", label: "Evidence", icon: Upload },
+  { href: "/dashboard/chat", label: "AI Assistant", icon: MessageCircle },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -15,7 +30,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="app-frame">
       <aside className="app-rail" aria-label="Product navigation">
-        <Link href="/" className="product-brand" aria-label="Tender Compliance Engine">
+        <Link
+          href="/dashboard"
+          className="product-brand"
+          aria-label="Tender Compliance Engine"
+        >
           <span className="product-mark">
             <img src="/tce-mark.svg" alt="" width="30" height="30" />
           </span>
@@ -29,9 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {navigation.map((item) => {
             const Icon = item.icon;
             const active =
-              item.href === "/"
-                ? pathname === "/" || pathname.startsWith("/projects/")
-                : pathname === item.href || pathname.startsWith(item.href + "/");
+              pathname === item.href || pathname.startsWith(item.href + "/");
 
             return (
               <Link
@@ -48,7 +65,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="rail-footer">
-          <div className="workspace-chip" aria-label="Single workspace private pilot">
+          <div
+            className="workspace-chip"
+            aria-label="Single workspace private pilot"
+          >
             <div className="profile-dot">TC</div>
             <div>
               <strong>Private workspace</strong>

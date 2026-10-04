@@ -185,11 +185,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
 
   await expect(
     page.getByRole("heading", {
-      name: "Go from tender documents to a reviewable compliance sheet.",
+      name: /From Tender Documents to a Source-Linked Compliance Sheet/,
     })
   ).toBeVisible();
   await expect(page.getByText("PDF / DOCX in · XLSX / DOCX / PDF out")).toBeVisible();
 
+  await page.goto("/dashboard");
   await page.getByRole("button", { name: "Create tender project" }).click();
   await page.getByPlaceholder("Project name").fill("Pilot Tender");
   await page.getByRole("button", { name: "Create", exact: true }).click();

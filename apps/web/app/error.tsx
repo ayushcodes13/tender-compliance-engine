@@ -24,7 +24,7 @@ export default function ErrorPage({
               <button className="button button-primary" type="button" onClick={reset}>
                 <RefreshCw size={14} aria-hidden="true" /> Try again
               </button>
-              <Link href="/" className="button button-secondary">Back to projects</Link>
+              <Link href="/dashboard" className="button button-secondary">Back to projects</Link>
             </div>
           </div>
         </div>
