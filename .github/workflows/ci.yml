@@ -211,6 +211,39 @@ jobs:
           curl --fail --silent --show-error http://localhost:3000/ >/dev/null
           cat /tmp/tce-ready.json
           docker compose ps
+      - name: Verify browser security headers
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error -D /tmp/tce-headers -o /dev/null http://localhost:3000/
+          tr -d '\r' < /tmp/tce-headers > /tmp/tce-headers-normalized
+          grep -Eiq '^x-content-type-options: nosniff      - name: Show bundled stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=250
+      - name: Stop bundled product
+        if: always()
+        run: docker compose down -v --remove-orphans
+ /tmp/tce-headers-normalized
+          grep -Eiq '^x-frame-options: DENY      - name: Show bundled stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=250
+      - name: Stop bundled product
+        if: always()
+        run: docker compose down -v --remove-orphans
+ /tmp/tce-headers-normalized
+          grep -Eiq '^referrer-policy: strict-origin-when-cross-origin      - name: Show bundled stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=250
+      - name: Stop bundled product
+        if: always()
+        run: docker compose down -v --remove-orphans
+ /tmp/tce-headers-normalized
+          grep -Eiq '^permissions-policy: camera=\(\), microphone=\(\), geolocation=\(\)      - name: Show bundled stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=250
+      - name: Stop bundled product
+        if: always()
+        run: docker compose down -v --remove-orphans
+ /tmp/tce-headers-normalized
       - name: Show bundled stack logs on failure
         if: failure()
         run: docker compose logs --no-color --tail=250
