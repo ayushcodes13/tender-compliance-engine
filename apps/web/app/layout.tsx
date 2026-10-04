@@ -7,7 +7,10 @@ export const metadata: Metadata = {
     default: "Tender Compliance Engine",
     template: "%s · Tender Compliance Engine",
   },
-  description: "Evidence-first technical tender review with source-linked requirements.",
+  description: "Turn tender requirements and OEM evidence into a source-linked, reviewable compliance sheet.",
+  icons: {
+    icon: "/tce-mark.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

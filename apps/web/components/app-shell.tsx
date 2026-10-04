@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app-frame">
       <aside className="app-rail" aria-label="Product navigation">
         <Link href="/" className="product-mark" aria-label="Tender Compliance Engine">
-          <span>TC</span>
+          <img src="/tce-mark.svg" alt="" width="44" height="44" />
         </Link>
 
         <nav className="rail-nav">

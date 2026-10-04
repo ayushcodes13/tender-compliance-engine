@@ -1,214 +1,229 @@
-# Tender Compliance Engine
+<p align="center">
+  <img src="apps/web/public/tce-mark.svg" width="88" alt="Tender Compliance Engine logo" />
+</p>
 
-Evidence-first technical tender compliance software for engineering, procurement, and technical sales teams.
+<h1 align="center">Tender Compliance Engine</h1>
 
-> **Status:** CP00–CP61 are implemented. The backend now covers tender ingestion through evidence-backed compliance, final exports, and submission approval/versioning. The main remaining product work is post-build simplification, browser wiring for the completed Phase 2 review/submission APIs, and stronger end-to-end/adversarial verification.
+<p align="center">
+  <strong>Turn technical tender documents and OEM evidence into a source-linked, reviewable compliance sheet.</strong>
+</p>
 
-## Why this exists
+<p align="center">
+  <a href="https://github.com/ayushcodes13/tender-compliance-engine/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ayushcodes13/tender-compliance-engine/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16%2B-4169E1?logo=postgresql&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/license-proprietary-001742">
+</p>
 
-Technical tender responses are still assembled through a slow manual loop: read large PDFs, find specifications, clean OCR errors, split requirements, build a compliance matrix, trace each row back to the source, and repeatedly verify that nothing was invented or lost.
+---
 
-Tender Compliance Engine is designed to turn that process into a structured, auditable workflow without treating an LLM as the source of truth.
+## What the product does
 
-## Product principles
+Tender Compliance Engine is built for engineering, procurement, technical sales, and bid teams that need to answer one practical question:
 
-1. **Evidence over hallucination.** Every extracted requirement must remain traceable to its source document and location.
-2. **Missing evidence is not non-compliance.** Absence and contradiction are different states.
-3. **Human review is a first-class workflow.** Uncertain OCR, ambiguous requirements, and later compliance decisions must be reviewable.
-4. **Deterministic logic owns math.** Numerical thresholds, units, ranges, and tolerances should be evaluated in code rather than delegated to an LLM.
-5. **No fabricated citations.** Page, clause, text span, and bounding-box metadata are recorded only when actually known.
-6. **Version everything that matters.** Documents, requirements, review decisions, and later evidence must be auditable.
-7. **Build the boring pipeline first.** Phase 1 intentionally avoids premature agents/RAG complexity.
+> **Given a tender requirement and the OEM/vendor documentation we have, what can we safely claim in the compliance sheet — and where is the evidence?**
 
-## Phase 1
+The product keeps the workflow simple for the user while preserving the source trail underneath:
 
 ```text
-Tender document(s)
-        │
-        ▼
- PDF/DOCX parsing + OCR
-        │
-        ▼
-Source-preserving page representation
-        │
-        ▼
-Technical requirement extraction
-        │
-        ▼
-Requirement normalization
-        │
-        ▼
-Human review / edit / split / merge
-        │
-        ▼
-Compliance matrix
-        │
-        ▼
-Excel export
+Tender document
+    ↓
+Extract technical requirements
+    ↓
+Human review + source verification
+    ↓
+OEM / vendor source documents
+    ↓
+Evidence retrieval + vendor facts
+    ↓
+Deterministic numeric / unit comparison
+    ↓
+Evidence-backed compliance review
+    ↓
+Final compliance matrix
+    ↓
+XLSX / DOCX / PDF submission
 ```
 
-### Phase 1 capabilities
+No agent framework is required for this workflow. No vector database is required for the current product. The system deliberately keeps deterministic logic in code and uses an LLM only where language interpretation is useful.
 
-- Create a tender project.
-- Upload one or more tender documents.
-- Parse digitally generated PDFs and route scanned pages through OCR.
-- Extract explicit technical requirements without inventing missing text.
-- Preserve document, document version, page, clause/section, source text, and coordinates when available.
-- Normalize technical constraints without changing meaning.
-- Review, edit, split, merge, reorder, categorize, and annotate requirements.
-- Audit manual changes.
-- Generate a structured compliance matrix.
-- Export reviewed requirements to Excel.
+## End-to-end user journey
 
-### Phase 1 boundary
+| Step | User action | Product output |
+| --- | --- | --- |
+| 1 | Create a tender project | Persisted project workspace |
+| 2 | Upload the tender | Immutable source version + processing status |
+| 3 | Review extracted requirements | Source-linked technical requirements |
+| 4 | Correct/split/merge/reorder requirements | Auditable reviewed requirement set |
+| 5 | Upload OEM/vendor material | Searchable source-preserving OEM documents |
+| 6 | Review proposed evidence | Accepted/rejected evidence per requirement |
+| 7 | Run comparison | Deterministic numeric/unit result + bounded qualitative assessment |
+| 8 | Resolve conflicts/gaps | Conflict, clarification, deviation, or review state |
+| 9 | Confirm compliance decision | Human-reviewed assessment |
+| 10 | Export | Final compliance matrix in XLSX, DOCX, or PDF |
+| 11 | Lock/approve | Immutable submission version |
 
-Phase 1 remains the tender-only workflow above. It does not itself claim vendor/OEM compliance.
+## What is supported today
 
-## Implemented Phase 2
+### Inputs
 
-The repository now also implements OEM/vendor document ingestion, source-preserving evidence retrieval and curation, vendor specification extraction, deterministic unit/numerical comparison, evidence-backed qualitative reasoning, conflict detection, missing-evidence clarifications and deviations, human compliance review/audit, final matrix projection, XLSX/DOCX/PDF outputs, and versioned submission approval/locking.
+| Input | Status | Notes |
+| --- | --- | --- |
+| Tender PDF | ✅ Supported | Digital and scanned/mixed PDFs; OCR is applied when required |
+| OEM/vendor PDF | ✅ Supported | Datasheets, manuals, brochures, test reports, certificates, proposals, quotations |
+| DOCX parsing | 🟡 Implemented behind the parser | The parser/worker support DOCX, but the current upload validation gate still accepts PDF only. This is tracked as production-wiring work and should not be advertised to customers until the upload path is enabled end to end. |
+| Images / PPT / arbitrary office files | — Not supported | Convert to PDF before upload for now |
 
-The backend APIs and tests for these capabilities are implemented. The post-CP61 hardening plan intentionally treats **browser completion and true end-to-end usability** as separate work: some later Phase 2 APIs are not yet exposed completely through the web UI.
+### Outputs
 
-The eventual assessment states are:
+- final compliance matrix in the browser;
+- XLSX;
+- DOCX;
+- PDF;
+- immutable submission versions with lock/approve/revoke lifecycle.
 
-- `COMPLIANT`
-- `NON_COMPLIANT`
-- `PARTIAL`
-- `NOT_DEMONSTRATED`
-- `CONFLICT`
-- `HUMAN_REVIEW_REQUIRED`
+## Trust model
+
+The product is intentionally conservative.
+
+- **Missing evidence is not non-compliance.**
+- **Same number is not the same technical claim.**
+- Accuracy, resolution, precision, repeatability, sensitivity, range, entity, model, scope, and operating conditions remain distinct.
+- Numerical thresholds and unit conversion are deterministic.
+- OCR ambiguity remains visible.
+- Every normal requirement and accepted evidence item is tied back to an immutable source version.
+- Human review can confirm, override, reopen, comment, and resolve conflicts without erasing the original system output.
+
+The highest-severity failure is **false compliance**: saying a product complies when the evidence does not establish it.
+
+## Product architecture
+
+```text
+Next.js web app
+      │
+      ▼
+FastAPI API
+      │
+      ├── PostgreSQL      projects / requirements / evidence / audit / submissions
+      ├── S3 / MinIO      original documents / rendered pages / exports
+      ├── Redis worker    document processing jobs
+      ├── Tesseract       OCR
+      └── OpenAI adapter  structured language extraction / bounded reasoning
+```
+
+The core runtime is one web app, one API, one worker, PostgreSQL, Redis, and S3-compatible object storage. It is not a microservice mesh.
 
 ## Repository structure
 
 ```text
 .
 ├── apps/
-│   ├── api/                  # FastAPI backend skeleton
-│   └── web/                  # Next.js frontend skeleton
-├── docs/
-│   ├── ARCHITECTURE.md       # System boundaries and data flow
-│   ├── DATA_MODEL.md         # Phase 1 schema + Phase 2-compatible extensions
-│   ├── EVALUATION.md         # Accuracy and safety evaluation strategy
-│   ├── PRD.md                # Phase 1 product requirements
-│   ├── ROADMAP.md            # Delivery milestones
-│   └── SECURITY.md           # Threat model and controls
-├── infra/
-│   └── docker-compose.yml    # Local Postgres, Redis, and MinIO
-├── .github/
-│   ├── workflows/ci.yml
-│   └── pull_request_template.md
-├── .env.example
-├── .gitignore
-├── AGENTS.md                 # Canonical AI/coding instructions
-├── CLAUDE.md -> AGENTS.md    # Same project instructions for Claude-compatible workflows
-└── Makefile
+│   ├── api/              FastAPI API + background worker
+│   └── web/              Next.js product UI
+├── docs/                 architecture, evaluation, security, runbooks
+├── infra/                local infrastructure
+├── docker-compose.yml    complete local stack
+├── checkpoint.md         completed canonical build plan
+├── AGENTS.md             engineering rules
+└── README.md
 ```
-
-## Tech direction
-
-The implemented architecture uses:
-
-- **Backend:** Python + FastAPI
-- **Frontend:** React + Next.js + TypeScript
-- **Database:** PostgreSQL
-- **Object storage:** S3-compatible storage (MinIO locally)
-- **Async infrastructure:** Redis-backed queue + worker for document processing
-- **Document processing:** parser/OCR adapters behind interfaces
-- **LLM use:** structured requirement extraction and language interpretation only where appropriate
-- **Export:** Phase 1 XLSX plus final XLSX/DOCX/PDF submission outputs
-
-The post-CP61 hardening goal is to keep this complete implementation understandable: simplify boundaries, remove dead ceremony, and prove the user journey end to end.
 
 ## Local development
 
 ### Prerequisites
 
-- Python 3.12+
-- Node.js 20+
-- Docker + Docker Compose
+- Docker / Docker Compose
+- Python 3.12+ for direct backend development
+- Node.js 20+ for direct frontend development
 
-### 1. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-### 2. Start infrastructure
+### Infrastructure
 
 ```bash
 make infra-up
+make api-install
+make api-migrate
+make web-install
 ```
 
-### 3. Run the API
+Run the API:
 
 ```bash
-make api-install
 make api-dev
 ```
 
-The health endpoint is available at:
-
-```text
-GET http://localhost:8000/health
-```
-
-### 4. Run the web app
+Run the frontend:
 
 ```bash
-make web-install
 make web-dev
 ```
 
-Open `http://localhost:3000`.
+Then open:
 
-## Current product/API surface
+```text
+http://localhost:3000
+```
 
-The API now includes health, projects, tender/OEM uploads, processing/retry, requirements and source viewing, evidence, vendor specifications, compliance assessments, qualitative reasoning, conflicts, clarifications/deviations, final matrix/exports, and submission lifecycle endpoints.
+The current development identity flow uses development headers and requires a local membership seed. The production-readiness pass is simplifying this so a fresh self-hosted deployment can bootstrap a single workspace without manual database work.
 
-The web app already supports the core project/tender requirement-review experience, but the final Phase 2 human-review/submission surfaces still need to be wired completely. See `docs/POST61_HARDENING_PLAN.md` for the focused post-build work.
+## AI configuration
 
-## Definition of trustworthy behavior
+The runtime adapter reads:
 
-The most important failure class is **false compliance**: claiming that a product meets a tender requirement when the evidence does not establish that conclusion. As Phase 2 lands, evaluation and release gates should be biased toward conservative outcomes rather than impressive-looking guesses.
+```bash
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o
+```
 
-For Phase 1, the analogous safety bar is **false extraction/citation**: a requirement or source location must not be created unless it is supported by the tender document.
+The API key is never committed. A production-wiring pass is in progress to make this configuration consistent across the root environment, API container, and worker container.
 
-## Development rules
+## Quality gates
 
-### Pull-request workflow
+CI checks the parts that matter most for this product:
 
-All substantive changes use a branch and pull request. Do not push feature, fix, documentation, configuration, or refactor work directly to `main`.
+- Python linting;
+- backend unit/integration/acceptance tests;
+- extraction/citation evaluation gates;
+- zero-false-compliance adversarial gates;
+- cross-tenant security tests;
+- frontend TypeScript and production build;
+- API, worker, and web Docker builds;
+- unsafe raw-HTML rendering guard.
 
-Each PR should be one coherent review unit, explain **why** it exists, describe **what changed**, identify scope and provenance/data impact, list verification performed, and state known risks or limitations. Required CI should pass before merge; squash merge is the default.
+The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_REVIEW.md](docs/POST61_RELEASE_REVIEW.md).
 
-Before implementing a milestone:
+## Current status
 
-1. State the milestone and scope.
-2. Identify dependencies and files to change.
-3. Keep the change minimal.
-4. Add or update tests.
-5. Preserve auditability and source traceability.
-6. Do not silently rewrite working components.
+**CP00–CP61 are complete.** Post-build hardening PRs have also completed the browser compliance-review flow, final matrix/export/submission UI, real OEM upload → worker integration, and adversarial security review.
 
-See `AGENTS.md` for the full project instructions.
+The remaining focus is deliberately commercial and practical:
 
-## Canonical execution plan
+1. remove the last environment/bootstrap friction;
+2. make the UI feel like a finished product;
+3. run representative real tender + OEM documents through the deployed product;
+4. fix only the issues those real runs expose.
 
-Work should follow [Canonical checkpoint plan](checkpoint.md) from the first unchecked checkpoint. Completed checkpoints are crossed out there, and the plan is updated through PRs whenever product requirements or architecture change.
+We are **not** adding agent orchestration, a vector database, or a new RAG platform unless real customer usage proves one is necessary.
+
+## Reference implementations studied
+
+Production patterns were reviewed from:
+
+- `Bynd-ai/chat@prod-trunk` — document upload UX, error boundaries, request correlation, deployment/environment discipline, sidebar/product navigation;
+- `Bynd-ai/metric-search` — environment selection, PDF review UX, structured logging, failure visibility, job isolation, LLM usage/cost discipline.
+
+These are references only. This repository does not copy private/unlicensed Bynd implementation code.
 
 ## Documentation
 
-- [Canonical checkpoint plan](checkpoint.md)
-- [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
-- [Post-CP61 hardening plan](docs/POST61_HARDENING_PLAN.md)
-
-- [Phase 1 PRD](docs/PRD.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Product requirements](docs/PRD.md)
 - [Data model](docs/DATA_MODEL.md)
-- [Roadmap](docs/ROADMAP.md)
 - [Evaluation strategy](docs/EVALUATION.md)
 - [Security model](docs/SECURITY.md)
+- [Post-CP61 release review](docs/POST61_RELEASE_REVIEW.md)
+- [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
 
 ## License
 
