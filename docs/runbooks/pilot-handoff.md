@@ -15,20 +15,16 @@ database users, migration tables, or a login account manually for this mode.
 ```bash
 git clone https://github.com/ayushcodes13/tender-compliance-engine.git
 cd tender-compliance-engine
-cp .env.example .env
+OPENAI_API_KEY=sk-... make pilot-start
 ```
 
-Put the real key in `.env`:
+That is the complete bundled-pilot handoff. The command checks Docker and
+Compose, validates the one required external secret, starts every service,
+waits for the browser-facing readiness endpoint, and prints the URL.
 
-```text
-OPENAI_API_KEY=...
-```
-
-Start everything:
-
-```bash
-docker compose up --build
-```
+If you prefer not to pass the key through the shell environment, copy
+`.env.example` to `.env`, set `OPENAI_API_KEY`, and run
+`make pilot-start`.
 
 Open:
 
@@ -114,13 +110,19 @@ The bundled Compose file supplies everything except the OpenAI key.
 Stop while keeping data:
 
 ```bash
-docker compose down
+make pilot-stop
 ```
 
 Start again:
 
 ```bash
-docker compose up
+make pilot-start
+```
+
+Check status at any time:
+
+```bash
+make pilot-status
 ```
 
 Do **not** use `docker compose down -v` on a customer pilot unless you intend

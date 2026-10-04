@@ -1,9 +1,12 @@
-.PHONY: help start stop infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
+.PHONY: help start stop pilot-start pilot-stop pilot-status infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
 
 help:
 	@echo "Tender Compliance Engine"
-	@echo "  make start          Build and start the complete product stack"
-	@echo "  make stop           Stop the complete product stack"
+	@echo "  make pilot-start    One-command private pilot start (requires OPENAI_API_KEY)"
+	@echo "  make pilot-stop     Stop the pilot while keeping customer data"
+	@echo "  make pilot-status   Show containers + same-origin readiness"
+	@echo "  make start          Alias for pilot-start"
+	@echo "  make stop           Alias for pilot-stop"
 	@echo "  make infra-up       Start Postgres, Redis and MinIO"
 	@echo "  make infra-down     Stop local infrastructure"
 	@echo "  make api-install    Install API package + dev dependencies"
@@ -20,11 +23,20 @@ help:
 	@echo "  make docker-worker-build  Build worker Docker image"
 	@echo "  make deploy-smoke   Run deployment smoke tests"
 
-start:
-	docker compose up --build -d
+pilot-start:
+	@./scripts/pilot-start.sh
 
-stop:
-	docker compose down
+pilot-stop:
+	@docker compose down
+
+pilot-status:
+	@docker compose ps
+	@curl -fsS http://localhost:3000/api/backend/ready || true
+	@echo
+
+start: pilot-start
+
+stop: pilot-stop
 
 infra-up:
 	docker compose -f infra/docker-compose.yml up -d
