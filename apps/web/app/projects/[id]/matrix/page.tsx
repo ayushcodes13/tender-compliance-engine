@@ -116,7 +116,7 @@ export default function ProjectMatrixPage() {
             className="topnav-tab button button-primary button-small"
             style={{ fontWeight: 600 }}
           >
-            Matrix
+            Compliance sheet
           </Link>
         </nav>
       </header>
@@ -125,11 +125,11 @@ export default function ProjectMatrixPage() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-              <h1>
-                Compliance Matrix — {project.name}
-              </h1>
+              <h1>Compliance sheet — {project.name}</h1>
               <p className="page-description">
-                v{document.version_number} · {document.display_name}
+                Review the source-linked final matrix, resolve any remaining
+                unresolved rows, and export XLSX, DOCX, or PDF. Tender source:
+                {" "}v{document.version_number} · {document.display_name}
               </p>
             </div>
           </section>

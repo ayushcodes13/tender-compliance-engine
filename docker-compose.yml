@@ -34,8 +34,8 @@ services:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-tce-access-key}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-tce-secret-key}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -86,7 +86,7 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
       interval: 10s
@@ -124,11 +124,13 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/backend}
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://api:8000
     ports:
       - "3000:3000"
     healthcheck:

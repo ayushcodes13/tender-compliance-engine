@@ -517,7 +517,7 @@ button {
 
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -2283,5 +2283,32 @@ button {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+}
+
+/* ===========================================================================
+   Source sections
+   =========================================================================== */
+
+.source-section-anchor {
+  scroll-margin-top: 20px;
+}
+
+.source-section-heading {
+  margin-bottom: 14px;
+}
+
+.source-section-heading .detail-section-title {
+  margin: 2px 0 4px;
+}
+
+.source-section-heading .field-help {
+  max-width: 720px;
+  margin: 0;
+}
+
+@media (max-width: 1100px) and (min-width: 701px) {
+  .workflow-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -49,6 +49,26 @@ XLSX / DOCX / PDF submission
 
 No agent framework is required for this workflow. No vector database is required for the current product. The system deliberately keeps deterministic logic in code and uses an LLM only where language interpretation is useful.
 
+## Fastest pilot start
+
+For a private pilot, Docker Compose starts PostgreSQL, Redis, object storage,
+migrations, the API, OCR worker, and web app together. Browser requests stay
+same-origin through the Next.js backend proxy.
+
+```bash
+cp .env.example .env
+# Put your real key in .env:
+OPENAI_API_KEY=...
+docker compose up --build
+```
+
+Then open **http://localhost:3000**.
+
+For this bundled single-workspace pilot, the OpenAI key is the only external
+secret you must provide. Public multi-customer SaaS should later replace the
+single-workspace identity and bundled credentials with managed production
+services and a real identity provider.
+
 ## End-to-end user journey
 
 | Step | User action | Product output |
