@@ -115,3 +115,4 @@ class QueueAdapter(abc.ABC):
         In-memory providers do not need cleanup; network-backed providers may
         override this method.
         """
+        return None
