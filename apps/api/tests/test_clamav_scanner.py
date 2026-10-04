@@ -8,7 +8,7 @@ import struct
 import pytest
 
 from tender_compliance_api.scan.adapter import MalwareScannerUnavailableError
-from tender_compliance_api.scan.clamav import ClamAvScanner
+from tender_compliance_api.scan.clamav import ClamAVScanner
 
 
 async def _serve(response: bytes, *, expect_ping: bool = False):
@@ -39,7 +39,7 @@ def test_ready_uses_protocol_ping() -> None:
     async def run() -> None:
         server, port, _ = await _serve(b"PONG", expect_ping=True)
         async with server:
-            scanner = ClamAvScanner(host="127.0.0.1", port=port, timeout_seconds=1)
+            scanner = ClamAVScanner(host="127.0.0.1", port=port, timeout_seconds=1)
             assert await scanner.ready() is True
 
     asyncio.run(run())
@@ -49,7 +49,7 @@ def test_clean_stream_returns_clean() -> None:
     async def run() -> None:
         server, port, received = await _serve(b"stream: OK")
         async with server:
-            scanner = ClamAvScanner(host="127.0.0.1", port=port, timeout_seconds=1)
+            scanner = ClamAVScanner(host="127.0.0.1", port=port, timeout_seconds=1)
             result = await scanner.scan("tender.pdf", b"trusted test bytes")
             assert result.clean is True
             assert result.threat_name is None
@@ -62,7 +62,7 @@ def test_found_stream_returns_threat_name() -> None:
     async def run() -> None:
         server, port, _ = await _serve(b"stream: Win.Test.EICAR_HDB-1 FOUND")
         async with server:
-            scanner = ClamAvScanner(host="127.0.0.1", port=port, timeout_seconds=1)
+            scanner = ClamAVScanner(host="127.0.0.1", port=port, timeout_seconds=1)
             result = await scanner.scan("eicar.com", b"test")
             assert result.clean is False
             assert result.threat_name == "Win.Test.EICAR_HDB-1"
@@ -74,7 +74,7 @@ def test_clamd_error_fails_closed() -> None:
     async def run() -> None:
         server, port, _ = await _serve(b"stream: INSTREAM size limit exceeded. ERROR")
         async with server:
-            scanner = ClamAvScanner(host="127.0.0.1", port=port, timeout_seconds=1)
+            scanner = ClamAVScanner(host="127.0.0.1", port=port, timeout_seconds=1)
             with pytest.raises(MalwareScannerUnavailableError):
                 await scanner.scan("large.pdf", b"test")
 
@@ -82,7 +82,7 @@ def test_clamd_error_fails_closed() -> None:
 
 
 def test_unreachable_scanner_fails_closed() -> None:
-    scanner = ClamAvScanner(host="127.0.0.1", port=1, timeout_seconds=0.1)
+    scanner = ClamAVScanner(host="127.0.0.1", port=1, timeout_seconds=0.1)
 
     with pytest.raises(MalwareScannerUnavailableError):
         asyncio.run(scanner.scan("tender.pdf", b"test"))
