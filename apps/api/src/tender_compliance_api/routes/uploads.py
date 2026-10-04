@@ -44,7 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
-from tender_compliance_api.config import get_settings
+from tender_compliance_api.config import RuntimeConfigurationError, get_settings
 from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
     DocumentVersion,
@@ -71,7 +71,12 @@ from tender_compliance_api.project import (
 from tender_compliance_api.queue import DEFAULT_QUEUE, QueueAdapter, QueueMessage
 from tender_compliance_api.queue.fake import FakeQueueAdapter
 from tender_compliance_api.queue.redis import RedisQueueAdapter
-from tender_compliance_api.scan.adapter import MalwareScanner, ScanResult
+from tender_compliance_api.scan.adapter import (
+    MalwareScanner,
+    MalwareScannerUnavailableError,
+    ScanResult,
+)
+from tender_compliance_api.scan.clamav import ClamAvScanner
 from tender_compliance_api.scan.fake import FakeScanner
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 from tender_compliance_api.storage.factory import create_storage_adapter
@@ -97,8 +102,20 @@ def get_storage_adapter() -> ObjectStorageAdapter:
 
 
 def get_scanner() -> MalwareScanner:
-    """Return the configured malware scanner (FakeScanner by default)."""
-    return FakeScanner()
+    """Return the configured malware scanner."""
+    settings = get_settings()
+    mode = settings.malware_scanner_mode.strip().lower()
+    if mode == "fake":
+        return FakeScanner()
+    if mode == "clamav":
+        return ClamAvScanner(
+            host=settings.clamav_host,
+            port=settings.clamav_port,
+            timeout_seconds=settings.malware_scan_timeout_seconds,
+        )
+    raise RuntimeConfigurationError(
+        f"Unsupported MALWARE_SCANNER_MODE={settings.malware_scanner_mode!r}"
+    )
 
 
 def get_queue_adapter() -> QueueAdapter:
@@ -275,7 +292,27 @@ async def upload_document(
         )
 
     # --- Scan for malware ---
-    scan_result: ScanResult = await scanner.scan(filename, data)
+    try:
+        scan_result: ScanResult = await scanner.scan(filename, data)
+    except MalwareScannerUnavailableError:
+        audit = AuditService(session)
+        await audit.log(
+            organization_id=auth.organization_id,
+            actor_id=auth.actor_id,
+            action="document.upload_rejected",
+            entity_type="project",
+            entity_id=project_id,
+            project_id=project_id,
+            metadata={
+                "reason": "malware_scanner_unavailable",
+                "filename": filename,
+            },
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Malware scanner unavailable. Upload was not accepted; retry shortly.",
+        ) from None
     if not scan_result.clean:
         audit = AuditService(session)
         await audit.log(
