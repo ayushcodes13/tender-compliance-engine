@@ -180,16 +180,47 @@ export default function Home() {
 
       <div className="page-scroll">
         <div className="page-container">
-          {/* ----- Heading ----- */}
-          <section className="page-heading">
-            <div>
-              <h1>Projects</h1>
-              <p className="page-description">
+          {/* ----- Hero ----- */}
+          {!loading && !error && projects.length === 0 && (
+            <section className="hero">
+              <h1>
+                Tender&nbsp;compliance,<br />
+                <span className="curve-text">simplified.</span>
+              </h1>
+              <p className="subtitle">
                 Upload a tender, verify its requirements, attach OEM evidence,
                 review compliance, and export the final submission.
               </p>
-            </div>
-          </section>
+              <div className="hero-actions">
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={openDialog}
+                >
+                  <FilePlus2 size={15} aria-hidden="true" />
+                  Create your first tender
+                </button>
+              </div>
+              <div className="hero-meta">
+                <span>No credit card required</span>
+                <span aria-hidden="true">·</span>
+                <span>Self-hosted</span>
+              </div>
+            </section>
+          )}
+
+          {/* ----- Heading (when projects exist) ----- */}
+          {!loading && !error && projects.length > 0 && (
+            <section className="page-heading">
+              <div>
+                <h1>Projects</h1>
+                <p className="page-description">
+                  Upload a tender, verify its requirements, attach OEM evidence,
+                  review compliance, and export the final submission.
+                </p>
+              </div>
+            </section>
+          )}
 
           {/* ----- Summary line ----- */}
           <p className="summary-inline">
