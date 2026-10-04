@@ -680,6 +680,12 @@ button {
   color: var(--color-success);
 }
 
+.status-error {
+  border-color: var(--color-error-border);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
 /* ===========================================================================
    Breadcrumbs
    =========================================================================== */
