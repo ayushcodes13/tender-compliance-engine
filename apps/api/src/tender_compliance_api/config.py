@@ -97,7 +97,8 @@ class Settings(BaseSettings):
             errors.append("OPENAI_API_KEY is required")
         if self.auth_mode.strip() != "single_workspace":
             errors.append(
-                "AUTH_MODE=single_workspace is required for the current private-pilot production mode"
+                "AUTH_MODE=single_workspace is required for the current "
+                "private-pilot production mode"
             )
         return errors
 
