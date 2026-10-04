@@ -76,7 +76,7 @@ class OpenAiLlmAdapter(LlmAdapter):
         the openai type stubs for provider plumbing.
         """
 
-        from openai import AsyncOpenAI  # type: ignore[import-not-found]
+        from openai import AsyncOpenAI
 
         return AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
 
