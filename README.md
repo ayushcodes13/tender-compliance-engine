@@ -51,9 +51,11 @@ No agent framework is required for this workflow. No vector database is required
 
 ## Fastest pilot start
 
-For a private pilot, Docker Compose starts PostgreSQL, Redis, object storage,
-migrations, the API, OCR worker, and web app together. Browser requests stay
-same-origin through the Next.js backend proxy.
+For a private pilot, Docker Compose starts PostgreSQL, Redis, migrations, the
+API, OCR worker, and web app together. Original documents, rendered pages, and
+exports persist in one shared Docker volume, so there is no separate object-
+storage service to configure. Browser requests stay same-origin through the
+Next.js backend proxy.
 
 ```bash
 cp .env.example .env
@@ -128,13 +130,17 @@ Next.js web app
 FastAPI API
       │
       ├── PostgreSQL      projects / requirements / evidence / audit / submissions
-      ├── S3 / MinIO      original documents / rendered pages / exports
+      ├── local volume    originals / rendered pages / exports (pilot)
+      ├── S3 adapter       optional cloud object storage
       ├── Redis worker    document processing jobs
       ├── Tesseract       OCR
       └── OpenAI adapter  structured language extraction / bounded reasoning
 ```
 
-The core runtime is one web app, one API, one worker, PostgreSQL, Redis, and S3-compatible object storage. It is not a microservice mesh.
+The private-pilot runtime is one web app, one API, one worker, PostgreSQL,
+Redis, and a shared durable filesystem volume. The same storage abstraction can
+use S3-compatible object storage for a later cloud deployment. It is not a
+microservice mesh.
 
 ## Repository structure
 
@@ -146,7 +152,7 @@ The core runtime is one web app, one API, one worker, PostgreSQL, Redis, and S3-
 ├── docs/                 architecture, evaluation, security, runbooks
 ├── infra/                local infrastructure
 ├── docker-compose.yml    complete local stack
-├── checkpoint.md         completed canonical build plan
+├── docs/checkpoint.md    completed canonical build plan
 ├── AGENTS.md             engineering rules
 └── README.md
 ```
@@ -199,7 +205,9 @@ OPENAI_API_KEY=...
 docker compose up --build
 ```
 
-Migrations run before the API starts, the object-storage bucket is created on API startup, and the same OpenAI configuration is supplied to the processing worker. Then open `http://localhost:3000`.
+Migrations run before the API starts, the shared document volume is verified on
+startup, and the same OpenAI configuration is supplied to the processing
+worker. Then open `http://localhost:3000`.
 
 This **single-workspace mode is designed for private pilots and one-customer deployments**. It is not a substitute for a real identity provider when the product is exposed as a public multi-user SaaS.
 
@@ -214,6 +222,7 @@ CI checks the parts that matter most for this product:
 - cross-tenant security tests;
 - frontend TypeScript and production build;
 - API, worker, and web Docker builds;
+- a full bundled Docker Compose startup + same-origin readiness smoke;
 - unsafe raw-HTML rendering guard.
 
 The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_REVIEW.md](docs/POST61_RELEASE_REVIEW.md).
@@ -222,10 +231,12 @@ The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_R
 
 **CP00–CP61 are complete.** Post-build hardening PRs have also completed the browser compliance-review flow, final matrix/export/submission UI, real OEM upload → worker integration, and adversarial security review.
 
+The buyer-facing pilot flow is now explicit in the UI: **Tender → Vendor/OEM → Review → Compliance sheet**.
+
 The remaining focus is deliberately commercial and practical:
 
-1. make the UI feel like a finished product;
-2. run representative real tender + OEM documents through the deployed product;
+1. run representative real tender + OEM documents through the deployed product;
+2. complete the manual acceptance checklist on those documents;
 3. fix only the issues those real runs expose.
 
 We are **not** adding agent orchestration, a vector database, or a new RAG platform unless real customer usage proves one is necessary.

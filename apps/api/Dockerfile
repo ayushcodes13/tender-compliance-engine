@@ -14,7 +14,10 @@ RUN pip install --upgrade pip && \
     pip install . && \
     rm -rf /root/.cache/pip
 
-RUN groupadd -r app && useradd -r -g app app
+RUN groupadd --gid 10001 app && \
+    useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin app && \
+    mkdir -p /app/object-storage && \
+    chown -R app:app /app/object-storage
 USER app
 
 EXPOSE 8000

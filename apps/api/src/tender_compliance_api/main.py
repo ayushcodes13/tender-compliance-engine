@@ -24,8 +24,7 @@ from tender_compliance_api.routes.source_viewer import router as source_viewer_r
 from tender_compliance_api.routes.submissions import router as submissions_router
 from tender_compliance_api.routes.uploads import router as uploads_router
 from tender_compliance_api.routes.vendor_specs import router as vendor_specs_router
-from tender_compliance_api.storage.fake import FakeStorageAdapter
-from tender_compliance_api.storage.s3 import S3StorageAdapter
+from tender_compliance_api.storage.factory import initialize_storage_adapter
 
 logger = get_logger("main")
 
@@ -37,18 +36,8 @@ async def lifespan(app: FastAPI) -> Any:
     if settings.database_url:
         init_engine(settings.database_url)
 
-    if settings.object_storage_endpoint:
-        storage = S3StorageAdapter(
-            endpoint_url=settings.object_storage_endpoint,
-            access_key=settings.object_storage_access_key,
-            secret_key=settings.object_storage_secret_key,
-            bucket=settings.object_storage_bucket,
-            region=settings.object_storage_region,
-        )
-        await storage.ensure_bucket()
-        app.state.storage_adapter = storage
-    elif not hasattr(app.state, "storage_adapter"):
-        app.state.storage_adapter = FakeStorageAdapter()
+    if not hasattr(app.state, "storage_adapter"):
+        app.state.storage_adapter = await initialize_storage_adapter(settings)
 
     yield
     await close_engine()

@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     # Browser/API boundary.
     cors_allowed_origins: str = "http://localhost:3000"
 
-    # Object storage (S3-compatible, e.g. MinIO locally)
+    # Object storage. A private single-host pilot uses a durable shared
+    # filesystem volume; public/cloud deployments can configure S3 instead.
+    object_storage_local_path: str = ""
     object_storage_endpoint: str = ""
     object_storage_access_key: str = ""
     object_storage_secret_key: str = ""

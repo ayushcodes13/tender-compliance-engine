@@ -39,8 +39,7 @@ from tender_compliance_api.queue import (
 from tender_compliance_api.renderer import PymupdfRendererAdapter
 from tender_compliance_api.renderer.adapter import RendererAdapter
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
-from tender_compliance_api.storage.fake import FakeStorageAdapter
-from tender_compliance_api.storage.s3 import S3StorageAdapter
+from tender_compliance_api.storage.factory import create_storage_adapter
 from tender_compliance_worker.processor import JobProcessor, SessionFactory
 
 logger = logging.getLogger(__name__)
@@ -229,16 +228,7 @@ def create_worker(
 
 def _get_storage_adapter() -> ObjectStorageAdapter:
     """Return the storage adapter based on configuration."""
-    settings = get_settings()
-    if not settings.object_storage_endpoint:
-        return FakeStorageAdapter()
-    return S3StorageAdapter(
-        endpoint_url=settings.object_storage_endpoint,
-        access_key=settings.object_storage_access_key,
-        secret_key=settings.object_storage_secret_key,
-        bucket=settings.object_storage_bucket,
-        region=settings.object_storage_region,
-    )
+    return create_storage_adapter()
 
 
 def _get_session_factory() -> SessionFactory:

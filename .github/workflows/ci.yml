@@ -156,3 +156,54 @@ jobs:
           file: ./apps/web/Dockerfile
           push: false
           load: true
+
+  pilot-smoke:
+    name: bundled pilot smoke
+    runs-on: ubuntu-latest
+    needs: [api, api-worker, web]
+    env:
+      # Presence is required by production readiness, but the smoke never sends
+      # document content to OpenAI.
+      OPENAI_API_KEY: ci-placeholder-not-a-real-key
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start complete bundled product
+        run: docker compose up -d --build
+      - name: Wait for web and same-origin readiness
+        run: |
+          set -euo pipefail
+
+          ready=0
+          for attempt in $(seq 1 48); do
+            if curl --fail --silent --show-error               http://localhost:3000/api/backend/ready               -o /tmp/tce-ready.json; then
+              if python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("/tmp/tce-ready.json").read_text())
+          assert data["status"] == "ready", data
+          PY
+              then
+                ready=1
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Bundled product did not become ready in time."
+            docker compose ps
+            docker compose logs --no-color --tail=200
+            exit 1
+          fi
+
+          curl --fail --silent --show-error http://localhost:3000/ >/dev/null
+          cat /tmp/tce-ready.json
+          docker compose ps
+      - name: Show bundled stack logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=250
+      - name: Stop bundled product
+        if: always()
+        run: docker compose down -v --remove-orphans
