@@ -371,14 +371,14 @@ export function TenderReviewWorkspace(props: {
             Live data
           </span>
           <Link href={`/projects/${projectId}/matrix`} className="button button-primary button-small">
-            Open matrix
+            Open compliance sheet
           </Link>
         </div>
       </header>
 
       <div className="project-tabs" role="tablist" aria-label="Project sections">
         <button className="project-tab project-tab-active" role="tab" aria-selected="true" type="button">
-          Requirements
+          Review
           <span>{reqList.total}</span>
         </button>
         <Link
@@ -396,7 +396,7 @@ export function TenderReviewWorkspace(props: {
           role="tab"
           aria-selected="false"
         >
-          Matrix
+          Compliance sheet
           <span>↗</span>
         </Link>
 

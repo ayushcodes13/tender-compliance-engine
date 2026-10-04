@@ -90,13 +90,16 @@ export function OemDocumentsPanel(props: {
   };
 
   return (
-    <div className="doclist-section">
+    <div className="doclist-section source-section-anchor" id="vendor-sources">
       <div className="section-title-row">
         <div>
-          <h2>OEM / vendor evidence</h2>
+          <p className="eyebrow">Step 2 · Vendor / OEM</p>
+          <h2>Vendor / OEM sources</h2>
           <p>
-            Upload the documents you would rely on in the bid. Evidence is
-            always tied back to these immutable source versions.
+            Upload datasheets, manuals, test reports, certificates, proposals,
+            quotations, or an existing vendor compliance sheet. These sources
+            support the response; the product does not assume their claims are true
+            until they are reviewed against the tender.
           </p>
         </div>
         <button
@@ -146,7 +149,11 @@ export function OemDocumentsPanel(props: {
           style={{ cursor: disabled ? "not-allowed" : "pointer" }}
         >
           <Upload size={13} aria-hidden="true" />
-          {uploading ? "Uploading…" : "Upload source"}
+          {uploading
+            ? "Uploading…"
+            : documentType === "compliance_sheet"
+              ? "Upload compliance sheet"
+              : "Upload source"}
           <input
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -180,8 +187,11 @@ export function OemDocumentsPanel(props: {
       ) : items.length === 0 ? (
         <div className="empty-state">
           <File size={22} aria-hidden="true" />
-          <strong>No OEM/vendor evidence yet.</strong>
-          <p>Add the source material that should support the vendor response.</p>
+          <strong>No vendor/OEM sources yet.</strong>
+          <p>
+            Add at least one technical source or an existing vendor compliance
+            sheet before you review compliance.
+          </p>
         </div>
       ) : (
         <table className="doclist-table">
