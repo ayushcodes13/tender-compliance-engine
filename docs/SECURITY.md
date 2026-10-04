@@ -23,10 +23,12 @@ Controls:
 
 - allowlisted MIME/file signatures
 - file-size/page-count limits
-- malware scanning in production
 - sandbox/isolated document-processing workers
 - processing timeouts and resource limits
 - never execute embedded document code/macros
+- a real malware scanner is required before accepting arbitrary public/untrusted uploads
+
+The bundled single-workspace pilot assumes a trusted operator uploading customer-provided tender/OEM files. Its current scanner seam is not a substitute for anti-malware scanning on a public upload surface.
 
 ### Prompt injection in documents
 
@@ -39,6 +41,17 @@ Controls:
 - structured schemas and validators
 - no tool execution based on document instructions
 - explicit provenance for model outputs
+
+### Browser boundary
+
+Controls:
+
+- same-origin browser-to-API proxy for the bundled deployment
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- strict-origin referrer policy
+- camera, microphone, and geolocation disabled through Permissions Policy
+- raw uploaded/derived document text is rendered through React escaping, not raw HTML
 
 ### Secret exposure
 
