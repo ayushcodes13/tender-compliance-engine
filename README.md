@@ -17,6 +17,10 @@
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-001742">
 </p>
 
+<p align="center">
+  <img src="apps/web/docs/landing-screenshot.png" width="1120" alt="Tender Compliance Engine landing page: glassmorphism + minimalist B2B theme, trust navy surface with a frosted hero card, Space Grotesk and DM Sans typography" />
+</p>
+
 ---
 
 ## What the product does
