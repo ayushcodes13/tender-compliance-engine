@@ -5,9 +5,6 @@ import {
   FileText,
   Gavel,
   LayoutGrid,
-  MessageCircle,
-  Settings,
-  Shield,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
@@ -20,8 +17,6 @@ const navigation = [
   { href: "/dashboard/requirements", label: "Requirements", icon: Gavel },
   { href: "/dashboard/matrix", label: "Compliance Matrix", icon: BarChart3 },
   { href: "/dashboard/evidence", label: "Evidence", icon: Upload },
-  { href: "/dashboard/chat", label: "AI Assistant", icon: MessageCircle },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
