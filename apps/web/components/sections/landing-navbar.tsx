@@ -42,10 +42,10 @@ export function LandingNavbar() {
 
         <div className="flex items-center gap-3">
           <Link
-            href="/sign-in"
+            href="/access"
             className="hidden text-sm font-medium text-text-secondary hover:text-text-primary md:inline-block"
           >
-            Sign in
+            Access
           </Link>
           <Link href="/contact">
             <motion.button

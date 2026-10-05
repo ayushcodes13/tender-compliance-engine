@@ -103,17 +103,17 @@ export default function ContactPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
           >
             <h2 className="font-display text-xl font-bold tracking-tight text-text-primary">
-              Already have access?
+              Already have a deployment?
             </h2>
             <p className="mt-3 text-sm text-text-secondary">
-              Sign in to your workspace to upload a tender, review extracted
+              Open your workspace to upload a tender, review extracted
               requirements, and export the compliance sheet.
             </p>
             <Link
-              href="/sign-in"
+              href="/dashboard"
               className="mt-5 inline-block rounded-md bg-accent px-6 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              Sign in
+              Open the workspace
             </Link>
           </motion.div>
         </div>
