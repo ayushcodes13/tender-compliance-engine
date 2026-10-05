@@ -20,6 +20,7 @@ from typing import cast
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import init_engine
 from tender_compliance_api.extraction.adapter import LlmAdapter
+from tender_compliance_api.extraction.dev_adapter import DevLlmAdapter
 from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.ocr.tesseract import TesseractOcrAdapter
@@ -164,13 +165,15 @@ def create_worker(
 
     Production validates its durable database, Redis queue, object storage,
     model credential, and pilot auth mode before constructing the worker.
-    Development may still fall back to :class:`FakeQueueAdapter`.  Defaults:
+    Development may still fall back to :class:`FakeQueueAdapter`.  When
+    ``OPENAI_API_KEY`` is absent in development, a deterministic
+    :class:`DevLlmAdapter` is used so the full extraction pipeline is
+    exercisable locally without network access.  Defaults:
     :class:`CompositeParserAdapter` dispatching to
     :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
     (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
     :class:`TesseractOcrAdapter` (CP21).  The LLM extraction default is
-    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``docs/review.md``); inject a
-    :class:`FakeLlmAdapter` for tests.
+    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``docs/review.md``).
     """
     settings = get_settings()
     settings.validate_runtime_configuration()
@@ -211,7 +214,16 @@ def create_worker(
                 "OPENAI_API_KEY is required for the production worker. "
                 "Set it in the environment before starting the stack."
             )
-        llm = OpenAiLlmAdapter()
+        if settings.app_env == "development" and not settings.openai_api_key:
+            # Local development without a configured model: use the deterministic
+            # DevLlmAdapter so the full extraction pipeline is exercisable
+            # end-to-end without network access to a provider.  DevLlmAdapter
+            # applies rule-based extraction that respects the CP25
+            # source-substring boundary (raw_source is always a verbatim line
+            # from the trusted window text).
+            llm = DevLlmAdapter()
+        else:
+            llm = OpenAiLlmAdapter()
 
     return Worker(
         queue=queue,
