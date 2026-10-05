@@ -56,8 +56,8 @@ export function FeaturesSection() {
               <motion.div
                 key={feature.title}
                 className={cn(
-                  "flex flex-col gap-4 rounded-xl border border-border bg-surface p-7",
-                  "transition-colors duration-200 hover:border-accent/40",
+                  "flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-7 backdrop-blur-xl",
+                  "transition-colors duration-200 hover:border-white/20 hover:bg-white/6",
                 )}
                 variants={cardVariants}
                 transition={{

@@ -55,7 +55,7 @@ export default function AccessPage() {
             {facts.map((item) => (
               <div
                 key={item.title}
-                className="rounded-lg border border-border bg-surface p-5"
+                className="rounded-lg border border-white/10 bg-white/5 p-5 backdrop-blur-xl"
               >
                 <h2 className="text-sm font-semibold text-text-primary">
                   {item.title}

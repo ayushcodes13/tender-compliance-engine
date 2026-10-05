@@ -16,11 +16,11 @@ export default function GlobalError({
             infrastructure. */}
         <style>{`
           @font-face {
-            font-family: "Figtree";
+            font-family: "Plus Jakarta Sans";
             font-style: normal;
-            font-weight: 300 700;
+            font-weight: 300 800;
             font-display: swap;
-            src: url("/fonts/figtree-latin.woff2") format("woff2");
+            src: url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
           }
         `}</style>
       </head>
@@ -28,7 +28,7 @@ export default function GlobalError({
         style={{
           margin: 0,
           fontFamily:
-            '"Figtree", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            '"Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
           background: "#0a0a0a",
           color: "#e4e4e3",
         }}

@@ -19,6 +19,33 @@
 
 ---
 
+## Product interface
+
+The web app uses a **glassmorphism + minimalist** dark surface: translucent layers, a
+subtle `1 px` white border (`#ffffff10`), and a soft `backdrop-blur` separate depth
+without visual clutter. The base is deep slate (`#111117`) with a safety-orange
+call-to-action (`#ff6c4c`), and a frosted surface for the TCE mark.
+
+![Landing screen — glassmorphism dark surface with frosted TCE mark](apps/web/public/screenshot-landing.png)
+
+![Dashboard — source-linked project list over a frosted rail and surface](apps/web/public/screenshot-dashboard.png)
+
+**Typography.** [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans)
+(weights 300–800) replaced the earlier Figtree type. It is **self-hosted** as variable
+WOFF2 files (latin + latin-ext) under `apps/web/public/fonts/`, with the SIL Open Font
+License bundled alongside as `OFL.txt`. The app loads no font over the network at build
+or runtime — there is no Google Fonts import in the CSS.
+
+**Logo.** `apps/web/public/tce-mark.svg` is a frosted-glass mark that sits directly on
+the translucent surface instead of a solid-color box, so it reads over both the landing
+hero and the dashboard rail.
+
+The visual direction follows the **Glassmorphism + Minimalism** recommendation produced
+by the `ui-ux-pro-max-skill` design-system generator (cloned locally and run with
+`search.py --design-system "B2B SaaS procurement compliance dashboard"`); it was used
+only as a reference catalog and no private or license-restricted code was copied into
+this repository.
+
 ## What the product does
 
 Tender Compliance Engine is built for engineering, procurement, technical sales, and bid teams that need to answer one practical question:

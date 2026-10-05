@@ -44,7 +44,7 @@ export function FaqSection() {
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
     <motion.div
-      className="rounded-lg border border-border bg-surface p-5"
+      className="rounded-lg border border-white/10 bg-white/5 p-5 backdrop-blur-xl"
       variants={{
         initial: { opacity: 0, y: 10 },
         animate: { opacity: 1, y: 0 },
@@ -68,15 +68,19 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-border/50 py-12">
+    <footer className="w-full border-t border-white/10 py-12">
       <div className="container mx-auto px-6 md:px-8">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="inline-flex items-center justify-center rounded-lg bg-white/10 p-1">
-                <img src="/tce-mark.svg" alt="" width={30} height={30} />
-              </span>
+              <img
+                src="/tce-mark.svg"
+                alt=""
+                width={34}
+                height={34}
+                className="h-8 w-8"
+              />
               <span>Tender Compliance Engine</span>
             </Link>
             <p className="mt-3 max-w-sm text-sm text-text-secondary">

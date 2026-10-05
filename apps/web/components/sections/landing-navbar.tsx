@@ -13,7 +13,7 @@ const navVariants = {
 export function LandingNavbar() {
   return (
     <motion.header
-      className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-sm"
+      className="sticky top-0 z-50 w-full border-b border-white/10 bg-white/5 backdrop-blur-xl"
       initial="initial"
       animate="animate"
       variants={navVariants}
@@ -21,9 +21,13 @@ export function LandingNavbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-6 md:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="inline-flex items-center justify-center rounded-lg bg-white/10 p-1">
-            <img src="/tce-mark.svg" alt="" width={30} height={30} />
-          </span>
+          <img
+            src="/tce-mark.svg"
+            alt=""
+            width={34}
+            height={34}
+            className="h-8 w-8"
+          />
           <span>Tender Compliance Engine</span>
         </Link>
 
@@ -33,7 +37,7 @@ export function LandingNavbar() {
             <Link
               key={item.href}
               href={item.href}
-              className="text-sm text-text-secondary hover:text-text-primary transition-colors"
+              className="text-sm text-text-secondary hover:text-accent transition-colors"
             >
               {item.label}
             </Link>

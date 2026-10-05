@@ -65,7 +65,7 @@ export default function ContactPage() {
             {pilotScope.map((item) => (
               <div
                 key={item.title}
-                className="rounded-lg border border-border bg-surface p-5"
+                className="rounded-lg border border-white/10 bg-white/5 p-5 backdrop-blur-xl"
               >
                 <h2 className="text-sm font-semibold text-text-primary">
                   {item.title}
@@ -78,7 +78,7 @@ export default function ContactPage() {
           </motion.div>
 
           <motion.div
-            className="mt-12 rounded-lg border border-border bg-surface p-6"
+            className="mt-12 rounded-lg border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.14, ease: [0.16, 1, 0.3, 1] }}
