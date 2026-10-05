@@ -25,7 +25,7 @@ export function WorkflowSection() {
             From Tender to Compliance Sheet
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-text-secondary">
-            Four simple steps. Each decision stays tied to its source.
+            Five steps. Each decision stays tied to its source.
           </p>
         </motion.div>
 

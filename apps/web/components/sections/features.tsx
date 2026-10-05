@@ -10,17 +10,17 @@ const container = {
   animate: {
     opacity: 1,
     transition: {
-      duration: 0.7,
+      duration: 0.6,
       ease: [0.16, 1, 0.3, 1] as const,
-      staggerChildren: 0.12,
-      delayChildren: 0.1,
+      staggerChildren: 0.1,
+      delayChildren: 0.05,
     },
   },
 };
 
 const cardVariants = {
-  initial: { opacity: 0, y: 30, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
 };
 
 export function FeaturesSection() {
@@ -28,18 +28,18 @@ export function FeaturesSection() {
     <section className="w-full py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
-          className="mb-14 text-center"
-          initial={{ opacity: 0, y: 20 }}
+          className="mb-12 text-center"
+          initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
         >
           <h2 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            Smarter Tools to Accelerate Your Growth
+            Source-linked extraction with review
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-text-secondary">
-            Powerful capabilities designed to simplify workflows and ensure
-            compliance without the spreadsheet hunt.
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-text-secondary">
+            Every requirement is extracted with a precise source anchor,
+            reviewed by your team, then exported as a citation-backed matrix.
           </p>
         </motion.div>
 
@@ -56,16 +56,15 @@ export function FeaturesSection() {
               <motion.div
                 key={feature.title}
                 className={cn(
-                  "group flex flex-col gap-4 rounded-xl border border-border bg-surface p-7",
-                  "transition-all duration-300 hover:border-accent/50 hover:bg-surface-elevated",
+                  "flex flex-col gap-4 rounded-xl border border-border bg-surface p-7",
+                  "transition-colors duration-200 hover:border-accent/40",
                 )}
                 variants={cardVariants}
                 transition={{
-                  duration: 0.6,
-                  delay: index * 0.1,
+                  duration: 0.5,
+                  delay: index * 0.08,
                   ease: [0.16, 1, 0.3, 1] as const,
                 }}
-                whileHover={{ y: -4 }}
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
                   <Icon className="h-5 w-5" />
