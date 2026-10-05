@@ -157,3 +157,76 @@ test.describe("accessibility", () => {
     await expectNoSeriousViolations(page, "/dashboard (create dialog open)");
   });
 });
+
+/**
+ * Keyboard containment for the create-project modal. These are behavioural
+ * rather than axe rules, so they are asserted directly: a modal that leaks
+ * focus is unusable with a keyboard and axe does not report it.
+ */
+test.describe("create-project dialog keyboard behavior", () => {
+  const focusInsideDialog = (page) =>
+    page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
+
+  test.beforeEach(async ({ page }) => {
+    await mockProjects(page, [seedProject()]);
+    await page.goto("/dashboard");
+    await expect(
+      page.getByRole("heading", { name: "Projects", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Pilot Tender")).toBeVisible();
+  });
+
+  test("moves focus into the dialog on open", async ({ page }) => {
+    await page.getByRole("button", { name: "New tender" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    expect(await focusInsideDialog(page)).toBe(true);
+  });
+
+  test("traps Tab inside the dialog", async ({ page }) => {
+    await page.getByRole("button", { name: "New tender" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    for (let i = 0; i < 14; i += 1) {
+      await page.keyboard.press("Tab");
+      expect(
+        await focusInsideDialog(page),
+        `focus left the dialog after ${i + 1} Tab presses`,
+      ).toBe(true);
+    }
+  });
+
+  test("traps Shift+Tab inside the dialog", async ({ page }) => {
+    await page.getByRole("button", { name: "New tender" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    for (let i = 0; i < 14; i += 1) {
+      await page.keyboard.press("Shift+Tab");
+      expect(
+        await focusInsideDialog(page),
+        `focus left the dialog after ${i + 1} Shift+Tab presses`,
+      ).toBe(true);
+    }
+  });
+
+  test("Escape closes the dialog and restores focus to the trigger", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "New tender" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New tender" })).toBeFocused();
+  });
+
+  test("cancel returns focus to the trigger", async ({ page }) => {
+    await page.getByRole("button", { name: "New tender" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New tender" })).toBeFocused();
+  });
+});
