@@ -64,24 +64,30 @@ export function HeroSection() {
             className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
             variants={item}
           >
-            <Link href="/contact">
-              <motion.button
-                className="rounded-md bg-accent px-7 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                whileHover={{ scale: 1.02 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
+            <motion.div
+              variants={item}
+              whileHover={{ scale: 1.02 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+            >
+              <Link
+                href="/contact"
+                className="inline-flex items-center rounded-md bg-accent px-7 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {heroData.primaryCta}
-              </motion.button>
-            </Link>
-            <Link href="/#how-it-works">
-              <motion.button
-                className="rounded-md border border-border bg-transparent px-7 py-3 text-sm font-semibold text-text-primary hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                whileHover={{ scale: 1.02 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
+              </Link>
+            </motion.div>
+            <motion.div
+              variants={item}
+              whileHover={{ scale: 1.02 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+            >
+              <Link
+                href="/#how-it-works"
+                className="inline-flex items-center rounded-md border border-border bg-transparent px-7 py-3 text-sm font-semibold text-text-primary hover:bg-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 {heroData.secondaryCta}
-              </motion.button>
-            </Link>
+              </Link>
+            </motion.div>
           </motion.div>
 
           <motion.p className="mt-8 text-sm text-text-tertiary" variants={item}>

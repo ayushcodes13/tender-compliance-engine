@@ -110,9 +110,9 @@ export function ProjectsGrid() {
       {/* Projects header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="font-display text-2xl font-bold text-text-primary">
+          <h1 className="font-display text-2xl font-bold text-text-primary">
             Projects
-          </h2>
+          </h1>
           <p className="mt-1 text-sm text-text-secondary">
             Upload a tender, verify requirements, attach OEM evidence, review
             compliance, and export the final submission.

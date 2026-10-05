@@ -47,15 +47,17 @@ export function LandingNavbar() {
           >
             Access
           </Link>
-          <Link href="/contact">
-            <motion.button
-              className="rounded-md bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          <motion.div
               whileHover={{ scale: 1.03 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              Book a pilot
-            </motion.button>
-          </Link>
+              <Link
+                href="/contact"
+                className="inline-flex items-center rounded-md bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Book a pilot
+              </Link>
+            </motion.div>
         </div>
       </div>
     </motion.header>
