@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   FilePlus2,
@@ -46,6 +46,9 @@ export function ProjectsGrid() {
   const [creating, setCreating] = useState(false);
   const router = useRouter();
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -69,6 +72,11 @@ export function ProjectsGrid() {
   const archivedProjects = projects.filter((p) => p.status === "archived");
 
   const openDialog = () => {
+    // Remember whatever had focus so it can be handed back on close.
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setNewName("");
     setShowDialog(true);
   };
@@ -78,6 +86,61 @@ export function ProjectsGrid() {
     setShowDialog(false);
     setNewName("");
   };
+
+  // Escape closes the dialog from anywhere inside it, and Tab is trapped
+  // within it. Registered on the document because the backdrop is a sibling of
+  // the dialog panel, so focus never sits on the element that would need the
+  // handler attached to it.
+  useEffect(() => {
+    if (!showDialog) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!creating) closeDialog();
+        return;
+      }
+
+      // Trap Tab inside the dialog. Without this, tabbing walks out into the
+      // page behind the modal and keyboard users lose their place.
+      if (event.key !== "Tab") return;
+      const root = dialogRef.current;
+      if (!root) return;
+
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null);
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && (active === first || !root.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showDialog, creating]);
+
+  // Return focus to the control that opened the dialog, so dismissing it does
+  // not drop the user back at the top of the document.
+  useEffect(() => {
+    if (showDialog) return;
+    const target = restoreFocusRef.current;
+    if (!target) return;
+    restoreFocusRef.current = null;
+    // The trigger can unmount while the dialog is open, so check it is still in
+    // the document before handing focus back.
+    if (target.isConnected) target.focus();
+  }, [showDialog]);
 
   const handleCreate = async () => {
     if (!newName.trim() || creating) return;
@@ -96,12 +159,11 @@ export function ProjectsGrid() {
     }
   };
 
+  // Enter submits. Escape is handled by the dialog-level listener so it works
+  // from anywhere inside the dialog, not just this field.
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !creating && newName.trim()) {
       void handleCreate();
-    }
-    if (e.key === "Escape") {
-      closeDialog();
     }
   };
 
@@ -232,12 +294,7 @@ export function ProjectsGrid() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  closeDialog();
-                }
-              }}
+              ref={dialogRef}
             >
               <h3
                 id="create-project-title"
