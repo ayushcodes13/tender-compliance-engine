@@ -49,8 +49,8 @@ export function WorkflowSection() {
               <motion.div
                 key={step.number}
                 className={cn(
-                  "flex items-start gap-4 rounded-xl border border-border bg-surface p-6",
-                  "transition-all duration-300 hover:border-accent/50",
+                  "flex items-start gap-4 rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl",
+                  "transition-colors duration-200 hover:border-white/20 hover:bg-white/6",
                 )}
                 variants={{
                   initial: { opacity: 0, x: -20 },
