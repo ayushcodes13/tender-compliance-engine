@@ -616,7 +616,12 @@ async function expectJson<T>(response: Response): Promise<T> {
       throw new Error(detail ?? "The request could not be accepted. Check the input and try again.");
     }
     if (response.status === 401) {
-      throw new Error("Your session is not authorized. Sign in again and retry.");
+      // No login flow exists to retry: this pilot resolves identity from
+      // deployment configuration, so telling someone to sign in again would
+      // send them looking for a form that was deliberately removed.
+      throw new Error(
+        "This deployment did not recognize your access. Check that you are reaching it the way the pilot provides, or contact whoever runs it.",
+      );
     }
     if (response.status === 403) {
       throw new Error("You do not have access to this project or action.");
