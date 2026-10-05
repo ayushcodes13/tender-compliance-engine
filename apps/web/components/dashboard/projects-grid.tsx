@@ -278,14 +278,14 @@ export function ProjectsGrid() {
       <AnimatePresence>
         {showDialog && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#172033]/30"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={closeDialog}
           >
             <motion.div
-              className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl"
+              className="w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-lg"
               role="dialog"
               aria-modal="true"
               aria-labelledby="create-project-title"
@@ -327,7 +327,7 @@ export function ProjectsGrid() {
                 </button>
                 <button
                   className={cn(
-                    "rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background",
+                    "rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white",
                     "hover:bg-accent-hover disabled:opacity-60",
                   )}
                   onClick={() => void handleCreate()}
