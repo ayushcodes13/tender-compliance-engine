@@ -9,10 +9,20 @@ export default function GlobalError({
   return (
     <html lang="en">
       <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&family=Figtree:wght@300;400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
+        {/* This screen renders its own <html>, outside the app layout, so it
+            cannot rely on globals.css for @font-face. The font is self-hosted
+            and the stack degrades to system-ui if the file cannot be fetched.
+            It must not link out to Google: this app runs on customers' own
+            infrastructure. */}
+        <style>{`
+          @font-face {
+            font-family: "Figtree";
+            font-style: normal;
+            font-weight: 300 700;
+            font-display: swap;
+            src: url("/fonts/figtree-latin.woff2") format("woff2");
+          }
+        `}</style>
       </head>
       <body
         style={{
@@ -62,7 +72,6 @@ export default function GlobalError({
                 fontSize: 24,
                 fontWeight: 500,
                 color: "#0f172a",
-                fontFamily: '"EB Garamond", Georgia, serif',
               }}
             >
               The application could not recover.
