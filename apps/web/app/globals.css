@@ -216,27 +216,34 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Focus ring: simple 2px outline, no glow */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
+/* These element defaults must live in @layer base. Unlayered rules outrank
+   every Tailwind utility regardless of specificity, so a bare `a { color:
+   inherit }` here silently overrides `text-*` on every anchor and button in
+   the app — which is how the primary CTA ended up rendering light grey on the
+   accent fill instead of near-black. */
+@layer base {
+  /* Focus ring: simple 2px outline, no glow */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-button {
-  color: inherit;
-}
+  button {
+    color: inherit;
+  }
 
-::selection {
-  background: var(--color-accent-soft);
+  ::selection {
+    background: var(--color-accent-soft);
+  }
 }
 
 /* ===========================================================================
@@ -354,7 +361,7 @@ button {
   place-items: center;
   border-radius: var(--radius-sm);
   background: var(--color-accent);
-  color: #ffffff;
+  color: var(--color-background);
   font-size: 10px;
   font-weight: 650;
 }
