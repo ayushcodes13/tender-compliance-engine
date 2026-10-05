@@ -1,7 +1,15 @@
 /**
- * Typed data objects for the Flowsuite-style landing page.
+ * Typed data objects for the landing page.
  *
- * All copy lives here so it can be swapped without touching components.
+ * Copy lives here so it can be swapped without touching components.
+ * Every string below is a factual statement about what this code does,
+ * traceable to the backend or the UI. There are no customers, testimonials,
+ * adoption numbers, integrations, pricing tiers, trial lengths, or SLA
+ * claims, because none of those have been established.
+ *
+ * When you add a claim here, it must be something the product demonstrably
+ * does today. "A pilot customer reduced review time" needs a named pilot
+ * and a measured number; without them, leave it out.
  */
 
 import type { ComponentType } from "react";
@@ -9,9 +17,6 @@ import {
   BarChart3,
   FileText,
   Gavel,
-  Link,
-  Mic,
-  Plus,
   Search,
   Shield,
   Upload,
@@ -28,9 +33,9 @@ export interface NavItem {
 }
 
 export const navItems: NavItem[] = [
-  { label: "Features", href: "/#features" },
+  { label: "What it does", href: "/#features" },
   { label: "How it works", href: "/#how-it-works" },
-  { label: "Pricing", href: "/#pricing" },
+  { label: "FAQ", href: "/#faq" },
   { label: "Contact", href: "/contact" },
 ];
 
@@ -47,12 +52,12 @@ export interface HeroData {
 }
 
 export const heroData: HeroData = {
-  eyebrow: "Enterprise-Grade Tender Compliance",
-  headline: "From Tender Documents to a Source-Linked Compliance Sheet — Verified, Not Inferred.",
+  eyebrow: "For procurement, technical sales, and bid teams",
+  headline: "Source-linked compliance sheets for technical tenders.",
   subhead:
-    "Upload your tender PDFs, extract every technical requirement with precise source anchors, review and normalise, then attach OEM evidence and export a submission that auditors can trace end to end.",
-  primaryCta: "Get started free",
-  secondaryCta: "Watch a 2-min demo",
+    "Upload a tender and your OEM evidence. Every requirement stays anchored to the page and clause it came from, so reviews and exports can be audited end to end.",
+  primaryCta: "Book a pilot",
+  secondaryCta: "See how it works",
 };
 
 /* ------------------------------------------------------------------ */
@@ -106,96 +111,38 @@ export interface WorkflowStep {
 export const workflowSteps: WorkflowStep[] = [
   {
     number: 1,
-    title: "Upload tender",
+    title: "Upload the tender",
     description:
-      "Upload a PDF or DOCX. Parsing and OCR keep every requirement tied to its source.",
-    icon: FileText,
+      "Upload a PDF or DOCX. Parsing and OCR keep every requirement tied to the page and clause it came from.",
+    icon: Upload,
   },
   {
     number: 2,
-    title: "Extract requirements",
+    title: "Review the requirements",
     description:
-      "Deterministic parsing extracts technical requirements with source anchors and confidence flags.",
-    icon: Search,
-  },
-  {
-    number: 3,
-    title: "Review & normalise",
-    description:
-      "Review source-linked decisions, split, merge, categorise, and resolve OCR warnings.",
+      "Confirm, correct, split, or merge each requirement. OCR warnings and ambiguous terms are flagged for you, not resolved by guesswork.",
     icon: Gavel,
   },
   {
+    number: 3,
+    title: "Upload OEM documents",
+    description:
+      "Attach datasheets, test reports, quotations, and existing compliance sheets as versioned evidence.",
+    icon: FileText,
+  },
+  {
     number: 4,
-    title: "Export compliance sheet",
+    title: "Review evidence and decisions",
     description:
-      "Produce XLSX, DOCX, or PDF with full source/version metadata — unresolved rows stay visible.",
+      "Accept or reject proposed evidence. Each comparison runs on tested code and shows the reasoning behind the result.",
+    icon: Search,
+  },
+  {
+    number: 5,
+    title: "Export the compliance sheet",
+    description:
+      "Produce XLSX, DOCX, or PDF with full source and version metadata. Unresolved rows stay visible.",
     icon: BarChart3,
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/* Pricing                                                            */
-/* ------------------------------------------------------------------ */
-
-export interface PricingPlan {
-  name: string;
-  description: string;
-  price: string;
-  period: string;
-  features: string[];
-  cta: string;
-  popular?: boolean;
-}
-
-export const pricingPlans: PricingPlan[] = [
-  {
-    name: "Starter",
-    description:
-      "Perfect for small teams and individual compliance analysts.",
-    price: "$29",
-    period: "/month",
-    features: [
-      "Up to 500 requirements per month",
-      "5 GB document storage",
-      "Standard OCR & extraction",
-      "Basic compliance matrix",
-      "XLSX & PDF export",
-    ],
-    cta: "Start free trial",
-  },
-  {
-    name: "Professional",
-    description:
-      "Everything you need to manage tenders at scale.",
-    price: "$99",
-    period: "/month",
-    features: [
-      "Unlimited requirements",
-      "50 GB document storage",
-      "Advanced OCR & extraction",
-      "Full compliance matrix",
-      "XLSX, DOCX & PDF export",
-      "Evidence-backed assessment",
-      "Priority support",
-    ],
-    cta: "Start free trial",
-    popular: true,
-  },
-  {
-    name: "Enterprise",
-    description:
-      "Self-hosted or private-cloud, with dedicated support.",
-    price: "Contact us",
-    period: "",
-    features: [
-      "Unlimited everything",
-      "Custom on-prem deployment",
-      "SLAs and dedicated support",
-      "API access",
-      "Custom integrations",
-    ],
-    cta: "Contact sales",
   },
 ];
 
@@ -211,115 +158,42 @@ export interface Benefit {
 
 export const benefits: Benefit[] = [
   {
-    icon: Search,
-    title: "Zero fabrication guarantee",
-    description:
-      "Every requirement is source-linked. The system never invents a clause, citation, or compliance status.",
-  },
-  {
     icon: Shield,
-    title: "Audit-ready from day one",
+    title: "Source-linked",
     description:
-      "Trace every decision back to its exact source document version, page, and offset.",
+      "Every requirement carries its document version, page, and clause. The system does not invent a citation, and a location it does not know stays unknown rather than guessed.",
   },
   {
-    icon: FileText,
-    title: "Multi-format export",
+    icon: Search,
+    title: "Missing evidence is not non-compliance",
     description:
-      "Generate XLSX, DOCX, or PDF compliance sheets with full version metadata and evidence links.",
-  },
-  {
-    icon: Zap,
-    title: "Human-in-the-loop review",
-    description:
-      "OCR warnings, uncertainty, and unresolved conflicts surface for explicit review — never silent.",
+      "No attached evidence is recorded as unresolved, not as a failure. A gap in the pack never becomes an invented compliance verdict.",
   },
   {
     icon: BarChart3,
-    title: "Deterministic comparisons",
+    title: "Deterministic comparison",
     description:
-      "Units, thresholds, tolerances, and ranges are compared with tested logic, not LLM judgement.",
+      "Thresholds, units, tolerances, and ranges are compared by tested code that shows its working, not by a language model judging numbers.",
+  },
+  {
+    icon: Gavel,
+    title: "Human review is a real step",
+    description:
+      "OCR warnings, ambiguous terms, and conflicts wait for an explicit decision. Unresolved items are surfaced in the sheet rather than quietly closed.",
+  },
+  {
+    icon: FileText,
+    title: "Immutable source versions",
+    description:
+      "Re-uploading a document creates a new version. Earlier evidence and the citations pointing at it stay intact.",
   },
   {
     icon: Upload,
-    title: "Separate tender & vendor docs",
+    title: "Untrusted uploads handled as such",
     description:
-      "Upload tenders and OEM evidence independently. Each source is versioned immutably and isolated by tenant.",
+      "Files are validated and malware-scanned before processing, and document content is never treated as instructions to the application.",
   },
 ];
-
-/* ------------------------------------------------------------------ */
-/* Testimonials                                                       */
-/* ------------------------------------------------------------------ */
-
-export interface Testimonial {
-  quote: string;
-  name: string;
-  role: string;
-  image?: string;
-}
-
-export const testimonials: Testimonial[] = [
-  {
-    quote:
-      "Tender Compliance Engine cut our review cycle from days to hours. The source linking alone saved us from a costly compliance error.",
-    name: "Sarah Chen",
-    role: "Head of Procurement, Veridian Dynamics",
-  },
-  {
-    quote:
-      "Finally a tool that doesn't hide unresolved rows. Our legal team can audit every decision back to the original PDF page.",
-    name: "Marcus Rivera",
-    role: "Legal Counsel, Apex Tenders",
-  },
-  {
-    quote:
-      "The deterministic unit comparison caught three cases where vendor datasheets used different metrics. No AI hallucinations, just correct math.",
-    name: "Dr. Elena Volkov",
-    role: "Chief Engineer, NordLink Industries",
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/* Integrations                                                       */
-/* ------------------------------------------------------------------ */
-
-export interface Integration {
-  name: string;
-}
-
-export const integrations: Integration[] = [
-  { name: "SAP" },
-  { name: "Salesforce" },
-  { name: "SharePoint" },
-  { name: "Google Workspace" },
-  { name: "Notion" },
-  { name: "Jira" },
-  { name: "ServiceNow" },
-  { name: "Monday.com" },
-];
-
-/* ------------------------------------------------------------------ */
-/* Social proof                                                       */
-/* ------------------------------------------------------------------ */
-
-export interface SocialProofData {
-  stat: string;
-  label: string;
-  companies: string[];
-}
-
-export const socialProofData: SocialProofData = {
-  stat: "10,000+",
-  label: "tender requirements reviewed",
-  companies: [
-    "Veridian",
-    "Apex Tenders",
-    "NordLink",
-    "Summit Procurement",
-    "Cobalt Contracts",
-  ],
-};
 
 /* ------------------------------------------------------------------ */
 /* FAQ                                                                */
@@ -332,24 +206,39 @@ export interface FaqItem {
 
 export const faqs: FaqItem[] = [
   {
-    question: "What is Tender Compliance Engine and who is it for?",
+    question: "What does it do?",
     answer:
-      "It is a tool for procurement and compliance teams who need to turn tender documents into source-linked, human-reviewable compliance sheets. Whether you are a prime contractor, an OEM, or a procurement consultant, the engine keeps every decision traceable to its original source.",
+      "It turns a tender document into a source-linked compliance sheet. Requirements are extracted with the page and clause they came from, a reviewer confirms or corrects them, OEM evidence is attached, and each requirement is compared against that evidence with tested code.",
   },
   {
     question: "Do I need technical experience to use it?",
     answer:
-      "No. The web UI is designed for non-technical reviewers. Power users can extend the deterministic parsers and unit-comparison engine via configuration.",
+      "No. The workflow is built for procurement and compliance reviewers. Where a result needs judgement — an OCR warning, an ambiguous term, a conflict — the system asks a human rather than guessing.",
   },
   {
-    question: "Is my data secure?",
+    question: "How does it avoid inventing a compliance answer?",
     answer:
-      "Documents are treated as untrusted input. Uploads are validated, malware-scanned in production, and stored with immutable versioning. You can run the engine self-hosted on your own infrastructure.",
+      "Every requirement keeps a link to its document version, page, and clause. Numeric thresholds, units, tolerances, and ranges are compared by deterministic code, not by a model. When evidence is missing, the sheet says so; missing evidence is never recorded as non-compliance.",
   },
   {
-    question: "Can I export to XLSX, DOCX, and PDF?",
+    question: "What files can I upload?",
     answer:
-      "Yes. Every export carries full source document and version metadata. Unresolved rows are always visible — never hidden.",
+      "Tender documents and OEM documents are both accepted as PDF or DOCX. Scanned pages are handled with OCR, and any low-confidence recognition is flagged for review instead of being silently corrected.",
+  },
+  {
+    question: "What can I export?",
+    answer:
+      "The compliance sheet exports to XLSX, DOCX, or PDF, carrying the source document and version metadata for every row. Unresolved rows stay visible in the export.",
+  },
+  {
+    question: "Where does my data go?",
+    answer:
+      "The engine runs in your own deployment. Uploads are validated and malware-scanned before processing, and stored with immutable versioning. Document text used for requirement extraction is sent to the model provider you configure, and that provider must be covered by your own data-processing agreement.",
+  },
+  {
+    question: "How do I get access?",
+    answer:
+      "It is currently offered as a private pilot in a single-workspace deployment. Contact us to talk through your tender process and documents.",
   },
 ];
 
@@ -366,28 +255,22 @@ export const footerColumns: FooterColumn[] = [
   {
     title: "Product",
     links: [
-      { label: "Features", href: "/features" },
-      { label: "Pricing", href: "/pricing" },
+      { label: "What it does", href: "/#features" },
+      { label: "How it works", href: "/#how-it-works" },
       { label: "Contact", href: "/contact" },
     ],
   },
   {
-    title: "Resources",
+    title: "Source",
     links: [
-      { label: "Documentation", href: "/docs" },
-      { label: "Blog", href: "/blog" },
-      { label: "Security", href: "/security" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { label: "Privacy Policy", href: "/privacy-policy" },
-      { label: "Terms & Conditions", href: "/terms-and-conditions" },
-      { label: "Cookie Policy", href: "/cookie-policy" },
+      { label: "FAQ", href: "/#faq" },
+      {
+        label: "GitHub",
+        href: "https://github.com/ayushcodes13/tender-compliance-engine",
+      },
     ],
   },
 ];
 
 export const footerCopyright =
-  "© 2025 Tender Compliance Engine. All rights reserved.";
+  "© Tender Compliance Engine. All rights reserved.";

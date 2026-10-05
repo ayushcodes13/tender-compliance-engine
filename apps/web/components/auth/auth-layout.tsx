@@ -2,7 +2,7 @@
 
 /*
   Auth pages — sign-in and sign-up.
-  Shared layout with a gradient accent panel and a form card.
+  Shared layout with a frosted-glass accent panel and a form card.
 */
 
 import Link from "next/link";
@@ -26,7 +26,7 @@ export default function AuthLayout({
   const subtitle =
     mode === "sign-in"
       ? "Sign in to continue to Tender Compliance Engine"
-      : "Start your 14-day free trial. No credit card required.";
+      : "Private pilot access. Self-hosted, single workspace.";
   const otherHref = mode === "sign-in" ? "/sign-up" : "/sign-in";
   const otherLabel =
     mode === "sign-in" ? "Don't have an account?" : "Already have an account?";
@@ -44,29 +44,26 @@ export default function AuthLayout({
         animate="animate"
         exit="exit"
         variants={pageVariants}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] as const }}
       >
         <div className="flex flex-col md:flex-row">
-          {/* Accent panel */}
-          <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-accent/20 via-accent/5 to-background p-12 text-center">
-            <div
-              className="absolute inset-0 pointer-events-none"
-              aria-hidden="true"
-            >
-              <div className="absolute -top-32 -left-16 h-64 w-64 rounded-full bg-accent/10 blur-3xl" />
-              <div className="absolute -bottom-32 -right-16 h-64 w-64 rounded-full bg-accent/10 blur-3xl" />
+          {/* Accent panel — frosted glass, theme logo, no orbs/emoji */}
+          <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/12 bg-white/[0.03] p-12 text-center backdrop-blur-xl">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center">
+              <img
+                src="/tce-mark.svg"
+                alt=""
+                width={36}
+                height={36}
+                className="h-auto w-9"
+              />
             </div>
-            <div className="relative z-10">
-              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 text-2xl">
-                🛡️
-              </div>
-              <h2 className="font-display text-2xl font-bold text-text-primary">
-                Tender Compliance Engine
-              </h2>
-              <p className="mt-3 max-w-xs text-sm text-text-secondary">
-                Your compliance decisions, traceable to the source document.
-              </p>
-            </div>
+            <h2 className="font-display text-2xl font-bold text-text-primary">
+              Tender Compliance Engine
+            </h2>
+            <p className="mt-3 max-w-xs text-sm text-text-secondary">
+              Your compliance decisions, traceable to the source document.
+            </p>
           </div>
 
           {/* Form panel */}

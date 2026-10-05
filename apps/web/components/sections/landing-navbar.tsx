@@ -21,14 +21,14 @@ export function LandingNavbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-6 md:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
-            <span className="text-lg">🛡️</span>
+          <span className="inline-flex items-center justify-center rounded-lg bg-white/10 p-1">
+            <img src="/tce-mark.svg" alt="" width={30} height={30} />
           </span>
           <span>Tender Compliance Engine</span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6">
+        <nav aria-label="Main" className="hidden md:flex items-center gap-6">
           {navItems.map((item) => (
             <Link
               key={item.href}
@@ -40,7 +40,6 @@ export function LandingNavbar() {
           ))}
         </nav>
 
-        {/* Auth buttons */}
         <div className="flex items-center gap-3">
           <Link
             href="/sign-in"
@@ -48,13 +47,13 @@ export function LandingNavbar() {
           >
             Sign in
           </Link>
-          <Link href="/sign-up">
+          <Link href="/contact">
             <motion.button
-              className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="rounded-md bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               whileHover={{ scale: 1.03 }}
               transition={{ duration: 0.15, ease: "easeOut" }}
             >
-              Get started
+              Book a pilot
             </motion.button>
           </Link>
         </div>

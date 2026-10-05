@@ -116,7 +116,7 @@ export function AuthForm({ mode }: AuthFormProps) {
             type="submit"
             disabled={loading || !email || !password}
             className={cn(
-              "w-full rounded-full bg-accent py-2.5 text-sm font-semibold text-background",
+              "w-full rounded-md bg-accent py-2.5 text-sm font-semibold text-background",
               "hover:bg-accent-hover disabled:opacity-60",
               "focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background",
               "transition-colors",

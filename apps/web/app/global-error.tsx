@@ -10,7 +10,7 @@ export default function GlobalError({
     <html lang="en">
       <head>
         <link
-          href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&family=Figtree:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -18,8 +18,8 @@ export default function GlobalError({
         style={{
           margin: 0,
           fontFamily:
-            '"Figtree", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          background: "#0a0a0a",
+            '"DM Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          background: "#0f172a",
           color: "#e4e4e3",
         }}
       >
@@ -62,7 +62,7 @@ export default function GlobalError({
                 fontSize: 24,
                 fontWeight: 500,
                 color: "#0f172a",
-                fontFamily: '"EB Garamond", Georgia, serif',
+                fontFamily: '"Space Grotesk", system-ui, sans-serif',
               }}
             >
               The application could not recover.
@@ -85,7 +85,7 @@ export default function GlobalError({
                 marginTop: 16,
                 border: 0,
                 borderRadius: 10,
-                background: "#ff6c4c",
+                background: "#2563eb",
                 color: "#fff",
                 padding: "10px 18px",
                 fontSize: 13,
@@ -94,10 +94,10 @@ export default function GlobalError({
                 transition: "background-color 0.2s ease",
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget.style as any).background = "#e55a3e";
+                (e.currentTarget.style as any).background = "#3b82f6";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget.style as any).background = "#ff6c4c";
+                (e.currentTarget.style as any).background = "#2563eb";
               }}
             >
               Retry application

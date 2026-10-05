@@ -1,86 +1,121 @@
 "use client";
 
-import { LandingNavbar } from "@/components/sections/landing-navbar";
-import { Footer } from "@/components/sections/faq-footer";
+import Link from "next/link";
 import { motion } from "framer-motion";
+
+import { Footer } from "@/components/sections/faq-footer";
+import { LandingNavbar } from "@/components/sections/landing-navbar";
+
+const pilotScope = [
+  {
+    title: "One workspace per deployment",
+    body: "A pilot runs as a single workspace with invite-only access. There is no shared multi-tenant environment.",
+  },
+  {
+    title: "Self-hosted",
+    body: "The engine, database, storage, and OCR run in your own deployment. Nothing is hosted for you as part of a pilot.",
+  },
+  {
+    title: "Evidence stays yours",
+    body: "Uploads are validated and malware-scanned before processing and stored with immutable versions, so earlier citations keep pointing at the exact document version they came from.",
+  },
+  {
+    title: "Human decisions are explicit",
+    body: "OCR warnings, ambiguous terms, and evidence gaps wait for a reviewer. The engine records unresolved rows rather than closing them with a guess.",
+  },
+];
+
+const readyToShare = [
+  "A representative tender document in PDF or DOCX.",
+  "The OEM datasheets, test reports, or quotations you would answer with.",
+  "Who reviews and signs off a requirement, and what an acceptable citation looks like to you.",
+];
 
 export default function ContactPage() {
   return (
     <main>
       <LandingNavbar />
-      <section className="py-20">
-        <div className="container mx-auto max-w-2xl px-6 md:px-8">
+      <section className="w-full py-20 md:py-28">
+        <div className="container mx-auto max-w-3xl px-6 md:px-8">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           >
-            <h1 className="font-display text-4xl font-bold tracking-tight text-text-primary">
-              Get in touch
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+              Private pilot
+            </p>
+            <h1 className="mt-5 font-display text-4xl font-bold tracking-tight text-text-primary sm:text-5xl">
+              Book a pilot
             </h1>
-            <p className="mt-4 text-lg text-text-secondary">
-              Have questions about the Tender Compliance Engine? Reach out and
-              we'll get back to you.
+            <p className="mt-6 max-w-2xl text-lg text-text-secondary">
+              Pilots are arranged directly rather than self-serve. Each one is a
+              single self-hosted workspace sized around one tender process, and
+              it ends when you decide it has answered the question you started
+              with.
             </p>
           </motion.div>
 
-          <motion.form
-            className="mt-10 space-y-5"
+          <motion.div
+            className="mt-12 grid gap-5 sm:grid-cols-2"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {pilotScope.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-lg border border-border bg-surface p-5"
+              >
+                <h2 className="text-sm font-semibold text-text-primary">
+                  {item.title}
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                  {item.body}
+                </p>
+              </div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            className="mt-12 rounded-lg border border-border bg-surface p-6"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <h2 className="font-display text-xl font-bold tracking-tight text-text-primary">
+              What to have ready
+            </h2>
+            <ul className="mt-4 space-y-2.5">
+              {readyToShare.map((item) => (
+                <li key={item} className="flex gap-3 text-sm text-text-secondary">
+                  <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+
+          <motion.div
+            className="mt-12 border-t border-border pt-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.5, delay: 0.2 }}
           >
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-text-secondary">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-4 py-2.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-secondary">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-4 py-2.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:outline-none"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">
-                Subject
-              </label>
-              <input
-                type="text"
-                required
-                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-4 py-2.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">
-                Message
-              </label>
-              <textarea
-                rows={5}
-                required
-                className="mt-1 w-full rounded-lg border border-border bg-surface-elevated px-4 py-2.5 text-sm text-text-primary focus:ring-2 focus:ring-accent focus:outline-none"
-              />
-            </div>
-            <motion.button
-              type="submit"
-              className="w-full rounded-full bg-accent px-6 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent"
-              whileHover={{ scale: 1.02 }}
-              transition={{ duration: 0.15 }}
+            <h2 className="font-display text-xl font-bold tracking-tight text-text-primary">
+              Already have access?
+            </h2>
+            <p className="mt-3 text-sm text-text-secondary">
+              Sign in to your workspace to upload a tender, review extracted
+              requirements, and export the compliance sheet.
+            </p>
+            <Link
+              href="/sign-in"
+              className="mt-5 inline-block rounded-md bg-accent px-6 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              Send message
-            </motion.button>
-          </motion.form>
+              Sign in
+            </Link>
+          </motion.div>
         </div>
       </section>
       <Footer />
