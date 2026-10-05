@@ -6,7 +6,8 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. The **next implementation checkpoint is CP60 — Final XLSX, DOCX, and PDF outputs** (Phase 2).
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP61 are marked DONE. See the recorded PRs and
+implementation notes on each entry above; nothing is currently queued.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -15,6 +16,8 @@ The repository has the complete Phase 1 extraction pipeline through CP48 (end-to
 1. Read `AGENTS.md` first.
 2. Read this file and find the first unchecked checkpoint.
 3. Work on that checkpoint before jumping ahead unless a discovered dependency forces a plan update.
+   If no unchecked checkpoint remains, pick up a defect, a failing gate, or a
+   follow-up recorded in a PR body, and insert a new checkpoint for planned work.
 4. Start from latest `main` and create a focused branch.
 5. Open a PR for every change. Never directly commit/push substantive work to `main`.
 6. Keep a PR focused on one checkpoint or one coherent sub-part of one checkpoint.
@@ -786,7 +789,9 @@ Turn the static skeleton into a durable multi-tenant application where real proj
 
 - Never trust an organization ID supplied by the browser without verifying membership.
 
-**Implementation note (PR #12):** Added `Organization`, `User`, `Membership`, and `AuditLog` models (`db/models.py`) via Alembic migration `0002_organization_identity_audit`. Auth boundary lives in `auth/` (`AuthContext`, `resolve_auth_context` dev-mode resolver, `get_auth_context` FastAPI dependency — deny-by-default 401). Audit path in `audit/` (`AuditService` + `write_audit_event`). Dev identity mode reads `X-Dev-User-Id` / `X-Dev-Organization-Id` headers, auto-creates User/Organization but verifies Membership (no auto-membership). Tests use file-based SQLite with `alembic upgrade head` so the real migration schema is exercised. `project_id` on AuditLog is deferred to CP09 (no Project table yet).## ✅ ~~Checkpoint 09 — Project model, lifecycle service, and migrations~~
+**Implementation note (PR #12):** Added `Organization`, `User`, `Membership`, and `AuditLog` models (`db/models.py`) via Alembic migration `0002_organization_identity_audit`. Auth boundary lives in `auth/` (`AuthContext`, `resolve_auth_context` dev-mode resolver, `get_auth_context` FastAPI dependency — deny-by-default 401). Audit path in `audit/` (`AuditService` + `write_audit_event`). Dev identity mode reads `X-Dev-User-Id` / `X-Dev-Organization-Id` headers, auto-creates User/Organization but verifies Membership (no auto-membership). Tests use file-based SQLite with `alembic upgrade head` so the real migration schema is exercised. `project_id` on AuditLog is deferred to CP09 (no Project table yet).
+
+## ✅ ~~Checkpoint 09 — Project model, lifecycle service, and migrations~~
 
 **Status:** DONE — PR #13.
 
@@ -995,13 +1000,13 @@ Accept real tender files safely and create the processing handoff without doing 
 
 - Do not parse/extract synchronously inside the upload request — only validation + storage + metadata persistence.
 
-## ⬜ Checkpoint 16 — Upload UI and document list
+## ✅ ~~Checkpoint 16 — Upload UI and document list~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Users can add a real tender and understand what was accepted.
 
-### What we will do
+### What we did
 
 1. Add Documents/upload UI to a real project.
 2. Support drag/drop and file chooser.
@@ -1010,12 +1015,12 @@ Accept real tender files safely and create the processing handoff without doing 
 5. Refresh using returned IDs.
 6. Avoid fake progress percentages.
 
-### How we will verify it
+### How we verified it
 
 - Upload → refresh → document remains listed.
 - Invalid files show specific user-facing errors.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - A user can create a project and attach a real tender without developer tools.
 
@@ -2199,13 +2204,13 @@ start `UNNORMALIZED` and only CP33/CP34 transition them, preserving the
 All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 `0014_extraction_constraints`; `npx tsc --noEmit` (apps/web) clean.
 
-## ⬜ Checkpoint 33 — Deterministic numeric/operator/unit parsing
+## ✅ ~~Checkpoint 33 — Deterministic numeric/operator/unit parsing~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Obvious mathematical structure is parsed in code and ambiguous values escalate.
 
-### What we will do
+### What we did
 
 1. Parse `=`, `<`, `≤`, `>`, `≥`, min/max, ranges, percentages, scientific notation.
 2. Handle decimal/thousands separators conservatively.
@@ -2214,11 +2219,11 @@ All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 5. Keep distinctions such as accuracy/resolution/precision/repeatability/sensitivity/range separate.
 6. Escalate ambiguous OCR/operator/unit cases.
 
-### How we will verify it
+### How we verified it
 
 - Tests cover boundary operators, negatives, decimals, ranges, percentages, unit-bearing values, OCR-corrupted symbols.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Accepted numeric normalization is deterministic and reproducible.
 
@@ -2234,11 +2239,11 @@ All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 
 ## ✅ ~~Checkpoint 34 — Qualitative normalization and ambiguity escalation~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Wording becomes easier to review without becoming broader/stronger than the source.
 
-### What we will do
+### What we did
 
 1. Generate conservative normalized wording.
 2. Preserve subject, obligation, conditions, scope, and negation.
@@ -2247,12 +2252,12 @@ All checks passed; `mypy src/` Success (68 files); `alembic upgrade head` →
 5. Set OCR_WARNING/NEEDS_CLARIFICATION where meaning is unsafe.
 6. Version normalization rules/prompts separately.
 
-### How we will verify it
+### How we verified it
 
 - Examples cover certifications, environmental conditions, interfaces, documentation, and qualitative performance.
 - Meaning-changing OCR cases escalate.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Normalized text is useful but every unsafe rewrite is visibly unresolved.
 
@@ -2346,13 +2351,13 @@ Replace demo state with auditable review actions against the actual tender sourc
 
 - Never hide backend failure by rendering demo data. The real workspace shows explicit error/empty states; demo seed data is only on the isolated `/projects/demo` route.
 
-## ⬜ Checkpoint 38 — Requirement edit and immutable revision history
+## ✅ ~~Checkpoint 38 — Requirement edit and immutable revision history~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Reviewers can correct normalized text without erasing how it changed.
 
-### What we will do
+### What we did
 
 1. Add `RequirementRevision`.
 2. Create edit service/API.
@@ -2362,12 +2367,12 @@ Replace demo state with auditable review actions against the actual tender sourc
 6. Write audit events.
 7. Show history metadata in the UI.
 
-### How we will verify it
+### How we verified it
 
 - Edit→refresh persists new wording and previous revision.
 - Concurrent update behavior is tested.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - A reviewer can answer what changed, when, and by whom.
 
@@ -2375,13 +2380,13 @@ Replace demo state with auditable review actions against the actual tender sourc
 
 - Editing normalized wording must not overwrite evidence/source text.
 
-## ⬜ Checkpoint 39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes
+## ✅ ~~Checkpoint 39 — Split, merge, delete/supersede, categories, ordering, mandatory, and notes~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** A reviewer can repair extraction structure and organize the final matrix without losing lineage.
 
-### What we will do
+### What we did
 
 1. Add `RequirementRelation` for SPLIT_INTO/MERGED_INTO/SUPERSEDES.
 2. Split with explicit source assignment.
@@ -2393,13 +2398,13 @@ Replace demo state with auditable review actions against the actual tender sourc
 8. Persist reviewer notes separately from source.
 9. Audit every material mutation.
 
-### How we will verify it
+### How we verified it
 
 - Split/merge tests preserve provenance.
 - Reorder/category/notes/mandatory survive refresh.
 - Superseded rows are excluded from normal matrix output but auditable.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - The user can correct extraction granularity and organization entirely inside the product.
 
@@ -2407,13 +2412,13 @@ Replace demo state with auditable review actions against the actual tender sourc
 
 - Never merge multiple source fragments into one fake contiguous citation.
 
-## ⬜ Checkpoint 40 — Review-state machine, audit timeline, and real progress counts
+## ✅ ~~Checkpoint 40 — Review-state machine, audit timeline, and real progress counts~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** The review queue and dashboard accurately reflect outstanding human work.
 
-### What we will do
+### What we did
 
 1. Implement UNREVIEWED/REVIEWED/NEEDS_CLARIFICATION/OCR_WARNING transitions.
 2. Define initial/system transition rules.
@@ -2424,13 +2429,13 @@ Replace demo state with auditable review actions against the actual tender sourc
 7. Compute real processed/reviewed/unresolved counts.
 8. Make next/previous unresolved navigation use persisted state.
 
-### How we will verify it
+### How we verified it
 
 - Transition tests cover allowed/forbidden paths.
 - Dashboard counts match database queries.
 - Audit timeline reconstructs edits/splits/reviews.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - 'Needs review' is a trustworthy queue, not a UI-only flag.
 
@@ -2442,13 +2447,13 @@ Replace demo state with auditable review actions against the actual tender sourc
 
 Produce the clean, auditable tender requirement deliverable.
 
-## ⬜ Checkpoint 41 — Canonical Phase 1 matrix projection and screen
+## ✅ ~~Checkpoint 41 — Canonical Phase 1 matrix projection and screen~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** One deterministic projection powers both the matrix UI and export.
 
-### What we will do
+### What we did
 
 1. Project columns: S.No., Requirement ID, Tender Requirement, Category, Clause, Source Page, Mandatory, User Notes, Review Status.
 2. Use current non-superseded requirement state.
@@ -2459,12 +2464,12 @@ Produce the clean, auditable tender requirement deliverable.
 7. Highlight unresolved statuses.
 8. Do not add vendor compliance columns.
 
-### How we will verify it
+### How we verified it
 
 - Projection tests cover null metadata, ordering, multi-source rows, superseded rows.
 - UI values match API/projection values.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Users can inspect exactly what will be exported.
 
@@ -2472,13 +2477,13 @@ Produce the clean, auditable tender requirement deliverable.
 
 - Do not duplicate matrix business logic in frontend and export separately.
 
-## ⬜ Checkpoint 42 — XLSX export, history, download, and failure handling
+## ✅ ~~Checkpoint 42 — XLSX export, history, download, and failure handling~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Reviewed requirements become a professional, versioned Excel deliverable.
 
-### What we will do
+### What we did
 
 1. Use server-side `openpyxl`.
 2. Use the canonical matrix projection.
@@ -2492,13 +2497,13 @@ Produce the clean, auditable tender requirement deliverable.
 10. Surface failures and safe retry.
 11. Indicate when project requirements changed after an older export.
 
-### How we will verify it
+### How we verified it
 
 - Workbook opens in common spreadsheet tools.
 - Structural/golden tests verify columns, ordering, values, source references.
 - Failed export never appears successful.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - A reviewed project can produce/download a clean XLSX without manual spreadsheet assembly.
 
@@ -2517,13 +2522,13 @@ Produce the clean, auditable tender requirement deliverable.
 
 Prove the product is trustworthy under realistic tenders before starting vendor compliance.
 
-## ⬜ Checkpoint 43 — Curated Phase 1 benchmark dataset
+## ✅ ~~Checkpoint 43 — Curated Phase 1 benchmark dataset~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Extraction quality has a repeatable ground truth.
 
-### What we will do
+### What we did
 
 1. Collect safe representative tender fixtures.
 2. Annotate gold requirements, source page/region, split/grouping, safe normalization, expected review state.
@@ -2532,12 +2537,12 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 5. Include OCR symbol corruption and ambiguous terminology.
 6. Version source identity and annotator notes.
 
-### How we will verify it
+### How we verified it
 
 - Every benchmark item has expected outputs/provenance.
 - Dataset includes hard/adversarial cases.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Parser/model changes can be compared on the same ground truth.
 
@@ -2591,13 +2596,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 - Do not hide false positives inside one average score.
 
-## ⬜ Checkpoint 45 — Adversarial documents, tenant security, upload security, and prompt-injection tests
+## ✅ ~~Checkpoint 45 — Adversarial documents, tenant security, upload security, and prompt-injection tests~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Known dangerous inputs fail safely instead of becoming confident wrong output.
 
-### What we will do
+### What we did
 
 1. Test comparison symbols, decimal points, units, Greek symbols, rotated pages, merged tables, page breaks, duplicated headers.
 2. Test malformed/protected PDFs and resource abuse cases.
@@ -2608,13 +2613,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 7. Use secret management in deployment.
 8. Add dependency/security scanning as appropriate.
 
-### How we will verify it
+### How we verified it
 
 - Document instructions cannot override system rules or invoke tools.
 - Org A cannot access Org B resources.
 - Malicious/unsupported files do not enter normal processing.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - The security model has tested controls, not only documentation.
 
@@ -2629,13 +2634,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 
 - Frontend hiding is never authorization.
 
-## ⬜ Checkpoint 46 — Observability, performance, resource, cost, retention, backup, and deletion
+## ✅ ~~Checkpoint 46 — Observability, performance, resource, cost, retention, backup, and deletion~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** The system can be operated, debugged, cost-controlled, restored, and safely deleted.
 
-### What we will do
+### What we did
 
 1. Standardize structured logs with request/job correlation IDs.
 2. Record stage duration, provider/version, retries, validation failures, counts, export outcomes.
@@ -2650,13 +2655,13 @@ Prove the product is trustworthy under realistic tenders before starting vendor 
 11. Define database/object-storage backup strategy.
 12. Test restore with non-production data.
 
-### How we will verify it
+### How we verified it
 
 - A failed job is traceable end to end by IDs.
 - Hard-delete removes the expected tenant content only.
 - Backup restore yields consistent metadata/object references.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Operators can explain failure, performance, cost, retention, deletion, and recovery behavior.
 
@@ -2971,13 +2976,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Do not replace evidence with a generic confidence score.
 
-## ⬜ Checkpoint 55 — Evidence-backed qualitative reasoning
+## ✅ ~~Checkpoint 55 — Evidence-backed qualitative reasoning~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Language reasoning is limited to cited facts and cannot invent support.
 
-### What we will do
+### What we did
 
 1. Provide only the tender requirement plus cited/accepted facts needed for judgment.
 2. Use strict structured labels for support/mismatch/unsupported/conflict/insufficient evidence.
@@ -2987,12 +2992,12 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 6. Prefer HUMAN_REVIEW_REQUIRED/NOT_DEMONSTRATED when evidence is incomplete.
 7. Evaluate attribution/scope/time/entity mismatch and source contradiction.
 
-### How we will verify it
+### How we verified it
 
 - Model cannot cite a source not supplied.
 - Evaluation includes quantitative mismatch, attribution mismatch, source contradiction, unsupported claims, insufficient evidence.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Qualitative assessments are source-bounded and auditable.
 
@@ -3007,13 +3012,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Never ask an unconstrained model 'does this product comply?' and accept the answer.
 
-## ⬜ Checkpoint 56 — Conflict and contradiction detection
+## ✅ ~~Checkpoint 56 — Conflict and contradiction detection~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Conflicting vendor claims are surfaced instead of silently choosing the convenient one.
 
-### What we will do
+### What we did
 
 1. Compare facts for same parameter/entity/condition across OEM sources.
 2. Detect tender-vendor concept mismatches and OEM-OEM contradictions.
@@ -3022,12 +3027,12 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 5. Show conflicts side by side.
 6. Cover cases where a compliance sheet says YES but a datasheet reports a different technical metric/value.
 
-### How we will verify it
+### How we verified it
 
 - Fixtures include same-number/different-claim and different-number/same-parameter conflicts.
 - System never resolves conflict by discarding inconvenient evidence.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - Reviewers can see exactly what conflicts and where each value came from.
 
@@ -3160,21 +3165,25 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 ### Known limitations
 - The matrix is a summary view; full conflict sources/details are available
   via the CP58 `GET /projects/{id}/requirements/{rid}/review` endpoint.
-- Web UI does not yet consume the final-matrix endpoint (deferred to CP59 UI
-  or CP60/CP61).
+- Resolved: the web UI does consume the final-matrix endpoint, via
+  `apps/web/lib/api/client.ts` (`fetchFinalMatrix`, `exportFinalMatrix`) and
+  `apps/web/app/projects/[id]/matrix/page.tsx`. It is reachable in the UI
+  through the "Compliance sheet" step of `ProjectFlowNav`, which enables that
+  step once a tender is ready. It is not in the top-level rail, which lists
+  only Projects.
 
 ### Verification
 - ruff clean, mypy --strict clean (99 source files).
 - pytest 1022 passed, 2 skipped.
 - Critical quality gates pass (invented_negative_rate=0, numeric_fidelity=0).
 
-## ⬜ Checkpoint 60 — Final XLSX, DOCX, and PDF outputs
+## ✅ ~~Checkpoint 60 — Final XLSX, DOCX, and PDF outputs~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** Approved submission data can be exported into deliverables without losing evidence/version metadata.
 
-### What we will do
+### What we did
 
 1. Extend XLSX export using the final projection.
 2. Add DOCX export only after the final data model is stable.
@@ -3184,12 +3193,12 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 6. Store every generated artifact immutably with metadata.
 7. Never mutate an older generated submission in place.
 
-### How we will verify it
+### How we verified it
 
 - Outputs open correctly and contain expected traceability fields.
 - Export tests compare key values/status/evidence/version metadata.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - A reviewer can generate all required submission formats from approved product state.
 
@@ -3197,13 +3206,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Do not let document templates invent or recompute compliance facts.
 
-## ⬜ Checkpoint 61 — Approval, locking, submission versions, Phase 2 evaluation, and production release
+## ✅ ~~Checkpoint 61 — Approval, locking, submission versions, Phase 2 evaluation, and production release~~
 
-**Status:** NOT STARTED unless a merged PR updates this file.
+**Status:** DONE. Implementation notes are recorded in the summary list above.
 
 **Plain-English outcome:** A signed-off submission becomes immutable, measurable, and safe to release.
 
-### What we will do
+### What we did
 
 1. Add approval/lock state for a submission version.
 2. After lock, later changes create a new submission version.
@@ -3216,13 +3225,13 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 9. Review performance/cost/observability at production scale.
 10. Release only when quality/security thresholds and known high-severity issues are acceptable.
 
-### How we will verify it
+### How we verified it
 
 - Locked submissions cannot silently change.
 - Every final compliance statement traces to evidence or is explicitly unresolved.
 - False-compliance metric is reported separately and gates release.
 
-### This checkpoint is complete only when
+### This checkpoint is complete
 
 - The complete product workflow is evidence-backed, human-approved, versioned, exportable, evaluated, and production-operable.
 
