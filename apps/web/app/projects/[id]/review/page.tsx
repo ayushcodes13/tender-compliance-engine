@@ -79,10 +79,11 @@ export default function ProjectReviewPage() {
               {error ?? "No document available for review"}
             </strong>
             {error ? <span>{error}</span> : null}
-            <Link href={`/projects/${projectId}`}>
-              <button className="button button-secondary" type="button">
-                Back to project
-              </button>
+            <Link
+              href={`/projects/${projectId}`}
+              className="button button-secondary"
+            >
+              Back to project
             </Link>
           </div>
         </div>

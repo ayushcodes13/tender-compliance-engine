@@ -87,10 +87,11 @@ export default function ProjectMatrixPage() {
               {error ?? "No tender available for compliance sheet"}
             </strong>
             {error ? <span>{error}</span> : null}
-            <Link href={`/projects/${projectId}`}>
-              <button className="button button-secondary" type="button">
-                Back to project
-              </button>
+            <Link
+              href={`/projects/${projectId}`}
+              className="button button-secondary"
+            >
+              Back to project
             </Link>
           </div>
         </div>
