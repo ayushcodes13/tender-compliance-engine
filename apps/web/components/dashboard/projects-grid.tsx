@@ -120,7 +120,7 @@ export function ProjectsGrid() {
         </div>
         <motion.button
           className={cn(
-            "flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background",
+            "flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-background",
             "hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent",
           )}
           onClick={openDialog}
@@ -173,7 +173,7 @@ export function ProjectsGrid() {
             Create your first tender project to get started.
           </p>
           <button
-            className="mt-4 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover"
+            className="mt-4 rounded-md bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover"
             onClick={openDialog}
           >
             Create tender project

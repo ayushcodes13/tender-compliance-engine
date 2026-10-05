@@ -11,6 +11,7 @@ Gavel,
   LogOut,
   Menu,
   Plus,
+  Shield,
   Upload,
   X,
 } from "lucide-react";
@@ -56,7 +57,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="flex h-16 items-center justify-between px-4 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
-              <span className="text-lg">🛡️</span>
+              <Shield className="h-5 w-5" />
             </span>
             <span>Tender Compliance</span>
           </Link>
