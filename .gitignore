@@ -56,3 +56,8 @@ credentials.json
 # PR body templates and lock files
 .cp*-pr-body.md
 apps/api/uv.lock
+
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/.playwright/
