@@ -443,6 +443,7 @@ export default function ProjectPage() {
                   <div className="detail-row detail-row-editing">
                     <input
                       type="text"
+                      aria-label="Project name"
                       value={draftName}
                       onChange={(e) => setDraftName(e.target.value)}
                       onKeyDown={(e) => {

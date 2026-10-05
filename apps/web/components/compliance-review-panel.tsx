@@ -245,6 +245,7 @@ export function ComplianceReviewPanel(props: {
               <p className="field-help" key={item.id}>{item.comment}</p>
             ))}
             <textarea className="review-textarea" rows={2} value={comment}
+              aria-label="Assessment comment"
               onChange={(e) => setComment(e.target.value)}
               placeholder="Add an auditable reviewer comment…" />
             <button className="button button-secondary button-small" type="button"

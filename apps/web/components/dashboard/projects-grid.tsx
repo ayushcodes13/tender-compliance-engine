@@ -224,18 +224,31 @@ export function ProjectsGrid() {
           >
             <motion.div
               className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-project-title"
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  closeDialog();
+                }
+              }}
             >
-              <h3 className="text-lg font-semibold text-text-primary">
+              <h3
+                id="create-project-title"
+                className="text-lg font-semibold text-text-primary"
+              >
                 New tender project
               </h3>
               <input
                 type="text"
                 placeholder="Project name"
+                aria-label="Project name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={handleKeyDown}
