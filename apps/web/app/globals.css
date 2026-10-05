@@ -11,12 +11,8 @@
 /* ============================================================================
    Plus Jakarta Sans — self-hosted (SIL OFL 1.1, see public/fonts/OFL.txt)
 
-   Recommended by the ui-ux-pro-max design system for an aesthetic yet
-   professional B2B SaaS typeface (Glassmorphism + Minimalism). Self-hosted
-   rather than loaded from next/font/google so the app builds and serves with no
-   outbound network access. This is the variable font (weight axis 300–800);
-   the two files cover the latin and latin-ext unicode ranges that the previous
-   Figtree subsets covered, so no glyph regresses.
+   Used as a compact, readable interface face. It is self-hosted so customer
+   deployments do not need outbound font requests at build or runtime.
    ============================================================================ */
 
 @font-face {
@@ -42,7 +38,6 @@
 }
 
 @theme {
-  /* ── Fonts (Plus Jakarta Sans, self-hosted; see @font-face above) ── */
   --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-plus-jakarta);
@@ -50,28 +45,27 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
-  /* ── Colour palette (dark SaaS — Flowsuite-inspired) ── */
-  --color-background: #0a0a0f;
-  --color-surface: #111117;
-  --color-surface-elevated: #17171f;
-  --color-border: #252530;
-  --color-border-hover: #333340;
+  /* Light technical palette — calm, high-contrast, procurement-friendly. */
+  --color-background: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f8fafc;
+  --color-border: #dfe4ea;
+  --color-border-hover: #c5ced8;
 
-  --color-text-primary: #f3f3f5;
-  --color-text-secondary: #b8bac1;
-  --color-text-tertiary: #8c8d96;
+  --color-text-primary: #172033;
+  --color-text-secondary: #516074;
+  --color-text-tertiary: #7b8796;
 
-  --color-accent: #ff6c4c;
-  --color-accent-hover: #e55a3e;
-  --color-accent-soft: rgba(255, 108, 76, 0.08);
+  --color-accent: #2457d6;
+  --color-accent-hover: #1e49b8;
+  --color-accent-soft: #edf3ff;
 
-  --color-success: #10b981;
-  --color-success-bg: rgba(16, 185, 129, 0.1);
-  --color-warning: #f59e0b;
-  --color-warning-bg: rgba(245, 158, 11, 0.1);
-  --color-error: #ef4444;
+  --color-success: #16734a;
+  --color-success-bg: #eef8f2;
+  --color-warning: #9a5b00;
+  --color-warning-bg: #fff7e8;
+  --color-error: #b42318;
 
-  /* ── Spacing scale ── */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 0.75rem;
@@ -80,19 +74,17 @@
   --space-2xl: 2rem;
   --space-3xl: 3rem;
 
-  /* ── Border radius ── */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.25rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1rem;
   --radius-full: 9999px;
 
-  /* ── Shadows ── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
-  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(23, 32, 51, 0.05);
+  --shadow-md: 0 6px 18px rgba(23, 32, 51, 0.07);
+  --shadow-lg: 0 14px 34px rgba(23, 32, 51, 0.09);
+  --shadow-xl: 0 24px 50px rgba(23, 32, 51, 0.12);
 }
 
 /* ---------------------------------------------------------------------------
@@ -100,96 +92,87 @@
    class-based components keep working while new components use Tailwind tokens.
    --------------------------------------------------------------------------- */
 :root {
-  --color-bg:            var(--color-background);
-  --color-bg-offset:     #111117;
-  --color-surface:       #111117;
-  --color-border:        #252530;
-  --color-border-hover:  #333340;
+  --color-bg:            #f4f6f8;
+  --color-bg-offset:     #f7f8fa;
+  --color-surface:       #ffffff;
+  --color-border:        #dfe4ea;
+  --color-border-hover:  #c5ced8;
 
-  --color-text:          #f3f3f5;
-  --color-text-muted:    #b8bac1;
-  --color-text-subtle:   #8c8d96;
+  --color-text:          #172033;
+  --color-text-muted:    #516074;
+  --color-text-subtle:   #7b8796;
 
-  --color-accent:        #ff6c4c;
-  --color-accent-hover:  #e55a3e;
-  --color-accent-soft:   rgba(255, 108, 76, 0.08);
+  --color-accent:        #2457d6;
+  --color-accent-hover:  #1e49b8;
+  --color-accent-soft:   #edf3ff;
 
-  /* Status colours — dark theme */
-  --color-warning:       #f59e0b;
-  --color-warning-bg:    rgba(245, 158, 11, 0.1);
-  --color-warning-border: #f59e0b;
-  --color-success:       #10b981;
-  --color-success-bg:    rgba(16, 185, 129, 0.1);
-  --color-success-border: #10b981;
-  --color-error:         #ef4444;
-  --color-error-bg:      rgba(239, 68, 68, 0.1);
-  --color-error-border:  #ef4444;
+  --color-warning:       #9a5b00;
+  --color-warning-bg:    #fff7e8;
+  --color-warning-border:#e6c68e;
+  --color-success:       #16734a;
+  --color-success-bg:    #eef8f2;
+  --color-success-border:#b7dcc8;
+  --color-error:         #b42318;
+  --color-error-bg:      #fff1f0;
+  --color-error-border:  #efbbb6;
 
-  /* Self-hosted Plus Jakarta Sans (see the @font-face block at the top of this file). */
   --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-plus-jakarta);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
-  /* ── Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 ── */
-  --space-xs:   4px;
-  --space-sm:   8px;
-  --space-md:   12px;
-  --space-lg:   16px;
-  --space-xl:   24px;
-  --space-2xl:  32px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
 
-  /* ── Border radius: 6–8px max, no pills ── */
-  --radius-sm:  6px;
-  --radius-md:  8px;
-  --radius-lg:  10px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 
-  /* ── Subtle shadow: max 2px blur ── */
-  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-subtle: 0 1px 2px rgba(23, 32, 51, 0.05);
 
-  /* ── Backwards-compatible aliases for inline styles ── */
-  --brand:            var(--color-accent);
-  --brand-hover:      var(--color-accent-hover);
-  --brand-light:      var(--color-accent-soft);
-  --bg-page:          var(--color-bg-offset);
-  --bg-panel:         var(--color-surface);
-  --bg-sunken:        var(--color-bg-offset);
-  --border-light:     var(--color-border);
-  --border-medium:    var(--color-border);
-  --border-strong:    var(--color-border-hover);
-  --text-primary:     var(--color-text);
-  --text-secondary:   var(--color-text-muted);
-  --text-tertiary:    var(--color-text-subtle);
-  --text-disabled:    #4a4b54;
-  --warm-base:        var(--color-text);
-  --warm-2:           rgba(0, 0, 0, 0.02);
-  --warm-3:           rgba(0, 0, 0, 0.02);
-  --warm-4:           rgba(0, 0, 0, 0.03);
-  --warm-border:      var(--color-border);
-  --review-highlight:         rgba(255, 108, 76, 0.08);
-  --review-highlight-strong:  rgba(255, 108, 76, 0.2);
-  --warning-bg:       var(--color-warning-bg);
-  --warning-border:   var(--color-warning-border);
-  --warning-text:     var(--color-warning);
-  --success-bg:       var(--color-success-bg);
-  --success-border:   var(--color-success-border);
-  --success-text:     var(--color-success);
-  --error-bg:         var(--color-error-bg);
-  --error-border:     var(--color-error-border);
-  --error-text:       var(--color-error);
-  --shadow-soft:      0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-elevated:  0 4px 12px rgba(0, 0, 0, 0.3);
-  --navy:             var(--color-accent);
-  --panel:            var(--color-surface);
-  --sunken:           var(--color-bg-offset);
-  --primary:          var(--color-accent);
-  --accent:           var(--color-accent);
-  --sans:             var(--font-sans);
-  --serif:            var(--font-sans);
-  --radius-sm:        6px;
-  --radius-md:        8px;
-  --radius-lg:        10px;
+  --brand: var(--color-accent);
+  --brand-hover: var(--color-accent-hover);
+  --brand-light: var(--color-accent-soft);
+  --bg-page: var(--color-bg-offset);
+  --bg-panel: var(--color-surface);
+  --bg-sunken: #f1f4f7;
+  --border-light: var(--color-border);
+  --border-medium: var(--color-border);
+  --border-strong: var(--color-border-hover);
+  --text-primary: var(--color-text);
+  --text-secondary: var(--color-text-muted);
+  --text-tertiary: var(--color-text-subtle);
+  --text-disabled: #a3adb9;
+  --warm-base: #ffffff;
+  --warm-2: #fafbfc;
+  --warm-3: #f6f8fa;
+  --warm-4: #eef2f6;
+  --warm-border: var(--color-border);
+  --review-highlight: #fff5cf;
+  --review-highlight-strong: #f7dfa0;
+  --warning-bg: var(--color-warning-bg);
+  --warning-border: var(--color-warning-border);
+  --warning-text: var(--color-warning);
+  --success-bg: var(--color-success-bg);
+  --success-border: var(--color-success-border);
+  --success-text: var(--color-success);
+  --error-bg: var(--color-error-bg);
+  --error-border: var(--color-error-border);
+  --error-text: var(--color-error);
+  --shadow-soft: 0 1px 2px rgba(23, 32, 51, 0.05);
+  --shadow-elevated: 0 12px 30px rgba(23, 32, 51, 0.09);
+  --navy: #172033;
+  --panel: var(--color-surface);
+  --sunken: #f4f6f8;
+  --primary: var(--color-accent);
+  --accent: var(--color-accent);
+  --sans: var(--font-sans);
+  --serif: var(--font-sans);
 }
 
 html,
@@ -200,11 +183,7 @@ body {
 }
 
 body {
-  /* Subtle depth gradient behind translucent surfaces — gives frosted-glass
-     panels something layered to blur against, without any neon/bright colour. */
-  background:
-    radial-gradient(880px 520px at 50% -10%, rgba(26, 30, 44, 0.30), transparent),
-    var(--color-bg-offset);
+  background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 14px;
@@ -269,30 +248,24 @@ a {
   position: relative;
   z-index: 20;
   display: flex;
-  width: 240px;
-  flex: 0 0 240px;
+  width: 224px;
+  flex: 0 0 224px;
   flex-direction: column;
-  background: rgba(16, 19, 25, 0.6);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 16px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: #f7f8fa;
+  border-right: 1px solid var(--color-border);
+  padding: 18px 14px;
 }
 
 .product-mark {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.05);
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid #d7dee8;
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--color-accent);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
 }
 
 .rail-nav {
@@ -322,8 +295,8 @@ a {
 }
 
 .rail-link-active {
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: #eaf0fb;
+  color: #17366f;
 }
 
 .rail-link-active::before {
@@ -371,11 +344,12 @@ a {
   width: 32px;
   height: 32px;
   place-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-background);
+  border: 1px solid #cad5e6;
+  border-radius: 8px;
+  background: #eaf0fb;
+  color: #24477f;
   font-size: 10px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .app-main {
@@ -390,12 +364,10 @@ a {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-lg);
-  background: rgba(16, 19, 25, 0.5);
-  box-shadow: var(--shadow-subtle);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04);
 }
 
 /* ===========================================================================
@@ -455,7 +427,7 @@ a {
 
 .button-secondary {
   border-color: var(--color-border);
-  background: var(--color-surface);
+  background: #ffffff;
   color: var(--color-text);
 }
 
@@ -558,9 +530,10 @@ a {
 
 .page-heading h1 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 500;
   color: var(--color-text);
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
 }
 
 .page-description {

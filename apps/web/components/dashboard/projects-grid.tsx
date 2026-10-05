@@ -182,11 +182,11 @@ export function ProjectsGrid() {
         </div>
         <motion.button
           className={cn(
-            "flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-background",
+            "flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white",
             "hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent",
           )}
           onClick={openDialog}
-          whileHover={{ scale: 1.03 }}
+          whileHover={{ y: -1 }}
           transition={{ duration: 0.15, ease: "easeOut" }}
         >
           <Plus className="h-4 w-4" />
@@ -235,7 +235,7 @@ export function ProjectsGrid() {
             Create your first tender project to get started.
           </p>
           <button
-            className="mt-4 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover"
+            className="mt-4 rounded-md bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
             onClick={openDialog}
           >
             Create tender project
@@ -352,13 +352,13 @@ function ProjectCard({ project }: { project: Project }) {
     <Link href={`/projects/${project.id}`}>
       <motion.div
         className={cn(
-          "group relative flex flex-col rounded-xl border p-5",
-          "bg-surface transition-all duration-300",
+          "group relative flex flex-col rounded-lg border p-5",
+          "bg-surface transition-colors duration-150",
           isArchived
             ? "border-border/30 opacity-60"
-            : "border-border hover:border-accent/50 hover:shadow-xl hover:shadow-accent/5",
+            : "border-border hover:border-border-hover hover:bg-surface-elevated",
         )}
-        whileHover={{ y: -4 }}
+        whileHover={{ y: -1 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
         <div className="mb-4 flex items-start justify-between">
@@ -367,8 +367,8 @@ function ProjectCard({ project }: { project: Project }) {
           </div>
           <span
             className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium",
-              "border",
+              "status-pill px-2.5 py-0.5 text-xs font-medium",
+              config.className,
             )}
           >
             {config.label}

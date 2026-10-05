@@ -25,16 +25,15 @@ const item = {
 
 export function HeroSection() {
   return (
-    <section className="w-full py-24 md:py-32">
+    <section className="w-full border-b border-border bg-background py-24 md:py-32">
       <motion.div
         className="container mx-auto flex justify-center px-6 text-center md:px-8"
         variants={container}
         initial="initial"
         animate="animate"
       >
-        {/* One restrained glass surface (WCAG-safe: solid text on a frosted panel) */}
         <motion.div
-          className="w-full max-w-2xl rounded-2xl border border-white/12 bg-white/5 p-8 text-center shadow-xl shadow-black/30 backdrop-blur-xl md:p-12"
+          className="w-full max-w-4xl px-2 py-8 text-center md:px-8"
           variants={item}
         >
           <motion.p
@@ -45,7 +44,7 @@ export function HeroSection() {
           </motion.p>
 
           <motion.h1
-            className="mt-5 max-w-3xl font-display text-4xl font-bold tracking-tight text-text-primary sm:text-5xl"
+            className="mx-auto mt-5 max-w-4xl font-display text-5xl font-semibold tracking-[-0.04em] text-text-primary sm:text-6xl"
             style={{ lineHeight: 1.1 }}
             variants={item}
           >
@@ -53,7 +52,7 @@ export function HeroSection() {
           </motion.h1>
 
           <motion.p
-            className="mt-6 max-w-2xl text-lg text-text-secondary"
+            className="mx-auto mt-6 max-w-2xl text-lg text-text-secondary"
             style={{ lineHeight: 1.6 }}
             variants={item}
           >
@@ -61,7 +60,7 @@ export function HeroSection() {
           </motion.p>
 
           <motion.div
-            className="mt-10 flex flex-col items-center gap-4 sm:flex-row"
+            className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
             variants={item}
           >
             <motion.div
@@ -71,7 +70,7 @@ export function HeroSection() {
             >
               <Link
                 href="/contact"
-                className="inline-flex items-center rounded-md bg-accent px-7 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="inline-flex items-center rounded-md bg-accent px-7 py-3 text-sm font-semibold text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {heroData.primaryCta}
               </Link>
