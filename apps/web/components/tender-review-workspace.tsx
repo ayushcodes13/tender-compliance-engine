@@ -14,7 +14,6 @@ import {
   Pencil,
   Plus,
   Search,
-  SlidersHorizontal,
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
@@ -396,28 +395,28 @@ export function TenderReviewWorkspace(props: {
         />
       </div>
 
-      <div className="project-tabs" role="tablist" aria-label="Project sections">
-        <button className="project-tab project-tab-active" role="tab" aria-selected="true" type="button">
+      <div className="project-tabs" aria-label="Project sections">
+        <button
+          className="project-tab project-tab-active"
+          type="button"
+          aria-current="page"
+        >
           Review
           <span>{reqList.total}</span>
         </button>
         <Link
           href={`/projects/${projectId}`}
           className="project-tab"
-          role="tab"
-          aria-selected="false"
         >
           Sources
-          <span>↗</span>
+          <span aria-hidden="true">↗</span>
         </Link>
         <Link
           href={`/projects/${projectId}/matrix`}
           className="project-tab"
-          role="tab"
-          aria-selected="false"
         >
           Compliance sheet
-          <span>↗</span>
+          <span aria-hidden="true">↗</span>
         </Link>
 
         <div className="review-navigator" aria-label="Review queue navigation">
@@ -459,9 +458,6 @@ export function TenderReviewWorkspace(props: {
               <h1>Requirements</h1>
               <p>{reqList.total} extracted</p>
             </div>
-            <button className="icon-button" type="button" aria-label="Requirement filters">
-              <SlidersHorizontal size={16} aria-hidden="true" />
-            </button>
           </div>
 
           <div className="requirement-search">
