@@ -29,8 +29,8 @@ export default function GlobalError({
           margin: 0,
           fontFamily:
             '"Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          background: "#0a0a0a",
-          color: "#e4e4e3",
+          background: "#f4f6f8",
+          color: "#172033",
         }}
       >
         <main
@@ -94,7 +94,7 @@ export default function GlobalError({
                 marginTop: 16,
                 border: 0,
                 borderRadius: 10,
-                background: "#ff6c4c",
+                background: "#2457d6",
                 color: "#fff",
                 padding: "10px 18px",
                 fontSize: 13,
@@ -103,10 +103,10 @@ export default function GlobalError({
                 transition: "background-color 0.2s ease",
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget.style as any).background = "#e55a3e";
+                (e.currentTarget.style as any).background = "#1e49b8";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget.style as any).background = "#ff6c4c";
+                (e.currentTarget.style as any).background = "#2457d6";
               }}
             >
               Retry application

@@ -13,7 +13,7 @@ const navVariants = {
 export function LandingNavbar() {
   return (
     <motion.header
-      className="sticky top-0 z-50 w-full border-b border-white/10 bg-white/5 backdrop-blur-xl"
+      className="sticky top-0 z-50 w-full border-b border-border bg-background"
       initial="initial"
       animate="animate"
       variants={navVariants}
@@ -57,7 +57,7 @@ export function LandingNavbar() {
             >
               <Link
                 href="/contact"
-                className="inline-flex items-center rounded-md bg-accent px-5 py-2 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="inline-flex items-center rounded-md bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 Book a pilot
               </Link>

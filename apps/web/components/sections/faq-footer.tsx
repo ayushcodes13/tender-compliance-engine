@@ -7,7 +7,7 @@ import { faqs, footerColumns, footerCopyright } from "@/lib/data/landing";
 
 export function FaqSection() {
   return (
-    <section id="faq" className="w-full py-20 md:py-28">
+    <section id="faq" className="w-full border-t border-border bg-background py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-14 text-center"
@@ -44,7 +44,7 @@ export function FaqSection() {
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
     <motion.div
-      className="rounded-lg border border-white/10 bg-white/5 p-5 backdrop-blur-xl"
+      className="border-b border-border py-5"
       variants={{
         initial: { opacity: 0, y: 10 },
         animate: { opacity: 1, y: 0 },
@@ -68,7 +68,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-white/10 py-12">
+    <footer className="w-full border-t border-border bg-surface py-12">
       <div className="container mx-auto px-6 md:px-8">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
