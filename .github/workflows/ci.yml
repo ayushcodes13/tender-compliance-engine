@@ -151,9 +151,8 @@ jobs:
       - run: npm run build
       - name: Browser buyer-flow smoke
         run: |
-          npm install --no-save --no-package-lock @playwright/test@1.51.1
           npx playwright install --with-deps chromium
-          npx playwright test --config=playwright.config.mjs
+          npm run e2e
       - name: Upload browser smoke report
         if: failure()
         uses: actions/upload-artifact@v4
