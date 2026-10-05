@@ -101,85 +101,104 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   let tenderDocs = [];
   let oemDocs = [];
 
-  await page.route("**/api/backend/**", async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    const path = url.pathname.replace(/^\/api\/backend/, "");
-    const method = request.method();
+  await page.route(
+    (url) => {
+      // Strip the proxy prefix so this matches both the relative fallback and
+      // an absolute API origin.
+      const path = url.pathname.replace(/^\/api\/backend/, "");
+      return path === "/projects" || path.startsWith("/projects/");
+    },
+    async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
 
-    const json = (body, status = 200) =>
-      route.fulfill({
-        status,
-        contentType: "application/json",
-        body: JSON.stringify(body),
-      });
+      // The glob above is only a cheap prefilter. `app/projects/[id]` is a real
+      // page at the same path as the API, and this spec navigates straight to
+      // it, so let actual page loads and Next.js client-side navigation (which
+      // carries an `_rsc` param) through untouched.
+      const isRscNavigation = url.searchParams.has("_rsc");
+      const isDataRequest = ["fetch", "xhr"].includes(request.resourceType());
+      if (isRscNavigation || !isDataRequest) {
+        return route.continue();
+      }
 
-    if (path === "/projects" && method === "GET") {
-      return json([]);
-    }
-    if (path === "/projects" && method === "POST") {
-      return json(currentProject, 201);
-    }
-    if (path === "/projects/project-1" && method === "GET") {
-      return json(currentProject);
-    }
-    if (path === "/projects/project-1/documents" && method === "GET") {
-      return json(tenderDocs);
-    }
-    if (path === "/projects/project-1/oem-documents" && method === "GET") {
-      return json(oemDocs);
-    }
-    if (path === "/projects/project-1/upload" && method === "POST") {
-      currentProject = project("tender_uploaded");
-      const doc = tenderDocument();
-      tenderDocs = [doc];
-      return json(
-        {
-          ...doc,
-          stored_object_id: "stored-tender-1",
-          storage_key: "org-1/project-1/tender-doc-1/v1/tender.pdf",
-          filename: "tender.pdf",
-          content_type: "application/pdf",
-          content_length: 42,
-          checksum_sha256: doc.sha256,
-          project_status: "tender_uploaded",
-          uploaded_at: createdAt,
-        },
-        201
-      );
-    }
-    if (path === "/projects/project-1/oem-documents/upload" && method === "POST") {
-      const doc = oemDocument();
-      oemDocs = [doc];
-      return json(
-        {
-          stored_object_id: "stored-oem-1",
-          document_id: doc.document_id,
-          version_number: doc.version_number,
-          storage_key: "org-1/project-1/oem-doc-1/v1/vendor-compliance.pdf",
-          filename: doc.display_name,
-          content_type: doc.mime_type,
-          content_length: doc.size_bytes,
-          checksum_sha256: doc.sha256,
-          processing_status: "uploaded",
-          uploaded_at: createdAt,
-        },
-        201
-      );
-    }
-    if (
-      path ===
-        "/projects/project-1/documents/tender-doc-1/versions/1/final-matrix" &&
-      method === "GET"
-    ) {
-      return json([finalMatrixRow()]);
-    }
-    if (path === "/projects/project-1/submissions/" && method === "GET") {
-      return json([]);
-    }
+      const path = url.pathname.replace(/^\/api\/backend/, "");
+      const method = request.method();
 
-    return json({ detail: `Unhandled browser smoke route: ${method} ${path}` }, 404);
-  });
+      const json = (body, status = 200) =>
+        route.fulfill({
+          status,
+          contentType: "application/json",
+          body: JSON.stringify(body),
+        });
+
+      if (path === "/projects" && method === "GET") {
+        return json([]);
+      }
+      if (path === "/projects" && method === "POST") {
+        return json(currentProject, 201);
+      }
+      if (path === "/projects/project-1" && method === "GET") {
+        return json(currentProject);
+      }
+      if (path === "/projects/project-1/documents" && method === "GET") {
+        return json(tenderDocs);
+      }
+      if (path === "/projects/project-1/oem-documents" && method === "GET") {
+        return json(oemDocs);
+      }
+      if (path === "/projects/project-1/upload" && method === "POST") {
+        currentProject = project("tender_uploaded");
+        const doc = tenderDocument();
+        tenderDocs = [doc];
+        return json(
+          {
+            ...doc,
+            stored_object_id: "stored-tender-1",
+            storage_key: "org-1/project-1/tender-doc-1/v1/tender.pdf",
+            filename: "tender.pdf",
+            content_type: "application/pdf",
+            content_length: 42,
+            checksum_sha256: doc.sha256,
+            project_status: "tender_uploaded",
+            uploaded_at: createdAt,
+          },
+          201
+        );
+      }
+      if (path === "/projects/project-1/oem-documents/upload" && method === "POST") {
+        const doc = oemDocument();
+        oemDocs = [doc];
+        return json(
+          {
+            stored_object_id: "stored-oem-1",
+            document_id: doc.document_id,
+            version_number: doc.version_number,
+            storage_key: "org-1/project-1/oem-doc-1/v1/vendor-compliance.pdf",
+            filename: doc.display_name,
+            content_type: doc.mime_type,
+            content_length: doc.size_bytes,
+            checksum_sha256: doc.sha256,
+            processing_status: "uploaded",
+            uploaded_at: createdAt,
+          },
+          201
+        );
+      }
+      if (
+        path ===
+          "/projects/project-1/documents/tender-doc-1/versions/1/final-matrix" &&
+        method === "GET"
+      ) {
+        return json([finalMatrixRow()]);
+      }
+      if (path === "/projects/project-1/submissions/" && method === "GET") {
+        return json([]);
+      }
+
+      return json({ detail: `Unhandled browser smoke route: ${method} ${path}` }, 404);
+    },
+  );
 
   await page.goto("/");
 
