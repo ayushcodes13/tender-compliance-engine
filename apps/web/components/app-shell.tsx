@@ -1,22 +1,16 @@
 "use client";
 
-import {
-  BarChart3,
-  FileText,
-  Gavel,
-  LayoutGrid,
-  Upload,
-} from "lucide-react";
+import { LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+// Only destinations that actually render are advertised. The
+// /dashboard/documents, /requirements, /matrix and /evidence routes exist but
+// are still "coming soon" stubs, so listing them in the rail implied
+// functionality the product does not have yet.
 const navigation = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/dashboard/documents", label: "Documents", icon: FileText },
-  { href: "/dashboard/requirements", label: "Requirements", icon: Gavel },
-  { href: "/dashboard/matrix", label: "Compliance Matrix", icon: BarChart3 },
-  { href: "/dashboard/evidence", label: "Evidence", icon: Upload },
+  { href: "/dashboard", label: "Projects", icon: LayoutGrid },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -42,8 +36,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="rail-nav">
           {navigation.map((item) => {
             const Icon = item.icon;
+            // Projects stays active inside a project: the project pages are
+            // reached by drilling into a project from this list, so they are
+            // not separate top-level destinations.
             const active =
-              pathname === item.href || pathname.startsWith(item.href + "/");
+              pathname === item.href ||
+              pathname.startsWith(item.href + "/") ||
+              pathname.startsWith("/projects");
 
             return (
               <Link
