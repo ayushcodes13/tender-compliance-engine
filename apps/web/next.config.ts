@@ -21,6 +21,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    // The simulated sign-in/sign-up forms were removed. Keep the old URLs
+    // resolving so existing bookmarks and links land on the access page
+    // instead of a 404.
+    return [
+      { source: "/sign-in", destination: "/access", permanent: true },
+      { source: "/sign-up", destination: "/access", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;
