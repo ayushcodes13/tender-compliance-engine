@@ -26,9 +26,9 @@ subtle `1 px` white border (`#ffffff10`), and a soft `backdrop-blur` separate de
 without visual clutter. The base is deep slate (`#111117`) with a safety-orange
 call-to-action (`#ff6c4c`), and a frosted surface for the TCE mark.
 
-![Landing screen — glassmorphism dark surface with frosted TCE mark](apps/web/public/screenshot-landing.png)
+![Landing screen — glassmorphism dark surface with frosted TCE mark](docs/screenshots/screenshot-landing.png)
 
-![Dashboard — source-linked project list over a frosted rail and surface](apps/web/public/screenshot-dashboard.png)
+![Dashboard — source-linked project list over a frosted rail and surface](docs/screenshots/screenshot-dashboard.png)
 
 **Typography.** [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans)
 (weights 300–800) replaced the earlier Figtree type. It is **self-hosted** as variable
