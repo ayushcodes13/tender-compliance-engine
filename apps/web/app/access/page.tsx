@@ -55,7 +55,7 @@ export default function AccessPage() {
             {facts.map((item) => (
               <div
                 key={item.title}
-                className="rounded-lg border border-white/10 bg-white/5 p-5 backdrop-blur-xl"
+                className="border-t border-border pt-5"
               >
                 <h2 className="text-sm font-semibold text-text-primary">
                   {item.title}
@@ -84,7 +84,7 @@ export default function AccessPage() {
             <div className="mt-5 flex flex-wrap gap-3">
               <Link
                 href="/dashboard"
-                className="rounded-md bg-accent px-6 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="rounded-md bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 Open the workspace
               </Link>

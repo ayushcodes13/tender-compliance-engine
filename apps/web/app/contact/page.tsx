@@ -65,7 +65,7 @@ export default function ContactPage() {
             {pilotScope.map((item) => (
               <div
                 key={item.title}
-                className="rounded-lg border border-white/10 bg-white/5 p-5 backdrop-blur-xl"
+                className="border-t border-border pt-5"
               >
                 <h2 className="text-sm font-semibold text-text-primary">
                   {item.title}
@@ -78,7 +78,7 @@ export default function ContactPage() {
           </motion.div>
 
           <motion.div
-            className="mt-12 rounded-lg border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
+            className="mt-12 border-y border-border py-7"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.14, ease: [0.16, 1, 0.3, 1] }}
@@ -111,7 +111,7 @@ export default function ContactPage() {
             </p>
             <Link
               href="/dashboard"
-              className="mt-5 inline-block rounded-md bg-accent px-6 py-3 text-sm font-semibold text-background hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="mt-5 inline-block rounded-md bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               Open the workspace
             </Link>

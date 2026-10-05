@@ -12,7 +12,7 @@ const item = {
 
 export function BenefitsSection() {
   return (
-    <section className="w-full py-20 md:py-28">
+    <section className="w-full bg-surface py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-12 text-center"
@@ -47,8 +47,8 @@ export function BenefitsSection() {
               <motion.div
                 key={benefit.title}
                 className={cn(
-                  "flex items-start gap-4 rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl",
-                  "transition-colors duration-200 hover:border-white/20 hover:bg-white/6",
+                  "flex items-start gap-4 border-t border-border pt-5",
+                  "transition-colors duration-200 hover:border-accent",
                 )}
                 variants={item}
                 transition={{
@@ -57,7 +57,7 @@ export function BenefitsSection() {
                   ease: [0.16, 1, 0.3, 1] as const,
                 }}
               >
-                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-md bg-accent-soft text-accent">
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>

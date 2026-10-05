@@ -25,7 +25,7 @@ const cardVariants = {
 
 export function FeaturesSection() {
   return (
-    <section className="w-full py-20 md:py-28">
+    <section className="w-full bg-surface py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-12 text-center"
@@ -56,8 +56,8 @@ export function FeaturesSection() {
               <motion.div
                 key={feature.title}
                 className={cn(
-                  "flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-7 backdrop-blur-xl",
-                  "transition-colors duration-200 hover:border-white/20 hover:bg-white/6",
+                  "flex flex-col gap-4 border-t border-border pt-6",
+                  "transition-colors duration-200 hover:border-accent",
                 )}
                 variants={cardVariants}
                 transition={{
@@ -66,7 +66,7 @@ export function FeaturesSection() {
                   ease: [0.16, 1, 0.3, 1] as const,
                 }}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-accent-soft text-accent">
                   <Icon className="h-5 w-5" />
                 </div>
                 <h3 className="font-semibold text-text-primary">

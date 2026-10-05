@@ -12,7 +12,7 @@ const item = {
 
 export function WorkflowSection() {
   return (
-    <section className="w-full py-20 md:py-28">
+    <section className="w-full border-y border-border bg-background py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-12 text-center"
@@ -30,7 +30,7 @@ export function WorkflowSection() {
         </motion.div>
 
         <motion.div
-          className="space-y-4"
+          className="overflow-hidden rounded-xl border border-border bg-surface"
           initial="initial"
           whileInView="animate"
           viewport={{ once: true, amount: 0.2 }}
@@ -49,8 +49,8 @@ export function WorkflowSection() {
               <motion.div
                 key={step.number}
                 className={cn(
-                  "flex items-start gap-4 rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl",
-                  "transition-colors duration-200 hover:border-white/20 hover:bg-white/6",
+                  "flex items-start gap-5 border-b border-border p-6 last:border-b-0",
+                  "transition-colors duration-200 hover:bg-surface-elevated",
                 )}
                 variants={{
                   initial: { opacity: 0, x: -20 },
@@ -62,7 +62,7 @@ export function WorkflowSection() {
                   ease: [0.16, 1, 0.3, 1] as const,
                 }}
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-background">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-sm font-bold text-accent">
                   {step.number}
                 </div>
                 <div className="flex-1">
