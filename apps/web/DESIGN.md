@@ -26,7 +26,7 @@ engineering, procurement, and bid teams. It must not look like an AI demo.
 | border-hover | #c5ced8 | Interactive borders |
 | text-primary | #172033 | Main copy |
 | text-secondary | #516074 | Supporting copy |
-| text-tertiary | #7b8796 | Metadata |
+| text-tertiary | #667085 | Metadata |
 | accent | #2457d6 | Primary action / selected state |
 | accent-hover | #1e49b8 | Primary hover |
 | accent-soft | #edf3ff | Selected/quiet accent backgrounds |
