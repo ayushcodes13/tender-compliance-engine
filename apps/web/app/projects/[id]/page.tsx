@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeft,
   FileText,
+  Pencil,
   Save,
   X,
   Upload,
@@ -490,7 +491,7 @@ export default function ProjectPage() {
                       }}
                       aria-label="Rename"
                     >
-                      ✏️
+                      <Pencil size={14} aria-hidden="true" />
                     </button>
                   </div>
                 )}
