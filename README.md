@@ -17,6 +17,10 @@
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-001742">
 </p>
 
+<p align="center">
+  <img src="apps/web/docs/landing-screenshot.png" width="1120" alt="Tender Compliance Engine landing page: glassmorphism + minimalist B2B theme, trust navy surface with a frosted hero card, Space Grotesk and DM Sans typography" />
+</p>
+
 ---
 
 ## What the product does
@@ -48,6 +52,58 @@ XLSX / DOCX / PDF submission
 ```
 
 No agent framework is required for this workflow. No vector database is required for the current product. The system deliberately keeps deterministic logic in code and uses an LLM only where language interpretation is useful.
+
+<details open>
+<summary><b>Pipeline</b> — source-preserved flow from tender to submission</summary>
+
+<svg width="800" height="170" viewBox="0 0 800 170" role="img" aria-label="Tender Compliance Engine pipeline: Tender PDF, Extract with source anchors, Human review, OEM evidence, Deterministic compare, Compliance matrix, Export to XLSX/DOCX/PDF" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="800" height="170" fill="#0f172a" rx="16" />
+  <g font-family="Space Grotesk, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <rect x="30" y="40" width="104" height="64" rx="12" fill="#111827" stroke="#ffffff22" stroke-width="1" />
+    <circle cx="82" cy="54" r="4.5" fill="#2563eb" />
+    <text x="82" y="70" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Tender PDF</text>
+    <text x="82" y="83" fill="#94a3b8" font-size="10" text-anchor="middle">Upload + OCR</text>
+
+    <rect x="168" y="40" width="104" height="64" rx="12" fill="#111827" stroke="#ffffff22" stroke-width="1" />
+    <circle cx="220" cy="54" r="4.5" fill="#2563eb" />
+    <text x="220" y="70" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Extract</text>
+    <text x="220" y="83" fill="#94a3b8" font-size="10" text-anchor="middle">Page + clause anchors</text>
+
+    <rect x="306" y="40" width="104" height="64" rx="12" fill="#111827" stroke="#ffffff22" stroke-width="1" />
+    <circle cx="358" cy="54" r="4.5" fill="#2563eb" />
+    <text x="358" y="70" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Review</text>
+    <text x="358" y="83" fill="#94a3b8" font-size="10" text-anchor="middle">Human gate</text>
+
+    <rect x="444" y="40" width="104" height="64" rx="12" fill="#111827" stroke="#ffffff22" stroke-width="1" />
+    <circle cx="496" cy="54" r="4.5" fill="#2563eb" />
+    <text x="496" y="70" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Evidence</text>
+    <text x="496" y="83" fill="#94a3b8" font-size="10" text-anchor="middle">OEM docs</text>
+
+    <rect x="582" y="40" width="104" height="64" rx="12" fill="#111827" stroke="#ffffff22" stroke-width="1" />
+    <circle cx="634" cy="54" r="4.5" fill="#2563eb" />
+    <text x="634" y="70" fill="#f8fafc" font-size="12" font-weight="600" text-anchor="middle">Compare</text>
+    <text x="634" y="83" fill="#94a3b8" font-size="10" text-anchor="middle">Deterministic</text>
+
+    <rect x="720" y="48" width="60" height="40" rx="10" fill="#1e293b" stroke="#ffffff22" stroke-width="1" />
+    <text x="750" y="72" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle">Export</text>
+    <text x="750" y="86" fill="#94a3b8" font-size="10" text-anchor="middle">XLSX · DOCX · PDF</text>
+
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,3 L0,6 Z" fill="#2563eb" />
+      </marker>
+    </defs>
+    <path d="M134 66 L168 66" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+    <path d="M272 66 L306 66" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+    <path d="M410 66 L444 66" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+    <path d="M548 66 L582 66" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+    <path d="M686 66 L720 66" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+    <path d="M750 74 L750 82" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" />
+  </g>
+</svg>
+
+Every node is a real step in the deterministic pipeline; the same source version and citation metadata that appear here are what ship in the XLSX/DOCX/PDF export.
+</details>
 
 ## Fastest pilot start
 
