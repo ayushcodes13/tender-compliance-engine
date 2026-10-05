@@ -15,16 +15,16 @@ export function BenefitsSection() {
     <section className="w-full py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
-          className="mb-14 text-center"
-          initial={{ opacity: 0, y: 20 }}
+          className="mb-12 text-center"
+          initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
         >
           <h2 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            The Powerful Advantages Your Team Gets
+            What the engine guarantees
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-text-secondary">
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-text-secondary">
             Built for procurement and compliance teams who need certainty, not
             approximations.
           </p>
@@ -37,10 +37,7 @@ export function BenefitsSection() {
           viewport={{ once: true, amount: 0.1 }}
           variants={{
             animate: {
-              transition: {
-                staggerChildren: 0.1,
-                delayChildren: 0.1,
-              },
+              transition: { staggerChildren: 0.08, delayChildren: 0.05 },
             },
           }}
         >
@@ -51,15 +48,14 @@ export function BenefitsSection() {
                 key={benefit.title}
                 className={cn(
                   "flex items-start gap-4 rounded-xl border border-border bg-surface p-6",
-                  "transition-all duration-300 hover:border-accent/50 hover:bg-surface-elevated",
+                  "transition-colors duration-200 hover:border-accent/40",
                 )}
                 variants={item}
                 transition={{
-                  duration: 0.6,
-                  delay: index * 0.1,
+                  duration: 0.45,
+                  delay: index * 0.08,
                   ease: [0.16, 1, 0.3, 1] as const,
                 }}
-                whileHover={{ y: -3 }}
               >
                 <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10 text-accent">
                   <Icon className="h-4 w-4" />

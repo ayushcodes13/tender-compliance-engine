@@ -7,7 +7,7 @@ import { faqs, footerColumns, footerCopyright } from "@/lib/data/landing";
 
 export function FaqSection() {
   return (
-    <section className="w-full py-20 md:py-28">
+    <section id="faq" className="w-full py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-14 text-center"
@@ -17,7 +17,7 @@ export function FaqSection() {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
         >
           <h2 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
-            Your Questions Answered
+            Questions
           </h2>
         </motion.div>
 
@@ -28,17 +28,12 @@ export function FaqSection() {
           viewport={{ once: true, amount: 0.2 }}
           variants={{
             animate: {
-              transition: { staggerChildren: 0.1, delayChildren: 0.1 },
+              transition: { staggerChildren: 0.06, delayChildren: 0.05 },
             },
           }}
         >
-          {faqs.map((faq, index) => (
-            <FaqItem
-              key={faq.question}
-              question={faq.question}
-              answer={faq.answer}
-              index={index}
-            />
+          {faqs.map((faq) => (
+            <FaqItem key={faq.question} question={faq.question} answer={faq.answer} />
           ))}
         </motion.div>
       </div>
@@ -46,25 +41,16 @@ export function FaqSection() {
   );
 }
 
-function FaqItem({
-  question,
-  answer,
-  index,
-}: {
-  question: string;
-  answer: string;
-  index: number;
-}) {
+function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
     <motion.div
-      className="rounded-xl border border-border bg-surface p-6"
+      className="rounded-lg border border-border bg-surface p-5"
       variants={{
-        initial: { opacity: 0, y: 15 },
+        initial: { opacity: 0, y: 10 },
         animate: { opacity: 1, y: 0 },
       }}
       transition={{
-        duration: 0.5,
-        delay: index * 0.1,
+        duration: 0.4,
         ease: [0.16, 1, 0.3, 1] as const,
       }}
     >
@@ -84,18 +70,18 @@ export function Footer() {
   return (
     <footer className="w-full border-t border-border/50 py-12">
       <div className="container mx-auto px-6 md:px-8">
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
-                <span className="text-lg">🛡️</span>
+              <span className="inline-flex items-center justify-center rounded-lg bg-white/10 p-1">
+                <img src="/tce-mark.svg" alt="" width={30} height={30} />
               </span>
               <span>Tender Compliance Engine</span>
             </Link>
-            <p className="mt-3 max-w-xs text-sm text-text-secondary">
-              Turn tender documents into source-linked, human-reviewable
-              compliance sheets — verified, not inferred.
+            <p className="mt-3 max-w-sm text-sm text-text-secondary">
+              Turn tender documents and OEM evidence into a source-linked,
+              human-reviewable compliance sheet.
             </p>
           </div>
 
