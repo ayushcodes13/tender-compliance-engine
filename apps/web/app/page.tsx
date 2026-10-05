@@ -7,7 +7,7 @@ import { FaqSection, Footer } from "@/components/sections/faq-footer";
 
 export default function LandingPage() {
   return (
-    <main>
+    <main className="landing-page">
       <LandingNavbar />
       <HeroSection />
       <section id="features">

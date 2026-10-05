@@ -13,14 +13,14 @@ const navVariants = {
 export function LandingNavbar() {
   return (
     <motion.header
-      className="sticky top-0 z-50 w-full border-b border-border bg-background"
+      className="landing-navbar sticky top-0 z-50 w-full border-b border-border bg-background"
       initial="initial"
       animate="animate"
       variants={navVariants}
     >
       <div className="container mx-auto flex h-16 items-center justify-between px-6 md:px-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link href="/" className="landing-brand flex items-center gap-2">
           <img
             src="/tce-mark.svg"
             alt=""
@@ -37,7 +37,7 @@ export function LandingNavbar() {
             <Link
               key={item.href}
               href={item.href}
-              className="text-sm text-text-secondary hover:text-accent transition-colors"
+              className="landing-nav-link text-text-secondary hover:text-accent transition-colors"
             >
               {item.label}
             </Link>
@@ -57,7 +57,7 @@ export function LandingNavbar() {
             >
               <Link
                 href="/contact"
-                className="inline-flex items-center rounded-md bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="landing-pill-cta inline-flex items-center bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 Book a pilot
               </Link>
