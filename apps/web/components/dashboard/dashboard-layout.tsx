@@ -6,16 +6,12 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   FileText,
-  Gavel,
+Gavel,
   LayoutDashboard,
   LogOut,
   Menu,
-  MessageCircle,
   Plus,
-  Settings,
-  Shield,
   Upload,
-  Users,
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,9 +23,6 @@ const navItems = [
   { label: "Requirements", href: "/dashboard/requirements", icon: Gavel },
   { label: "Compliance Matrix", href: "/dashboard/matrix", icon: BarChart3 },
   { label: "Evidence", href: "/dashboard/evidence", icon: Upload },
-  { label: "AI Assistant", href: "/dashboard/chat", icon: MessageCircle },
-  { label: "Team", href: "/dashboard/team", icon: Users },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
