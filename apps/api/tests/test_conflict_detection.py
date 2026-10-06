@@ -25,9 +25,11 @@ from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.compliance.conflict_detection import (
     ConflictDetectionService,
+    ConflictSource,
     DetectedConflict,
 )
 from tender_compliance_api.db.models import (
+    Conflict,
     ConflictResolution,
     ConstraintNormalizationState,
     DocumentProcessingStatus,
@@ -1035,3 +1037,70 @@ class TestNoFabrication:
                 return conflicts
 
         asyncio.run(_run_and_verify())
+
+
+# ---------------------------------------------------------------------------
+# Regression: record_conflicts must commit Conflict rows so the conflicts
+# endpoint (persist=true) survives across requests — without an in-service
+# commit the route returns rows but the DB stays empty.
+# ---------------------------------------------------------------------------
+
+
+class TestConflictPersistenceAcrossSessions:
+    def test_record_conflicts_persists_for_subsequent_session(self, session_cm) -> None:
+        user_id, org_id, proj_id = _setup_project_and_tenant(session_cm)
+        auth = _make_user_auth(user_id, org_id)
+        req_id = _setup_requirement(session_cm, proj_id)
+        evidence_id = _setup_evidence_with_vendor_spec(
+            session_cm,
+            proj_id,
+            req_id,
+            evidence_text="Ambient temperature: 25 °C.",
+            vendor_spec_param="ambient_temperature",
+            vendor_value=25.0,
+            vendor_unit="degC",
+        )
+
+        detected = DetectedConflict(
+            conflict_type="parameter_value",
+            parameter="ambient_temperature",
+            entity=None,
+            sources=[
+                ConflictSource(
+                    evidence_id=str(evidence_id),
+                    vendor_spec_id=None,
+                    oem_document_version_id=None,
+                    source_text="Ambient temperature: 25 °C.",
+                    value=25.0,
+                    unit="degC",
+                )
+            ],
+            tender_claim="shall operate at 30 °C",
+        )
+
+        async def _run() -> list:
+            async with session_cm() as session:
+                svc = ConflictDetectionService(
+                    db=session, audit=AuditService(session)
+                )
+                return await svc.record_conflicts(
+                    auth=auth,
+                    project_id=proj_id,
+                    requirement_id=req_id,
+                    conflicts=[detected],
+                )
+
+        persisted = asyncio.run(_run())
+        assert len(persisted) == 1
+
+        async def _count() -> int:
+            async with session_cm() as s:
+                rows = (
+                    await s.execute(
+                        select(Conflict).where(Conflict.requirement_id == req_id)
+                    )
+                ).scalars().all()
+                return len(rows)
+
+        count = asyncio.run(_count())
+        assert count == 1, f"conflict not persisted across sessions (got {count})"
