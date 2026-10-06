@@ -115,6 +115,22 @@ class TestColonSpecs:
         assert "resolution" in params
         assert "operating_temperature" in params
 
+    def test_spec_preceded_by_non_spec_line(self) -> None:
+        """A spec line preceded by a non-spec line must still be extracted.
+
+        Regression: the label char class previously included ``\\s`` (which
+        matches ``\\n``), so a preceding line was swallowed into the label
+        (``"Field calibration report\\nHumidity"``) and ``_normalize_spec_label``
+        failed to recognize it — silently dropping the page-2 humidity=90 spec
+        and suppressing the 1.4 80-vs-90 conflict in live runs.
+        """
+        text = "Field calibration report\nHumidity: 90 % RH measured at 25 C"
+        specs = _parse(text)
+        hum = [s for s in specs if s.parameter == "humidity"]
+        assert len(hum) == 1
+        assert hum[0].value == 90.0
+        assert hum[0].unit == "%"
+
 
 # ---------------------------------------------------------------------------
 # 2. Operator-based specs (no colon)

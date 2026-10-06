@@ -124,7 +124,7 @@ _SPEC_LABELS: dict[str, str] = {
 # excluding character class.
 _OP_CHAR = r"≤|≥|>=|≤|<|>|=|≠|!="
 _SPEC_COLON_RE = re.compile(
-    r"(?P<label>[A-Za-z][A-Za-z][A-Za-z\s/-]+?)"
+    r"(?P<label>[A-Za-z][A-Za-z][A-Za-z /-]+?)"
     r"\s*:\s*"
     r"(?P<value>(?:±|" + _OP_CHAR + r")?\s*(?:" + _TOK_NUM + r")\b[^\n]*)",
     re.IGNORECASE,
@@ -133,7 +133,7 @@ _SPEC_COLON_RE = re.compile(
 # Pattern: "Label <operator> <value>" (no colon), e.g. "Resolution ≤ 0.01 mm"
 # The value captures everything up to end-of-line.
 _SPEC_OPERATOR_RE = re.compile(
-    r"(?P<label>[A-Za-z][A-Za-z][A-Za-z\s/-]+?)"
+    r"(?P<label>[A-Za-z][A-Za-z][A-Za-z /-]+?)"
     r"\s*"
     r"(?:" + _OP_CHAR + r")"
     r"\s*"
