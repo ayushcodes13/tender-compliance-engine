@@ -461,9 +461,56 @@ Phase 2 evaluation + production release
   - ruff/mypy clean. pytest 1072 passed, 2 skipped. Quality gates pass
     (invented_negative_rate=0, numeric_fidelity=0, false_compliance=0).
 
----
+- [x] ✅ ~~CP54–CP61 — Live end-to-end acceptance & post-completion defect log~~
+  - Status: DONE — landed on `main` via PR #126 (squash commit `cade9d0`
+    "feat: complete Phase 2 live stack on main"). The persistence + parser fix was
+    consolidated into the Phase-2 promotion squash-merge; scoped PRs #127/#128/#129/#130
+    were folded (closed) — their changes are live on `main` via cade9d0.
+  - Defect found during live acceptance (default zero-UUID dev stack, `single_workspace`
+    auth, SQLite + local storage + fake scanner + deterministic `RuleBasedQualitativeReasoner`):
+    Phase-2 service mutations flushed rows in-session but **never committed** them, so
+    `compliance_assessments`, `conflicts`, clarification/deviation rows rolled back at
+    request end. HTTP 201s returned valid IDs yet data was invisible across requests;
+    final-matrix rows were all `None`; submission `assessment_snapshot` was empty. Unit
+    tests masked it (they commit at the test level).
+  - Fix: terminal success-path commit added to the 12 mutating methods —
+    `compliance/service.py` (`_create_assessment`, `confirm_assessment`,
+    `override_assessment`, `reopen_assessment`, `add_comment` → `await
+    self._session.commit()`), `compliance/conflict_detection.py` (`record_conflicts`,
+    `resolve_conflict` → `await self._db.commit()`), `compliance/missing_evidence.py`
+    (`create_clarification`, `answer_clarification`, `edit_clarification`,
+    `create_deviation`, `review_deviation` → `await self._db.commit()`). Read-only
+    delegates left untouched. `expire_on_commit=False` (`db/session.py:79`) keeps
+    returned ORM objects loaded.
+  - Secondary defect fixed in the same pass: `extraction/vendor_spec.py` label char
+    class `[A-Za-z][A-Za-z][A-Za-z\s/-]+?` matches `\n`, swallowing a preceding
+    non-spec line into the label and dropping the following spec (e.g. page-2
+    `humidity=90`), which suppressed the 1.4 (80 vs 90) conflict. Fix: label group now
+    `[A-Za-z][A-Za-z][A-Za-z /-]+?`. Regression test `TestColonSpecs::test_spec_preceded_by_non_spec_line`.
+  - Tests: 4 cross-session persistence regression classes + 1 parser regression.
+    Negative check: disabling the commit makes `test_assess_persists_for_subsequent_session`
+    FAIL (count 0); restoring → PASS.
+  - Gate: Phase-2 suites on `main` + fix: `pytest tests/test_compliance_*.py
+    tests/test_conflict_*.py tests/test_missing_*.py tests/test_vendor_spec.py
+    tests/test_final_*.py tests/test_submission.py tests/test_phase2_eval.py -q` →
+    **140 passed**. `ruff check` / `mypy` clean on changed files.
+  - Live acceptance on `main` (services restarted on cade9d0, DB `/tmp/tce-final.db`):
+    `GET /health` 200; `GET .../final-matrix` 200, **8 rows all with
+    `assessment_status`**; 1.4 `has_unresolved_conflict=True` (humidity 80-vs-90);
+    `compliance_assessments=16` (v1+v2/req, identical status = versioning, NOT
+    duplicates); `conflicts=1` (`parameter_value`, `humidity`, 5 sources traced to
+    evidence + `source_text`); `submissions=2` both `approved` with non-null
+    `assessment_snapshot` (1781 + 3562 bytes); XLSX export valid `PK\x03\x04`.
+  - Per-requirement statuses (deterministic, non-fabricated): 1.1 `not_demonstrated`
+    ("has no number"); 1.2 `non_compliant` `max_le` (150ms>100ms); 1.4 `compliant`
+    `max_lt_percentage` (80<85); 1.5/2.1/2.3 `not_demonstrated` (`no_constraint_parsed`);
+    2.2 `human_review_required` `uncertain_state` (both partial); 2.4
+    `human_review_required` `parameter_mismatch` (temperature vs humidity).
+  - Known limitation (not fixed, non-fabricating by design): watt `W`, bare `1000
+    users`, bare `4 GB` outside `_UNIT_QUANTITY` → `not_demonstrated`. Unit-coverage
+    extension deferred to a separate enhancement PR (decided, not fabricated).
 
-# Stage A — Product contract and existing foundation
+---
 
 What already exists and the rules every later checkpoint must preserve.
 
