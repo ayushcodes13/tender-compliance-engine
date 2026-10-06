@@ -461,9 +461,79 @@ Phase 2 evaluation + production release
   - ruff/mypy clean. pytest 1072 passed, 2 skipped. Quality gates pass
     (invented_negative_rate=0, numeric_fidelity=0, false_compliance=0).
 
----
+- [x] ✅ ~~CP54–CP61 — Live end-to-end acceptance & post-completion defect log~~
+  - Status: DONE — PR #130 `fix/phase2-persistence-commits` (targets `main`)
+  - Defect found during live acceptance (default zero-UUID dev stack,
+    `single_workspace` auth, SQLite + local storage + fake scanner +
+    deterministic `RuleBasedQualitativeReasoner`): Phase-2 service mutations
+    **flushed in-session but never committed**, so `compliance_assessments`,
+    `conflicts`, clarification/deviation rows were rolled back at request end.
+    HTTP 201s returned valid IDs yet the data was invisible across requests;
+    final-matrix rows were all `None`; submission `assessment_snapshot` was empty.
+    Unit tests masked it (they commit at the test level).
+  - Fix: a terminal success-path commit added to the 12 mutating methods —
+    `compliance/service.py` (`_create_assessment`, `confirm_assessment`,
+    `override_assessment`, `reopen_assessment`, `add_comment` →
+    `await self._session.commit()`), `compliance/conflict_detection.py`
+    (`record_conflicts`, `resolve_conflict` → `await self._db.commit()`),
+    `compliance/missing_evidence.py` (`create_clarification`,
+    `answer_clarification`, `edit_clarification`, `create_deviation`,
+    `review_deviation` → `await self._db.commit()`). Read-only delegates
+    (`detect_conflicts`, `detect_and_record`, `auto_generate_clarifications`)
+    left untouched. `expire_on_commit=False` (`db/session.py:79`) keeps
+    returned ORM objects loaded. Non-fabricating: missing evidence stays
+    missing; no compliance status is invented.
+  - Secondary defect fixed in the same PR: `extraction/vendor_spec.py` label
+    char class `[A-Za-z][A-Za-z][A-Za-z\s/-]+?` matches `\n` (`\s`), which
+    swallowed a preceding non-spec line into the label and dropped the
+    following spec — e.g. page-2 `humidity=90` was lost, suppressing the 1.4
+    (80 vs 90) conflict. Fix: label group now `[A-Za-z][A-Za-z][A-Za-z /-]+?`
+    (space only). `Label:\nvalue` still parses (`:\s*` still spans newline;
+    only the label itself no longer matches newline/tab). Regression test
+    `TestColonSpecs::test_spec_preceded_by_non_spec_line`.
+  - Tests: 4 cross-session persistence regression classes
+    (`TestAssessmentPersistenceAcrossSessions`,
+    `TestConflictPersistenceAcrossSessions`,
+    `TestMissingEvidencePersistenceAcrossSessions`) + parser regression.
+    Negative check: disabling the commit makes
+    `test_assess_persists_for_subsequent_session` FAIL (count 0); restoring → PASS.
+  - Gate: Phase-2 suites on `main` + this fix: `pytest tests/test_compliance_assessment.py
+    tests/test_conflict_detection.py tests/test_missing_evidence.py tests/test_vendor_spec.py
+    tests/test_final_matrix.py tests/test_final_export.py tests/test_submission.py
+    tests/test_phase2_eval.py -q` → **140 passed**. `ruff check` / `mypy` clean
+    on changed files.
+  - Live acceptance outcome (SQLite dev DB `/tmp/tce-final.db`, WAL):
+    `oem_documents=1`, `evidence=24`, `vendor_specs=205`,
+    `compliance_assessments=16` (versions 1+2 per requirement, identical status
+    = re-assess versioning, NOT duplicate creation), `conflicts=1` unresolved
+    (`parameter_value`, param=`humidity`, sources=5: 80 vs 90), `export_artifacts=4`,
+    `submissions=2` (one `approved` per run: `ddea8aa8` `approved` 3562-byte
+    snapshot, `91453104` 1781-byte snapshot). Final-matrix: 8 rows, all with a
+    real `assessment_status`; row 1.4 `has_unresolved_conflict=True`. XLSX export
+    HTTP 200, valid `PK\x03\x04` (6265 bytes on Phase-1 smoke). **0 HTTP 500s.**
+  - Per-requirement statuses (deterministic, non-fabricated):
+    1.1 `not_demonstrated` ("has no number"); 1.2 `non_compliant` `max_le`
+    (150 ms > 100 ms); 1.4 `compliant` `max_lt_percentage` (80 < 85); 1.5/2.1/2.3
+    `not_demonstrated` (`no_constraint_parsed`); 2.2 `human_review_required`
+    `uncertain_state` (both partial); 2.4 `human_review_required`
+    `parameter_mismatch` (temperature vs humidity). Source clauses
+    (clause→id): 1.1 b7bf1b1c-, 1.2 7e27901f-, 1.4 ef7e25da-,
+    1.5 bf2487d3-, 2.1 cd2832cf-, 2.2 cfa02f14-, 2.3 a874ba25-, 2.4 61793d0d-.
+  - Live-driver quirks (in `/tmp/phase2_journey.py`, not in repo): `assess`
+    returns **201** — driver must check `if st > 299:` not `if st != 200:`;
+    `detect-conflicts` expects a bare `persist: bool` body — pass `body=True`,
+    not `{"persist": true}` (dict → 422).
+  - Known limitation (not fixed here, non-fabricating by design): watt `W`,
+    bare `1000 users`, bare `4 GB` are outside `_UNIT_QUANTITY`, so 1.5/2.1/2.3
+    yield `not_demonstrated` rather than a numeric comparison. Unit-coverage
+    extension deferred to a separate enhancement PR (decided, not fabricated).
+  - ⚠️ `main`'s full suite is red pending the still-open #126 (DevLlmAdapter),
+    #127 (UUID round-trip), #128 (CP31 `run_id`), #129 (gitignore `dump.rdb`);
+    those are independent and must merge for live Phase-2 to be fully green.
+    This PR (the persistence + parser fix) is green for all Phase-2 scopes on
+    `main` + these commits.
 
-# Stage A — Product contract and existing foundation
+---
 
 What already exists and the rules every later checkpoint must preserve.
 
