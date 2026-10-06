@@ -29,11 +29,11 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy import UUID as SaUUID
 from sqlalchemy import Enum as _SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tender_compliance_api.db.base import Base
+from tender_compliance_api.db.types import TcuUUID as SaUUID  # noqa: A001
 
 
 def _enum_values_callable(enum_cls: type[enum.Enum]) -> list[str]:
