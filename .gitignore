@@ -61,3 +61,6 @@ apps/api/uv.lock
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/.playwright/
+
+# Redis (dev persistence)
+dump.rdb
