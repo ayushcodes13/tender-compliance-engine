@@ -541,11 +541,17 @@ class JobProcessor:
             # Record one diagnostics row for this run (CP31) — best-effort,
             # never strands the version if it fails.
             try:
+                # Pass the run_id *column* value (run.run_id), not the row PK
+                # (run.id): capture_extraction_diagnostics resolves the run via
+                # get_run, which matches ProcessingRun.run_id. The PK is a
+                # different column and is not what get_run looks up, so passing
+                # it raises "processing run … not found" and silently drops the
+                # diagnostics row (caught + warned above).
                 await svc.capture_extraction_diagnostics(
                     auth,
                     document_id=version.document_id,
                     version_number=version.version_number,
-                    run_id=run.id,
+                    run_id=run.run_id,
                     outcome=outcome,
                     reconciliation_outcome=reconciliation_outcome,
                     promoted_count=promoted,
