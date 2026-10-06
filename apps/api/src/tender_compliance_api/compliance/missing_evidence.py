@@ -147,6 +147,7 @@ class MissingEvidenceService:
                 "parameter": context.parameter,
             },
         )
+        await self._db.commit()
         return cr
 
     async def answer_clarification(
@@ -186,6 +187,7 @@ class MissingEvidenceService:
             project_id=project_id,
             metadata={"answer_length": len(answer)},
         )
+        await self._db.commit()
         return cr
 
     async def list_clarifications(
@@ -274,6 +276,7 @@ class MissingEvidenceService:
                 "context": context is not None,
             },
         )
+        await self._db.commit()
         return cr
 
     async def auto_generate_clarifications(
@@ -482,6 +485,7 @@ class MissingEvidenceService:
                 "deviation_type": deviation_type.value,
             },
         )
+        await self._db.commit()
         return dev
 
     async def review_deviation(
@@ -530,6 +534,7 @@ class MissingEvidenceService:
                 "review_notes": review_notes,
             },
         )
+        await self._db.commit()
         return dev
 
     async def list_deviations(

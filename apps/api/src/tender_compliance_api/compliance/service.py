@@ -276,6 +276,7 @@ class ComplianceAssessmentService:
             },
         )
 
+        await self._session.commit()
         return assessment
 
     async def list_assessments(
@@ -368,6 +369,7 @@ class ComplianceAssessmentService:
             },
         )
 
+        await self._session.commit()
         return assessment
 
     # ------------------------------------------------------------------
@@ -486,6 +488,7 @@ class ComplianceAssessmentService:
         self._session.add(comment)
         await self._session.flush()
 
+        await self._session.commit()
         return overridden
 
     async def reopen_assessment(
@@ -554,6 +557,7 @@ class ComplianceAssessmentService:
             self._session.add(comment)
             await self._session.flush()
 
+        await self._session.commit()
         return reopened
 
     async def add_comment(
@@ -594,6 +598,7 @@ class ComplianceAssessmentService:
                 "comment_type": comment_type.value,
             },
         )
+        await self._session.commit()
         return ac
 
     async def list_comments(

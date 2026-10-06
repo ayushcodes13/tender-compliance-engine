@@ -295,6 +295,7 @@ class ConflictDetectionService:
                     "num_sources": len(c.sources),
                 },
             )
+        await self._db.commit()
         return persisted
 
     async def list_conflicts(
@@ -373,6 +374,7 @@ class ConflictDetectionService:
             },
         )
         await self._db.flush()
+        await self._db.commit()
         return conflict
 
     async def detect_and_record(
