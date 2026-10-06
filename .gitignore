@@ -43,6 +43,9 @@ uploads/
 *.sqlite3
 test.db
 
+# Redis runtime artifacts (local dev)
+dump.rdb
+
 # Generated exports
 exports/
 *.xlsx

@@ -21,6 +21,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 
+from sqlalchemy import select
+
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.compliance.service import ComplianceAssessmentService
 from tender_compliance_api.db.models import (
@@ -577,3 +579,42 @@ class TestTenantIsolation:
 
         assessment = asyncio.run(_run())
         assert assessment is None
+
+
+# ---------------------------------------------------------------------------
+# Regression: Phase-2 mutations must commit so they survive across sessions.
+#
+# Before the service-level commit was added, assess_requirement flushed the
+# row in-session but never committed; the returned object was valid, so the
+# same-session unit tests passed — yet the live routes returned 201 while
+# `compliance_assessments` stayed empty, making final-matrix show status=None.
+# ---------------------------------------------------------------------------
+
+
+class TestAssessmentPersistenceAcrossSessions:
+    """assess_requirement must persist (HTTP 201 -> row survives the request)."""
+
+    def test_assess_persists_for_subsequent_session(self, session_cm) -> None:
+        _, org_id, project_id = _setup_project_and_tenant(session_cm)
+        req_id = _setup_requirement(session_cm, project_id)
+        _setup_evidence_and_vendor_spec(session_cm, project_id, req_id)
+        auth = _make_auth(org_id)
+
+        # Runs in one request/session (no test-level commit).
+        assessment = _run_assess(session_cm, auth, project_id, req_id)
+        assert assessment.id is not None
+
+        # A *different* session (the next request) must still see the row.
+        async def _count() -> int:
+            async with session_cm() as s:
+                rows = (
+                    await s.execute(
+                        select(ComplianceAssessment).where(
+                            ComplianceAssessment.requirement_id == req_id
+                        )
+                    )
+                ).scalars().all()
+                return len(rows)
+
+        count = asyncio.run(_count())
+        assert count == 1, f"assessment not persisted across sessions (got {count})"
