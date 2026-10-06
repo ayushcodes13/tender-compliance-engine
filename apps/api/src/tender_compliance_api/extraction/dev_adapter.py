@@ -29,7 +29,6 @@ from __future__ import annotations
 import re
 from collections import deque
 from collections.abc import Sequence
-from typing import Any
 
 from pydantic import BaseModel
 

@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from tender_compliance_api.extraction.adapter import LlmCallConfig
 from tender_compliance_api.extraction.dev_adapter import DevLlmAdapter
 from tender_compliance_api.extraction.prompts import ExtractionResponse
@@ -120,7 +118,10 @@ class TestClauseNumberExtraction:
 
 class TestEmptyText:
     def test_no_requirements_yields_empty_response(self) -> None:
-        text = "Technical Requirements for Industrial Control System\n\nThis document describes the product."
+        text = (
+            "Technical Requirements for Industrial Control System\n\n"
+            "This document describes the product."
+        )
         resp = _run_extract(DevLlmAdapter(), text)
         assert len(resp.candidates) == 0
 
