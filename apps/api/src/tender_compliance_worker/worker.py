@@ -138,14 +138,35 @@ class Worker:
             "Worker started (concurrency=%d, queue=%s)",
             self._max_concurrency, queue_name,
         )
+        heartbeat_task: asyncio.Task[None] | None = None
+        if isinstance(self._queue, RedisQueueAdapter):
+            heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        try:
+            while self._running:
+                try:
+                    await self.run_once(queue_name)
+                except KeyboardInterrupt:
+                    break
+                except Exception:  # noqa: BLE001
+                    logger.exception("Worker error in run loop")
+                await asyncio.sleep(1)
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+
+    async def _heartbeat_loop(self) -> None:
+        """Renew the processing-worker lease independently of job duration."""
+        assert isinstance(self._queue, RedisQueueAdapter)
         while self._running:
             try:
-                await self.run_once(queue_name)
-            except KeyboardInterrupt:
-                break
+                await self._queue.heartbeat_worker()
             except Exception:  # noqa: BLE001
-                logger.exception("Worker error in run loop")
-            await asyncio.sleep(1)
+                logger.exception("Could not publish worker heartbeat")
+            await asyncio.sleep(3)
 
     def stop(self) -> None:
         self._running = False

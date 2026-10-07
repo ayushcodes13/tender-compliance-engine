@@ -6,8 +6,8 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP61 are marked DONE. See the recorded PRs and
-implementation notes on each entry above; nothing is currently queued.
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP62 are marked DONE. See the implementation
+notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -3286,8 +3286,50 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Never trade false compliance for a better-looking completion rate.
 
+## ✅ ~~Checkpoint 62 — Private-pilot startup and processing readiness~~
+
+**Status:** DONE — implementation and Compose smoke completed on `fix/pilot-readiness-worker`.
+
+**Plain-English outcome:** The documented pilot startup succeeds only when the API, web UI, dependencies, and document-processing worker are actually available.
+
+### What we will do
+
+1. Supply the worker with the validated private-pilot runtime configuration.
+2. Have the worker publish a short-lived Redis heartbeat while it polls.
+3. Make production readiness fail closed when no worker heartbeat is present.
+4. Correct the web container health check to probe the address the server listens on.
+5. Add regression coverage and keep the setup/readiness instructions accurate.
+
+### This checkpoint is complete only when
+
+- [x] A default configured Compose start no longer restarts the worker for missing settings.
+- [x] Production readiness reports the worker and becomes not-ready when its heartbeat is absent or Redis is unavailable.
+- [x] Development readiness keeps working without a production worker lease.
+- [x] The web service health check succeeds after binding Next.js to the container's IPv4 listener.
+- [x] Relevant API tests and the Compose startup smoke pass.
+
+### Implementation notes
+
+- Added a 15-second Redis worker lease renewed every 3 seconds while the worker
+  polls. Production `/ready` fails closed if the lease is missing; `/health`
+  remains liveness-only.
+- Added the runtime settings required by production validation to the Compose
+  worker, bound the Next.js standalone server to `0.0.0.0` inside the web
+  container, and made both web health probes use IPv4 loopback.
+- Verified on 2026-10-07 with an x86_64 Compose run: API, worker, scanner,
+  database, Redis, and web healthy; `/ready` returned worker ready; stopping the
+  worker changed readiness to 503/unavailable after the lease expired, and
+  restarting it restored readiness. Dashboard returned HTTP 200.
+- The local smoke used a placeholder OpenAI key and does not verify provider
+  authentication or actual extraction.
+
+### Guardrail
+
+- Do not claim that a configured AI key proves provider authentication or a successful extraction.
+- Liveness remains separate from readiness so a dependency failure does not hide the API process state.
+
 # Plan completion rule
 
-The plan is complete only when CP00 through CP61 are checked and crossed out, the relevant end-to-end acceptance tests pass, release gates meet conservative quality/security thresholds, and every final compliance statement is either evidence-backed or explicitly unresolved.
+The plan is complete only when all defined checkpoints are checked and crossed out, the relevant end-to-end acceptance tests pass, release gates meet conservative quality/security thresholds, and every final compliance statement is either evidence-backed or explicitly unresolved.
 
 If the product direction changes, update this file through a focused PR, explain why, and continue from the new first unchecked checkpoint.
