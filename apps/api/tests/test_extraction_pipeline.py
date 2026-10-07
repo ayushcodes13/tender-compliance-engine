@@ -404,7 +404,8 @@ class TestRunMetadataPersistence:
                     )
                 ).scalar_one()
                 assert row.status is ExtractionRunStatus.FAILED
-                assert row.error_message == "connection timed out"
+                assert row.error_message != "connection timed out"
+                assert "processing stage" in (row.error_message or "").lower()
                 assert row.finish_reason is None
 
         asyncio.run(_run())

@@ -58,6 +58,14 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     requirement_categories,
 )
+from tender_compliance_api.errors import (
+    EXPORT_FAILURE,
+    PAGE_IMAGE_STORAGE_FAILURE,
+    PAGE_OCR_FAILURE,
+    PAGE_RENDER_FAILURE,
+    PAGE_TEXT_FAILURE,
+    PROCESSING_STAGE_FAILURE,
+)
 from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.extraction.constraint_parser import (
     ParsedConstraint,
@@ -84,6 +92,7 @@ from tender_compliance_api.extraction.requirement import (
     resolve_sources,
     to_promotion_input,
 )
+from tender_compliance_api.logs import error_category
 from tender_compliance_api.parser.cleanup import cleanup_pages
 from tender_compliance_api.project.service import ProjectNotFoundError
 from tender_compliance_api.queue import make_job_id
@@ -1543,7 +1552,7 @@ class DocumentService:
                 stored_object_id=None,
                 actor_id=auth.actor_id,
                 status=ExportStatus.FAILED,
-                error_message=str(exc)[:2048],
+                error_message=EXPORT_FAILURE,
                 requirement_count=len(rows),
                 workbook_sha256="",
                 export_format=export_format,
@@ -1562,7 +1571,8 @@ class DocumentService:
                     "document_id": str(document_id),
                     "version_number": version_number,
                     "format": export_format.value,
-                    "error": str(exc)[:512],
+                    "error_type": type(exc).__name__,
+                    "error_category": error_category(exc),
                 },
             )
 
@@ -1694,7 +1704,7 @@ class DocumentService:
                 stored_object_id=None,
                 actor_id=auth.actor_id,
                 status=ExportStatus.FAILED,
-                error_message=str(exc)[:2048],
+                error_message=EXPORT_FAILURE,
                 requirement_count=0,
                 workbook_sha256="",
             )
@@ -1711,7 +1721,8 @@ class DocumentService:
                 metadata={
                     "document_id": str(document_id),
                     "version_number": version_number,
-                    "error": str(exc)[:512],
+                    "error_type": type(exc).__name__,
+                    "error_category": error_category(exc),
                 },
             )
 
@@ -2299,7 +2310,11 @@ class DocumentService:
             cost_usd=call.cost_usd,
             finish_reason=call.finish_reason,
             status=ExtractionRunStatus(call.status),
-            error_message=call.error_message,
+            error_message=(
+                PROCESSING_STAGE_FAILURE
+                if call.status == "failed" and call.error_message
+                else None
+            ),
         )
         self._session.add(extraction_run)
         await self._session.flush()
@@ -2690,7 +2705,7 @@ class DocumentService:
             # Per-page extraction/parse errors stay visible (CP24): a failed
             # page must not silently disappear inside a "success".
             if page_result.error:
-                meta["error"] = page_result.error
+                meta["error"] = PAGE_TEXT_FAILURE
 
             page = DocumentPage(
                 document_version_id=version.id,
@@ -2760,7 +2775,7 @@ class DocumentService:
         if render_result.fatal_error is not None:
             for existing_page in pages_by_num.values():
                 _append_page_warning(
-                    existing_page, f"render failed: {render_result.fatal_error}"
+                    existing_page, PAGE_RENDER_FAILURE
                 )
             await self._session.flush()
             return list(pages_by_num.values())
@@ -2772,7 +2787,7 @@ class DocumentService:
 
             if page_result.error is not None or not page_result.image_bytes:
                 _append_page_warning(
-                    page, f"render failed: {page_result.error}"
+                    page, PAGE_RENDER_FAILURE
                 )
                 continue
 
@@ -2793,8 +2808,8 @@ class DocumentService:
                     key, page_result.image_bytes, page_result.content_type
                 )
                 page.rendered_image_object_key = info.key
-            except Exception as exc:  # noqa: BLE001 — best-effort, non-fatal
-                _append_page_warning(page, f"image store failed: {exc!r}")
+            except Exception:  # noqa: BLE001 — best-effort, non-fatal
+                _append_page_warning(page, PAGE_IMAGE_STORAGE_FAILURE)
 
         await self._session.flush()
         return list(pages_by_num.values())
@@ -2867,8 +2882,8 @@ class DocumentService:
             try:
                 image_bytes = await storage.get(key)
                 ocr_result = await ocr_adapter.ocr(image_bytes)
-            except Exception as exc:  # noqa: BLE001 — per-page, non-fatal
-                _append_page_warning(page, f"ocr failed: {exc!r}")
+            except Exception:  # noqa: BLE001 — per-page, non-fatal
+                _append_page_warning(page, PAGE_OCR_FAILURE)
                 ocr_applied = True
                 continue
 

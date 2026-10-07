@@ -18,6 +18,7 @@ import logging
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.validation.rules import FileValidationRule
 
 logger = logging.getLogger(__name__)
@@ -49,12 +50,11 @@ class PdfValidationRule(FileValidationRule):
         try:
             reader = PdfReader(io.BytesIO(data))
         except PdfReadError as exc:
-            return [
-                f"PDF could not be read (malformed or corrupted): {exc}"
-            ]
+            logger.warning("PDF validation rejected document (%s)", type(exc).__name__)
+            return [PROCESSING_STAGE_FAILURE]
         except Exception as exc:  # noqa: BLE001 — any parse failure = reject
-            logger.warning("Unexpected pypdf error for %s: %s", filename, exc)
-            return [f"PDF parsing failed: {exc!r}"]
+            logger.warning("Unexpected pypdf validation error (%s)", type(exc).__name__)
+            return [PROCESSING_STAGE_FAILURE]
 
         errors: list[str] = []
 
@@ -70,7 +70,8 @@ class PdfValidationRule(FileValidationRule):
         try:
             page_count = len(reader.pages)
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"Could not determine PDF page count: {exc!r}")
+            logger.warning("PDF page count validation failed (%s)", type(exc).__name__)
+            errors.append(PROCESSING_STAGE_FAILURE)
             return errors
 
         if page_count > self._max_pages:

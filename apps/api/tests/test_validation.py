@@ -118,7 +118,8 @@ class TestPdfValidationRule:
         data = b"%PDF-1.4 this is not a real pdf body"
         result = svc.validate("corrupt.pdf", "application/pdf", data)
         assert not result.valid
-        assert any("pdf" in e.lower() for e in result.errors)
+        assert any("processing stage" in e.lower() for e in result.errors)
+        assert all("%pdf" not in e.lower() for e in result.errors)
 
     def test_password_protected_pdf_rejected(self) -> None:
         svc = ValidationService()

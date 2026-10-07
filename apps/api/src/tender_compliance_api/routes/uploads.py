@@ -37,7 +37,7 @@ from fastapi import (
     HTTPException,
     UploadFile,
 )
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +60,7 @@ from tender_compliance_api.document.service import (
     DocumentService,
     TransitionError,
 )
+from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.parser.adapter import ParserAdapter
 from tender_compliance_api.parser.pypdf import PypdfParserAdapter
 from tender_compliance_api.project import (
@@ -192,6 +193,12 @@ class ProcessingRunResponse(BaseModel):
     error_message: str | None
     started_at: datetime
     completed_at: datetime | None
+
+    @field_validator("error_message", mode="before")
+    @classmethod
+    def hide_raw_error_message(cls, value: str | None) -> str | None:
+        """Protect clients from raw provider, parser, and storage exceptions."""
+        return PROCESSING_STAGE_FAILURE if value else None
 
 
 class RetryResponse(BaseModel):
@@ -462,7 +469,7 @@ async def upload_document(
     # --- Transition project status ---
     try:
         project = await project_svc.mark_uploaded(auth, project_id)
-    except (ProjectArchivedError, StateTransitionError) as exc:
+    except (ProjectArchivedError, StateTransitionError):
         # Already uploaded — not a hard failure, just log and continue.
         audit = AuditService(session)
         await audit.log(
@@ -478,7 +485,7 @@ async def upload_document(
                 "document_id": str(doc_id),
                 "version_number": next_version,
                 "bytes_reused": bytes_reused,
-                "reason": str(exc),
+                "reason": "project_state_transition_already_applied",
             },
         )
         await session.refresh(project)

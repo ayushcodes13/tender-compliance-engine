@@ -593,7 +593,8 @@ class TestProcessingRunsApi:
                     run_id=uuid.uuid4(),
                     attempt=1,
                     stage=ProcessingStage.PARSE,
-                    status=RunStatus.COMPLETED,
+                    status=RunStatus.FAILED,
+                    error_message="SECRET provider endpoint and credentials",
                 )
                 session.add(run)
                 await session.commit()
@@ -609,9 +610,12 @@ class TestProcessingRunsApi:
         runs = response.json()
         assert len(runs) == 1
         assert runs[0]["stage"] == "parse"
-        assert runs[0]["status"] == "completed"
+        assert runs[0]["status"] == "failed"
         assert runs[0]["attempt"] == 1
         assert runs[0]["error_type"] is None
+        assert "SECRET" not in response.text
+        assert "credentials" not in response.text
+        assert "processing stage" in runs[0]["error_message"].lower()
 
     def test_list_runs_cross_tenant_denied(self, session_cm) -> None:
         """Cross-tenant access to runs returns 404."""

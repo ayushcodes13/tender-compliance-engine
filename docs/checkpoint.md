@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP64 are marked DONE. See the implementation
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP65 are marked DONE. See the implementation
 notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
@@ -3377,6 +3377,35 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Do not present raw worker/provider exception strings as client-facing diagnostics.
 - Do not mutate the uploaded source version when retrying.
+
+## Checkpoint 65 — ~~Safe unexpected failure messages and diagnostics~~
+
+**Status:** DONE — typed API failures remain distinct; unexpected failures and historical persisted diagnostics are sanitized.
+
+**Plain-English outcome:** Unexpected failures stay useful to operators without returning exception text, document data, or provider details to clients or ordinary logs.
+
+### What we will do
+
+1. Return stable client messages for unexpected API failures while preserving correct 4xx/5xx status behavior.
+2. Keep persisted run/export errors and audit metadata free of raw exception text.
+3. Replace parser/renderer and worker exception strings in client-visible diagnostics with safe stage-specific messages.
+4. Preserve correlation IDs, error categories, stage, attempt, and source-version identity for support and audit.
+5. Add regression tests for API responses, stored diagnostic records, and source-viewer warnings.
+
+### This checkpoint is complete only when
+
+- [x] Unexpected API errors return safe messages and do not convert internal failures into not-found responses.
+- [x] Existing and newly stored processing/export errors do not expose raw exception text.
+- [x] Parser/renderer errors remain visible as useful, safe warnings without losing page-level isolation.
+- [x] Safe diagnostics retain status, stage, attempt, and correlation information.
+- [x] Relevant API/parser/worker tests pass.
+
+**Implementation note:** Added stable safe messages, redacted historical response fields, removed raw parser/renderer/provider error details from persisted diagnostics and audit metadata, and retained categorized operator logs. Verification: API suite 1122 passed, 2 skipped; Ruff passed.
+
+### Guardrail
+
+- Do not include provider payloads, source text, credentials, storage URLs, or raw exception strings in client responses, audit metadata, or ordinary logs.
+- Keep typed domain errors and intentional validation messages distinct from unexpected server failures.
 
 # Plan completion rule
 

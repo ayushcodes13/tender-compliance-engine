@@ -9,9 +9,13 @@ extracting files or executing embedded content.
 from __future__ import annotations
 
 import io
+import logging
 import zipfile
 
+from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.validation.rules import FileValidationRule
+
+logger = logging.getLogger(__name__)
 
 _REQUIRED_PARTS = frozenset({"[Content_Types].xml", "word/document.xml"})
 _MAX_ARCHIVE_ENTRIES = 10_000
@@ -50,6 +54,7 @@ class DocxValidationRule(FileValidationRule):
                         f"({_MAX_UNCOMPRESSED_BYTES} bytes)"
                     ]
         except (zipfile.BadZipFile, OSError, ValueError) as exc:
-            return [f"DOCX could not be read: {exc}"]
+            logger.warning("DOCX validation rejected document (%s)", type(exc).__name__)
+            return [PROCESSING_STAGE_FAILURE]
 
         return []

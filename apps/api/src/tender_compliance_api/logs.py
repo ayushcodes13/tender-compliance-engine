@@ -89,14 +89,14 @@ class StructuredJsonFormatter(logging.Formatter):
             payload["error_type"] = type(record.exc_info[1]).__name__
             # Use a stable category, not the full message (which may
             # contain confidential data).
-            payload["error_category"] = _categorize_error(
+            payload["error_category"] = error_category(
                 record.exc_info[1]
             )
 
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 
-def _categorize_error(exc: BaseException) -> str:
+def error_category(exc: BaseException) -> str:
     """Map exception types to stable, non-sensitive category strings.
 
     Raw exception messages are NOT logged — only the category.  This
@@ -119,6 +119,9 @@ def _categorize_error(exc: BaseException) -> str:
     if "Connection" in name:
         return "connection_error"
     return "runtime_error"
+
+
+_categorize_error = error_category
 
 
 def get_logger(name: str) -> logging.Logger:
