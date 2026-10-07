@@ -84,7 +84,9 @@ FastAPI API ───── PostgreSQL
 - `GET /health` — process liveness.
 - `GET /ready` — checks the dependencies needed to serve the product,
   including database, queue, durable document storage, and production AI
-configuration.
+  configuration. Production readiness also requires a recent processing
+  worker heartbeat from Redis; the worker renews its short-lived lease while
+  polling the queue.
 - Browser/deployment checks should prefer
   `GET /api/backend/ready` through the web app because that proves both the
   frontend proxy and backend dependencies are reachable.
@@ -174,7 +176,9 @@ Required automated release checks:
 - frontend typecheck + production build;
 - API, worker, and web container builds;
 - full bundled Compose startup;
-- `http://localhost:3000/api/backend/ready` returns `status=ready`.
+- `http://localhost:3000/api/backend/ready` returns `status=ready`, including
+  `components.worker=ready` after the processing worker publishes its Redis
+  heartbeat.
 
 After those checks, use
 [POST61_RELEASE_REVIEW.md](../POST61_RELEASE_REVIEW.md) with real customer-like

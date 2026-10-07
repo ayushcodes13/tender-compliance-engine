@@ -23,6 +23,8 @@ from tender_compliance_api.queue.adapter import (
 
 #: Key prefix namespace for all queue keys.
 _KEY_PREFIX = "tc"
+_WORKER_HEARTBEAT_KEY = f"{_KEY_PREFIX}:worker:heartbeat"
+WORKER_HEARTBEAT_TTL_SECONDS = 15
 
 #: The Redis client is typed as ``Any`` because redis-py's async stubs
 #: report ``Awaitable[T] | T`` for pipeline-overloaded methods, which
@@ -167,6 +169,16 @@ class RedisQueueAdapter(QueueAdapter):
     async def size(self, queue: str) -> int:
         client = await self._get_client()
         return cast(int, await client.llen(_queue_key(queue)))
+
+    async def heartbeat_worker(self) -> None:
+        """Keep a bounded Redis lease while this worker is polling."""
+        client = await self._get_client()
+        await client.set(_WORKER_HEARTBEAT_KEY, "alive", ex=WORKER_HEARTBEAT_TTL_SECONDS)
+
+    async def worker_ready(self) -> bool:
+        """Report whether any worker has renewed its polling lease recently."""
+        client = await self._get_client()
+        return bool(await client.exists(_WORKER_HEARTBEAT_KEY))
 
     async def close(self) -> None:
         if self._client is not None:

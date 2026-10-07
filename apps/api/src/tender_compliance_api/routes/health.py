@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.queue import DEFAULT_QUEUE, QueueAdapter
+from tender_compliance_api.queue.redis import RedisQueueAdapter
 from tender_compliance_api.routes.uploads import (
     get_queue_adapter,
     get_scanner,
@@ -47,7 +48,8 @@ async def readiness(
 
     This is deliberately stricter than /health. It checks the durable
     dependencies required by the user journey: database, queue, object storage,
-    and the AI credential in production. It never logs or returns secrets.
+    the AI credential, and a live processing worker in production. It never
+    logs or returns secrets.
     """
     settings = get_settings()
     components: dict[str, str] = {}
@@ -61,11 +63,27 @@ async def readiness(
         failures.append("database")
 
     try:
-        await queue.size(DEFAULT_QUEUE)
-        components["queue"] = "ready"
-    except Exception:
-        components["queue"] = "unavailable"
-        failures.append("queue")
+        try:
+            await queue.size(DEFAULT_QUEUE)
+            components["queue"] = "ready"
+        except Exception:
+            components["queue"] = "unavailable"
+            failures.append("queue")
+
+        if settings.is_production:
+            try:
+                worker_ready = (
+                    isinstance(queue, RedisQueueAdapter)
+                    and await queue.worker_ready()
+                )
+                components["worker"] = "ready" if worker_ready else "unavailable"
+                if not worker_ready:
+                    failures.append("worker")
+            except Exception:
+                components["worker"] = "unavailable"
+                failures.append("worker")
+        else:
+            components["worker"] = "development"
     finally:
         await queue.close()
 
@@ -86,7 +104,7 @@ async def readiness(
         components["malware_scanner"] = "unavailable"
         failures.append("malware_scanner")
 
-    if settings.app_env == "production":
+    if settings.is_production:
         if settings.openai_api_key.strip():
             components["ai_provider"] = "configured"
         else:
