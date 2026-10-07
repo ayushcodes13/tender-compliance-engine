@@ -389,7 +389,10 @@ class TestStorePagesCleanup:
                 err_meta = rows[0].structural_metadata or {}
                 assert (
                     err_meta.get("error")
-                    == "text extraction failed: corrupted stream"
+                    == (
+                        "Text extraction failed for this page. Review the original "
+                        "page before relying on extracted text."
+                    )
                 )
                 assert rows[0].extracted_text is None
                 # Healthy page: no error key, text preserved.

@@ -39,6 +39,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
+from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
@@ -232,7 +233,7 @@ async def extract_from_windows(
                 response_model=ExtractionResponse,
                 config=config,
             )
-        except LlmCallError as exc:
+        except LlmCallError:
             # Log the failed call (audit) and move on rather than failing the
             # whole stage — candidates from other windows may still be valid.
             failed = LlmCallResult(
@@ -247,7 +248,7 @@ async def extract_from_windows(
                 cost_usd=None,
                 finish_reason=None,
                 status="failed",
-                error_message=str(exc),
+                error_message=PROCESSING_STAGE_FAILURE,
                 call_site=config.call_site,
             )
             await log_call(failed)

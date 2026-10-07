@@ -30,6 +30,8 @@ from tender_compliance_api.db.models import (
     User,
 )
 from tender_compliance_api.db.session import get_session
+from tender_compliance_api.document.service import DocumentService
+from tender_compliance_api.errors import UNEXPECTED_REQUEST_FAILURE
 from tender_compliance_api.main import app
 
 client = TestClient(app)
@@ -109,6 +111,23 @@ def _setup_project_with_requirement():
 
 
 class TestSubmissionCreation:
+    def test_unexpected_matrix_failure_is_safe_server_error(self, monkeypatch):
+        ctx = _setup_project_with_requirement()
+
+        async def fail_matrix(*args, **kwargs):
+            raise RuntimeError("SECRET provider endpoint and token")
+
+        monkeypatch.setattr(DocumentService, "get_final_matrix_rows", fail_matrix)
+        resp = client.post(
+            f"/projects/{ctx['project_id']}/submissions/{ctx['doc_id']}/versions/"
+            f"{ctx['version_number']}",
+            headers=_headers(ctx["user_id"], ctx["org_id"]),
+        )
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == UNEXPECTED_REQUEST_FAILURE
+        assert "SECRET" not in resp.text
+        assert resp.headers.get("x-correlation-id")
+
     def test_create_submission_draft(self):
         ctx = _setup_project_with_requirement()
         resp = client.post(

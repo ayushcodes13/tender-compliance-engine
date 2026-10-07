@@ -34,10 +34,41 @@ from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.db.models import RequirementSource
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
+from tender_compliance_api.errors import (
+    PAGE_IMAGE_STORAGE_FAILURE,
+    PAGE_OCR_FAILURE,
+    PAGE_RENDER_FAILURE,
+    PAGE_TEXT_FAILURE,
+)
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 from tender_compliance_api.storage.factory import create_storage_adapter
 
 router = APIRouter(prefix="/projects", tags=["source-viewer"])
+
+
+def _safe_structural_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Redact exception text from historical per-page metadata."""
+    if not metadata:
+        return None
+    safe = dict(metadata)
+    if safe.get("error"):
+        safe["error"] = PAGE_TEXT_FAILURE
+    safe_warnings = []
+    for warning in safe.get("warnings", []):
+        normalized = str(warning).lower()
+        if "render failed" in normalized or "renderer raised" in normalized:
+            safe_warnings.append(PAGE_RENDER_FAILURE)
+        elif "image store failed" in normalized or "storage failed" in normalized:
+            safe_warnings.append(PAGE_IMAGE_STORAGE_FAILURE)
+        elif "ocr failed" in normalized:
+            safe_warnings.append(PAGE_OCR_FAILURE)
+        elif "text extraction failed" in normalized:
+            safe_warnings.append(PAGE_TEXT_FAILURE)
+        else:
+            safe_warnings.append(warning)
+    if "warnings" in safe:
+        safe["warnings"] = safe_warnings
+    return safe
 
 
 def get_storage_adapter() -> ObjectStorageAdapter:
@@ -122,9 +153,7 @@ async def get_page(
         ocr_confidence=float(page.ocr_confidence) if page.ocr_confidence else None,
         cleaned_text=page.cleaned_text,
         extracted_text=page.extracted_text,
-        structural_metadata=dict(page.structural_metadata)
-        if page.structural_metadata
-        else None,
+        structural_metadata=_safe_structural_metadata(page.structural_metadata),
         created_at=page.created_at,
     )
 

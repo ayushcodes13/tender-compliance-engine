@@ -377,7 +377,7 @@ class TestStoreRenderedPages:
 
             assert all(p.rendered_image_object_key is None for p in pages)
             meta = pages[0].structural_metadata or {}
-            assert any("render failed" in w for w in (meta.get("warnings") or []))
+            assert any("rendering failed" in w for w in (meta.get("warnings") or []))
             assert len(storage._store) == 0
 
         asyncio.run(_run())
@@ -415,7 +415,10 @@ class TestStoreRenderedPages:
 
             by_num = {p.page_number: p for p in pages}
             assert by_num[1].rendered_image_object_key is None
-            assert "boom" in (by_num[1].structural_metadata or {}).get("warnings", [])[-1]
+            assert "Page preview rendering failed" in (
+                (by_num[1].structural_metadata or {}).get("warnings", [])[-1]
+            )
+            assert "boom" not in str(by_num[1].structural_metadata)
             assert by_num[2].rendered_image_object_key is not None
             img = await storage.get(by_num[2].rendered_image_object_key)
             assert img[:8] == PNG_SIGNATURE

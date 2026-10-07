@@ -105,7 +105,6 @@ class OpenAiLlmAdapter(LlmAdapter):
         max_retries = config.max_retries or _DEFAULT_MAX_RETRIES
 
         start = time.monotonic()
-        last_error: Exception | None = None
         for _attempt in range(1, max_retries + 1):
             try:
                 completion = await asyncio.wait_for(
@@ -145,13 +144,12 @@ class OpenAiLlmAdapter(LlmAdapter):
                         f"(finish_reason={call.finish_reason})"
                     )
                 return ExtractResult(response=response, call=call)
-            except Exception as exc:
-                last_error = exc
+            except Exception:
+                pass
 
         raise LlmCallError(
-            f"OpenAI extraction failed after {max_retries} attempts: "
-            f"{last_error}"
-        ) from last_error
+            f"Provider extraction failed after {max_retries} attempts"
+        ) from None
 
 
 __all__ = ["OpenAiLlmAdapter"]
