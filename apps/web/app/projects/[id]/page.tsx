@@ -23,6 +23,7 @@ import {
   api,
   Project,
   DocumentItem,
+  ProcessingRun,
   UploadResponse,
 } from "@/lib/api/client";
 
@@ -109,6 +110,34 @@ function documentProcessingMeta(
   }
 }
 
+function processingStageLabel(stage: ProcessingRun["stage"]): string {
+  switch (stage) {
+    case "parse":
+      return "Document parsing";
+    case "ocr":
+      return "Text recognition (OCR)";
+    case "cleanup":
+      return "Text cleanup";
+    case "extract":
+      return "Requirement extraction";
+  }
+}
+
+function processingStatusLabel(status: ProcessingRun["status"]): string {
+  switch (status) {
+    case "started":
+      return "started";
+    case "running":
+      return "in progress";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "retry":
+      return "will retry";
+  }
+}
+
 export default function ProjectPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
@@ -123,6 +152,12 @@ export default function ProjectPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [processingRuns, setProcessingRuns] = useState<
+    Record<string, ProcessingRun[]>
+  >({});
+  const [processingRunsUnavailable, setProcessingRunsUnavailable] = useState<
+    Record<string, boolean>
+  >({});
   const [docsLoading, setDocsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -162,6 +197,34 @@ export default function ProjectPage() {
     try {
       const docs = await api.fetchDocuments(projectId);
       setDocuments(docs);
+      const eligible = docs.filter((doc) =>
+        ["failed", "partial"].includes(doc.processing_status)
+      );
+      const runResults: Array<readonly [string, ProcessingRun[], boolean]> =
+        await Promise.all(
+          eligible.map(async (doc) => {
+            const key = `${doc.document_id}-${doc.version_number}`;
+            try {
+              return [
+                key,
+                await api.fetchProcessingRuns(
+                  projectId,
+                  doc.document_id,
+                  doc.version_number
+                ),
+                false,
+              ] as const;
+            } catch {
+              return [key, [] as ProcessingRun[], true] as const;
+            }
+          })
+        );
+      setProcessingRuns(Object.fromEntries(runResults.map(([key, runs]) => [key, runs])));
+      setProcessingRunsUnavailable(
+        Object.fromEntries(
+          runResults.map(([key, _runs, unavailable]) => [key, unavailable])
+        )
+      );
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Failed to load documents"
@@ -690,6 +753,31 @@ export default function ProjectPage() {
                           </td>
                           <td>{formatDate(doc.created_at)}</td>
                           <td>
+                            {canRetry && (
+                              <details className="processing-history">
+                                <summary>Processing history</summary>
+                                {processingRunsUnavailable[retryKey] ? (
+                                  <p className="field-help">Processing history is temporarily unavailable.</p>
+                                ) : (processingRuns[retryKey] ?? []).length === 0 ? (
+                                  <p className="field-help">No stage attempts are recorded yet.</p>
+                                ) : (
+                                  <ol>
+                                    {(processingRuns[retryKey] ?? []).slice(0, 8).map((run) => (
+                                      <li key={run.id}>
+                                        {processingStageLabel(run.stage)} — {processingStatusLabel(run.status)} (attempt {run.attempt})
+                                        <span className="field-help">
+                                          {formatDate(run.started_at)}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ol>
+                                )}
+                                <p className="field-help">
+                                  Retry reprocesses this same immutable upload.
+                                  Error details are kept out of this view.
+                                </p>
+                              </details>
+                            )}
                             {canRetry ? (
                               <button
                                 className="button button-secondary button-small"

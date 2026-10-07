@@ -85,6 +85,17 @@ export type RetryProcessingResponse = {
   status: DocumentProcessingStatus;
 };
 
+export type ProcessingRun = {
+  id: string;
+  run_id: string;
+  attempt: number;
+  stage: "parse" | "ocr" | "cleanup" | "extract";
+  status: "started" | "running" | "completed" | "failed" | "retry";
+  error_type: string | null;
+  started_at: string;
+  completed_at: string | null;
+};
+
 /** Requirement review state (Phase 1). */
 export type RequirementReviewState =
   | "unreviewed"
@@ -714,6 +725,15 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/versions/${version}/retry`,
       { method: "POST" }
     ).then((r) => expectJson<RetryProcessingResponse>(r)),
+
+  fetchProcessingRuns: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/runs`
+    ).then((r) => expectJson<ProcessingRun[]>(r)),
 
   // --- Requirements (CP35) ---
 

@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP63 are marked DONE. See the implementation
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP64 are marked DONE. See the implementation
 notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
@@ -3351,6 +3351,32 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 ### Guardrail
 
 - Do not expose unauthenticated single-workspace mode directly to a public/shared network.
+
+## ✅ ~~Checkpoint 64 — Client-visible processing recovery history~~
+
+**Status:** DONE — verified by frontend typecheck and browser smoke.
+
+**Plain-English outcome:** A client can see which document stage failed, how many attempts were recorded, and safely retry the same immutable upload.
+
+### What we did
+
+1. Read the existing per-version processing-run history for failed and partial tender uploads.
+2. Show a compact stage/status/attempt/timestamp summary alongside the existing retry action.
+3. Keep raw exception text out of the client-facing history.
+4. Explain that retry reprocesses the same source version.
+
+### This checkpoint is complete only when
+
+- [x] Failed and partial documents show persisted stage history when available.
+- [x] History shows the retry action and preserves the original source version.
+- [x] Missing run history fails gracefully without hiding the retry action.
+- [x] Browser coverage confirms useful safe history appears and raw error text is not rendered.
+- [x] Frontend typecheck and browser smoke pass.
+
+### Guardrail
+
+- Do not present raw worker/provider exception strings as client-facing diagnostics.
+- Do not mutate the uploaded source version when retrying.
 
 # Plan completion rule
 
