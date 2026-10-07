@@ -226,6 +226,9 @@ startup, and the same OpenAI configuration is supplied to the processing
 worker. Then open `http://localhost:3000`.
 
 This **single-workspace mode is designed for private pilots and one-customer deployments**. It is not a substitute for a real identity provider when the product is exposed as a public multi-user SaaS.
+The bundled web UI and API bind to localhost by default. For remote client
+access, use a trusted private reverse proxy or VPN; the pilot has no user
+sign-in and must not be exposed directly to the internet.
 
 ## Quality gates
 

@@ -41,8 +41,13 @@ Readiness through the same path used by the browser:
 curl -fsS http://localhost:3000/api/backend/ready
 ```
 
-The API binds to localhost in this mode; the browser uses the same-origin
-Next.js proxy and the shared document volume is internal to the Docker stack.
+Both the API and web UI bind to localhost by default (`127.0.0.1`). The browser
+uses the same-origin Next.js proxy and the shared document volume is internal
+to the Docker stack. This pilot has no user sign-in, so do not bind the web UI
+to a public or shared network. For remote client access, keep the Compose
+binding on loopback and put a trusted reverse proxy or VPN access boundary in
+front of it. `PILOT_WEB_BIND` can change the host bind address when required;
+only use a private, access-controlled boundary for that deployment.
 
 ### 2. Public multi-customer SaaS
 
