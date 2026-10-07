@@ -32,6 +32,10 @@ Open:
 http://localhost:3000
 ```
 
+The web UI and API are bound to `127.0.0.1` by default. Since this pilot has
+no user sign-in, keep it local or provide remote access through a trusted
+private reverse proxy or VPN. Do not expose the UI directly to the internet.
+
 ## What the customer does
 
 1. Create a tender project.

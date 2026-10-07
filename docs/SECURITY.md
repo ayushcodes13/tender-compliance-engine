@@ -46,6 +46,7 @@ Controls:
 
 Controls:
 
+- bundled single-workspace web UI and API bind to loopback by default; remote pilot access requires a trusted private access boundary because this mode has no user sign-in
 - same-origin browser-to-API proxy for the bundled deployment
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`

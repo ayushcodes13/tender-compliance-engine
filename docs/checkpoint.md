@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP62 are marked DONE. See the implementation
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP63 are marked DONE. See the implementation
 notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
@@ -3327,6 +3327,30 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Do not claim that a configured AI key proves provider authentication or a successful extraction.
 - Liveness remains separate from readiness so a dependency failure does not hide the API process state.
+
+## ✅ ~~Checkpoint 63 — Private pilot network boundary and ARM64 scanner~~
+
+**Status:** DONE — verified with a native ARM64 local Compose run and CI manifest/binding checks.
+
+**Plain-English outcome:** The browser UI stays local by default, and the bundled malware scanner image runs on both x86_64 and ARM64 hosts.
+
+### What we did
+
+1. Bind the web UI to loopback by default while retaining an explicit `PILOT_WEB_BIND` override.
+2. Use the official Debian ClamAV image variant.
+3. Check in CI that the default web binding is loopback and the scanner publishes an ARM64 manifest.
+4. Document private proxy/VPN requirements for remote client access to the unauthenticated single-workspace pilot.
+
+### This checkpoint is complete only when
+
+- [x] A default Compose configuration binds the web UI to `127.0.0.1`.
+- [x] CI verifies the scanner image includes `linux/arm64`.
+- [x] Deployment/security documentation explains the private remote-access boundary.
+- [x] Local Compose starts with the native host architecture and the UI/readiness checks pass.
+
+### Guardrail
+
+- Do not expose unauthenticated single-workspace mode directly to a public/shared network.
 
 # Plan completion rule
 
