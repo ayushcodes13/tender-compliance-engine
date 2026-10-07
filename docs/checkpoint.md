@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP65 are marked DONE. See the implementation
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP66 are marked DONE. See the implementation
 notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
@@ -3400,12 +3400,41 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 - [x] Safe diagnostics retain status, stage, attempt, and correlation information.
 - [x] Relevant API/parser/worker tests pass.
 
-**Implementation note:** Added stable safe messages, redacted historical response fields, removed raw parser/renderer/provider error details from persisted diagnostics and audit metadata, and retained categorized operator logs. Verification: API suite 1122 passed, 2 skipped; Ruff passed.
+**Implementation note:** Added stable safe messages, redacted historical response fields, removed raw parser/renderer/provider error details from persisted diagnostics and audit metadata, and retained categorized operator logs. Verification: API suite 1123 passed, 2 skipped; Ruff passed.
 
 ### Guardrail
 
 - Do not include provider payloads, source text, credentials, storage URLs, or raw exception strings in client responses, audit metadata, or ordinary logs.
 - Keep typed domain errors and intentional validation messages distinct from unexpected server failures.
+
+## Checkpoint 66 — ~~Source navigation from the final matrix~~
+
+**Status:** DONE — final-matrix source links open the exact saved tender version, requirement, and page in review.
+
+**Plain-English outcome:** A reviewer can open a final-matrix requirement directly at its tender citation, while unknown or stale locations remain visibly unresolved.
+
+### What we will do
+
+1. Show the stored tender source page beside each final-matrix requirement.
+2. Link only rows with a valid positive source page to the exact tender document version and matching requirement in the review workspace.
+3. Carry document ID/version, requirement ID, and page through the route; select the matching requirement and display the requested page and anchor.
+4. Show an explicit unavailable state if the document version is missing or the page cannot be matched to the selected requirement's stored source anchors.
+5. Add browser regression coverage for exact navigation and unknown locations.
+
+### This checkpoint is complete only when
+
+- [x] Final-matrix source links retain the exact document version, requirement identity, and page.
+- [x] Review workspace selects the linked requirement and source page.
+- [x] Missing or invalid locations never create a page link; stale version/page targets show unavailable and never silently fall back to a different source.
+- [x] End-to-end browser coverage and frontend typecheck pass.
+- [x] Production web build succeeds.
+
+**Implementation note:** Added a tender-source column to the final matrix with links bound to document/version/requirement/page. The review workspace can load a linked requirement outside the first list page; stale page and document-version targets show explicit unavailable states. Also fixed hook ordering that broke the review workspace when requirements loaded. Verification: frontend typecheck and production build passed; Playwright E2E 14 passed.
+
+### Guardrail
+
+- Never infer a page or clause when source metadata is absent.
+- Do not change requirement text, source anchors, or assessment state as part of navigation.
 
 # Plan completion rule
 
