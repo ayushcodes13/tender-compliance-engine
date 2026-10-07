@@ -114,8 +114,17 @@ export function TenderReviewWorkspace(props: {
   documentId: string;
   version: number;
   document?: DocumentItem | null;
+  initialRequirementId?: string;
+  initialSourcePage?: number;
 }) {
-  const { projectId, documentId, version, document } = props;
+  const {
+    projectId,
+    documentId,
+    version,
+    document,
+    initialRequirementId,
+    initialSourcePage,
+  } = props;
   const [selectedId, setSelectedId] = useState<string>("");
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -173,12 +182,19 @@ export function TenderReviewWorkspace(props: {
     })();
   }, [selectedId, projectId, documentId, version]);
 
-  // Auto-select the first requirement when the list loads.
+  // Select a deep-linked requirement when it belongs to this document;
+  // otherwise retain the ID so the version-scoped detail endpoint can verify
+  // it even when it is beyond the first page of the requirement list.
   useEffect(() => {
-    if (reqList?.items && reqList.items.length > 0 && !selectedId) {
-      setSelectedId(reqList.items[0].id);
+    if (reqList && !selectedId) {
+      const linked = initialRequirementId
+        ? reqList.items.find((item) => item.id === initialRequirementId)
+        : undefined;
+      setSelectedId(
+        linked?.id ?? initialRequirementId ?? reqList.items[0]?.id ?? ""
+      );
     }
-  }, [reqList, selectedId]);
+  }, [reqList, selectedId, initialRequirementId]);
 
   // Reset draft text and notes when selection changes.
   useEffect(() => {
@@ -209,6 +225,68 @@ export function TenderReviewWorkspace(props: {
     const next = (base + direction + reviewQueue.length) % reviewQueue.length;
     setSelectedId(reviewQueue[next].id);
   };
+
+  // Keep all hooks above the loading/error/empty-state returns below. The
+  // workspace changes from an empty requirement list to populated data after
+  // the API request, so hooks after those returns would change order.
+  const detail = selectedDetail ?? null;
+  const selectedSummary =
+    selected ??
+    (detail?.id === selectedId
+      ? {
+          id: detail.id,
+          requirement_type: detail.requirement_type,
+          normalized_text: detail.normalized_text,
+          uncertainty: detail.uncertainty,
+          review_state: detail.review_state,
+          ocr_warning: detail.ocr_warning,
+          clause_number: detail.clause_number,
+          display_order: detail.display_order,
+          mandatory: detail.mandatory,
+          superseded: detail.superseded,
+          created_at: detail.created_at,
+        }
+      : reqList?.items[0]);
+  const visibleRequirements = useMemo(() => {
+    const items = reqList?.items ?? [];
+    if (selectedSummary && !items.some((item) => item.id === selectedSummary.id)) {
+      return [selectedSummary, ...items];
+    }
+    return items;
+  }, [reqList?.items, selectedSummary]);
+  const selectedStatus: RequirementStatus = (selectedSummary?.review_state ??
+    "unreviewed") as RequirementStatus;
+  const selectedSources = detail?.sources ?? [];
+  const selectedSource =
+    initialSourcePage !== undefined
+      ? selectedSources.find((source) => source.page_number === initialSourcePage)
+      : selectedSources[0];
+  const sourcePage = selectedSource?.page_number ?? 1;
+
+  const STOP_WORDS = new Set([
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
+    "with", "at", "by", "from", "is", "are", "was", "were", "be", "been",
+    "has", "have", "had", "must", "shall", "should", "will", "may", "can",
+  ]);
+  const queryTerms = useMemo(() => {
+    const rawText =
+      detail?.normalized_text ?? selectedSummary?.normalized_text ?? "";
+    if (!rawText) return [];
+    const tokens = rawText
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const token of tokens) {
+      if (!seen.has(token)) {
+        seen.add(token);
+        unique.push(token);
+      }
+    }
+    return unique.slice(0, 20);
+  }, [detail?.normalized_text, selectedSummary?.normalized_text]);
+  const [evidenceRevision, setEvidenceRevision] = useState(0);
 
   const saveNormalizedText = async () => {
     const nextText = draftText.trim();
@@ -298,7 +376,7 @@ export function TenderReviewWorkspace(props: {
     );
   }
 
-  if (!reqList || reqList.items.length === 0) {
+  if (!reqList || (reqList.items.length === 0 && !selectedId)) {
     return (
       <div className="project-workspace">
         <header className="project-topbar">
@@ -320,48 +398,7 @@ export function TenderReviewWorkspace(props: {
     );
   }
 
-  // The selected requirement from the list.
-  const selectedSummary = selected ?? reqList.items[0];
-  // The detailed view (with constraints and sources) for the selected requirement.
-  const detail = selectedDetail ?? null;
-  const selectedStatus: RequirementStatus = (selectedSummary?.review_state ??
-    "unreviewed") as RequirementStatus;
-  // Use the first source anchor's page for source viewer navigation, if available.
-  const selectedSources = detail?.sources ?? [];
-  const sourcePage = selectedSources[0]?.page_number ?? 1;
-
-  // Derive query terms from the requirement's normalized text for evidence
-  // retrieval. This is a simple term extraction: lowercase, strip punctuation,
-  // remove common English stop words. The retrieval engine on the backend
-  // uses the same stop-word logic, so these terms feed directly into
-  // deterministic TF-IDF search over OEM documents.
-  const STOP_WORDS = new Set([
-    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
-    "with", "at", "by", "from", "is", "are", "was", "were", "be", "been",
-    "has", "have", "had", "must", "shall", "should", "will", "may", "can",
-  ]);
-  const queryTerms = useMemo(() => {
-    const rawText =
-      detail?.normalized_text ?? selectedSummary?.normalized_text ?? "";
-    if (!rawText) return [];
-    const tokens = rawText
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
-    // Deduplicate while preserving order, cap at 20 terms.
-    const unique: string[] = [];
-    const seen = new Set<string>();
-    for (const t of tokens) {
-      if (!seen.has(t)) {
-        seen.add(t);
-        unique.push(t);
-      }
-    }
-    return unique.slice(0, 20);
-  }, [detail?.normalized_text, selectedSummary?.normalized_text]);
-
   // Trigger evidence refresh from parent (e.g. after requirement review update).
-  const [evidenceRevision, setEvidenceRevision] = useState(0);
   const refreshEvidence = () => setEvidenceRevision((n) => n + 1);
 
   return (
@@ -487,7 +524,7 @@ export function TenderReviewWorkspace(props: {
           </div>
 
           <div className="requirement-list">
-            {reqList.items.map((item) => {
+            {visibleRequirements.map((item) => {
               const active = item.id === selectedId;
               const itemStatus = item.review_state as RequirementStatus;
               const clause = item.clause_number ?? "—";
@@ -555,7 +592,7 @@ export function TenderReviewWorkspace(props: {
               );
             })}
 
-            {reqList.items.length === 0 ? (
+            {visibleRequirements.length === 0 ? (
               <div className="empty-list">
                 <Search size={18} aria-hidden="true" />
                 <strong>No matching requirements</strong>
@@ -577,6 +614,18 @@ export function TenderReviewWorkspace(props: {
                 <CircleAlert size={18} aria-hidden="true" />
                 <strong>Failed to load requirement</strong>
                 <span>{detailError}</span>
+              </div>
+            </div>
+          ) : initialSourcePage !== undefined && !selectedSource ? (
+            <div className="source-stage">
+              <div className="empty-list" role="status">
+                <CircleAlert size={18} aria-hidden="true" />
+                <strong>Cited page is unavailable for this requirement</strong>
+                <span>
+                  The saved source location could not be matched. Review the
+                  tender requirement and its available citations before relying
+                  on a page reference.
+                </span>
               </div>
             </div>
           ) : (
@@ -619,9 +668,9 @@ export function TenderReviewWorkspace(props: {
             <section className="evidence-section">
               <div className="evidence-section-heading">
                 <span>Source anchor</span>
-                {selectedSources.length > 0 ? (
+                {selectedSource ? (
                   <span className="precision-pill">
-                    {selectedSources[0].location_type === "exact"
+                    {selectedSource.location_type === "exact"
                       ? "Exact"
                       : "Approximate"}
                   </span>
@@ -634,15 +683,15 @@ export function TenderReviewWorkspace(props: {
                 </span>
                 <div>
                   <strong>{document?.display_name ?? "Technical Tender"}</strong>
-                  <p>
+                  {selectedSource ? <p>
                     Page {sourcePage} · Clause{" "}
-                    {selectedSources[0]?.clause_number ?? "—"}
-                  </p>
+                    {selectedSource.clause_number ?? "—"}
+                  </p> : <p>Source location unavailable</p>}
                 </div>
               </div>
 
-              {selectedSources.length > 0 && selectedSources[0].source_text ? (
-                <blockquote>{selectedSources[0].source_text}</blockquote>
+              {selectedSource?.source_text ? (
+                <blockquote>{selectedSource.source_text}</blockquote>
               ) : (
                 <p style={{ color: "var(--text-tertiary)" }}>
                   No source text available.
@@ -780,8 +829,9 @@ export function TenderReviewWorkspace(props: {
                 <div>
                   <dt>Source</dt>
                   <dd>
-                    Page {sourcePage} ·{" "}
-                    {selectedSources[0]?.clause_number ?? "—"}
+                    {selectedSource
+                      ? `Page ${sourcePage} · ${selectedSource.clause_number ?? "—"}`
+                      : "Location unavailable"}
                   </dd>
                 </div>
                 <div>

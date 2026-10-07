@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
@@ -9,10 +9,38 @@ import { AppShell } from "@/components/app-shell";
 import { TenderReviewWorkspace } from "@/components/tender-review-workspace";
 import { api, DocumentItem, Project } from "@/lib/api/client";
 
+const isUuid = (value: string | null): value is string =>
+  value !== null &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+
 export default function ProjectReviewPage() {
   const params = useParams<{ id: string }>();
   const projectId = params.id;
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawDocumentId = searchParams.get("documentId");
+  const rawVersion = searchParams.get("version");
+  const hasSourceVersionRequest = rawDocumentId !== null || rawVersion !== null;
+  const requestedDocumentId = isUuid(rawDocumentId) ? rawDocumentId : undefined;
+  const parsedVersion = Number(rawVersion);
+  const requestedVersion =
+    Number.isInteger(parsedVersion) && parsedVersion > 0
+      ? parsedVersion
+      : undefined;
+  const rawRequirementId = searchParams.get("requirementId");
+  const initialRequirementId = isUuid(rawRequirementId)
+    ? rawRequirementId
+    : undefined;
+  const pageParam = Number(searchParams.get("page"));
+  const initialSourcePage =
+    requestedDocumentId &&
+    requestedVersion &&
+    initialRequirementId &&
+    Number.isInteger(pageParam) &&
+    pageParam > 0
+      ? pageParam
+      : undefined;
 
   const [project, setProject] = useState<Project | null>(null);
   const [document, setDocument] = useState<DocumentItem | null>(null);
@@ -30,17 +58,31 @@ export default function ProjectReviewPage() {
         setProject(proj);
 
         const docs = await api.fetchDocuments(projectId);
-        // Pick the latest version with a parsed status; fall back to newest.
-        const parsed = docs
-          .filter((d) => d.processing_status === "parsed")
-          .sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-        const target = parsed.length > 0 ? parsed[0] : docs[docs.length - 1];
+        let target: DocumentItem | undefined;
+        if (hasSourceVersionRequest) {
+          target = requestedDocumentId && requestedVersion
+            ? docs.find(
+                (item) =>
+                  item.document_id === requestedDocumentId &&
+                  item.version_number === requestedVersion
+              )
+            : undefined;
+        } else {
+          // Standard review navigation picks the latest parsed version;
+          // source links bind to the exact document/version from the matrix.
+          const parsed = docs
+            .filter((d) => d.processing_status === "parsed")
+            .sort(
+              (a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+          target = parsed.length > 0 ? parsed[0] : docs[docs.length - 1];
+        }
         if (!target) {
           setError(
-            "No documents uploaded yet. Upload a document from the project page."
+            hasSourceVersionRequest
+              ? "The cited tender document version is unavailable. Review the current project sources before relying on this matrix link."
+              : "No documents uploaded yet. Upload a document from the project page."
           );
           return;
         }
@@ -51,7 +93,7 @@ export default function ProjectReviewPage() {
         setLoading(false);
       }
     })();
-  }, [projectId]);
+  }, [projectId, hasSourceVersionRequest, requestedDocumentId, requestedVersion]);
 
   if (loading) {
     return (
@@ -98,6 +140,8 @@ export default function ProjectReviewPage() {
         documentId={document.document_id}
         version={document.version_number}
         document={document}
+        initialRequirementId={initialRequirementId}
+        initialSourcePage={initialSourcePage}
       />
     </AppShell>
   );

@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const createdAt = "2026-10-04T12:00:00Z";
+const tenderDocumentId = "00000000-0000-4000-8000-000000000010";
+const requirementId = "00000000-0000-4000-8000-000000000001";
+const otherRequirementId = "00000000-0000-4000-8000-000000000002";
 
 function project(status = "draft") {
   return {
@@ -17,7 +20,7 @@ function project(status = "draft") {
 
 function tenderDocument() {
   return {
-    document_id: "tender-doc-1",
+    document_id: tenderDocumentId,
     display_name: "tender.pdf",
     document_type: "tender",
     version_number: 1,
@@ -57,7 +60,7 @@ function oemDocument() {
 function finalMatrixRow() {
   return {
     serial: 1,
-    requirement_id: "req-1",
+    requirement_id: requirementId,
     tender_requirement: "Positioning resolution shall be 1 µm or better.",
     category: "Motion",
     clause: "4.2",
@@ -155,7 +158,7 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
           {
             ...doc,
             stored_object_id: "stored-tender-1",
-            storage_key: "org-1/project-1/tender-doc-1/v1/tender.pdf",
+            storage_key: `org-1/project-1/${tenderDocumentId}/v1/tender.pdf`,
             filename: "tender.pdf",
             content_type: "application/pdf",
             content_length: 42,
@@ -187,10 +190,110 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
       }
       if (
         path ===
-          "/projects/project-1/documents/tender-doc-1/versions/1/final-matrix" &&
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix` &&
         method === "GET"
       ) {
-        return json([finalMatrixRow()]);
+        return json([
+          finalMatrixRow(),
+          {
+            ...finalMatrixRow(),
+            serial: 2,
+            requirement_id: otherRequirementId,
+            source_page: null,
+            tender_requirement: "Page location has not been established.",
+          },
+        ]);
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/requirements` &&
+        method === "GET"
+      ) {
+        return json({
+          items: [{
+            id: otherRequirementId,
+            requirement_type: "performance",
+            normalized_text: "Another requirement from the first list page.",
+            uncertainty: "low",
+            review_state: "reviewed",
+            ocr_warning: false,
+            clause_number: "4.2",
+            display_order: 1,
+            mandatory: true,
+            superseded: false,
+            created_at: createdAt,
+          }],
+          total: 201,
+          limit: 200,
+          offset: 0,
+        });
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/requirements/${requirementId}` &&
+        method === "GET"
+      ) {
+        return json({
+          id: requirementId,
+          document_version_id: "tender-version-1",
+          requirement_type: "performance",
+          normalized_text: finalMatrixRow().tender_requirement,
+          raw_source: finalMatrixRow().raw_source,
+          uncertainty: "low",
+          review_state: "reviewed",
+          ocr_warning: false,
+          clause_number: "4.2",
+          reconciliation_group_id: null,
+          display_order: 1,
+          mandatory: true,
+          superseded: false,
+          created_at: createdAt,
+          updated_at: null,
+          constraints: [],
+          sources: [{
+            id: "source-1",
+            requirement_id: requirementId,
+            page_number: 12,
+            clause_number: "4.2",
+            location_type: "exact",
+            source_text: finalMatrixRow().raw_source,
+            ocr_confidence: 0.99,
+          }],
+          revisions: [],
+          notes: [],
+          categories: [],
+        });
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/12` &&
+        method === "GET"
+      ) {
+        return json({
+          page_number: 12,
+          has_image: false,
+          ocr_needed: false,
+          ocr_confidence: 0.99,
+          cleaned_text: finalMatrixRow().raw_source,
+          extracted_text: finalMatrixRow().raw_source,
+          structural_metadata: null,
+          created_at: createdAt,
+        });
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/12/sources` &&
+        method === "GET"
+      ) {
+        return json([{
+          requirement_id: requirementId,
+          clause_number: "4.2",
+          page_number: 12,
+          location_type: "exact",
+          source_text: finalMatrixRow().raw_source,
+          bbox: null,
+          ocr_confidence: 0.99,
+        }]);
       }
       if (path === "/projects/project-1/submissions/" && method === "GET") {
         return json([]);
@@ -270,8 +373,36 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(summary.getByText("Compliant", { exact: true })).toBeVisible();
   await expect(summary.getByText("Needs attention")).toBeVisible();
   await expect(page.getByText("Positioning resolution shall be 1 µm or better.")).toBeVisible();
+  await expect(page.getByText("Location unavailable")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: /Open tender source for requirement 2/ })
+  ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Export XLSX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export DOCX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create draft submission" })).toBeVisible();
+
+  const sourceLink = page.getByRole("link", {
+    name: "Open tender source for requirement 1, page 12",
+  });
+  await expect(sourceLink).toHaveAttribute(
+    "href",
+    `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12`
+  );
+  await sourceLink.click();
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/project-1/review\\?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12$`)
+  );
+  await expect(page.getByText("Page 12 · Clause 4.2", { exact: true })).toBeVisible();
+  await expect(page.getByText(finalMatrixRow().raw_source, { exact: true }).first()).toBeVisible();
+
+  await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=13`);
+  await expect(
+    page.getByText("Cited page is unavailable for this requirement")
+  ).toBeVisible();
+
+  await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=2&requirementId=${requirementId}&page=12`);
+  await expect(
+    page.getByText(/The cited tender document version is unavailable/).first()
+  ).toBeVisible();
 });
