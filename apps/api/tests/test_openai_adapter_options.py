@@ -2,6 +2,7 @@ import asyncio
 import sys
 from types import SimpleNamespace
 
+import pytest
 from pydantic import BaseModel
 
 from tender_compliance_api.extraction.adapter import LlmCallConfig
@@ -60,7 +61,9 @@ def test_non_azure_base_url_is_preserved() -> None:
     assert _azure_foundry_base_url(endpoint) == (endpoint, False)
 
 
-def test_bare_azure_endpoint_configures_route_version_and_api_key_header(monkeypatch) -> None:
+def test_bare_azure_endpoint_configures_route_version_and_api_key_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
 
     class FakeAsyncOpenAI:
