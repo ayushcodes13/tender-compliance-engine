@@ -18,11 +18,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import uuid
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
     ExportArtifact,
@@ -43,7 +45,13 @@ from tender_compliance_api.db.models import (
     User,
 )
 from tender_compliance_api.db.session import get_session
+from tender_compliance_api.document import service as document_service
+from tender_compliance_api.export import visual_validation
+from tender_compliance_api.export.visual_validation import PageImageValidationResponse
+from tender_compliance_api.extraction import openai_adapter
+from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.main import app
+from tender_compliance_api.matrix.projection import project_matrix_rows
 
 client = TestClient(app)
 _session_cm = contextlib.asynccontextmanager(get_session)
@@ -270,6 +278,169 @@ class TestExportGeneration:
         assert body["validation_report"]["window_processing"]["failed_windows"] == [
             {"window_index": 1, "chunk_id": "window-1", "pages": [3]}
         ]
+
+    def test_ocr_quote_requires_page_image_check_even_when_text_matches(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _mark_ocr_source():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        cleaned_text=requirement.raw_source,
+                        ocr_needed=True,
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_mark_ocr_source())
+        resp = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "failed"
+        assert body["validation_status"] == "needs_review"
+        issues = body["validation_report"]["source_validation"]["issues"]
+        assert len(issues) == 1
+        assert issues[0]["code"] == "ocr_visual_verification_required"
+
+    def test_ocr_quote_passes_only_after_exact_page_image_check(self, monkeypatch):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _mark_ocr_source():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        cleaned_text=requirement.raw_source,
+                        ocr_needed=True,
+                        rendered_image_object_key="rendered/page-3.png",
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_mark_ocr_source())
+
+        class FakeAdapter:
+            pass
+
+        class FakeStorage:
+            async def get(self, key: str) -> bytes:
+                assert key == "rendered/page-3.png"
+                return b"page-image"
+
+        checked: list[dict[str, object]] = []
+
+        async def fake_visual_check(**kwargs):
+            checked.append(kwargs)
+            return (
+                PageImageValidationResponse(
+                    verdict="exact",
+                    confidence=0.99,
+                    visible_quote=kwargs["proposed_quote"],
+                    reason="The full quote is visibly present.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        expected_requirement_ids: list[str] = []
+
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+            ),
+        )
+        monkeypatch.setattr(
+            openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter()
+        )
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                expected_requirement_ids.extend(str(row.requirement_id) for row in rows)
+                return await document_service._source_quote_validation_report(
+                    session,
+                    rows,
+                    FakeStorage(),
+                )
+
+        report = asyncio.run(_validate())
+        assert report["status"] == "passed"
+        assert report["llm_assisted_rows"] == expected_requirement_ids
+        assert len(checked) == 1
+        assert checked[0]["page_number"] == 3
+        assert checked[0]["image_bytes"] == b"page-image"
 
     def test_completed_windows_are_not_reported_as_proof_of_completeness(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()

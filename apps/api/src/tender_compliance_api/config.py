@@ -58,9 +58,9 @@ class Settings(BaseSettings):
     openai_base_url: str = ""
     openai_model: str = "gpt-4o"
 
-    # Optional second pass only for source-invalid requirement quotations.
-    # It never runs after the deterministic source-substring check succeeds.
-    verbatim_validation_fallback_enabled: bool = False
+    # Strict second pass for source-invalid quotations and OCR-derived source
+    # rows. It is enabled by default; calls still require a configured API key.
+    verbatim_validation_fallback_enabled: bool = True
 
     # Processing limits
     max_retries: int = 5

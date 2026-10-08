@@ -56,7 +56,11 @@ class ExportIntegrityResult:
 @dataclass(frozen=True)
 class SourceQuoteIssue:
     row_id: str
-    code: Literal["source_text_unavailable", "source_quote_not_found"]
+    code: Literal[
+        "source_text_unavailable",
+        "source_quote_not_found",
+        "ocr_visual_verification_required",
+    ]
 
 
 def _content_key(value: str) -> str:

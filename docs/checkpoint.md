@@ -3540,7 +3540,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 1. Preserve the literal tender quote in generated tender-requirement cells. Validate the generated file contents after rendering so exporter truncation or row loss is detected.
 2. Validate source-derived cells against only their authorized document version/page. Check row completeness against the canonical requirement set and report missing or changed cells.
-3. Use deterministic exact source matching first. When native/OCR text cannot establish a match, allow a bounded, strict LLM fallback over the exact rendered cited page; never use it to move the citation, infer missing wording, or silently rewrite a requirement.
+3. Use deterministic exact source matching first. When native/OCR text cannot establish a match, or the source page carries an OCR warning, require a bounded, strict LLM check over the exact rendered cited page; never use it to move the citation, infer missing wording, or silently rewrite a requirement.
 4. Persist a typed validation result with export metadata and expose clear pass/review/fail states. A candidate inferred from page imagery remains reviewable unless its exact returned text can be independently verified; provider failures fail closed.
 5. Make source citations open the immutable document version/page, scroll to the relevant anchor, and visibly emphasize the selected exact or approximate excerpt. Keep unknown locations unavailable.
 6. Use the existing Bynd reuse audit as the reference boundary: adopt typed abstention and page-authority patterns, and learn from the chat/industry-report citation behavior without copying AGPL or private implementation code.
@@ -3563,3 +3563,4 @@ If the product direction changes, update this file through a focused PR, explain
 - The post-render integrity report now records checked column/cell counts and identifies changed fields. This validates emitted rows against the canonical projection; it does not prove the extraction pass found every obligation in the tender.
 - Per-window extraction records distinguish a failed provider call from a successful call that returned no candidates. Complete call coverage is only evidence that each recorded window reached the model; it does not prove that every obligation in those windows was identified.
 - LLM fallback may inspect only the immutable cited page (or a tighter source region); it cannot search another page/version or treat prompt text embedded in the tender as instructions.
+- A quote that matches OCR text still requires page-image verification when the requirement or cited page carries an OCR warning. Missing images and uncertain visual results keep the artifact in review.
