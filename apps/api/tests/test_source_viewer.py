@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import struct
 import uuid
 
 from fastapi.testclient import TestClient
@@ -33,7 +34,10 @@ from tender_compliance_api.db.models import (
 )
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.main import app
-from tender_compliance_api.routes.source_viewer import get_storage_adapter
+from tender_compliance_api.routes.source_viewer import (
+    _ocr_quote_bbox,
+    get_storage_adapter,
+)
 from tender_compliance_api.storage.fake import FakeStorageAdapter
 
 client = TestClient(app)
@@ -377,6 +381,23 @@ class TestPageImage:
 
 
 class TestSourceAnchors:
+    def test_ocr_quote_bbox_rejects_ambiguous_or_changed_words(self):
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + struct.pack(">IIBBBBB", 300, 100, 8, 6, 0, 0, 0)
+            + b"\x00\x00\x00\x00"
+        )
+        words = [
+            {"text": "weight", "bbox": {"x": 10, "y": 20, "width": 35, "height": 12}},
+            {"text": "≤", "bbox": {"x": 48, "y": 20, "width": 10, "height": 12}},
+            {"text": "2", "bbox": {"x": 62, "y": 20, "width": 7, "height": 12}},
+            {"text": "kg", "bbox": {"x": 73, "y": 20, "width": 15, "height": 12}},
+        ]
+        assert _ocr_quote_bbox(words + words, "weight ≤ 2 kg", png) is None
+        assert _ocr_quote_bbox(words, "weight < 2 kg", png) is None
+
     def test_get_page_sources_returns_anchors(self):
         """GET page sources returns source anchors with bbox for overlay."""
         user_id, org_id, project_id = _build_org_project()
@@ -397,6 +418,63 @@ class TestSourceAnchors:
         assert anchor["ocr_confidence"] == 0.95
         assert "clause_number" in anchor
         assert "requirement_id" in anchor
+
+    def test_ocr_word_geometry_highlights_unique_exact_quote(self):
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + struct.pack(">IIBBBBB", 300, 100, 8, 6, 0, 0, 0)
+            + b"\x00\x00\x00\x00"
+        )
+
+        async def _persist_ocr_geometry():
+            async with _session_cm() as session:
+                page = (
+                    await session.execute(
+                        select(DocumentPage).where(
+                            DocumentPage.page_number == 1,
+                            DocumentPage.document_version_id
+                            == select(DocumentVersion.id)
+                            .where(DocumentVersion.document_id == doc_id)
+                            .scalar_subquery(),
+                        )
+                    )
+                ).scalar_one()
+                page.ocr_words = [
+                    {"text": "weight", "bbox": {"x": 10, "y": 20, "width": 35, "height": 12}},
+                    {"text": "≤", "bbox": {"x": 48, "y": 20, "width": 10, "height": 12}},
+                    {"text": "2", "bbox": {"x": 62, "y": 20, "width": 7, "height": 12}},
+                    {"text": "kg", "bbox": {"x": 73, "y": 20, "width": 15, "height": 12}},
+                ]
+                source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.document_version_id
+                            == page.document_version_id
+                        )
+                    )
+                ).scalar_one()
+                source.bbox = None
+                await session.commit()
+
+        asyncio.run(_persist_ocr_geometry())
+        _make_test_storage()
+        _put_image_sync("rendered/page_1.png", png)
+        try:
+            response = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/sources",
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            _clear_test_storage()
+
+        assert response.status_code == 200
+        assert response.json()[0]["bbox"] == {
+            "x": 10.0, "y": 20.0, "width": 78.0, "height": 12.0
+        }
 
     def test_get_page_sources_empty_for_page_without_anchors(self):
         """GET page sources for a page with no anchors returns empty list."""

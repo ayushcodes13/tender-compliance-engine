@@ -766,6 +766,11 @@ class DocumentPage(Base):
     rendered_image_object_key: Mapped[str | None] = mapped_column(
         String(512), nullable=True
     )
+    # OCR word-level text/geometry in rendered-page pixel coordinates. This is
+    # retained so exact OCR quotes can be highlighted without inventing boxes.
+    ocr_words: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON(), nullable=True
+    )
     structural_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSON(), nullable=True
     )

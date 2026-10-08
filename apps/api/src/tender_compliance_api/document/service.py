@@ -3177,6 +3177,23 @@ class DocumentService:
 
             if ocr_result.confidence is not None:
                 page.ocr_confidence = ocr_result.confidence
+            page.ocr_words = [
+                {
+                    "text": word.text,
+                    "confidence": word.confidence,
+                    "bbox": (
+                        {
+                            "x": word.bbox[0],
+                            "y": word.bbox[1],
+                            "width": word.bbox[2],
+                            "height": word.bbox[3],
+                        }
+                        if word.bbox is not None
+                        else None
+                    ),
+                }
+                for word in ocr_result.words
+            ] or None
             if ocr_result.text and ocr_result.text.strip():
                 page.extracted_text = ocr_result.text
                 page.ocr_needed = False
