@@ -283,6 +283,21 @@ class TestExportGeneration:
             ("temperature-range", "source_quote_not_found")
         ]
 
+    def test_source_quote_check_allows_wrap_whitespace_but_not_quote_glyph_change(self):
+        exact_quote = "The chuck supports a wafer diameter of 4”."
+        wrapped_source = "The chuck supports a wafer diameter\nof 4”."
+        assert validate_source_quote_presence(
+            [RequirementCell("quote", exact_quote)], {"quote": [wrapped_source]}
+        ) == ()
+
+        changed_glyph = exact_quote.replace("4”", '4"')
+        issues = validate_source_quote_presence(
+            [RequirementCell("quote", changed_glyph)], {"quote": [wrapped_source]}
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("quote", "source_quote_not_found")
+        ]
+
     def test_export_does_not_accept_source_from_another_version(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
