@@ -39,8 +39,8 @@ _ASSESSMENT_STATUS_LABELS: dict[str, str] = {
 # Column definitions: (field_name, header, width_pts)
 _COLUMNS: list[tuple[str, str, float]] = [
     ("serial", "S.No.", 30),
-    ("requirement_id", "Requirement ID", 125),
-    ("tender_requirement", "Tender Requirement", 263),
+    ("requirement_id", "Requirement ID", 143),
+    ("tender_requirement", "Tender Requirement", 245),
     ("assessment_status", "Assessment", 75),
     ("vendor_spec_value", "V.Value", 55),
     ("vendor_spec_unit", "V.Unit", 48),
@@ -77,7 +77,7 @@ def _row_text(row: FinalMatrixRow) -> list[str]:
         status = row.assessment_suggested_status
     return [
         _fmt(row.serial),
-        _fmt(row.requirement_id),
+        str(row.requirement_id),
         _fmt(row.tender_requirement),
         _assess_label(status),
         _fmt(row.vendor_spec_value),

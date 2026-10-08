@@ -116,22 +116,27 @@ def _xlsx_cells(data: bytes) -> list[RequirementCell]:
                         min_row=row_number + 1, values_only=True
                     )
                     if len(data_row) > max(id_idx, text_idx)
-                    and data_row[id_idx] not in (None, "")
+                    and isinstance(data_row[id_idx], str)
+                    and re.fullmatch(
+                        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                        data_row[id_idx],
+                    ) is not None
                 ]
         return []
     finally:
         workbook.close()
 
 
-def _pdf_text(data: bytes) -> str:
+def _pdf_text_pages(data: bytes) -> list[str]:
     document: Any = pymupdf.open(  # type: ignore[no-untyped-call]
         stream=data, filetype="pdf"
     )
     try:
-        return "\n".join(
+        return [
             document.load_page(page_number).get_text(sort=True)
             for page_number in range(document.page_count)
-        )
+        ]
     finally:
         document.close()
 
@@ -149,7 +154,10 @@ def validate_generated_requirement_cells(
     """
     issues: list[CellIssue] = []
     if export_format == "pdf":
-        artifact_text = _content_key(_pdf_text(artifact_bytes))
+        pages = _pdf_text_pages(artifact_bytes)
+        # The first page contains document metadata, including its document
+        # UUID. Requirement IDs appear only in the subsequent data pages.
+        artifact_text = _content_key("\n".join(pages[1:]))
         row_ids = [_content_key(row_id) for row_id in re.findall(
             r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
             artifact_text,

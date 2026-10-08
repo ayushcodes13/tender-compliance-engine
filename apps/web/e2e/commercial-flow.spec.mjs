@@ -308,6 +308,20 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
           id: "vendor-response-export-1",
           status: "completed",
           export_format: "docx",
+          validation_status: "passed",
+          validation_report: {
+            artifact_integrity: "passed",
+            expected_rows: 1,
+            actual_rows: 1,
+            issues: [],
+            source_validation: {
+              status: "passed",
+              checked_rows: 1,
+              llm_assisted_rows: [],
+              issues: [],
+              calls: [],
+            },
+          },
         });
       }
       if (

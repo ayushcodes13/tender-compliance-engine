@@ -175,6 +175,7 @@ def _create_raw_requirement(
                     document_version_id=version.id,
                     page_number=1,
                     clause_number=clause,
+                    source_text=raw_source,
                 )
             )
             await session.commit()

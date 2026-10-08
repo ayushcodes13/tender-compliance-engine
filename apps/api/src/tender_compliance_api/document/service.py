@@ -152,7 +152,7 @@ async def _source_quote_validation_report(
                 RequirementSource.page_number,
                 DocumentPage.rendered_image_object_key,
             ).where(RequirementSource.requirement_id.in_(requirement_ids))
-            .join(
+            .outerjoin(
                 DocumentPage,
                 (DocumentPage.document_version_id == RequirementSource.document_version_id)
                 & (DocumentPage.page_number == RequirementSource.page_number),
