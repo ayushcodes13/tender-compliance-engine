@@ -9,12 +9,48 @@ from pydantic import ValidationError
 
 from tender_compliance_api.extraction.coverage_audit import (
     CALL_SITE,
+    IMAGE_SYSTEM_PROMPT,
+    OBLIGATION_SCOPE,
+    PROMPT_VERSION,
+    SYSTEM_PROMPT,
     ImageObligationCoverageResponse,
     ObligationCoverageResponse,
     _find_potential_omissions,
     audit_window_coverage,
 )
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
+
+
+def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
+    assert PROMPT_VERSION == "1.1.0"
+    for prompt in (SYSTEM_PROMPT, IMAGE_SYSTEM_PROMPT):
+        assert OBLIGATION_SCOPE in prompt
+        assert "technical specifications" in prompt
+        assert "installation" in prompt
+        assert "warranty" in prompt
+        assert "tables of contents" in prompt
+        assert "bidder eligibility" in prompt
+        assert "Incoterms" in prompt
+        assert "Bare equipment names, table parameter labels" in prompt
+        assert "Delivery timing" in prompt
+        assert "installation duties remain in scope" in prompt
+        assert "instructions about how to prepare or" in prompt
+        assert "A title or heading is not an obligation by itself." in prompt
+
+
+def test_cover_and_contents_window_can_complete_with_no_obligations() -> None:
+    source = (
+        "Global Tender for the supply of a Diamond Scriber.\n"
+        "Section 1 Bid Schedule Pg. 2\n"
+        "Section 2 Eligibility Criteria Pg. 3\n"
+        "Section 4 Specifications Pg. 10"
+    )
+    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[])])
+
+    result = asyncio.run(audit_window_coverage(source, [], adapter))
+
+    assert result.status == "completed"
+    assert result.potential_omissions == ()
 
 
 def test_strict_response_rejects_wrong_types_and_extra_fields() -> None:
