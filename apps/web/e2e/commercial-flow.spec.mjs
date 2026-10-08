@@ -104,6 +104,7 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   let currentProject = project();
   let tenderDocs = [];
   let oemDocs = [];
+  let exportArtifacts = [];
 
   await page.route(
     (url) => {
@@ -335,9 +336,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
         method === "POST" &&
         url.searchParams.get("fmt") === "xlsx"
       ) {
-        return json({
+        const artifact = {
           id: "review-required-export-1",
           status: "failed",
+          export_format: "xlsx",
+          generated_at: createdAt,
+          requirement_count: 2,
           validation_status: "needs_review",
           validation_report: {
             issues: [],
@@ -349,7 +353,16 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
               potential_omissions: [{ pages: [9], source_quote: coverageQuote }],
             },
           },
-        });
+        };
+        exportArtifacts.unshift(artifact);
+        return json(artifact);
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/exports` &&
+        method === "GET"
+      ) {
+        return json(exportArtifacts);
       }
       if (path === "/projects/project-1/submissions/" && method === "GET") {
         return json([]);
@@ -360,10 +373,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
         method === "POST" &&
         url.searchParams.get("template") === "vendor-response"
       ) {
-        return json({
+        const artifact = {
           id: "vendor-response-export-1",
           status: "completed",
           export_format: "docx",
+          generated_at: createdAt,
+          requirement_count: 2,
           validation_status: "passed",
           validation_report: {
             artifact_integrity: "passed",
@@ -378,7 +393,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
               calls: [],
             },
           },
-        });
+        };
+        exportArtifacts.unshift(artifact);
+        return json(artifact);
       }
       if (
         path ===
@@ -474,6 +491,8 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByRole("button", { name: "Export DOCX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
   await page.getByRole("button", { name: "Export XLSX" }).click();
+  await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
+  await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   const findingLink = page.getByRole("link", {
     name: "Open tender page 9 and inspect excerpt",
   });
@@ -487,11 +506,25 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
 
   await page.goto("/projects/project-1/matrix");
   await expect(page.getByRole("heading", { name: "Final compliance sheet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Export history" })).toBeVisible();
+  await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
+  await expect(page.getByText(/This export is unavailable for download until it has a passing result\./)).toBeVisible();
+  await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
   ]);
   expect(vendorSheetDownload.suggestedFilename()).toBe("tender_vendor_response_v1.docx");
+  await expect(page.getByText("Validated", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh export history" }).click();
+  await expect(page.getByText("Validated", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(1);
+  const [historyDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download" }).click(),
+  ]);
+  expect(historyDownload.suggestedFilename()).toBe("tender_export_v1_vendor-r.docx");
   await expect(page.getByRole("button", { name: "Create draft submission" })).toBeVisible();
 
   const sourceLink = page.getByRole("link", {

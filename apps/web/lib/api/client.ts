@@ -1113,6 +1113,15 @@ export const api = {
       { method: "POST" }
     ).then((r) => expectJson<ExportArtifactResponse>(r)),
 
+  fetchExports: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/exports`
+    ).then((r) => expectJson<ExportArtifactResponse[]>(r)),
+
   downloadMatrixExport: async (
     projectId: string,
     documentId: string,

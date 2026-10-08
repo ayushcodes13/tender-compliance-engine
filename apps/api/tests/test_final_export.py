@@ -151,6 +151,17 @@ class TestXlsxExport:
         assert data["validation_report"]["checked_columns"] == 28
         assert data["validation_report"]["checked_cells"] == 28
 
+        history = client.get(
+            f"/projects/{proj_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+        assert history.status_code == 200
+        saved_artifact = next(
+            item for item in history.json() if item["id"] == data["id"]
+        )
+        assert saved_artifact["validation_status"] == "passed"
+        assert saved_artifact["validation_report"]["checked_cells"] == 28
+
     def test_xlsx_export_has_phase2_columns(self):
         (user_id, org_id, proj_id, doc_id, ver, ver_id, req_id) = (
             _build_org_project_with_req()
