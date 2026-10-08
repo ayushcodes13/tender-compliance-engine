@@ -579,7 +579,7 @@ export function TenderReviewWorkspace(props: {
                         <span className="citation-glance" role="tooltip">
                           <span className="citation-glance-label">Source evidence</span>
                           <strong>{document?.display_name ?? "Technical Tender"}</strong>
-                          <p>{src.source_text ?? "(no source text)"}</p>
+                          <p>{src.quote_text ?? src.source_text ?? "(no source text)"}</p>
                           <small>
                             Page {src.page_number} · Clause {src.clause_number ?? "—"} ·{" "}
                             {src.location_type === "exact" ? "Exact" : "Approximate"}{" "}
@@ -634,6 +634,7 @@ export function TenderReviewWorkspace(props: {
               documentId={documentId}
               version={version}
               pageNumber={sourcePage}
+              selectedRequirementId={selectedId}
               totalPages={undefined}
               onPageChange={(page) => {
                 /* Page navigation handled within SourceViewer */

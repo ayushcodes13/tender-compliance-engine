@@ -39,6 +39,7 @@ export function FinalMatrixView(props: {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [validationNotice, setValidationNotice] = useState<string | null>(null);
 
   const reload = async () => {
     setLoading(true);
@@ -106,6 +107,7 @@ export function FinalMatrixView(props: {
   const exportFile = async (format: ExportFormat) => {
     setBusy(`export-${format}`);
     setError(null);
+    setValidationNotice(null);
     try {
       const artifact = await api.createFinalMatrixExport(
         projectId,
@@ -114,7 +116,24 @@ export function FinalMatrixView(props: {
         format
       );
       if (artifact.status !== "completed") {
+        if (artifact.validation_status === "failed") {
+          const issueCount =
+            (artifact.validation_report?.issues?.length ?? 0) +
+            (artifact.validation_report?.source_validation?.issues.length ?? 0);
+          throw new Error(
+            `The generated file failed its content check (${issueCount} row issue${issueCount === 1 ? "" : "s"}). No file was issued. Review the tender wording and source links, then try again.`
+          );
+        }
+        if (artifact.validation_status === "needs_review") {
+          const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
+          throw new Error(
+            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before this file can be issued. Open each row's source citation and verify the exact wording.`
+          );
+        }
         throw new Error(artifact.error_message ?? "Export generation failed");
+      }
+      if (artifact.validation_status !== "passed") {
+        throw new Error("The generated file did not complete its content check.");
       }
       const blob = await api.downloadExport(
         projectId,
@@ -130,6 +149,11 @@ export function FinalMatrixView(props: {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      const llmCount =
+        artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
+      setValidationNotice(
+        `File integrity and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -140,6 +164,7 @@ export function FinalMatrixView(props: {
   const exportVendorResponseSheet = async () => {
     setBusy("export-vendor-response");
     setError(null);
+    setValidationNotice(null);
     try {
       const artifact = await api.createVendorResponseSheetExport(
         projectId,
@@ -147,7 +172,24 @@ export function FinalMatrixView(props: {
         version
       );
       if (artifact.status !== "completed") {
+        if (artifact.validation_status === "failed") {
+          const issueCount =
+            (artifact.validation_report?.issues?.length ?? 0) +
+            (artifact.validation_report?.source_validation?.issues.length ?? 0);
+          throw new Error(
+            `The generated response sheet failed its content check (${issueCount} row issue${issueCount === 1 ? "" : "s"}). No file was issued.`
+          );
+        }
+        if (artifact.validation_status === "needs_review") {
+          const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
+          throw new Error(
+            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before the response sheet can be issued.`
+          );
+        }
         throw new Error(artifact.error_message ?? "Export generation failed");
+      }
+      if (artifact.validation_status !== "passed") {
+        throw new Error("The generated response sheet did not complete its content check.");
       }
       const blob = await api.downloadExport(
         projectId,
@@ -163,6 +205,11 @@ export function FinalMatrixView(props: {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      const llmCount =
+        artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
+      setValidationNotice(
+        `File integrity and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -187,6 +234,12 @@ export function FinalMatrixView(props: {
       </div>
 
       {error ? <div className="upload-error-banner" role="alert"><AlertCircle size={14} />{error}</div> : null}
+      {validationNotice ? (
+        <div className="compliance-ready-banner" role="status">
+          <CheckCircle size={15} aria-hidden="true" />
+          <div><strong>Export content check passed.</strong><span>{validationNotice}</span></div>
+        </div>
+      ) : null}
 
       <div className="compliance-summary-grid" aria-label="Compliance sheet summary">
         <div className="compliance-summary-card">

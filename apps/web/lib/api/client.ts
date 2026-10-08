@@ -142,6 +142,7 @@ export type RequirementSourceSummary = {
   clause_number: string | null;
   location_type: string;
   source_text: string | null;
+  quote_text: string | null;
   ocr_confidence: number | null;
 };
 
@@ -303,6 +304,7 @@ export type SourceAnchor = {
   page_number: number;
   location_type: string;
   source_text: string | null;
+  quote_text: string | null;
   bbox: { x: number; y: number; width: number; height: number } | null;
   ocr_confidence: number | null;
 };
@@ -332,6 +334,27 @@ export type ExportArtifactResponse = {
   workbook_sha256: string;
   generated_at: string | null;
   export_format?: "xlsx" | "docx" | "pdf" | null;
+  validation_status: "not_run" | "passed" | "needs_review" | "failed";
+  validation_report: {
+    artifact_integrity?: "passed" | "failed";
+    expected_rows?: number;
+    actual_rows?: number;
+    issues?: { row_id: string; code: string }[];
+    source_validation?: {
+      status: "passed" | "needs_review";
+      checked_rows: number;
+      llm_assisted_rows?: string[];
+      issues: { row_id: string; code: string }[];
+      llm_fallback_results?: {
+        row_id: string;
+        page_number: number;
+        status: string;
+        provider?: string;
+        model?: string;
+        call_status?: string;
+      }[];
+    };
+  } | null;
 };
 
 export type FinalMatrixRowResponse = {

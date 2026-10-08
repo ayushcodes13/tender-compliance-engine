@@ -3529,3 +3529,34 @@ If the product direction changes, update this file through a focused PR, explain
 ### Guardrail
 
 - The fallback may repair citation selection only. It must not semantically correct OCR, synthesize missing text, confirm vendor compliance, or bypass the normal human review/export gates.
+
+## Checkpoint 70 — Verbatim validation of generated tender sheets
+
+**Status:** IN PROGRESS — generated requirement wording is now sourced from the persisted raw quote; export validation, OCR fallback, and citation proof UI remain.
+
+**Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
+
+### Scope
+
+1. Preserve the literal tender quote in generated tender-requirement cells. Validate the generated file contents after rendering so exporter truncation or row loss is detected.
+2. Validate source-derived cells against only their authorized document version/page. Check row completeness against the canonical requirement set and report missing or changed cells.
+3. Use deterministic exact source matching first. When native/OCR text cannot establish a match, allow a bounded, strict LLM fallback over the exact rendered cited page; never use it to move the citation, infer missing wording, or silently rewrite a requirement.
+4. Persist a typed validation result with export metadata and expose clear pass/review/fail states. A candidate inferred from page imagery remains reviewable unless its exact returned text can be independently verified; provider failures fail closed.
+5. Make source citations open the immutable document version/page, scroll to the relevant anchor, and visibly emphasize the selected exact or approximate excerpt. Keep unknown locations unavailable.
+6. Use the existing Bynd reuse audit as the reference boundary: adopt typed abstention and page-authority patterns, and learn from the chat/industry-report citation behavior without copying AGPL or private implementation code.
+
+### This checkpoint is complete only when
+
+- [ ] XLSX, DOCX, PDF, and vendor-response exports retain complete source wording without clipping or silent truncation.
+- [ ] A post-render validator checks expected row identities/counts and each tender-derived cell against its source/version/page; non-source fields are validated against their owning data contract instead of being falsely compared with the tender.
+- [ ] Deterministic validation runs first; a bounded, schema-strict page-image fallback is used only for uncertain source text and preserves abstention on errors or ambiguity.
+- [ ] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.
+- [ ] Citation controls expose the cited excerpt, open the exact tender version and page, and emphasize the selected quote in the viewer without upgrading approximate anchors.
+- [ ] Tests cover clipping, missing/duplicate rows, exact and mismatched text, OCR uncertainty, malformed/provider-failed fallback, source scoping, and citation navigation/highlighting.
+- [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.
+
+### Guardrail
+
+- “Verbatim validated” means the tender-derived cell's non-whitespace characters match the cited source quote. Layout wrapping may alter whitespace only; paraphrases, omitted characters, changed values/units/operators, and unverified LLM visual readings do not pass.
+- Requirement coverage validation must identify omitted rows separately from per-row citation validation. A green per-row quote check alone is not proof that every tender obligation was extracted.
+- LLM fallback may inspect only the immutable cited page (or a tighter source region); it cannot search another page/version or treat prompt text embedded in the tender as instructions.

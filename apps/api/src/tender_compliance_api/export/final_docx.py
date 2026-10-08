@@ -109,7 +109,9 @@ def build_final_matrix_docx(
         cells = table.add_row().cells
         cells[0].text = _format_value(row.serial)
         cells[1].text = _format_value(row.requirement_id)
-        cells[2].text = _truncate(row.tender_requirement)
+        # DOCX tables wrap long text naturally. Truncating here would make the
+        # exported requirement disagree with the source-linked matrix row.
+        cells[2].text = row.tender_requirement
         status = row.assessment_status or ""
         if status:
             status = _ASSESSMENT_STATUS_LABELS.get(status, status)
@@ -136,11 +138,3 @@ def build_final_matrix_docx(
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
-
-
-def _truncate(text: str, max_len: int = 200) -> str:
-    if text is None:
-        return ""
-    if len(text) > max_len:
-        return text[: max_len - 3] + "..."
-    return text

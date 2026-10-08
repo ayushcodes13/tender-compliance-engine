@@ -89,9 +89,24 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
       );
 
       if (artifact.status !== "completed") {
+        if (artifact.validation_status === "needs_review") {
+          const count = artifact.validation_report?.source_validation?.issues.length ?? 0;
+          setExportError(
+            `${count} tender row${count === 1 ? " needs" : "s need"} source review before this workbook can be issued. Open the source citations and verify the exact wording.`
+          );
+          return;
+        }
+        if (artifact.validation_status === "failed") {
+          setExportError("The generated workbook failed its content check. No file was issued.");
+          return;
+        }
         setExportError(
           `Export failed: ${artifact.error_message ?? "unknown error"}`
         );
+        return;
+      }
+      if (artifact.validation_status !== "passed") {
+        setExportError("The generated workbook did not pass validation and cannot be downloaded.");
         return;
       }
 

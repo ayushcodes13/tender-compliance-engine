@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,7 @@ from sqlalchemy.orm import selectinload
 
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
+from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import (
     Category,
     ConstraintNormalizationState,
@@ -66,7 +68,7 @@ from tender_compliance_api.errors import (
     PAGE_TEXT_FAILURE,
     PROCESSING_STAGE_FAILURE,
 )
-from tender_compliance_api.extraction.adapter import LlmCallResult
+from tender_compliance_api.extraction.adapter import LlmAdapter, LlmCallResult
 from tender_compliance_api.extraction.constraint_parser import (
     ParsedConstraint,
     parse_constraint,
@@ -122,6 +124,130 @@ def _resolve_storage() -> ObjectStorageAdapter:
     on FastAPI's dependency-injection machinery.
     """
     return create_storage_adapter()
+
+
+async def _source_quote_validation_report(
+    session: AsyncSession,
+    rows: Sequence[FinalMatrixRow | MatrixRow],
+    storage: ObjectStorageAdapter,
+) -> dict[str, object]:
+    """Check linked source text, then use a bounded page-image fallback."""
+    from tender_compliance_api.export.validation import (  # noqa: PLC0415
+        RequirementCell,
+        validate_source_quote_presence,
+    )
+    from tender_compliance_api.export.visual_validation import (  # noqa: PLC0415
+        MAX_CALLS_PER_PAGE,
+        validate_quote_on_page_image,
+    )
+
+    requirement_ids = [row.requirement_id for row in rows]
+    sources_by_requirement: dict[str, list[str]] = {}
+    pages_by_requirement: dict[str, list[tuple[int, str | None]]] = {}
+    if requirement_ids:
+        result = await session.execute(
+            select(
+                RequirementSource.requirement_id,
+                RequirementSource.source_text,
+                RequirementSource.page_number,
+                DocumentPage.rendered_image_object_key,
+            ).where(RequirementSource.requirement_id.in_(requirement_ids))
+            .join(
+                DocumentPage,
+                (DocumentPage.document_version_id == RequirementSource.document_version_id)
+                & (DocumentPage.page_number == RequirementSource.page_number),
+            )
+        )
+        for requirement_id, source_text, page_number, image_key in result:
+            if source_text:
+                sources_by_requirement.setdefault(str(requirement_id), []).append(
+                    source_text
+                )
+            pages_by_requirement.setdefault(str(requirement_id), []).append(
+                (page_number, image_key)
+            )
+
+    expected = [
+        RequirementCell(str(row.requirement_id), row.raw_source) for row in rows
+    ]
+    issues = list(validate_source_quote_presence(expected, sources_by_requirement))
+    settings = get_settings()
+    adapter: LlmAdapter | None = None
+    if settings.verbatim_validation_fallback_enabled and settings.openai_api_key.strip():
+        from tender_compliance_api.extraction.openai_adapter import (  # noqa: PLC0415
+            OpenAiLlmAdapter,
+        )
+
+        adapter = OpenAiLlmAdapter()
+
+    row_by_id = {str(row.requirement_id): row for row in rows}
+    page_calls: dict[tuple[int, str | None], int] = {}
+    fallback_results: list[dict[str, object]] = []
+    resolved_ids: set[str] = set()
+    if adapter is not None:
+        for issue in issues:
+            if issue.code != "source_quote_not_found":
+                continue
+            row = row_by_id.get(issue.row_id)
+            if row is None:
+                continue
+            for page_number, image_key in pages_by_requirement.get(issue.row_id, []):
+                if image_key is None:
+                    continue
+                key = (page_number, image_key)
+                if page_calls.get(key, 0) >= MAX_CALLS_PER_PAGE:
+                    continue
+                page_calls[key] = page_calls.get(key, 0) + 1
+                try:
+                    image_bytes = await storage.get(image_key)
+                except Exception:  # noqa: BLE001 — fail closed on image retrieval
+                    fallback_results.append(
+                        {
+                            "row_id": issue.row_id,
+                            "page_number": page_number,
+                            "status": "image_unavailable",
+                        }
+                    )
+                    continue
+                response, call = await validate_quote_on_page_image(
+                    proposed_quote=row.raw_source,
+                    page_number=page_number,
+                    image_bytes=image_bytes,
+                    image_mime_type="image/png",
+                    adapter=adapter,
+                )
+                accepted = response is not None and response.verdict == "exact"
+                fallback_results.append(
+                    {
+                        "row_id": issue.row_id,
+                        "page_number": page_number,
+                        "status": "exact" if accepted else "needs_review",
+                        "provider": call.provider,
+                        "model": call.model,
+                        "prompt_version": call.prompt_version,
+                        "schema_version": call.schema_version,
+                        "call_status": call.status,
+                        "latency_ms": call.latency_ms,
+                        "prompt_tokens": call.prompt_tokens,
+                        "completion_tokens": call.completion_tokens,
+                        "total_tokens": call.total_tokens,
+                    }
+                )
+                if accepted:
+                    resolved_ids.add(issue.row_id)
+                    break
+
+    unresolved_issues = [issue for issue in issues if issue.row_id not in resolved_ids]
+    return {
+        "status": "needs_review" if unresolved_issues else "passed",
+        "checked_rows": len(expected),
+        "llm_assisted_rows": sorted(resolved_ids),
+        "issues": [
+            {"row_id": issue.row_id, "code": issue.code}
+            for issue in unresolved_issues
+        ],
+        "llm_fallback_results": fallback_results,
+    }
 
 
 class DocumentNotFoundError(Exception):
@@ -1448,6 +1574,8 @@ class DocumentService:
         if storage is None:
             storage = _resolve_storage()
 
+        integrity_report: dict[str, object] | None = None
+        validation_status = "not_run"
         try:
             fmt = export_format.value
             if export_format == ExportFormat.XLSX:
@@ -1522,6 +1650,52 @@ class DocumentService:
             else:
                 raise ValueError(f"Unsupported export format: {export_format}")
 
+            # Validate the actual serialized artifact before storing it. This
+            # catches exporter clipping, dropped rows, and altered tender
+            # wording rather than assuming the in-memory projection survived
+            # rendering unchanged.
+            from tender_compliance_api.export.validation import (  # noqa: PLC0415
+                RequirementCell,
+                validate_generated_requirement_cells,
+            )
+
+            expected_cells = [
+                RequirementCell(
+                    row_id=(
+                        str(row.serial)
+                        if vendor_response_template
+                        else str(row.requirement_id)
+                    ),
+                    text=row.raw_source,
+                )
+                for row in rows
+            ]
+            integrity = validate_generated_requirement_cells(
+                expected_cells,
+                artifact_bytes,
+                export_format=fmt,  # type: ignore[arg-type]
+            )
+            integrity_report = {
+                "artifact_integrity": integrity.status,
+                "expected_rows": integrity.expected_rows,
+                "actual_rows": integrity.actual_rows,
+                "issues": [
+                    {"row_id": issue.row_id, "code": issue.code}
+                    for issue in integrity.issues
+                ],
+            }
+            if integrity.status != "passed":
+                validation_status = "failed"
+                raise ValueError("generated sheet failed content validation")
+
+            source_report = await _source_quote_validation_report(
+                self._session, rows, storage
+            )
+            integrity_report["source_validation"] = source_report
+            validation_status = str(source_report["status"])
+            if validation_status != "passed":
+                raise ValueError("generated sheet requires source review")
+
             # Store the artifact bytes.
             storage_key = build_key(
                 org_id=auth.organization_id,
@@ -1566,6 +1740,8 @@ class DocumentService:
                 requirement_count=len(rows),
                 workbook_sha256=obj_info.checksum_sha256,
                 export_format=export_format,
+                validation_status="passed",
+                validation_report=integrity_report,
             )
             self._session.add(artifact)
             await self._session.flush()
@@ -1589,6 +1765,9 @@ class DocumentService:
                     "requirement_count": len(rows),
                     "sha256": obj_info.checksum_sha256,
                     "storage_key": storage_key,
+                    "artifact_integrity": integrity.status,
+                    "validation_expected_rows": integrity.expected_rows,
+                    "validation_actual_rows": integrity.actual_rows,
                 },
             )
 
@@ -1604,6 +1783,8 @@ class DocumentService:
                 requirement_count=len(rows),
                 workbook_sha256="",
                 export_format=export_format,
+                validation_status=validation_status,
+                validation_report=integrity_report,
             )
             self._session.add(artifact)
             await self._session.flush()
@@ -1625,6 +1806,7 @@ class DocumentService:
                     "format": export_format.value,
                     "error_type": type(exc).__name__,
                     "error_category": error_category(exc),
+                    "validation_report": integrity_report,
                 },
             )
 
@@ -1673,6 +1855,8 @@ class DocumentService:
         if storage is None:
             storage = _resolve_storage()
 
+        integrity_report: dict[str, object] | None = None
+        validation_status = "not_run"
         try:
             wb, checksum = build_matrix_workbook(
                 rows,
@@ -1683,6 +1867,40 @@ class DocumentService:
                 requirement_count=len(rows),
             )
             workbook_bytes = save_matrix_workbook(wb)
+
+            from tender_compliance_api.export.validation import (  # noqa: PLC0415
+                RequirementCell,
+                validate_generated_requirement_cells,
+            )
+
+            integrity = validate_generated_requirement_cells(
+                [
+                    RequirementCell(str(row.requirement_id), row.raw_source)
+                    for row in rows
+                ],
+                workbook_bytes,
+                export_format="xlsx",
+            )
+            integrity_report = {
+                "artifact_integrity": integrity.status,
+                "expected_rows": integrity.expected_rows,
+                "actual_rows": integrity.actual_rows,
+                "issues": [
+                    {"row_id": issue.row_id, "code": issue.code}
+                    for issue in integrity.issues
+                ],
+            }
+            if integrity.status != "passed":
+                validation_status = "failed"
+                raise ValueError("generated matrix failed content validation")
+
+            source_report = await _source_quote_validation_report(
+                self._session, rows, storage
+            )
+            integrity_report["source_validation"] = source_report
+            validation_status = str(source_report["status"])
+            if validation_status != "passed":
+                raise ValueError("generated matrix requires source review")
 
             # Store the workbook bytes.
             storage_key = build_key(
@@ -1727,6 +1945,8 @@ class DocumentService:
                 status=ExportStatus.COMPLETED,
                 requirement_count=len(rows),
                 workbook_sha256=obj_info.checksum_sha256,
+                validation_status="passed",
+                validation_report=integrity_report,
             )
             self._session.add(artifact)
             await self._session.flush()
@@ -1744,6 +1964,9 @@ class DocumentService:
                     "requirement_count": len(rows),
                     "workbook_sha256": obj_info.checksum_sha256,
                     "storage_key": storage_key,
+                    "artifact_integrity": "passed",
+                    "validation_expected_rows": integrity.expected_rows,
+                    "validation_actual_rows": integrity.actual_rows,
                 },
             )
 
@@ -1759,6 +1982,8 @@ class DocumentService:
                 error_message=EXPORT_FAILURE,
                 requirement_count=0,
                 workbook_sha256="",
+                validation_status=validation_status,
+                validation_report=integrity_report,
             )
             self._session.add(artifact)
             await self._session.flush()
@@ -1775,6 +2000,7 @@ class DocumentService:
                     "version_number": version_number,
                     "error_type": type(exc).__name__,
                     "error_category": error_category(exc),
+                    "validation_report": integrity_report,
                 },
             )
 

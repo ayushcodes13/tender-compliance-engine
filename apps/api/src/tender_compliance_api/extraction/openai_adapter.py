@@ -20,6 +20,7 @@ override (CP26 guardrail).
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
 from typing import Any
 
@@ -149,6 +150,81 @@ class OpenAiLlmAdapter(LlmAdapter):
 
         raise LlmCallError(
             f"Provider extraction failed after {max_retries} attempts"
+        ) from None
+
+    async def extract_with_image(
+        self,
+        *,
+        system_prompt: str,
+        user_text: str,
+        image_bytes: bytes,
+        image_mime_type: str,
+        response_model: type[BaseModel],
+        config: LlmCallConfig,
+    ) -> ExtractResult:
+        """Call a vision-capable OpenAI-compatible model with one page image."""
+        client = self._client()
+        encoded_image = base64.b64encode(image_bytes).decode("ascii")
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{image_mime_type};base64,{encoded_image}"
+                        },
+                    },
+                ],
+            },
+        ]
+        timeout = config.timeout_s or _DEFAULT_TIMEOUT_S
+        max_retries = config.max_retries or _DEFAULT_MAX_RETRIES
+        start = time.monotonic()
+        for _attempt in range(1, max_retries + 1):
+            try:
+                completion = await asyncio.wait_for(
+                    client.chat.completions.parse(
+                        model=config.model,
+                        messages=messages,
+                        response_format=response_model,
+                        max_tokens=config.max_tokens,
+                        temperature=config.temperature,
+                    ),
+                    timeout=timeout,
+                )
+                latency_ms = int((time.monotonic() - start) * 1000)
+                choice = completion.choices[0]
+                usage = getattr(completion, "usage", None)
+                call = LlmCallResult(
+                    provider="openai",
+                    model=config.model,
+                    prompt_version=config.prompt_version,
+                    schema_version=config.schema_version,
+                    latency_ms=latency_ms,
+                    prompt_tokens=getattr(usage, "prompt_tokens", None),
+                    completion_tokens=getattr(usage, "completion_tokens", None),
+                    total_tokens=getattr(usage, "total_tokens", None),
+                    cost_usd=None,
+                    finish_reason=getattr(choice, "finish_reason", None),
+                    status="completed",
+                    call_site=config.call_site,
+                )
+                response: BaseModel | None = getattr(
+                    getattr(choice, "message", None), "parsed", None
+                )
+                if response is None:
+                    raise LlmCallError(
+                        "OpenAI returned no parsed image response "
+                        f"(finish_reason={call.finish_reason})"
+                    )
+                return ExtractResult(response=response, call=call)
+            except Exception:
+                pass
+        raise LlmCallError(
+            f"Provider image validation failed after {max_retries} attempts"
         ) from None
 
 
