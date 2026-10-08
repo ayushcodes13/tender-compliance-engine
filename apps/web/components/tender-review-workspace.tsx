@@ -252,7 +252,9 @@ export function TenderReviewWorkspace(props: {
           superseded: detail.superseded,
           created_at: detail.created_at,
         }
-      : reqList?.items[0]);
+      : selectedId
+        ? reqList?.items.find((item) => item.id === selectedId)
+        : undefined);
   const visibleRequirements = useMemo(() => {
     const items = reqList?.items ?? [];
     if (selectedSummary && !items.some((item) => item.id === selectedSummary.id)) {
@@ -267,10 +269,7 @@ export function TenderReviewWorkspace(props: {
     initialSourcePage !== undefined
       ? selectedSources.find((source) => source.page_number === initialSourcePage)
       : selectedSources[0];
-  // A finding link may identify a tender excerpt without a requirement ID.
-  // In that case the default selected requirement can have a different page;
-  // preserve the immutable page supplied by the citation URL.
-  const sourcePage = initialSourcePage ?? selectedSource?.page_number ?? 1;
+  const sourcePage = selectedSource?.page_number ?? initialSourcePage ?? 1;
 
   const STOP_WORDS = new Set([
     "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
@@ -643,8 +642,10 @@ export function TenderReviewWorkspace(props: {
               documentId={documentId}
               version={version}
               pageNumber={sourcePage}
-              selectedRequirementId={initialSourceQuote ? null : selectedId}
-              highlightQuote={initialSourceQuote}
+              selectedRequirementId={
+                initialSourceQuote && !selectedId ? null : selectedId || null
+              }
+              highlightQuote={selectedId ? null : initialSourceQuote}
               totalPages={undefined}
               onPageChange={(page) => {
                 /* Page navigation handled within SourceViewer */
