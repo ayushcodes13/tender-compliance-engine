@@ -205,7 +205,11 @@ async def _source_quote_validation_report(
         issue.row_id
         for issue in issues
         if issue.code
-        in {"source_quote_not_found", "ocr_visual_verification_required"}
+        in {
+            "source_text_unavailable",
+            "source_quote_not_found",
+            "ocr_visual_verification_required",
+        }
     }
     issues.extend(
         SourceQuoteIssue(requirement_id, "ocr_visual_verification_required")
@@ -227,6 +231,7 @@ async def _source_quote_validation_report(
     if adapter is not None:
         for issue in issues:
             if issue.code not in {
+                "source_text_unavailable",
                 "source_quote_not_found",
                 "ocr_visual_verification_required",
             }:
