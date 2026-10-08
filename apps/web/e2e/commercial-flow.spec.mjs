@@ -465,7 +465,14 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
             artifact_integrity: "passed",
             expected_rows: 1,
             actual_rows: 1,
+            checked_columns: 7,
+            checked_cells: 7,
             issues: [],
+            window_processing: {
+              status: "not_available",
+              completeness_proven: false,
+              obligation_audit_status: "not_available",
+            },
             source_validation: {
               status: "passed",
               checked_rows: 1,
@@ -597,9 +604,15 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
   ]);
   expect(vendorSheetDownload.suggestedFilename()).toBe("tender_vendor_response_v1.docx");
-  await expect(page.getByText("Validated", { exact: true })).toBeVisible();
+  await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: /Whole-tender completeness was not verified/ })
+  ).toBeVisible();
   await page.getByRole("button", { name: "Refresh export history" }).click();
-  await expect(page.getByText("Validated", { exact: true })).toBeVisible();
+  await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: /Whole-tender completeness was not verified/ })
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(1);
   const [historyDownload] = await Promise.all([
     page.waitForEvent("download"),
