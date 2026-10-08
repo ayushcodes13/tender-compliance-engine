@@ -36,7 +36,7 @@ Behaviour mapped to CP28:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
@@ -59,6 +59,11 @@ from tender_compliance_api.extraction.schema import (
     RequirementCandidate,
     SourcedRequirementCandidate,
     UncertaintyLevel,
+)
+from tender_compliance_api.extraction.verbatim_validation import (
+    MAX_FALLBACKS_PER_WINDOW,
+    _valid_positive,
+    validate_candidate,
 )
 
 #: Marker on LlmCallConfig identifying the extraction entry point (CP28).
@@ -89,6 +94,7 @@ class CandidateRecord:
     is_valid: bool
     persistable: bool
     rejection_reason: str | None
+    verbatim_validation: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -180,6 +186,7 @@ def _to_record(window: SourceWindow, candidate: RequirementCandidate) -> Candida
         is_valid=is_valid,
         persistable=persistable,
         rejection_reason=rejection_reason,
+        verbatim_validation=None,
     )
 
 
@@ -190,6 +197,7 @@ async def extract_from_windows(
     log_call: Callable[[LlmCallResult], Awaitable[Any]],
     prompt_version: str = PROMPT_VERSION,
     schema_version: str = SCHEMA_VERSION,
+    enable_verbatim_fallback: bool = False,
 ) -> ExtractionOutcome:
     """Extract requirement candidates from a list of source windows.
 
@@ -258,8 +266,65 @@ async def extract_from_windows(
         await log_call(result.call)
         llm_calls.append(result.call)
 
+        fallback_calls = 0
         for cand in _iter_candidates(result):
-            candidates.append(_to_record(window, cand))
+            record = _to_record(window, cand)
+            if not record.is_valid and enable_verbatim_fallback:
+                trusted_text = window.sources[0].source_text if window.sources else None
+                if trusted_text and len(window.sources) == 1:
+                    if fallback_calls >= MAX_FALLBACKS_PER_WINDOW:
+                        record = replace(
+                            record,
+                            verbatim_validation={"status": "fallback_budget_exhausted"},
+                        )
+                    else:
+                        fallback_calls += 1
+                        validation, fallback_call = await validate_candidate(
+                            cand, trusted_text, llm
+                        )
+                        await log_call(fallback_call)
+                        llm_calls.append(fallback_call)
+                        if validation is not None and _valid_positive(
+                            cand, validation, trusted_text
+                        ):
+                            recovered = cand.model_copy(
+                                update={
+                                    "raw_source": validation.matched_source,
+                                    "uncertainty": UncertaintyLevel.UNCERTAIN,
+                                }
+                            )
+                            recovered_record = _to_record(window, recovered)
+                            if recovered_record.is_valid:
+                                record = replace(
+                                    recovered_record,
+                                    persistable=True,
+                                    rejection_reason=None,
+                                    verbatim_validation={
+                                        "status": "recovered_for_human_review",
+                                        "confidence": float(validation.confidence),
+                                        "original_quote": cand.raw_source,
+                                    },
+                                )
+                        else:
+                            record = replace(
+                                record,
+                                verbatim_validation={
+                                    "status": (
+                                        "rejected"
+                                        if validation is not None
+                                        else "provider_failure"
+                                    ),
+                                    "verdict": (
+                                        validation.verdict if validation is not None else None
+                                    ),
+                                    "confidence": (
+                                        float(validation.confidence)
+                                        if validation is not None
+                                        else None
+                                    ),
+                                },
+                            )
+            candidates.append(record)
 
     return ExtractionOutcome(candidates=candidates, llm_calls=llm_calls)
 

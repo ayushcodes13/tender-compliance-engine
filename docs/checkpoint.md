@@ -3497,3 +3497,35 @@ If the product direction changes, update this file through a focused PR, explain
 ### Guardrail
 
 - This template is not a final assessment or submission. It must not pre-fill OEM compliance, deviation, evidence, or assessment status.
+
+## ✅ ~~Checkpoint 69 — Source-bounded verbatim fallback for extraction candidates~~
+
+**Status:** DONE — opt-in source-quote recovery is persisted into human review with approximate provenance.
+
+**Plain-English outcome:** When a model's quoted source fragment fails deterministic source matching, an optional strict LLM fallback may recover it only by identifying an exact substring in the same trusted source window. The recovered requirement remains auditable and unreviewed until a person checks it.
+
+### Scope
+
+1. Keep deterministic substring validation first and unchanged.
+2. Call the fallback only for source-invalid candidates in a single-source window, with at most three fallback calls per window; never use it to invent requirements or move a citation to another window/page/version.
+3. Require a strict, closed response schema. Any provider error, malformed/coerced type, ambiguous decision, mismatched material number/unit, or returned quote that is not literally present in the trusted window remains rejected.
+4. On acceptance, preserve the original extracted requirement wording, use only the exact source quote for provenance, record that fallback was used, and retain OCR uncertainty for the human review flow.
+5. Keep provider calls behind the existing adapter/configuration and extraction-run audit; no secrets or document bodies in ordinary logs.
+
+### This checkpoint is complete only when
+
+- [x] Deterministic exact/whitespace matching remains the first path and does not incur fallback calls.
+- [x] Only a source-invalid candidate in a single-source window can trigger fallback against its original trusted window, and no window makes more than three fallback calls.
+- [x] Strict parsing rejects wrong JSON scalar types and extra fields; malformed responses fail closed.
+- [x] A positive response must quote an exact source substring, pass deterministic number/operator/unit/technical-term guards, and retain approximate source location because model-selected offsets are unknown.
+- [x] A successful fallback does not rewrite normalized requirement text or page/version identity, synthesize offsets, or erase OCR warnings, and remains visibly human-reviewable.
+- [x] Provider failures and all negative/uncertain outcomes preserve the original rejection.
+- [x] Audit/run diagnostics distinguish fallback calls/outcomes without logging tender text or provider errors.
+- [x] Tests cover positive recovery, fabricated quotes, number/unit/entity/concept changes, OCR uncertainty, malformed/coercible types, provider timeout/failure, per-window call limits, and deterministic success making no fallback call.
+- [x] API tests, strict typing, lint, evaluation-harness tests, migration checks, and the candidate-to-human-review persistence flow pass.
+
+**Implementation note:** PR #139 adds the opt-in `VERBATIM_VALIDATION_FALLBACK_ENABLED` path behind the existing extraction adapter, with a closed strict response model, a maximum of three calls per single-source window, deterministic material guards, candidate/run audit metadata, and a new migration. Recovered candidates use the exact returned source substring, keep their original normalized text and uncertainty, retain approximate source anchors, and enter `OCR_WARNING` or `NEEDS_CLARIFICATION`. Verification: API suite 1,130 passed / 2 skipped; Ruff passed; strict mypy passed for 115 source files; migration head is `0030_candidate_verbatim_validation`. Live provider behavior was not exercised; the flag remains off by default.
+
+### Guardrail
+
+- The fallback may repair citation selection only. It must not semantically correct OCR, synthesize missing text, confirm vendor compliance, or bypass the normal human review/export gates.

@@ -14,10 +14,11 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 
 from tender_compliance_api.db.models import DocumentPage
 from tender_compliance_api.extraction.adapter import (
@@ -40,6 +41,9 @@ from tender_compliance_api.extraction.schema import (
     RequirementType,
     TrustedSourceContext,
     UncertaintyLevel,
+)
+from tender_compliance_api.extraction.verbatim_validation import (
+    VerbatimValidationResponse,
 )
 
 ORG_ID = uuid.uuid4()
@@ -183,6 +187,275 @@ def test_candidate_with_no_citation_is_invalid_not_persistable() -> None:
         assert "not present in the trusted source text" in rec.rejection_reason
         # still recorded for audit → invented-requirement rate is measurable
         assert len(calls) == 1
+
+    asyncio.run(_run())
+
+
+def test_verbatim_fallback_recovers_only_exact_guarded_quote() -> None:
+    async def _run() -> None:
+        source = "The pump must deliver at least 5 L/\nmin at 2 bar."
+        candidate = _cand(
+            "The pump must deliver at least 5 L/min at 2 bar.",
+            "The pump must deliver at least 5 L/min at 2 bar.",
+        )
+        fallback = VerbatimValidationResponse(
+            verdict="supported",
+            confidence=0.99,
+            matched_source=source,
+            reason="Line wrapping only.",
+        )
+        llm = FakeLlmAdapter(responses=[_response([candidate]), fallback])
+        calls, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [_window(_page(source), source)],
+            llm,
+            log_call=log_call,
+            enable_verbatim_fallback=True,
+        )
+        record = outcome.candidates[0]
+        assert record.is_valid is True
+        assert record.persistable is True
+        assert record.raw_source == source
+        assert record.normalized_text == candidate.normalized_text
+        assert record.uncertainty == UncertaintyLevel.UNCERTAIN.value
+        assert record.verbatim_validation["status"] == "recovered_for_human_review"
+        assert len(calls) == 2
+        assert calls[1].call_site == "validate_verbatim_source"
+
+        changed_unit = "The pump must deliver at least 5 L/s at 2 bar."
+        wrong_unit = VerbatimValidationResponse(
+            verdict="supported",
+            confidence=0.99,
+            matched_source=changed_unit,
+            reason="Close wording.",
+        )
+        llm2 = FakeLlmAdapter(responses=[_response([candidate]), wrong_unit])
+        _, log_call2 = _make_log()
+        result2 = await extract_from_windows(
+            [_window(_page(changed_unit), changed_unit)],
+            llm2,
+            log_call=log_call2,
+            enable_verbatim_fallback=True,
+        )
+        assert result2.candidates[0].is_valid is False
+
+        changed_concept = "The sensor accuracy shall be within 0.5 percent."
+        concept_candidate = _cand(
+            "The sensor resolution shall be within 0.5 percent.",
+            "The sensor resolution shall be within 0.5 percent.",
+        )
+        model_support = VerbatimValidationResponse(
+            verdict="supported",
+            confidence=0.99,
+            matched_source=changed_concept,
+            reason="Close wording.",
+        )
+        llm3 = FakeLlmAdapter(responses=[_response([concept_candidate]), model_support])
+        _, log_call3 = _make_log()
+        result3 = await extract_from_windows(
+            [_window(_page(changed_concept), changed_concept)],
+            llm3,
+            log_call=log_call3,
+            enable_verbatim_fallback=True,
+        )
+        assert result3.candidates[0].is_valid is False
+
+        entity_source = "The Contoso pump must deliver 5 L/min at 2 bar."
+        entity_candidate = _cand(
+            "The Acme pump must deliver 5 L/min at 2 bar.",
+            "The Acme pump must deliver 5 L/min at 2 bar.",
+        )
+        entity_support = VerbatimValidationResponse(
+            verdict="supported",
+            confidence=0.99,
+            matched_source=entity_source,
+            reason="Close wording.",
+        )
+        llm4 = FakeLlmAdapter(responses=[_response([entity_candidate]), entity_support])
+        _, log_call4 = _make_log()
+        result4 = await extract_from_windows(
+            [_window(_page(entity_source), entity_source)],
+            llm4,
+            log_call=log_call4,
+            enable_verbatim_fallback=True,
+        )
+        assert result4.candidates[0].is_valid is False
+
+        many = [_cand(candidate.normalized_text, candidate.raw_source) for _ in range(4)]
+        limited_llm = FakeLlmAdapter(
+            responses=[_response(many), fallback, fallback, fallback]
+        )
+        _, limited_log = _make_log()
+        limited = await extract_from_windows(
+            [_window(_page(source), source)],
+            limited_llm,
+            log_call=limited_log,
+            enable_verbatim_fallback=True,
+        )
+        assert len(limited_llm.calls) == 4  # one extraction + three bounded fallbacks
+        assert all(candidate.persistable for candidate in limited.candidates[:3])
+        assert limited.candidates[3].is_valid is False
+        assert limited.candidates[3].verbatim_validation["status"] == (
+            "fallback_budget_exhausted"
+        )
+
+    asyncio.run(_run())
+
+
+def test_verbatim_fallback_rejects_malformed_and_does_not_run_after_match() -> None:
+    for payload in (
+        {
+            "verdict": "supported",
+            "confidence": "0.99",
+            "matched_source": "quote",
+            "reason": "ok",
+        },
+        {
+            "verdict": "supported",
+            "confidence": 0.99,
+            "matched_source": "quote",
+            "reason": "ok",
+            "page_number": 2,
+        },
+    ):
+        try:
+            VerbatimValidationResponse.model_validate(payload)
+        except Exception:
+            continue
+        raise AssertionError("strict fallback schema accepted malformed output")
+
+    async def _run() -> None:
+        text = "The pump must deliver at least 5 L/min at 2 bar."
+        candidate = _cand("The pump must deliver 5 L/min.", text)
+        llm = FakeLlmAdapter(responses=[_response([candidate])])
+        _, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [_window(_page(text), text)],
+            llm,
+            log_call=log_call,
+            enable_verbatim_fallback=True,
+        )
+        assert outcome.candidates[0].is_valid is True
+        assert len(llm.calls) == 1
+
+    asyncio.run(_run())
+
+
+def test_verbatim_fallback_skips_multisource_windows() -> None:
+    async def _run() -> None:
+        text = "The unit shall operate below 30 dB(A)."
+        window = SourceWindow(
+            chunk_id="multi",
+            text=text,
+            sources=(
+                TrustedSourceContext.from_page(_page(text, 1), ORG_ID, DOC_ID),
+                TrustedSourceContext.from_page(_page(text, 2), ORG_ID, DOC_ID),
+            ),
+            ocr_warning=False,
+        )
+        candidate = _cand("The unit shall operate below 30 dB(A).", "missing")
+        llm = FakeLlmAdapter(
+            responses=[
+                _response([candidate]),
+                VerbatimValidationResponse(
+                    verdict="supported",
+                    confidence=0.99,
+                    matched_source=text,
+                    reason="Selected.",
+                ),
+            ]
+        )
+        _, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [window], llm, log_call=log_call, enable_verbatim_fallback=True
+        )
+        assert outcome.candidates[0].is_valid is False
+        assert len(llm.calls) == 1
+
+    asyncio.run(_run())
+
+
+def test_verbatim_fallback_provider_failure_preserves_original_rejection() -> None:
+    class FailedFallbackLlm(FakeLlmAdapter):
+        async def extract(
+            self,
+            *,
+            system_prompt: str,
+            user_text: str,
+            response_model: type[BaseModel],
+            config: LlmCallConfig,
+        ) -> ExtractResult:
+            result = await super().extract(
+                system_prompt=system_prompt,
+                user_text=user_text,
+                response_model=response_model,
+                config=config,
+            )
+            if response_model is VerbatimValidationResponse:
+                return ExtractResult(
+                    response=result.response,
+                    call=replace(result.call, status="failed"),
+                )
+            return result
+
+    class RaisingFallbackLlm(FakeLlmAdapter):
+        async def extract(
+            self,
+            *,
+            system_prompt: str,
+            user_text: str,
+            response_model: type[BaseModel],
+            config: LlmCallConfig,
+        ) -> ExtractResult:
+            if response_model is VerbatimValidationResponse:
+                raise LlmCallError("synthetic provider timeout")
+            return await super().extract(
+                system_prompt=system_prompt,
+                user_text=user_text,
+                response_model=response_model,
+                config=config,
+            )
+
+    async def _run() -> None:
+        source = "The enclosure shall be IP67 rated."
+        candidate = _cand("The enclosure shall be IP67 rated.", "fabricated quote")
+        llm = FailedFallbackLlm(
+            responses=[
+                _response([candidate]),
+                VerbatimValidationResponse(
+                    verdict="supported",
+                    confidence=0.99,
+                    matched_source=source,
+                    reason="Model result must be ignored after provider failure.",
+                ),
+            ]
+        )
+        calls, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [_window(_page(source), source)],
+            llm,
+            log_call=log_call,
+            enable_verbatim_fallback=True,
+        )
+        record = outcome.candidates[0]
+        assert record.is_valid is False
+        assert record.persistable is False
+        assert record.verbatim_validation["status"] == "provider_failure"
+        assert [call.status for call in calls] == ["completed", "failed"]
+
+        timeout_llm = RaisingFallbackLlm(responses=[_response([candidate])])
+        timeout_calls, timeout_log = _make_log()
+        timeout_outcome = await extract_from_windows(
+            [_window(_page(source), source)],
+            timeout_llm,
+            log_call=timeout_log,
+            enable_verbatim_fallback=True,
+        )
+        assert timeout_outcome.candidates[0].is_valid is False
+        assert timeout_outcome.candidates[0].verbatim_validation["status"] == (
+            "provider_failure"
+        )
+        assert [call.status for call in timeout_calls] == ["completed", "failed"]
 
     asyncio.run(_run())
 

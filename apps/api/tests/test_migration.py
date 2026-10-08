@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0029_oem_compliance_sheet_type"
+_HEAD_REV = "0030_candidate_verbatim_validation"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -71,8 +71,13 @@ def test_upgrade_head_creates_app_tables(tmp_path):
     command.upgrade(config, "head")
 
     engine = create_engine(f"sqlite:///{db_path}")
-    tables = set(inspect(engine).get_table_names())
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
     assert _APP_TABLES.issubset(tables)
+    candidate_columns = {
+        column["name"] for column in inspector.get_columns("extraction_candidates")
+    }
+    assert "verbatim_validation" in candidate_columns
     engine.dispose()
 
 

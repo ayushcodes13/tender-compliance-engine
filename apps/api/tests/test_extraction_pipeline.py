@@ -74,6 +74,9 @@ from tender_compliance_api.extraction.schema import (
     TrustedSourceContext,
     UncertaintyLevel,
 )
+from tender_compliance_api.extraction.verbatim_validation import (
+    VerbatimValidationResponse,
+)
 from tender_compliance_api.storage.keys import build_key
 from tender_compliance_worker.processor import JobProcessor
 
@@ -676,6 +679,128 @@ class TestExtractStageCandidates:
                     row.rejection_reason or ""
                 )
 
+        asyncio.run(_run())
+
+    def test_fallback_result_and_call_audit_are_persisted(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            text = "The unit shall operate below 30 dB(A)\n."
+            window = SourceWindow(
+                chunk_id="c1",
+                text=text,
+                sources=(
+                    TrustedSourceContext.from_page(
+                        DocumentPage(
+                            document_version_id=info["version_id"],
+                            page_number=1,
+                            cleaned_text=text,
+                            ocr_needed=True,
+                        ),
+                        info["org_id"],
+                        info["doc_id"],
+                    ),
+                ),
+                ocr_warning=True,
+            )
+            candidate = RequirementCandidate(
+                normalized_text="The unit shall operate below 30 dB(A).",
+                raw_source="The unit shall operate below 30 dB(A).",
+                requirement_type=RequirementType.OBLIGATION,
+                uncertainty=UncertaintyLevel.CONFIRMED,
+            )
+            llm = FakeLlmAdapter(
+                responses=[
+                    ExtractionResponse(candidates=[candidate]),
+                    VerbatimValidationResponse(
+                        verdict="supported",
+                        confidence=0.99,
+                        matched_source=text,
+                        reason="Exact source text recovered.",
+                    ),
+                ]
+            )
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            async with sf() as session:
+                svc = DocumentService(session)
+                outcome = await extract_from_windows(
+                    [window],
+                    llm,
+                    log_call=lambda call: svc.log_llm_call(
+                        info["processing_run_id"], call
+                    ),
+                    enable_verbatim_fallback=True,
+                )
+                await svc.store_extraction_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                    candidates=outcome.candidates,
+                )
+                await svc.reconcile_version_candidates(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                assert await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                ) == (1, 0)
+                await session.commit()
+
+            async with sf() as session:
+                candidate_row = (
+                    await session.execute(
+                        select(ExtractionCandidate).where(
+                            ExtractionCandidate.document_version_id
+                            == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert candidate_row.is_valid is True
+                assert candidate_row.persistable is True
+                assert candidate_row.uncertainty == "uncertain"
+                assert candidate_row.raw_source == text
+                assert candidate_row.verbatim_validation["status"] == (
+                    "recovered_for_human_review"
+                )
+                run_rows = (
+                    await session.execute(
+                        select(ExtractionRun).where(
+                            ExtractionRun.processing_run_id
+                            == info["processing_run_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(run_rows) == 2
+                assert {run.call_site for run in run_rows} == {
+                    "extract_candidates",
+                    "validate_verbatim_source",
+                }
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert requirement.review_state == RequirementReviewState.OCR_WARNING
+                source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                assert source.location_type == "approximate"
         asyncio.run(_run())
 
     def test_empty_windows_produce_no_candidates(self, session_cm) -> None:

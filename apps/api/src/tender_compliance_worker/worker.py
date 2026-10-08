@@ -256,6 +256,9 @@ def create_worker(
             storage=storage,
             ocr=ocr,
             llm=llm,
+            verbatim_validation_fallback_enabled=(
+                settings.verbatim_validation_fallback_enabled
+            ),
         ),
         max_concurrency=max_concurrency or settings.max_concurrency,
     )
