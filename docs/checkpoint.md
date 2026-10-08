@@ -3458,7 +3458,7 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 - [x] Project creation and navigation remain available with accessible focus behavior.
 - [x] Frontend typecheck, production build, and relevant browser checks pass.
 
-**Implementation note:** Updated the project dashboard with status-based workspace summaries, searchable project cards, a collapsed archive, and a clearer create-project modal. Verification: frontend typecheck and production build passed; Playwright accessibility/project-flow checks passed.
+**Implementation note:** Updated the project dashboard with status-based workspace summaries, searchable project cards, a collapsed archive, and a clearer create-project modal. Updated the commercial-flow browser assertions for the renamed create controls. Verification: frontend typecheck and production build passed; all 15 Playwright browser checks passed.
 
 ### Guardrail
 
