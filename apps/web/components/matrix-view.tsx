@@ -92,6 +92,21 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
 
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "needs_review") {
+          const coverage = artifact.validation_report?.window_processing;
+          if (coverage?.status === "incomplete") {
+            const failedPages = Array.from(
+              new Set(
+                (coverage.failed_windows ?? []).flatMap((window) => window.pages)
+              )
+            ).sort((a, b) => a - b);
+            const pageText = failedPages.length
+              ? ` Affected tender pages: ${failedPages.join(", ")}.`
+              : "";
+            setExportError(
+              `Extraction reached ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows. Review the failed or missing windows before issuing a workbook.${pageText}`
+            );
+            return;
+          }
           const count = artifact.validation_report?.source_validation?.issues.length ?? 0;
           setExportError(
             `${count} tender row${count === 1 ? " needs" : "s need"} source review before this workbook can be issued. Open the source citations and verify the exact wording.`
@@ -139,8 +154,15 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      const coverage = artifact.validation_report?.window_processing;
+      const coverageNotice =
+        coverage?.status === "complete"
+          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows; this does not prove every requirement was identified.`
+          : coverage?.status === "not_available"
+            ? " No extraction-window audit is available, so extraction completeness was not checked."
+            : "";
       setExportNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns and ${artifact.validation_report?.checked_cells ?? 0} cells passed the content check for ${artifact.validation_report?.actual_rows ?? rows?.length ?? 0} rows.`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns and ${artifact.validation_report?.checked_cells ?? 0} cells passed the content check for ${artifact.validation_report?.actual_rows ?? rows?.length ?? 0} rows.${coverageNotice}`
       );
     } catch (err) {
       setExportError(

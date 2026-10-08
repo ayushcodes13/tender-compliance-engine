@@ -27,13 +27,18 @@ from tender_compliance_api.db.models import (
     DocumentVersion,
     ExportArtifact,
     ExportStatus,
+    ExtractionDiagnostics,
+    ExtractionWindowAudit,
     Membership,
     Organization,
+    ProcessingRun,
+    ProcessingStage,
     Project,
     ProjectStatus,
     Requirement,
     RequirementReviewState,
     RequirementSource,
+    RunStatus,
     TenderDocument,
     User,
 )
@@ -160,6 +165,60 @@ def _add_requirements(project_id, doc_id, ver, reqs_data):
     asyncio.run(_add())
 
 
+def _add_window_audit(doc_id, ver, *, call_status: str, candidate_count: int):
+    """Attach one extraction-window result to a parsed test version."""
+
+    async def _add():
+        async with _session_cm() as session:
+            version = (
+                await session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.document_id == uuid.UUID(doc_id),
+                        DocumentVersion.version_number == ver,
+                    )
+                )
+            ).scalar_one()
+            run = ProcessingRun(
+                document_version_id=version.id,
+                run_id=uuid.uuid4(),
+                attempt=1,
+                stage=ProcessingStage.EXTRACT,
+                status=RunStatus.COMPLETED,
+            )
+            session.add(run)
+            await session.flush()
+            session.add(
+                ExtractionDiagnostics(
+                    document_version_id=version.id,
+                    processing_run_id=run.id,
+                    total_windows=1,
+                    rejection_breakdown={},
+                )
+            )
+            session.add(
+                ExtractionWindowAudit(
+                    document_version_id=version.id,
+                    processing_run_id=run.id,
+                    chunk_id="window-1",
+                    window_index=1,
+                    call_status=call_status,
+                    candidate_count=candidate_count,
+                    ocr_warning=False,
+                    source_spans=[
+                        {
+                            "page_number": 3,
+                            "clause_number": "5.1",
+                            "char_start": 0,
+                            "char_end": 20,
+                        }
+                    ],
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_add())
+
+
 # ---------------------------------------------------------------------------
 # Export generation
 # ---------------------------------------------------------------------------
@@ -188,6 +247,46 @@ class TestExportGeneration:
         assert body["generated_at"]
         assert body["validation_report"]["checked_columns"] == 9
         assert body["validation_report"]["checked_cells"] == 18
+        assert body["validation_report"]["window_processing"]["status"] == "not_available"
+        assert body["validation_report"]["window_processing"]["completeness_proven"] is False
+
+    def test_export_is_held_when_an_extraction_window_failed(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+        _add_window_audit(doc_id, ver, call_status="failed", candidate_count=0)
+
+        resp = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "failed"
+        assert body["validation_status"] == "needs_review"
+        assert body["validation_report"]["window_processing"]["status"] == "incomplete"
+        assert body["validation_report"]["window_processing"]["failed_windows"] == [
+            {"window_index": 1, "chunk_id": "window-1", "pages": [3]}
+        ]
+
+    def test_completed_windows_are_not_reported_as_proof_of_completeness(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+        _add_window_audit(doc_id, ver, call_status="completed", candidate_count=1)
+
+        resp = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+        assert resp.status_code == 200
+        report = resp.json()["validation_report"]["window_processing"]
+        assert report["status"] == "complete"
+        assert report["completeness_proven"] is False
 
     def test_export_excludes_superseded(self):
         """Superseded requirements are excluded from the export."""

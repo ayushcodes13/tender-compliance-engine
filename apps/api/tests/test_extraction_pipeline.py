@@ -31,6 +31,7 @@ from tender_compliance_api.db.models import (
     ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
+    ExtractionWindowAudit,
     Membership,
     Organization,
     ProcessingRun,
@@ -57,6 +58,7 @@ from tender_compliance_api.extraction.chunking import SourceWindow
 from tender_compliance_api.extraction.extractor import (
     CandidateRecord,
     ExtractionOutcome,
+    WindowExtractionResult,
     extract_from_windows,
 )
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
@@ -1564,6 +1566,38 @@ class TestExtractionDiagnostics:
                         status="completed", call_site="extract_candidates",
                     ),
                 ],
+                window_results=[
+                    WindowExtractionResult(
+                        chunk_id="c1",
+                        window_index=1,
+                        call_status="completed",
+                        candidate_count=3,
+                        ocr_warning=False,
+                        source_spans=[
+                            {
+                                "page_number": 1,
+                                "clause_number": None,
+                                "char_start": 0,
+                                "char_end": len(text_a),
+                            }
+                        ],
+                    ),
+                    WindowExtractionResult(
+                        chunk_id="c2",
+                        window_index=2,
+                        call_status="completed",
+                        candidate_count=1,
+                        ocr_warning=False,
+                        source_spans=[
+                            {
+                                "page_number": 2,
+                                "clause_number": None,
+                                "char_start": 0,
+                                "char_end": len(text_b),
+                            }
+                        ],
+                    ),
+                ],
             )
 
             async with sf() as session:
@@ -1630,6 +1664,25 @@ class TestExtractionDiagnostics:
                 assert row.schema_version == SCHEMA_VERSION
                 # Reconciliation summary carried through verbatim
                 assert row.reconciliation_summary == recon.summary()
+                windows = (
+                    await session.execute(
+                        select(ExtractionWindowAudit)
+                        .where(
+                            ExtractionWindowAudit.processing_run_id
+                            == info["processing_run_id"]
+                        )
+                        .order_by(ExtractionWindowAudit.window_index)
+                    )
+                ).scalars().all()
+                assert [(window.chunk_id, window.call_status) for window in windows] == [
+                    ("c1", "completed"),
+                    ("c2", "completed"),
+                ]
+                assert [window.candidate_count for window in windows] == [3, 1]
+                assert [window.source_spans[0]["page_number"] for window in windows] == [
+                    1,
+                    2,
+                ]
 
         asyncio.run(_run())
 

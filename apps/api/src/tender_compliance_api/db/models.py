@@ -1094,6 +1094,50 @@ class ExtractionDiagnostics(Base):
         )
 
 
+class ExtractionWindowAudit(Base):
+    """Per-window extraction outcome without duplicating tender text."""
+
+    __tablename__ = "extraction_window_audits"
+    __table_args__ = (
+        UniqueConstraint(
+            "processing_run_id", "chunk_id", name="uq_extraction_window_run_chunk"
+        ),
+        Index("ix_extraction_window_version", "document_version_id"),
+        Index("ix_extraction_window_run", "processing_run_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    processing_run_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("processing_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chunk_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    window_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    call_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    ocr_warning: Mapped[bool] = mapped_column(
+        Boolean(), nullable=False, default=False, server_default="0"
+    )
+    source_spans: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"ExtractionWindowAudit(run={self.processing_run_id!r}, "
+            f"chunk={self.chunk_id!r}, status={self.call_status!r})"
+        )
+
+
 class RequirementReviewState(enum.StrEnum):
     """Phase 1 human-review states for a persisted :class:`Requirement`.
 

@@ -564,6 +564,17 @@ def test_multiple_windows_each_get_one_llm_call() -> None:
         assert len(outcome.candidates) == 2
         assert len(calls) == 2
         assert all(c.status == "completed" for c in calls)
+        assert [result.window_index for result in outcome.window_results] == [1, 2]
+        assert [result.chunk_id for result in outcome.window_results] == ["c1", "c2"]
+        assert [result.call_status for result in outcome.window_results] == [
+            "completed",
+            "completed",
+        ]
+        assert [result.candidate_count for result in outcome.window_results] == [1, 1]
+        assert [result.source_spans[0]["page_number"] for result in outcome.window_results] == [
+            1,
+            2,
+        ]
         texts = {c.normalized_text for c in outcome.candidates}
         assert {"Temp range.", "Humidity range."} == texts
 
@@ -583,6 +594,7 @@ def test_empty_windows_is_noop() -> None:
 
         assert outcome.candidates == []
         assert outcome.llm_calls == []
+        assert outcome.window_results == []
         assert calls == []
 
     asyncio.run(_run())
@@ -656,6 +668,16 @@ def test_llm_failure_is_audited_and_skipped() -> None:
         assert statuses == ["completed", "failed"]
         # the failed window produced no candidates; the success window had none
         assert outcome.candidates == []
+        assert [result.chunk_id for result in outcome.window_results] == ["c1", "c2"]
+        assert [result.call_status for result in outcome.window_results] == [
+            "failed",
+            "completed",
+        ]
+        assert [result.candidate_count for result in outcome.window_results] == [0, 0]
+        assert [result.source_spans[0]["page_number"] for result in outcome.window_results] == [
+            1,
+            2,
+        ]
 
     asyncio.run(_run())
 

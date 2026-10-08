@@ -136,6 +136,20 @@ export function FinalMatrixView(props: {
           );
         }
         if (artifact.validation_status === "needs_review") {
+          const coverage = artifact.validation_report?.window_processing;
+          if (coverage?.status === "incomplete") {
+            const failedPages = Array.from(
+              new Set(
+                (coverage.failed_windows ?? []).flatMap((window) => window.pages)
+              )
+            ).sort((a, b) => a - b);
+            const pageText = failedPages.length
+              ? ` Affected tender pages: ${failedPages.join(", ")}.`
+              : "";
+            throw new Error(
+              `Extraction reached ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows. Review the failed or missing windows before issuing this file.${pageText}`
+            );
+          }
           const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
           throw new Error(
             `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before this file can be issued. Open each row's source citation and verify the exact wording.`
@@ -162,8 +176,15 @@ export function FinalMatrixView(props: {
       URL.revokeObjectURL(url);
       const llmCount =
         artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
+      const coverage = artifact.validation_report?.window_processing;
+      const coverageNotice =
+        coverage?.status === "complete"
+          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows; this does not prove every requirement was identified.`
+          : coverage?.status === "not_available"
+            ? " No extraction-window audit is available, so extraction completeness was not checked."
+            : "";
       setValidationNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -192,6 +213,20 @@ export function FinalMatrixView(props: {
           );
         }
         if (artifact.validation_status === "needs_review") {
+          const coverage = artifact.validation_report?.window_processing;
+          if (coverage?.status === "incomplete") {
+            const failedPages = Array.from(
+              new Set(
+                (coverage.failed_windows ?? []).flatMap((window) => window.pages)
+              )
+            ).sort((a, b) => a - b);
+            const pageText = failedPages.length
+              ? ` Affected tender pages: ${failedPages.join(", ")}.`
+              : "";
+            throw new Error(
+              `Extraction reached ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows. Review the failed or missing windows before issuing the response sheet.${pageText}`
+            );
+          }
           const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
           throw new Error(
             `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before the response sheet can be issued.`
@@ -218,8 +253,15 @@ export function FinalMatrixView(props: {
       URL.revokeObjectURL(url);
       const llmCount =
         artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
+      const coverage = artifact.validation_report?.window_processing;
+      const coverageNotice =
+        coverage?.status === "complete"
+          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows; this does not prove every requirement was identified.`
+          : coverage?.status === "not_available"
+            ? " No extraction-window audit is available, so extraction completeness was not checked."
+            : "";
       setValidationNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");

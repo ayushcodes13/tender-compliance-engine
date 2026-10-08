@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0032_document_page_ocr_word_geometry"
+_HEAD_REV = "0033_extraction_window_audits"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -34,6 +34,7 @@ _APP_TABLES = {
     "requirement_constraints", "requirement_revisions",
     "requirement_relations", "requirement_notes", "categories",
     "requirement_categories", "export_artifacts",
+    "extraction_window_audits",
     "oem_documents", "oem_document_versions",
     "oem_text_segments", "evidence", "evidence_locations",
     "vendor_specs", "compliance_assessments",

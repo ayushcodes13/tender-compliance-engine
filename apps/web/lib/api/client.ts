@@ -356,6 +356,17 @@ export type ExportArtifactResponse = {
         call_status?: string;
       }[];
     };
+    window_processing?: {
+      status: "complete" | "incomplete" | "not_available";
+      completeness_proven: false;
+      expected_windows?: number;
+      audited_windows?: number;
+      missing_window_count?: number;
+      failed_windows?: { window_index: number; chunk_id: string; pages: number[] }[];
+      zero_candidate_windows?: { window_index: number; chunk_id: string; pages: number[] }[];
+      ocr_warning_windows?: { window_index: number; chunk_id: string; pages: number[] }[];
+      message: string;
+    };
   } | null;
 };
 
