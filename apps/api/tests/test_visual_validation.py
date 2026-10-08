@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from tender_compliance_api.export.visual_validation import (
     CALL_SITE,
@@ -142,3 +142,47 @@ def test_visual_validation_malformed_response_fails_closed():
     assert response is None
     assert call.status == "failed"
     assert call.call_site == CALL_SITE
+
+
+def test_visual_validation_provider_error_fails_closed():
+    class FailingAdapter(FakeAdapter):
+        async def extract_with_image(self, **kwargs) -> ExtractResult:
+            raise RuntimeError("provider unavailable")
+
+    response, call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="Minimum accuracy: ±2 mm",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=FailingAdapter(object()),
+        )
+    )
+
+    assert response is None
+    assert call.status == "failed"
+    assert call.error_message == "page image validation failed"
+    assert call.call_site == CALL_SITE
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "verdict": "exact",
+            "confidence": "0.99",
+            "visible_quote": "Minimum accuracy: ±2 mm",
+            "reason": "Checked against the image.",
+        },
+        {
+            "verdict": "exact",
+            "confidence": 0.99,
+            "visible_quote": "Minimum accuracy: ±2 mm",
+            "reason": "Checked against the image.",
+            "page_number": 8,
+        },
+    ],
+)
+def test_visual_validation_response_rejects_coercible_or_extra_wire_fields(payload):
+    with pytest.raises(ValidationError):
+        PageImageValidationResponse.model_validate(payload)
