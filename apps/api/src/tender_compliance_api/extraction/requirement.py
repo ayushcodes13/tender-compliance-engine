@@ -7,11 +7,11 @@ offsets, pages, or clauses.
 
 Phase 1 domain semantics (per AGENTS.md): only candidates that survived CP25
 source validation *and* CP29 reconciliation (``is_valid`` / ``persistable`` /
-``deduped=False``) are promotable.  UNCERTAIN/ABSTAIN candidates are routed to
-human review (CP35) and are **not** promoted here.  OCR/structure-uncertain
-candidates were elevated to UNCERTAIN (and thus ``persistable=False``) in CP28,
-so they do not reach promotion; the Phase 1 ``OCR_WARNING`` review state remains
-available for CP35 to assign when a reviewer inspects an OCR-derived source.
+``deduped=False``) are promotable. Ordinary UNCERTAIN/ABSTAIN candidates are
+not promoted. A strict verbatim-fallback recovery is the narrow exception: it
+supplies an exact quote from the same source window and is promoted only into a
+human-review state (``NEEDS_CLARIFICATION`` or ``OCR_WARNING``), never as an
+approved result.
 
 Anchor resolution is deterministic and never upgrades precision on a fuzzy
 match (Bynd reuse note #4): ``EXACT`` is recorded only when the candidate's
@@ -137,14 +137,18 @@ def to_promotion_input(row: Any) -> PromotionInput:
 
 
 def resolve_sources(
-    raw_source: str, sources_json: list[dict[str, Any]] | None
+    raw_source: str,
+    sources_json: list[dict[str, Any]] | None,
+    *,
+    allow_exact: bool = True,
 ) -> list[ResolvedSource]:
     """Resolve the strongest known anchor per contributing source fragment.
 
     ``EXACT`` only when ``raw_source`` is a *literal* substring of the trusted
     page ``source_text`` (deterministic offset, no fuzzy mapping).  Otherwise
     ``APPROXIMATE`` (page/clause only) — precision is never upgraded on a
-    plausible-but-non-literal match.
+    plausible-but-non-literal match. ``allow_exact=False`` is used when an LLM
+    selected a literal quote but did not establish its precise offsets.
     """
 
     resolved: list[ResolvedSource] = []
@@ -158,7 +162,7 @@ def resolve_sources(
         char_end = frag.get("char_end")
 
         exact_start: int | None = None
-        if src_text is not None and raw_source:
+        if allow_exact and src_text is not None and raw_source:
             idx = src_text.find(raw_source)
             if idx == -1 and norm_raw:
                 # Whitespace differs (e.g. model cited reformatted text) — we

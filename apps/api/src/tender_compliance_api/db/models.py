@@ -859,9 +859,9 @@ class ExtractionCandidate(Base):
     deterministic extraction results.  One row per candidate the LLM emitted
     for a version's windows; ``is_valid`` is False when the candidate's
     ``raw_source`` was not found in its trusted window text (a possible
-    fabrication) — such rows are kept for audit (so the invented-requirement
-    rate is measurable) but are never promoted to a persisted requirement by
-    CP30 (``persistable`` must be True).
+    fabrication) — such rows are kept for audit. A strict fallback may make a
+    candidate valid only by replacing the quote with a literal source-window
+    substring; recovered candidates enter a human-review state.
 
     Phase 1 only: this table holds no vendor/OEM-compliance verdicts and no
     evidence — only the candidate text, its trusted source anchors, and audit
@@ -917,6 +917,10 @@ class ExtractionCandidate(Base):
     )
     rejection_reason: Mapped[str | None] = mapped_column(
         String(1024), nullable=True
+    )
+    # Strict source-quote fallback audit metadata; never a provider payload.
+    verbatim_validation: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
     )
     # CP29 reconciliation of these candidates against this version.
     reconciliation_group_id: Mapped[str | None] = mapped_column(
@@ -2899,4 +2903,3 @@ class Submission(Base):
             f"Submission(project={self.project_id!r}, v={self.version_number}, "
             f"status={self.status.value!r})"
         )
-

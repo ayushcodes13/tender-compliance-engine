@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     openai_base_url: str = ""
     openai_model: str = "gpt-4o"
 
+    # Optional second pass only for source-invalid requirement quotations.
+    # It never runs after the deterministic source-substring check succeeds.
+    verbatim_validation_fallback_enabled: bool = False
+
     # Processing limits
     max_retries: int = 5
     max_concurrency: int = 4
@@ -93,10 +97,7 @@ class Settings(BaseSettings):
             errors.append("DATABASE_URL is required")
         if not self.redis_url.strip():
             errors.append("REDIS_URL is required")
-        if not (
-            self.object_storage_local_path.strip()
-            or self.object_storage_endpoint.strip()
-        ):
+        if not (self.object_storage_local_path.strip() or self.object_storage_endpoint.strip()):
             errors.append(
                 "durable object storage is required "
                 "(OBJECT_STORAGE_LOCAL_PATH or OBJECT_STORAGE_ENDPOINT)"

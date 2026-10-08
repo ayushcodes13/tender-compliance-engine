@@ -106,6 +106,7 @@ class JobProcessor:
         storage: ObjectStorageAdapter | None = None,
         ocr: OcrAdapter | None = None,
         llm: LlmAdapter | None = None,
+        verbatim_validation_fallback_enabled: bool = False,
     ) -> None:
         self._session_factory = session_factory
         self._parser = parser or _default_parser()
@@ -123,6 +124,9 @@ class JobProcessor:
         # ``create_worker`` inject a real LLM adapter (CP26); the EXTRACT
         # stage invokes it once implemented (CP28).
         self._llm: LlmAdapter | None = llm
+        self._verbatim_validation_fallback_enabled = (
+            verbatim_validation_fallback_enabled
+        )
         self._storage = storage or _default_storage()
 
     async def process(self, job: QueuedJob) -> None:
@@ -500,6 +504,7 @@ class JobProcessor:
                 windows,
                 self._llm,
                 log_call=lambda call: svc.log_llm_call(run.id, call),
+                enable_verbatim_fallback=self._verbatim_validation_fallback_enabled,
             )
             await svc.store_extraction_candidates(
                 auth,

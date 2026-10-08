@@ -80,7 +80,8 @@ def compute_diagnostics(
             the deduped count and the reconcilation summary JSON.
 
     Counts:
-        - total_windows == total_llm_calls (one audited call per window).
+        - total_windows counts primary extraction calls; fallback validation
+          calls are included only in total_llm_calls.
         - accepted  = candidates that are valid AND persistable (promotable).
         - rejected  = candidates that failed source validation (fabrication guard).
         - ocr_warning = candidates drawn from an OCR/structurally-unreliable window
@@ -99,6 +100,14 @@ def compute_diagnostics(
     for c in candidates:
         if not c.is_valid:
             rejection_breakdown[c.rejection_reason or _REJECTION_UNKNOWN] += 1
+        fallback_status = (c.verbatim_validation or {}).get("status")
+        if fallback_status in {
+            "recovered_for_human_review",
+            "rejected",
+            "provider_failure",
+            "fallback_budget_exhausted",
+        }:
+            rejection_breakdown[f"verbatim_fallback_{fallback_status}"] += 1
 
     provider, model, prompt_version, schema_version = _versions_from_calls(
         outcome.llm_calls
@@ -116,7 +125,9 @@ def compute_diagnostics(
     )
 
     return ExtractionDiagnosticsSummary(
-        total_windows=len(outcome.llm_calls),
+        total_windows=sum(
+            1 for call in outcome.llm_calls if call.call_site == "extract_candidates"
+        ),
         total_llm_calls=len(outcome.llm_calls),
         total_candidates=total_candidates,
         accepted_candidates=accepted,

@@ -33,8 +33,8 @@ class FakeLlmAdapter(LlmAdapter):
     configuration.
     """
 
-    def __init__(self, responses: Sequence[ExtractionResponse] = ()) -> None:
-        self._responses: deque[ExtractionResponse] = deque(responses)
+    def __init__(self, responses: Sequence[BaseModel] = ()) -> None:
+        self._responses: deque[BaseModel] = deque(responses)
         self.calls: list[LlmCallResult] = []
 
     provider: str = "fake"

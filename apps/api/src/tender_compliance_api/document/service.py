@@ -2445,6 +2445,7 @@ class DocumentService:
                     is_valid=record.is_valid,
                     persistable=record.persistable,
                     rejection_reason=record.rejection_reason,
+                    verbatim_validation=record.verbatim_validation,
                 )
             )
         self._session.add_all(rows)
@@ -2598,9 +2599,9 @@ class DocumentService:
         ``deduped=False``).  Each promotion:
         - resolves EXACT/APPROXIMATE source anchors from the candidate's trusted
           ``sources_json`` (never fabricating offsets/pages),
-        - assigns review_state UNREVIEWED (Phase 1; OCR_WARNING is reserved for
-          CP35 reviewer assignment — OCR-derived candidates are UNCERTAIN and
-          therefore non-persistable since CP28),
+        - assigns OCR_WARNING to recovered OCR-derived candidates, and
+          NEEDS_CLARIFICATION to other strict-fallback recoveries; ordinary
+          confirmed candidates start UNREVIEWED,
         - uses a stable ``promotion_key`` so reprocessing an unchanged version
           does not duplicate a row (``inserted`` count stays 0) and never
           overwrites a human-reviewed requirement.
@@ -2641,6 +2642,7 @@ class DocumentService:
         skipped = 0
         for row in rows:
             inp: PromotionInput = to_promotion_input(row)
+            recovered_by_fallback = row.verbatim_validation is not None
             if inp.promotion_key in existing_keys:
                 # Unchanged requirement — preserve its existing review_state
                 # (CP30.9: human-reviewed rows are never silently overwritten).
@@ -2658,13 +2660,21 @@ class DocumentService:
                 uncertainty=inp.uncertainty,
                 clause_number=inp.clause_number,
                 ocr_warning=inp.ocr_warning,
-                review_state=RequirementReviewState.UNREVIEWED,
+                review_state=(
+                    RequirementReviewState.OCR_WARNING
+                    if inp.ocr_warning
+                    else RequirementReviewState.NEEDS_CLARIFICATION
+                    if recovered_by_fallback
+                    else RequirementReviewState.UNREVIEWED
+                ),
             )
             self._session.add(requirement)
             await self._session.flush()
 
             sources: list[ResolvedSource] = resolve_sources(
-                inp.raw_source, inp.sources_json
+                inp.raw_source,
+                inp.sources_json,
+                allow_exact=not recovered_by_fallback,
             )
             for src in sources:
                 self._session.add(

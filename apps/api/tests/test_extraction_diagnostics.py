@@ -50,6 +50,7 @@ def _cand(
     requirement_type: str = "obligation",
     ocr_warning: bool = False,
     rejection_reason: str | None = None,
+    verbatim_validation: dict[str, object] | None = None,
 ) -> CandidateRecord:
     return CandidateRecord(
         chunk_id="c1",
@@ -65,6 +66,7 @@ def _cand(
         is_valid=valid,
         persistable=persistable,
         rejection_reason=rejection_reason,
+        verbatim_validation=verbatim_validation,
     )
 
 
@@ -103,6 +105,11 @@ def test_rejection_breakdown_groups_reasons() -> None:
             _cand(valid=False, persistable=False, rejection_reason="fabrication"),
             _cand(valid=False, persistable=False, rejection_reason="no_citation"),
             _cand(valid=False, persistable=False, rejection_reason=None),
+            _cand(
+                valid=True,
+                persistable=True,
+                verbatim_validation={"status": "recovered_for_human_review"},
+            ),
         ],
         llm_calls=[_call()],
     )
@@ -111,9 +118,10 @@ def test_rejection_breakdown_groups_reasons() -> None:
         "fabrication": 2,
         "no_citation": 1,
         "unknown": 1,
+        "verbatim_fallback_recovered_for_human_review": 1,
     }
     assert s.rejected_candidates == 4
-    assert s.accepted_candidates == 0
+    assert s.accepted_candidates == 1
 
 
 def test_ocr_warning_is_independent_of_acceptance() -> None:
