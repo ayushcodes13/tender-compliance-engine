@@ -64,6 +64,21 @@ function obligationCoverageMessage(
   return null;
 }
 
+function obligationCoverageSummary(
+  coverage: { obligation_audit_status?: string } | undefined
+): string {
+  if (coverage?.obligation_audit_status === "no_potential_omissions") {
+    return " The independent scan found no unmatched obligation excerpts, but it does not prove that every tender obligation was identified.";
+  }
+  if (coverage?.obligation_audit_status === "potential_omissions") {
+    return " The independent scan found possible omissions that need human review.";
+  }
+  if (coverage?.obligation_audit_status === "audit_failed") {
+    return " The independent scan did not complete, so whole-tender completeness needs human review.";
+  }
+  return " Whole-tender completeness was not verified because no independent obligation scan is available.";
+}
+
 const statusTone = (value: string | null) => {
   if (value === "compliant") return "status-pill status-reviewed";
   if (value === "non_compliant") return "status-pill status-error";
@@ -81,7 +96,7 @@ function exportValidationLabel(artifact: ExportArtifactResponse): string {
   if (artifact.validation_status === "needs_review") return "Needs review";
   if (artifact.validation_status === "failed") return "Content check failed";
   if (artifact.status !== "completed") return "Generation failed";
-  if (artifact.validation_status === "passed") return "Validated";
+  if (artifact.validation_status === "passed") return "Content checked";
   return "Not validated";
 }
 
@@ -97,7 +112,12 @@ function exportValidationTone(artifact: ExportArtifactResponse): string {
 function exportValidationSummary(artifact: ExportArtifactResponse): string {
   const report = artifact.validation_report;
   if (artifact.validation_status === "passed" && artifact.status === "completed") {
-    if (!report) return "Validation passed. Detailed validation counts are unavailable in the saved report.";
+    if (!report) {
+      return (
+        "Content checks passed, but detailed counts are unavailable." +
+        obligationCoverageSummary(undefined)
+      );
+    }
     const details: string[] = [];
     if (report.checked_columns !== undefined && report.checked_cells !== undefined) {
       details.push(`${report.checked_columns} columns and ${report.checked_cells} cells checked`);
@@ -107,7 +127,10 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
     const counts = details.length
       ? `${details.join(" ")}.`
       : "Detailed validation counts are unavailable in the saved report.";
-    return `${counts}${llmRows ? ` ${llmRows} row${llmRows === 1 ? " used" : "s used"} strict page-image review.` : ""}`;
+    return (
+      `${counts}${llmRows ? ` ${llmRows} row${llmRows === 1 ? " used" : "s used"} strict page-image review.` : ""}` +
+      obligationCoverageSummary(report.window_processing)
+    );
   }
   if (artifact.validation_status === "needs_review") {
     const issueCount =
@@ -344,10 +367,7 @@ export function FinalMatrixView(props: {
           : coverage?.status === "not_available"
             ? " No extraction-window processing audit is available."
             : "";
-      const obligationNotice =
-        coverage?.obligation_audit_status === "no_potential_omissions"
-          ? " The independent scan found no unmatched obligation excerpts; this is not proof that every obligation was identified."
-          : " An independent obligation scan was not available, so whole-tender completeness is unverified.";
+      const obligationNotice = obligationCoverageSummary(coverage);
       setValidationNotice(
         `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}${obligationNotice}`
       );
@@ -438,10 +458,7 @@ export function FinalMatrixView(props: {
           : coverage?.status === "not_available"
             ? " No extraction-window processing audit is available."
             : "";
-      const obligationNotice =
-        coverage?.obligation_audit_status === "no_potential_omissions"
-          ? " The independent scan found no unmatched obligation excerpts; this is not proof that every obligation was identified."
-          : " An independent obligation scan was not available, so whole-tender completeness is unverified.";
+      const obligationNotice = obligationCoverageSummary(coverage);
       setValidationNotice(
         `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}${obligationNotice}`
       );
