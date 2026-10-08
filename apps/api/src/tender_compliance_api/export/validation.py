@@ -69,6 +69,21 @@ def _content_key(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _source_quote_key(value: str) -> str:
+    """Normalize layout and standalone list markers for source quote checks.
+
+    Some PDF text extractors expose Word's private-use bullet glyph even when
+    the generated DOCX stores that marker as list formatting. Only a marker at
+    the start of a line is presentation; bullets inside wording stay literal.
+    """
+    without_list_markers = re.sub(
+        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7\uf0b7][ \t]+",
+        "",
+        value,
+    )
+    return _content_key(without_list_markers)
+
+
 def _docx_table(
     data: bytes,
 ) -> tuple[list[str], list[dict[str, str]], list[CellIssue]]:
@@ -333,8 +348,8 @@ def validate_source_quote_presence(
         if not sources:
             issues.append(SourceQuoteIssue(row.row_id, "source_text_unavailable"))
             continue
-        quote = _content_key(row.text)
-        combined_sources = [_content_key(text) for text in sources]
+        quote = _source_quote_key(row.text)
+        combined_sources = [_source_quote_key(text) for text in sources]
         if not quote or not any(quote in source for source in combined_sources):
             issues.append(SourceQuoteIssue(row.row_id, "source_quote_not_found"))
     return tuple(issues)

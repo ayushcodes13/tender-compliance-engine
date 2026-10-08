@@ -49,7 +49,7 @@ class PageImageValidationResponse(BaseModel):
 
 def _layout_key(text: str) -> str:
     without_list_markers = re.sub(
-        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7][ \t]+",
+        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7\uf0b7][ \t]+",
         "",
         text,
     )

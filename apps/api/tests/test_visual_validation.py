@@ -91,12 +91,12 @@ def test_visual_validation_accepts_only_exact_quote_from_supplied_page():
 
 def test_visual_validation_ignores_only_standalone_list_bullet_markers():
     adapter = FakeAdapter(
-        _response(visible_quote="• Accuracy: ±0.5%\n\uf0a7 Force: 25 kN")
+        _response(visible_quote="• Accuracy: ±0.5%\n\uf0a7 Force: 25 kN\n\uf0b7 Power: 220 V")
     )
 
     response, _ = asyncio.run(
         validate_quote_on_page_image(
-            proposed_quote="Accuracy: ±0.5%\nForce: 25 kN",
+            proposed_quote="Accuracy: ±0.5%\nForce: 25 kN\nPower: 220 V",
             page_number=7,
             image_bytes=b"page-seven",
             image_mime_type="image/png",
