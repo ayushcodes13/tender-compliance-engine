@@ -174,6 +174,7 @@ export function FinalMatrixView(props: {
   const [error, setError] = useState<string | null>(null);
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
   const [coverageFindings, setCoverageFindings] = useState<PotentialOmission[]>([]);
+  const [addedCoverageKeys, setAddedCoverageKeys] = useState<Set<string>>(new Set());
 
   const reload = async () => {
     setLoading(true);
@@ -283,6 +284,25 @@ export function FinalMatrixView(props: {
       );
     } finally {
       setHistoryDownloadId(null);
+    }
+  };
+
+  const addCoverageFinding = async (finding: PotentialOmission, page: number) => {
+    const key = `${page}:${finding.source_quote}`;
+    setBusy(`coverage-${key}`);
+    setError(null);
+    try {
+      await api.addRequirementFromSource(projectId, documentId, version, {
+        page_number: page,
+        source_quote: finding.source_quote,
+      });
+      setAddedCoverageKeys((current) => new Set(current).add(key));
+      setValidationNotice("The excerpt was added as a source-linked, unreviewed requirement. Run an export again to recheck coverage.");
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add the source excerpt");
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -502,6 +522,22 @@ export function FinalMatrixView(props: {
                     Open tender page {page} and inspect excerpt
                   </Link>
                 ))}
+                {finding.pages.map((page) => {
+                  const key = `${page}:${finding.source_quote}`;
+                  const added = addedCoverageKeys.has(key);
+                  return (
+                    <button
+                      key={`add-${page}`}
+                      type="button"
+                      className="button button-secondary button-small"
+                      style={{ margin: "8px 8px 0 0" }}
+                      disabled={added || busy === `coverage-${key}`}
+                      onClick={() => void addCoverageFinding(finding, page)}
+                    >
+                      {added ? "Added for review" : busy === `coverage-${key}` ? "Adding…" : "Add excerpt as unreviewed requirement"}
+                    </button>
+                  );
+                })}
               </li>
             ))}
           </ul>

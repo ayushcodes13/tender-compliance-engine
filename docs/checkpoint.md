@@ -3532,7 +3532,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ## Checkpoint 70 — Verbatim validation of generated tender sheets
 
-**Status:** IN PROGRESS — PRs #140–#143 add post-render artifact/source-quote checks, persisted validation states, strict cited-page fallback, OCR highlights, and per-cell validation. PR #150 adds per-window extraction-call outcomes and an independent source-bounded omission scan; PRs #151–#152 fix quote-only citation navigation and cover clipping/missing/duplicate exports across formats. PR #154 preserves Unicode in final PDF exports, and PR #155 covers schema, provider, and image-retrieval failures. The second pass is not proof of tender-wide completeness. Live-provider plus supplied-example verification remains part of this checkpoint.
+**Status:** IN PROGRESS — PRs #140–#143 add post-render artifact/source-quote checks, persisted validation states, strict cited-page fallback, OCR highlights, and per-cell validation. PR #150 adds per-window extraction-call outcomes and an independent source-bounded omission scan; PRs #151–#152 fix quote-only citation navigation and cover clipping/missing/duplicate exports across formats. PR #154 preserves Unicode in final PDF exports, and PR #155 covers schema, provider, and image-retrieval failures. The current follow-up adds a page-verified reviewer action for adding a surfaced omission as an unreviewed source-linked requirement. The second pass is not proof of tender-wide completeness. Live-provider plus supplied-example verification remains part of this checkpoint.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 
@@ -3556,6 +3556,7 @@ If the product direction changes, update this file through a focused PR, explain
   - The matrix link carries the selected persisted source-anchor ID. The review view keeps the document version and page in the URL, selects only that anchor, and exposes the excerpt with its exact/approximate label. The commercial-flow E2E covers text-only exact anchors, rendered-page approximate overlays, and switching between two citations on the same page.
 - [x] Tests cover clipping, missing/duplicate rows, exact and mismatched text, OCR uncertainty, malformed/provider-failed fallback, source scoping, and citation navigation/highlighting.
   - Coverage includes exact, uncertain, malformed, provider-failed, and image-unavailable outcomes; only an exact cited-page result resolves a row. Synthetic native-PDF tests verify unique literal quote geometry and fail closed for changed characters, duplicate quotes, and rotated pages. Provider tests use fakes and do not establish live visual accuracy.
+- [ ] A reviewer can add a surfaced omission only after the exact excerpt is verified against the selected immutable page; OCR uncertainty stays in `OCR_WARNING`, duplicate submissions are idempotent, and re-export recomputes whether coverage is resolved.
 - [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.
 
 ### Guardrail

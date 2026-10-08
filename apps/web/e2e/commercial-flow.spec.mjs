@@ -413,6 +413,36 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
       }
       if (
         path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/requirements/from-source` &&
+        method === "POST"
+      ) {
+        const body = request.postDataJSON();
+        expect(body).toEqual({ page_number: 9, source_quote: coverageQuote });
+        return json({
+          id: "coverage-requirement-1",
+          document_version_id: "version-1",
+          requirement_type: "obligation",
+          normalized_text: coverageQuote,
+          raw_source: coverageQuote,
+          uncertainty: "confirmed",
+          review_state: "unreviewed",
+          ocr_warning: false,
+          clause_number: null,
+          reconciliation_group_id: null,
+          display_order: null,
+          mandatory: null,
+          superseded: false,
+          created_at: createdAt,
+          updated_at: null,
+          constraints: [],
+          sources: [],
+          revisions: [],
+          notes: [],
+          categories: [],
+        });
+      }
+      if (
+        path ===
           `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix/exports` &&
         method === "POST" &&
         url.searchParams.get("fmt") === "xlsx"
@@ -585,6 +615,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     name: "Open tender page 9 and inspect excerpt",
   });
   await expect(findingLink).toBeVisible();
+  await page.getByRole("button", { name: "Add excerpt as unreviewed requirement" }).click();
+  await expect(page.getByRole("button", { name: "Added for review" })).toBeVisible();
+  await expect(page.getByText(/Run an export again to recheck coverage/)).toBeVisible();
   await findingLink.click();
   await expect(page).toHaveURL(/page=9&sourceQuote=/);
   await expect(page.getByText("Page 9 · No rendered image", { exact: true })).toBeVisible();

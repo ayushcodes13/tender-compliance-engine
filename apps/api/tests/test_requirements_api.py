@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
     Membership,
@@ -163,6 +164,84 @@ def _get_first_req_id_str(doc_id: uuid.UUID, ver: int) -> str:
             )
             return str(result.scalar_one().id)
     return asyncio.run(_get())
+
+
+class TestAddRequirementFromCoverageFinding:
+    def _setup_source_page(self, project_id, *, text, ocr_needed=False):
+        async def _create():
+            async with _session_cm() as session:
+                doc = TenderDocument(
+                    project_id=project_id, display_name="tender.pdf", document_type="tender"
+                )
+                session.add(doc)
+                await session.flush()
+                version = DocumentVersion(
+                    document_id=doc.id, version_number=1, stored_object_id=uuid.uuid4(),
+                    sha256="source-test", mime_type="application/pdf", size_bytes=10,
+                    processing_status=DocumentProcessingStatus.PARSED,
+                )
+                session.add(version)
+                await session.flush()
+                session.add(DocumentPage(
+                    document_version_id=version.id, page_number=3,
+                    extracted_text=text, cleaned_text=text, ocr_needed=ocr_needed,
+                    ocr_confidence=0.91,
+                ))
+                await session.commit()
+                return doc.id
+        return asyncio.run(_create())
+
+    def test_adds_exact_source_quote_and_is_idempotent(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The instrument shall include installation and operator training."
+        doc_id = self._setup_source_page(project_id, text=f"Clause 4. {quote}")
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source"
+        payload = {"page_number": 3, "source_quote": quote}
+        first = client.post(url, json=payload, headers=_headers(user_id, org_id))
+        second = client.post(url, json=payload, headers=_headers(user_id, org_id))
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+        assert first.json()["id"] == second.json()["id"]
+        assert first.json()["raw_source"] == quote
+        assert first.json()["review_state"] == "unreviewed"
+        source = first.json()["sources"][0]
+        assert source["page_number"] == 3
+        assert source["location_type"] == "exact"
+
+    def test_rejects_quote_from_another_page(self):
+        user_id, org_id, project_id = _build_org_project()
+        doc_id = self._setup_source_page(project_id, text="A different source clause.")
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
+            json={"page_number": 3, "source_quote": "Unsupported wording."},
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 422
+
+    def test_other_organization_cannot_add_requirement_to_version(self):
+        _, _, project_id = _build_org_project()
+        foreign_id, foreign_org_id, _ = _build_org_project()
+        quote = "The instrument shall include training."
+        doc_id = self._setup_source_page(project_id, text=quote)
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
+            json={"page_number": 3, "source_quote": quote},
+            headers=_headers(foreign_id, foreign_org_id),
+        )
+        assert response.status_code == 404
+
+    def test_ocr_source_remains_in_warning_state(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The instrument shall include training."
+        doc_id = self._setup_source_page(project_id, text=quote, ocr_needed=True)
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
+            json={"page_number": 3, "source_quote": quote},
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["review_state"] == "ocr_warning"
+        assert response.json()["sources"][0]["location_type"] == "exact"
 
 
 # ---------------------------------------------------------------------------

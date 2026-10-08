@@ -97,6 +97,8 @@ export type ProcessingRun = {
 };
 
 /** Requirement review state (Phase 1). */
+export type AddRequirementFromSourceRequest = { page_number: number; source_quote: string };
+
 export type RequirementReviewState =
   | "unreviewed"
   | "reviewed"
@@ -809,6 +811,17 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements${qs ? `?${qs}` : ""}`
     ).then((r) => expectJson<RequirementListResponse>(r));
   },
+
+  addRequirementFromSource: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    body: AddRequirementFromSourceRequest
+  ): Promise<RequirementDetail> =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/from-source`,
+      { method: "POST", body: JSON.stringify(body) }
+    ).then((r) => expectJson<RequirementDetail>(r)),
 
   fetchRequirement: (
     projectId: string,
