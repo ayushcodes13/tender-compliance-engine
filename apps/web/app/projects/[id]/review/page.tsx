@@ -32,6 +32,8 @@ export default function ProjectReviewPage() {
   const initialRequirementId = isUuid(rawRequirementId)
     ? rawRequirementId
     : undefined;
+  const rawSourceId = searchParams.get("sourceId");
+  const initialSourceId = isUuid(rawSourceId) ? rawSourceId : undefined;
   const pageParam = Number(searchParams.get("page"));
   const initialSourcePage =
     requestedDocumentId &&
@@ -144,6 +146,7 @@ export default function ProjectReviewPage() {
         document={document}
         initialRequirementId={initialRequirementId}
         initialSourcePage={initialSourcePage}
+        initialSourceId={initialSourceId}
         initialSourceQuote={initialSourceQuote}
       />
     </AppShell>

@@ -257,6 +257,9 @@ class FinalMatrixRow:
     has_unresolved_conflict: bool
     clarification_statuses: list[str]
     deviation_statuses: list[str]
+    # The first source anchor is a stable citation target for the matrix UI.
+    # It remains API metadata and is not part of any exported column.
+    source_anchor_id: UUID | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Serialise to a plain dict (used by the XLSX writer)."""
@@ -336,14 +339,25 @@ async def project_final_matrix_rows(
     page_result = await session.execute(
         select(
             RequirementSource.requirement_id,
-            func.min(RequirementSource.page_number).label("min_page"),
+            RequirementSource.id.label("source_anchor_id"),
+            RequirementSource.page_number,
         )
-        .where(RequirementSource.requirement_id.in_(req_ids))
-        .group_by(RequirementSource.requirement_id)
+        .where(
+            RequirementSource.requirement_id.in_(req_ids),
+            RequirementSource.document_version_id == document_version_id,
+        )
+        .order_by(
+            RequirementSource.requirement_id,
+            RequirementSource.page_number,
+            RequirementSource.id,
+        )
     )
-    first_page_by_req: dict[UUID, int | None] = {
-        row.requirement_id: row.min_page for row in page_result
-    }
+    first_source_by_req: dict[UUID, tuple[UUID, int]] = {}
+    for source_row in page_result:
+        first_source_by_req.setdefault(
+            source_row.requirement_id,
+            (source_row.source_anchor_id, source_row.page_number),
+        )
 
     # 3. Latest accepted evidence + vendor spec per requirement (Phase 2).
     ev_result = await session.execute(
@@ -478,7 +492,16 @@ async def project_final_matrix_rows(
                 tender_requirement=req.raw_source,
                 category=first_cat_by_req.get(req.id),
                 clause=req.clause_number,
-                source_page=first_page_by_req.get(req.id),
+                source_page=(
+                    first_source_by_req[req.id][1]
+                    if req.id in first_source_by_req
+                    else None
+                ),
+                source_anchor_id=(
+                    first_source_by_req[req.id][0]
+                    if req.id in first_source_by_req
+                    else None
+                ),
                 mandatory=req.mandatory,
                 user_notes=latest_note_by_req.get(req.id),
                 review_status=req.review_state.value,

@@ -50,6 +50,7 @@ from tender_compliance_api.db.models import (
     Project,
     ProjectStatus,
     Requirement,
+    RequirementSource,
     TenderDocument,
     User,
     VendorSpec,
@@ -686,6 +687,7 @@ class TestFinalMatrixEndpoint:
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         version = _version_from_setup(doc_id, ver)
         auth = _make_auth(user_id, org_id)
+        source_anchor_id = uuid.uuid4()
 
         async def _setup():
             async with _session_cm() as session:
@@ -708,6 +710,30 @@ class TestFinalMatrixEndpoint:
                 ).scalars().all()
                 for r in reqs:
                     await _add_evidence_and_vendor_spec(session, project_id, r.id)
+                session.add(
+                    RequirementSource(
+                        id=source_anchor_id,
+                        requirement_id=reqs[0].id,
+                        document_version_id=version.id,
+                        page_number=12,
+                        clause_number="4.2",
+                        char_start=0,
+                        char_end=len(reqs[0].raw_source),
+                        location_type="exact",
+                        source_text=reqs[0].raw_source,
+                    )
+                )
+                session.add(
+                    RequirementSource(
+                        id=uuid.uuid4(),
+                        requirement_id=reqs[0].id,
+                        document_version_id=version.id,
+                        page_number=14,
+                        clause_number="4.3",
+                        location_type="approximate",
+                        source_text=reqs[0].raw_source,
+                    )
+                )
                 await session.commit()
                 # Assess each.
                 svc = ComplianceAssessmentService(session)
@@ -733,6 +759,8 @@ class TestFinalMatrixEndpoint:
         assert data[0]["has_unresolved_conflict"] is False
         # Phase 1 columns preserved.
         assert data[0]["raw_source"] == "The operating temperature shall be at least 25 °C."
+        assert data[0]["source_page"] == 12
+        assert data[0]["source_anchor_id"] == str(source_anchor_id)
 
     def test_final_matrix_tenant_isolation(self):
         """Cross-org access to final matrix returns 404."""

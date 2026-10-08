@@ -3552,7 +3552,8 @@ If the product direction changes, update this file through a focused PR, explain
 - [x] A post-render validator checks expected row identities/counts and each tender-derived cell against its source/version/page; non-source fields are checked against their owning projection values instead of being falsely compared with the tender.
 - [ ] Deterministic validation runs first; a bounded, schema-strict page-image fallback is used only for uncertain source text and preserves abstention on errors or ambiguity.
 - [x] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.
-- [ ] Citation controls expose the cited excerpt, open the exact tender version and page, and emphasize the selected quote in the viewer without upgrading approximate anchors.
+- [x] Citation controls expose the cited excerpt, open the exact tender version and page, and emphasize the selected quote in the viewer without upgrading approximate anchors.
+  - The matrix link carries the selected persisted source-anchor ID. The review view keeps the document version and page in the URL, selects only that anchor, and exposes the excerpt with its exact/approximate label. The commercial-flow E2E covers text-only exact anchors, rendered-page approximate overlays, and switching between two citations on the same page.
 - [x] Tests cover clipping, missing/duplicate rows, exact and mismatched text, OCR uncertainty, malformed/provider-failed fallback, source scoping, and citation navigation/highlighting.
   - Coverage includes exact, uncertain, malformed, provider-failed, and image-unavailable outcomes; only an exact cited-page result resolves a row. Provider tests use fakes and do not establish live visual accuracy.
 - [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.

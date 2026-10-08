@@ -1046,6 +1046,7 @@ class FinalMatrixRowResponse(BaseModel):
     category: str | None
     clause: str | None
     source_page: int | None
+    source_anchor_id: UUID | None = None
     mandatory: bool | None
     user_notes: str | None
     review_status: str
