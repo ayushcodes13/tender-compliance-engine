@@ -274,6 +274,130 @@ class TestExportGeneration:
         assert body["validation_report"]["window_processing"]["status"] == "not_available"
         assert body["validation_report"]["window_processing"]["completeness_proven"] is False
 
+    @pytest.mark.parametrize(
+        ("image_verdict", "expected_status", "expected_validation"),
+        [
+            ("exact", "completed", "passed"),
+            ("not_exact", "failed", "needs_review"),
+        ],
+    )
+    def test_final_export_routes_ocr_uncertainty_through_image_gate(
+        self, monkeypatch, image_verdict, expected_status, expected_validation
+    ):
+        """The final artifact is issued only after the source-page fallback passes."""
+        from tender_compliance_api.storage.fake import FakeStorageAdapter
+
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _mark_uncertain_and_add_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        cleaned_text=requirement.raw_source,
+                        ocr_needed=True,
+                        rendered_image_object_key="rendered/page-3.png",
+                    )
+                )
+                await session.commit()
+                return requirement.raw_source, str(requirement.id)
+
+        quote, requirement_id = asyncio.run(_mark_uncertain_and_add_page())
+        storage = FakeStorageAdapter()
+        storage._store["rendered/page-3.png"] = b"rendered-source-page"
+
+        class FakeAdapter:
+            provider = "fake"
+            model = "fake-vision"
+
+        checked: list[dict[str, object]] = []
+
+        async def fake_visual_check(**kwargs):
+            checked.append(kwargs)
+            exact = image_verdict == "exact"
+            return (
+                PageImageValidationResponse(
+                    verdict=image_verdict,
+                    confidence=0.99,
+                    visible_quote=kwargs["proposed_quote"] if exact else "",
+                    reason="Checked the complete proposed wording against page 3.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        monkeypatch.setattr(document_service, "_resolve_storage", lambda: storage)
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+                is_production=False,
+            ),
+        )
+        monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/final-matrix/exports",
+            headers=_headers(user_id, org_id),
+            params={"fmt": "xlsx"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == expected_status
+        assert body["validation_status"] == expected_validation
+        source_validation = body["validation_report"]["source_validation"]
+        assert len(checked) == 1
+        assert checked[0]["proposed_quote"] == quote
+        assert checked[0]["page_number"] == 3
+        assert checked[0]["image_bytes"] == b"rendered-source-page"
+        assert checked[0]["image_mime_type"] == "image/png"
+        assert isinstance(checked[0]["adapter"], FakeAdapter)
+        assert source_validation["llm_assisted_rows"] == (
+            [requirement_id] if image_verdict == "exact" else []
+        )
+        assert source_validation["llm_fallback_results"][0]["status"] == (
+            "exact" if image_verdict == "exact" else "needs_review"
+        )
+
     def test_source_quote_check_rejects_dropped_range_dash(self):
         # The supplied MBE output omits the range dash in this tender quote.
         issues = validate_source_quote_presence(
