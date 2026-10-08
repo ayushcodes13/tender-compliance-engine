@@ -7,7 +7,7 @@ import { faqs, footerColumns, footerCopyright } from "@/lib/data/landing";
 
 export function FaqSection() {
   return (
-    <section id="faq" className="w-full border-t border-border bg-background py-20 md:py-28">
+    <section id="faq" className="landing-section-premium w-full border-t border-border bg-background py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-14 text-center"
@@ -16,7 +16,7 @@ export function FaqSection() {
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
         >
-          <h2 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
+          <h2 className="font-display text-3xl text-text-primary sm:text-4xl">
             Questions
           </h2>
         </motion.div>
@@ -44,7 +44,7 @@ export function FaqSection() {
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   return (
     <motion.div
-      className="border-b border-border py-5"
+      className="premium-faq-item"
       variants={{
         initial: { opacity: 0, y: 10 },
         animate: { opacity: 1, y: 0 },
@@ -68,12 +68,12 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-border bg-surface py-12">
+    <footer className="premium-footer w-full border-t border-border bg-surface py-12">
       <div className="container mx-auto px-6 md:px-8">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
+            <Link href="/" className="landing-brand flex items-center gap-2">
               <img
                 src="/tce-mark.svg"
                 alt=""

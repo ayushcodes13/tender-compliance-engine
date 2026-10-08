@@ -172,7 +172,7 @@ export function ProjectsGrid() {
       {/* Projects header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-text-primary">
+          <h1 className="font-display text-3xl text-text-primary">
             Projects
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
@@ -285,7 +285,7 @@ export function ProjectsGrid() {
             onClick={closeDialog}
           >
             <motion.div
-              className="w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-lg"
+              className="modal-premium w-full max-w-md border border-border bg-surface p-6 shadow-lg"
               role="dialog"
               aria-modal="true"
               aria-labelledby="create-project-title"
@@ -352,7 +352,7 @@ function ProjectCard({ project }: { project: Project }) {
     <Link href={`/projects/${project.id}`}>
       <motion.div
         className={cn(
-          "group relative flex flex-col rounded-lg border p-5",
+          "project-card-premium group relative flex flex-col border p-5",
           "bg-surface transition-colors duration-150",
           isArchived
             ? "border-border/30 opacity-60"

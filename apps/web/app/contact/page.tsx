@@ -33,7 +33,7 @@ const readyToShare = [
 
 export default function ContactPage() {
   return (
-    <main>
+    <main className="landing-page">
       <LandingNavbar />
       <section className="w-full py-20 md:py-28">
         <div className="container mx-auto max-w-3xl px-6 md:px-8">
@@ -42,10 +42,10 @@ export default function ContactPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           >
-            <p className="text-xs font-semibold uppercase tracking-wider text-accent">
+            <p className="premium-eyebrow text-accent">
               Private pilot
             </p>
-            <h1 className="mt-5 font-display text-4xl font-bold tracking-tight text-text-primary sm:text-5xl">
+            <h1 className="mt-5 font-display text-4xl text-text-primary sm:text-5xl">
               Book a pilot
             </h1>
             <p className="mt-6 max-w-2xl text-lg text-text-secondary">
@@ -65,7 +65,7 @@ export default function ContactPage() {
             {pilotScope.map((item) => (
               <div
                 key={item.title}
-                className="border-t border-border pt-5"
+                className="premium-fact-card"
               >
                 <h2 className="text-sm font-semibold text-text-primary">
                   {item.title}
