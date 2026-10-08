@@ -1,8 +1,12 @@
 import asyncio
 import sys
 from types import SimpleNamespace
+from typing import Any
 
+import httpx
+import openai
 import pytest
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from tender_compliance_api.extraction.adapter import LlmCallConfig
@@ -82,6 +86,59 @@ def test_bare_azure_endpoint_configures_route_version_and_api_key_header(
         "base_url": "https://example.openai.azure.com/models/",
         "default_headers": {"api-key": "test-key"},
         "default_query": {"api-version": "2024-05-01-preview"},
+    }
+
+
+def test_openai_client_sends_azure_models_path_api_version_and_key_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        observed["path"] = request.url.path
+        observed["query"] = request.url.query.decode()
+        observed["api_key"] = request.headers.get("api-key", "")
+        return httpx.Response(
+            200,
+            json={
+                "id": "synthetic",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "deployment-alias",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    def create_mocked_client(**kwargs: Any) -> AsyncOpenAI:
+        http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        return AsyncOpenAI(**kwargs, http_client=http_client)
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", create_mocked_client)
+    client = OpenAiLlmAdapter(
+        model="deployment-alias",
+        base_url="https://example.openai.azure.com/",
+        api_key="test-key",
+    )._client()
+
+    async def exercise() -> None:
+        await client.chat.completions.create(
+            model="deployment-alias",
+            messages=[{"role": "user", "content": "synthetic"}],
+        )
+        await client.close()
+
+    asyncio.run(exercise())
+
+    assert observed == {
+        "path": "/models/chat/completions",
+        "query": "api-version=2024-05-01-preview",
+        "api_key": "test-key",
     }
 
 
