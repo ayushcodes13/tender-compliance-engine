@@ -489,8 +489,17 @@ class TestExportGeneration:
         ("ocr_warning", "source_text"),
         [(True, "raw_Req A"), (False, None)],
     )
-    def test_quote_passes_only_after_exact_page_image_check(
-        self, monkeypatch, ocr_warning, source_text
+    @pytest.mark.parametrize(
+        ("fallback_outcome", "expected_status"),
+        [
+            ("exact", "passed"),
+            ("uncertain", "needs_review"),
+            ("provider_failed", "needs_review"),
+            ("image_unavailable", "needs_review"),
+        ],
+    )
+    def test_page_image_fallback_fails_closed(
+        self, monkeypatch, ocr_warning, source_text, fallback_outcome, expected_status
     ):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
@@ -543,18 +552,45 @@ class TestExportGeneration:
         class FakeStorage:
             async def get(self, key: str) -> bytes:
                 assert key == "rendered/page-3.png"
+                if fallback_outcome == "image_unavailable":
+                    raise RuntimeError("object storage unavailable")
                 return b"page-image"
 
         checked: list[dict[str, object]] = []
 
         async def fake_visual_check(**kwargs):
             checked.append(kwargs)
+            if fallback_outcome == "provider_failed":
+                return (
+                    None,
+                    LlmCallResult(
+                        provider="fake",
+                        model="fake-vision",
+                        prompt_version="test",
+                        schema_version="test",
+                        latency_ms=1,
+                        prompt_tokens=None,
+                        completion_tokens=None,
+                        total_tokens=None,
+                        cost_usd=None,
+                        finish_reason=None,
+                        status="failed",
+                        error_message="page image validation failed",
+                        call_site="test_page_image_validation",
+                    ),
+                )
             return (
                 PageImageValidationResponse(
-                    verdict="exact",
-                    confidence=0.99,
-                    visible_quote=kwargs["proposed_quote"],
-                    reason="The full quote is visibly present.",
+                    verdict="exact" if fallback_outcome == "exact" else "cannot_tell",
+                    confidence=0.99 if fallback_outcome == "exact" else 0.2,
+                    visible_quote=(
+                        kwargs["proposed_quote"] if fallback_outcome == "exact" else ""
+                    ),
+                    reason=(
+                        "The full quote is visibly present."
+                        if fallback_outcome == "exact"
+                        else "The page image is unclear."
+                    ),
                 ),
                 LlmCallResult(
                     provider="fake",
@@ -609,11 +645,33 @@ class TestExportGeneration:
                 )
 
         report = asyncio.run(_validate())
-        assert report["status"] == "passed"
-        assert report["llm_assisted_rows"] == expected_requirement_ids
-        assert len(checked) == 1
-        assert checked[0]["page_number"] == 3
-        assert checked[0]["image_bytes"] == b"page-image"
+        assert report["status"] == expected_status
+        if fallback_outcome == "exact":
+            assert report["llm_assisted_rows"] == expected_requirement_ids
+        else:
+            assert report["llm_assisted_rows"] == []
+            expected_issue = (
+                "ocr_visual_verification_required"
+                if ocr_warning
+                else "source_text_unavailable"
+            )
+            assert report["issues"] == [
+                {"row_id": expected_requirement_ids[0], "code": expected_issue}
+            ]
+        if fallback_outcome == "image_unavailable":
+            assert checked == []
+            assert report["llm_fallback_results"][0]["status"] == "image_unavailable"
+        else:
+            assert len(checked) == 1
+            assert checked[0]["page_number"] == 3
+            assert checked[0]["image_bytes"] == b"page-image"
+            expected_fallback_status = (
+                "exact" if fallback_outcome == "exact" else "needs_review"
+            )
+            assert report["llm_fallback_results"][0]["status"] == expected_fallback_status
+            assert report["llm_fallback_results"][0]["call_status"] == (
+                "failed" if fallback_outcome == "provider_failed" else "completed"
+            )
 
     def test_completed_windows_are_not_reported_as_proof_of_completeness(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
