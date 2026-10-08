@@ -20,10 +20,11 @@ Routes:
 
 from __future__ import annotations
 
+import math
 import re
 import struct
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -33,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
-from tender_compliance_api.db.models import Requirement, RequirementSource
+from tender_compliance_api.db.models import DocumentPage, Requirement, RequirementSource
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.errors import (
@@ -161,6 +162,65 @@ def _pdf_quote_bbox(
         return None
 
 
+def _ocr_quote_bbox(
+    ocr_words: list[dict[str, Any]] | None,
+    quote: str,
+    rendered_png: bytes,
+) -> dict[str, float] | None:
+    """Map one unique whitespace-normalized OCR word sequence to pixels."""
+    if (
+        not ocr_words
+        or len(rendered_png) < 24
+        or rendered_png[:8] != b"\x89PNG\r\n\x1a\n"
+        or not quote.strip()
+    ):
+        return None
+    try:
+        image_width, image_height = struct.unpack(">II", rendered_png[16:24])
+        quote_tokens = re.sub(r"\s+", " ", quote).strip().split(" ")
+        page_words: list[tuple[str, dict[str, Any]]] = []
+        for item in ocr_words:
+            text = item.get("text")
+            bbox = item.get("bbox")
+            if not isinstance(text, str) or not text or not isinstance(bbox, dict):
+                continue
+            if re.search(r"\s", text):
+                return None
+            page_words.append((text, bbox))
+        if not quote_tokens or len(quote_tokens) > len(page_words):
+            return None
+        starts = [
+            index
+            for index in range(len(page_words) - len(quote_tokens) + 1)
+            if [word for word, _bbox in page_words[index:index + len(quote_tokens)]]
+            == quote_tokens
+        ]
+        if len(starts) != 1 or image_width <= 0 or image_height <= 0:
+            return None
+        matched = page_words[starts[0]:starts[0] + len(quote_tokens)]
+        boxes: list[tuple[float, float, float, float]] = []
+        for _word, bbox in matched:
+            x = float(bbox["x"])
+            y = float(bbox["y"])
+            width = float(bbox["width"])
+            height = float(bbox["height"])
+            values = (x, y, width, height)
+            if (
+                not all(math.isfinite(value) for value in values)
+                or x < 0 or y < 0 or width <= 0 or height <= 0
+                or x + width > image_width or y + height > image_height
+            ):
+                return None
+            boxes.append((x, y, x + width, y + height))
+        x0 = min(box[0] for box in boxes)
+        y0 = min(box[1] for box in boxes)
+        x1 = max(box[2] for box in boxes)
+        y1 = max(box[3] for box in boxes)
+        return {"x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0}
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -266,17 +326,25 @@ async def get_page_source_anchors(
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     result = await session.execute(
-        select(RequirementSource, Requirement.raw_source)
+        select(RequirementSource, Requirement.raw_source, DocumentPage.ocr_words)
         .join(Requirement, Requirement.id == RequirementSource.requirement_id)
+        .outerjoin(
+            DocumentPage,
+            (DocumentPage.document_version_id == RequirementSource.document_version_id)
+            & (DocumentPage.page_number == RequirementSource.page_number),
+        )
         .where(
             RequirementSource.document_version_id == version.id,
             RequirementSource.page_number == page_number,
         )
     )
-    sources = list(result.all())
+    sources = cast(
+        list[tuple[RequirementSource, str, list[dict[str, Any]] | None]],
+        list(result.all()),
+    )
     page_png: bytes | None = None
     pdf_document: Any | None = None
-    if any(source.bbox is None for source, _quote in sources):
+    if any(source.bbox is None for source, _quote, _words in sources):
         try:
             page_png, _ = await svc.get_page_image_bytes(
                 auth, document_id, version_number, page_number, storage
@@ -291,29 +359,32 @@ async def get_page_source_anchors(
             )
         except Exception:  # noqa: BLE001 — text/page navigation still works
             pdf_document = None
-    anchors = [
-        SourceAnchor(
-            requirement_id=s.requirement_id,
-            clause_number=s.clause_number,
-            page_number=s.page_number,
-            location_type=s.location_type,
-            source_text=s.source_text,
-            quote_text=quote_text,
-            bbox=(
-                dict(s.bbox)
-                if s.bbox
-                else (
-                    _pdf_quote_bbox(
-                        pdf_document, page_number, quote_text, page_png
-                    )
-                    if pdf_document is not None and page_png is not None
-                    else None
+    anchors: list[SourceAnchor] = []
+    for source, quote_text, ocr_words in sources:
+        bbox = dict(source.bbox) if source.bbox else None
+        if bbox is None and page_png is not None:
+            if pdf_document is not None:
+                bbox = _pdf_quote_bbox(
+                    pdf_document, page_number, quote_text, page_png
                 )
-            ),
-            ocr_confidence=float(s.ocr_confidence) if s.ocr_confidence else None,
+            if bbox is None:
+                bbox = _ocr_quote_bbox(ocr_words, quote_text, page_png)
+        anchors.append(
+            SourceAnchor(
+                requirement_id=source.requirement_id,
+                clause_number=source.clause_number,
+                page_number=source.page_number,
+                location_type=source.location_type,
+                source_text=source.source_text,
+                quote_text=quote_text,
+                bbox=bbox,
+                ocr_confidence=(
+                    float(source.ocr_confidence)
+                    if source.ocr_confidence
+                    else None
+                ),
+            )
         )
-        for s, quote_text in sources
-    ]
     if pdf_document is not None:
         pdf_document.close()
     return anchors

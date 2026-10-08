@@ -347,12 +347,18 @@ class TestApplyOcr:
                 session_cm, org_id, project_id, storage,
                 page_count=2, ocr_needed=True, rendered=True,
             )
+            ocr_words = [
+                OcrWord(text="scanned", confidence=91.0, bbox=(1, 2, 30, 10)),
+                OcrWord(text="text", confidence=88.0, bbox=(34, 2, 18, 10)),
+            ]
             sf = _get_session_factory()
             async with sf() as session:
                 svc = DocumentService(session)
                 pages = await svc.apply_ocr(
                     _worker_auth(org_id), ver["doc_id"], 1,
-                    FakeOcrAdapter(text="scanned text", confidence=88.0),
+                    FakeOcrAdapter(
+                        text="scanned text", confidence=88.0, words=ocr_words
+                    ),
                     storage,
                 )
 
@@ -361,6 +367,18 @@ class TestApplyOcr:
                     assert p.extracted_text == "scanned text"
                     assert p.ocr_confidence == 88.0
                     assert p.ocr_needed == 0
+                    assert p.ocr_words == [
+                        {
+                            "text": "scanned",
+                            "confidence": 91.0,
+                            "bbox": {"x": 1, "y": 2, "width": 30, "height": 10},
+                        },
+                        {
+                            "text": "text",
+                            "confidence": 88.0,
+                            "bbox": {"x": 34, "y": 2, "width": 18, "height": 10},
+                        },
+                    ]
 
                 v = (
                     await session.execute(
