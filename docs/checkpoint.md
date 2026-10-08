@@ -3547,7 +3547,8 @@ If the product direction changes, update this file through a focused PR, explain
 
 ### This checkpoint is complete only when
 
-- [ ] XLSX, DOCX, PDF, and vendor-response exports retain complete source wording without clipping or silent truncation.
+- [x] XLSX, DOCX, PDF, and vendor-response exports retain complete source wording without clipping or silent truncation.
+  - Positive post-render round-trip coverage now includes full multiline technical wording and symbols across Phase 1 XLSX, vendor-response DOCX, final XLSX, final DOCX, and final PDF. The PDF exporter embeds a Unicode font so technical symbols are not replaced during rendering.
 - [x] A post-render validator checks expected row identities/counts and each tender-derived cell against its source/version/page; non-source fields are checked against their owning projection values instead of being falsely compared with the tender.
 - [ ] Deterministic validation runs first; a bounded, schema-strict page-image fallback is used only for uncertain source text and preserves abstention on errors or ambiguity.
 - [x] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.

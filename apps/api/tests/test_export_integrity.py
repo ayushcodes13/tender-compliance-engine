@@ -230,6 +230,58 @@ def test_post_render_validator_rejects_clipped_tender_text_in_every_export() -> 
         ), (export_format, result.issues)
 
 
+def test_post_render_validator_accepts_full_multiline_text_in_every_export() -> None:
+    full_text = (
+        "Temperature range shall be at least 450–1250°C, with ±2°C accuracy and ≥95% stability.\n"
+        + "The measured value, range, and operating condition must remain visible; " * 22
+        + "\nThe submitted equipment shall retain the stated values, units, and limits."
+    )
+    phase1_row = replace(
+        _row(),
+        tender_requirement=full_text,
+        raw_source=full_text,
+        normalized_text=full_text,
+    )
+    final_row = _final_row(full_text)
+
+    cases = []
+    headers, expected = phase1_matrix_xlsx([phase1_row])
+    workbook, _checksum = build_matrix_workbook([phase1_row])
+    cases.append(("xlsx", headers, expected, save_matrix_workbook(workbook)))
+
+    headers, expected = vendor_response_docx([phase1_row])
+    cases.append(
+        (
+            "docx",
+            headers,
+            expected,
+            build_vendor_response_docx(
+                [phase1_row], tender_name="Tender", document_version=1
+            ),
+        )
+    )
+
+    headers, expected = final_matrix_xlsx([final_row])
+    workbook, _checksum = build_final_matrix_workbook([final_row])
+    cases.append(("xlsx", headers, expected, save_workbook_bytes(workbook)))
+
+    headers, expected = final_matrix_docx([final_row])
+    cases.append(("docx", headers, expected, build_final_matrix_docx([final_row])))
+
+    headers, expected = final_matrix_pdf([final_row])
+    cases.append(("pdf", headers, expected, build_final_matrix_pdf([final_row])))
+
+    for export_format, expected_headers, expected_cells, artifact in cases:
+        result = validate_generated_requirement_cells(
+            expected_cells,
+            artifact,
+            export_format=export_format,
+            expected_headers=expected_headers,
+        )
+        assert result.status == "passed", (export_format, result.issues)
+        assert result.expected_rows == result.actual_rows == 1
+
+
 def test_post_render_validator_rejects_missing_and_duplicate_rows_in_every_export() -> None:
     phase1_row = _row()
     final_row = _final_row(phase1_row.raw_source)
