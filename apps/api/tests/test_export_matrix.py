@@ -20,6 +20,7 @@ import contextlib
 import uuid
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -327,7 +328,13 @@ class TestExportGeneration:
         assert len(issues) == 1
         assert issues[0]["code"] == "ocr_visual_verification_required"
 
-    def test_ocr_quote_passes_only_after_exact_page_image_check(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("ocr_warning", "source_text"),
+        [(True, "raw_Req A"), (False, None)],
+    )
+    def test_quote_passes_only_after_exact_page_image_check(
+        self, monkeypatch, ocr_warning, source_text
+    ):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
             project_id, doc_id, ver,
@@ -351,13 +358,21 @@ class TestExportGeneration:
                         )
                     )
                 ).scalar_one()
-                requirement.ocr_warning = True
+                requirement.ocr_warning = ocr_warning
+                source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                source.source_text = source_text
                 session.add(
                     DocumentPage(
                         document_version_id=version.id,
                         page_number=3,
                         cleaned_text=requirement.raw_source,
-                        ocr_needed=True,
+                        ocr_needed=ocr_warning,
                         rendered_image_object_key="rendered/page-3.png",
                     )
                 )
