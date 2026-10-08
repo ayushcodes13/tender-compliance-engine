@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle, Download, LockKeyhole, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { CitationEvidenceDrawer, CitationTarget } from "@/components/citation-evidence-drawer";
 
 import {
   api,
@@ -160,8 +161,10 @@ export function FinalMatrixView(props: {
   projectId: string;
   documentId: string;
   version: number;
+  documentName: string;
 }) {
-  const { projectId, documentId, version } = props;
+  const { projectId, documentId, version, documentName } = props;
+  const [citationDrawer, setCitationDrawer] = useState<CitationTarget | null>(null);
   const [rows, setRows] = useState<FinalMatrixRowResponse[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionResponse[]>([]);
   const [exportArtifacts, setExportArtifacts] = useState<ExportArtifactResponse[]>([]);
@@ -474,6 +477,7 @@ export function FinalMatrixView(props: {
   }
 
   return (
+    <>
     <section style={{ marginTop: 28 }}>
       <div className="section-title-row">
         <div>
@@ -589,13 +593,17 @@ export function FinalMatrixView(props: {
                   <td>{row.tender_requirement}</td>
                   <td>
                     {sourcePage !== null ? (
-                      <Link
+                      <a
                         className="button button-secondary button-small"
                         href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&requirementId=${encodeURIComponent(row.requirement_id)}&page=${sourcePage}${row.source_anchor_id ? `&sourceId=${encodeURIComponent(row.source_anchor_id)}` : ""}`}
                         aria-label={`Open tender source for requirement ${row.serial}, page ${sourcePage}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setCitationDrawer({ projectId, documentId, documentName, version, pageNumber: sourcePage, requirementId: row.requirement_id, sourceId: row.source_anchor_id ?? null, quoteText: row.raw_source, clause: row.clause });
+                        }}
                       >
                         Page {sourcePage} · Open source
-                      </Link>
+                      </a>
                     ) : (
                       <span>Location unavailable</span>
                     )}
@@ -787,5 +795,7 @@ export function FinalMatrixView(props: {
         )}
       </div>
     </section>
+    <CitationEvidenceDrawer citation={citationDrawer} onClose={() => setCitationDrawer(null)} />
+    </>
   );
 }
