@@ -3560,7 +3560,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ### Guardrail
 
-- “Verbatim validated” means the tender-derived cell's non-whitespace characters match the cited source quote. Layout wrapping may alter whitespace only; paraphrases, omitted characters, changed values/units/operators, and unverified LLM visual readings do not pass.
+- “Verbatim validated” means the tender-derived cell's non-whitespace wording matches the cited source quote. Standalone list-bullet glyphs at line starts are treated as presentation markers; layout wrapping may alter whitespace. Paraphrases, omitted wording, changed values/units/operators, and unverified LLM visual readings do not pass.
 - Requirement coverage validation must identify omitted rows separately from per-row citation validation. A green per-row quote check alone is not proof that every tender obligation was extracted.
 - Still open: extraction coverage beyond the canonical requirement rows. The export validator must not report that every tender obligation was extracted merely because every persisted row was emitted.
 - The post-render integrity report now records checked column/cell counts and identifies changed fields. This validates emitted rows against the canonical projection; it does not prove the extraction pass found every obligation in the tender.

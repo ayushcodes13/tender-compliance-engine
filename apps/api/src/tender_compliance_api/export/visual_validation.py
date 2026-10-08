@@ -28,6 +28,10 @@ on the page. Do not use outside knowledge, another page, OCR assumptions, or
 semantic equivalence. Return exact only when every visible word, letter,
 number, unit, operator, and punctuation mark in the proposed wording appears
 in the page in the same order. Layout line breaks and spacing may differ.
+Standalone bullet glyphs at the start of list items are presentation markers
+and may be omitted or differ; do not treat them as wording. Compare all text
+within the requirement exactly. A bullet glyph inside a technical expression
+or sentence is not a list marker.
 For exact, return the complete visible matching wording in visible_quote.
 If any character is unclear, omitted, added, or changed, return cannot_tell
 or not_exact and an empty visible_quote. Never correct OCR or infer text.
@@ -44,7 +48,12 @@ class PageImageValidationResponse(BaseModel):
 
 
 def _layout_key(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    without_list_markers = re.sub(
+        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7][ \t]+",
+        "",
+        text,
+    )
+    return re.sub(r"\s+", " ", without_list_markers).strip()
 
 
 async def validate_quote_on_page_image(
