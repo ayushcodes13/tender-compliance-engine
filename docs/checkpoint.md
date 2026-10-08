@@ -3532,7 +3532,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ## Checkpoint 70 — Verbatim validation of generated tender sheets
 
-**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback; PR #141 adds scanned-page OCR highlights; PR #143 validates every exported column and cell. The current follow-up records each extraction window's call outcome, runs an independent obligation scan, and holds exports when a scan is missing, uncertain, or finds possible omissions. OCR-warning windows use their app-selected rendered page images; any returned visual boxes remain approximate and link to that immutable tender page. This second pass is not proof of tender-wide completeness, and live-provider plus supplied-example verification remains part of this checkpoint.
+**Status:** IN PROGRESS — PRs #140–#143 add post-render artifact/source-quote checks, persisted validation states, strict cited-page fallback, OCR highlights, and per-cell validation. PR #150 adds per-window extraction-call outcomes and an independent source-bounded omission scan; PRs #151–#152 fix quote-only citation navigation and cover clipping/missing/duplicate exports across formats. The second pass is not proof of tender-wide completeness. Live-provider plus supplied-example verification remains part of this checkpoint.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 
@@ -3550,7 +3550,7 @@ If the product direction changes, update this file through a focused PR, explain
 - [ ] XLSX, DOCX, PDF, and vendor-response exports retain complete source wording without clipping or silent truncation.
 - [x] A post-render validator checks expected row identities/counts and each tender-derived cell against its source/version/page; non-source fields are checked against their owning projection values instead of being falsely compared with the tender.
 - [ ] Deterministic validation runs first; a bounded, schema-strict page-image fallback is used only for uncertain source text and preserves abstention on errors or ambiguity.
-- [ ] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.
+- [x] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.
 - [ ] Citation controls expose the cited excerpt, open the exact tender version and page, and emphasize the selected quote in the viewer without upgrading approximate anchors.
 - [ ] Tests cover clipping, missing/duplicate rows, exact and mismatched text, OCR uncertainty, malformed/provider-failed fallback, source scoping, and citation navigation/highlighting.
 - [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.

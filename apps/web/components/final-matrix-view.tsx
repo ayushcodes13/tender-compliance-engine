@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import {
   api,
+  ExportArtifactResponse,
   FinalMatrixRowResponse,
   SubmissionResponse,
 } from "@/lib/api/client";
@@ -76,6 +77,62 @@ const statusTone = (value: string | null) => {
   return "status-pill status-neutral";
 };
 
+function exportValidationLabel(artifact: ExportArtifactResponse): string {
+  if (artifact.validation_status === "needs_review") return "Needs review";
+  if (artifact.validation_status === "failed") return "Content check failed";
+  if (artifact.status !== "completed") return "Generation failed";
+  if (artifact.validation_status === "passed") return "Validated";
+  return "Not validated";
+}
+
+function exportValidationTone(artifact: ExportArtifactResponse): string {
+  if (artifact.validation_status === "passed" && artifact.status === "completed") {
+    return "status-pill status-reviewed";
+  }
+  if (artifact.validation_status === "needs_review") return "status-pill status-warning";
+  if (artifact.validation_status === "failed") return "status-pill status-error";
+  return "status-pill status-neutral";
+}
+
+function exportValidationSummary(artifact: ExportArtifactResponse): string {
+  const report = artifact.validation_report;
+  if (artifact.validation_status === "passed" && artifact.status === "completed") {
+    if (!report) return "Validation passed. Detailed validation counts are unavailable in the saved report.";
+    const details: string[] = [];
+    if (report.checked_columns !== undefined && report.checked_cells !== undefined) {
+      details.push(`${report.checked_columns} columns and ${report.checked_cells} cells checked`);
+    }
+    if (report.actual_rows !== undefined) details.push(`across ${report.actual_rows} rows`);
+    const llmRows = report?.source_validation?.llm_assisted_rows?.length ?? 0;
+    const counts = details.length
+      ? `${details.join(" ")}.`
+      : "Detailed validation counts are unavailable in the saved report.";
+    return `${counts}${llmRows ? ` ${llmRows} row${llmRows === 1 ? " used" : "s used"} strict page-image review.` : ""}`;
+  }
+  if (artifact.validation_status === "needs_review") {
+    const issueCount =
+      (report?.issues?.length ?? 0) +
+      (report?.source_validation?.issues?.length ?? 0) +
+      (report?.window_processing?.potential_omissions?.length ?? 0);
+    return issueCount
+      ? `${issueCount} validation or coverage finding${issueCount === 1 ? "" : "s"}. This export is unavailable for download until it has a passing result.`
+      : "Validation could not establish a safe result. This export is unavailable for download.";
+  }
+  if (artifact.validation_status === "failed") {
+    return "The generated content did not match its saved requirements and source checks. No file was issued.";
+  }
+  if (artifact.status !== "completed") {
+    return "The export could not be generated. No validated file is available.";
+  }
+  return "This artifact has no passing validation result and is unavailable for download.";
+}
+
+function exportGeneratedAt(value: string | null): string {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleString();
+}
+
 export function FinalMatrixView(props: {
   projectId: string;
   documentId: string;
@@ -84,7 +141,12 @@ export function FinalMatrixView(props: {
   const { projectId, documentId, version } = props;
   const [rows, setRows] = useState<FinalMatrixRowResponse[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionResponse[]>([]);
+  const [exportArtifacts, setExportArtifacts] = useState<ExportArtifactResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportHistoryLoading, setExportHistoryLoading] = useState(true);
+  const [exportHistoryError, setExportHistoryError] = useState<string | null>(null);
+  const [historyDownloadError, setHistoryDownloadError] = useState<string | null>(null);
+  const [historyDownloadId, setHistoryDownloadId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
@@ -92,7 +154,9 @@ export function FinalMatrixView(props: {
 
   const reload = async () => {
     setLoading(true);
+    setExportHistoryLoading(true);
     setError(null);
+    setExportHistoryError(null);
     try {
       const [nextRows, nextSubmissions] = await Promise.all([
         api.fetchFinalMatrix(projectId, documentId, version),
@@ -100,8 +164,21 @@ export function FinalMatrixView(props: {
       ]);
       setRows(nextRows);
       setSubmissions(nextSubmissions);
+      setExportHistoryError(null);
+      try {
+        setExportArtifacts(await api.fetchExports(projectId, documentId, version));
+      } catch (historyErr) {
+        setExportHistoryError(
+          historyErr instanceof Error
+            ? historyErr.message
+            : "Failed to load export history"
+        );
+      } finally {
+        setExportHistoryLoading(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load final compliance data");
+      setExportHistoryLoading(false);
     } finally {
       setLoading(false);
     }
@@ -153,6 +230,39 @@ export function FinalMatrixView(props: {
     }
   };
 
+  const downloadHistoricalExport = async (artifact: ExportArtifactResponse) => {
+    if (artifact.status !== "completed" || artifact.validation_status !== "passed") {
+      return;
+    }
+    setHistoryDownloadId(artifact.id);
+    setHistoryDownloadError(null);
+    try {
+      const blob = await api.downloadExport(
+        projectId,
+        documentId,
+        version,
+        artifact.id
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const extension = artifact.export_format ? `.${artifact.export_format}` : "";
+      anchor.download = `tender_export_v${version}_${artifact.id.slice(0, 8)}${extension}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadErr) {
+      setHistoryDownloadError(
+        downloadErr instanceof Error
+          ? downloadErr.message
+          : "Failed to download export"
+      );
+    } finally {
+      setHistoryDownloadId(null);
+    }
+  };
+
   const exportFile = async (format: ExportFormat) => {
     setBusy(`export-${format}`);
     setError(null);
@@ -165,6 +275,10 @@ export function FinalMatrixView(props: {
         version,
         format
       );
+      setExportArtifacts((current) => [
+        artifact,
+        ...current.filter((saved) => saved.id !== artifact.id),
+      ]);
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "failed") {
           const issueCount =
@@ -255,6 +369,10 @@ export function FinalMatrixView(props: {
         documentId,
         version
       );
+      setExportArtifacts((current) => [
+        artifact,
+        ...current.filter((saved) => saved.id !== artifact.id),
+      ]);
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "failed") {
           const issueCount =
@@ -525,6 +643,72 @@ export function FinalMatrixView(props: {
           <Download size={14} aria-hidden="true" />
           {busy === "export-vendor-response" ? "Generating…" : "Export vendor response DOCX"}
         </button>
+      </div>
+
+      <div className="detail-panel" style={{ marginTop: 20 }}>
+        <div className="section-title-row">
+          <div>
+            <h2>Export history</h2>
+            <p>Exports for tender version {version}. Only completed exports with a passing validation result can be downloaded.</p>
+          </div>
+          <button
+            className="button button-secondary button-small"
+            type="button"
+            disabled={exportHistoryLoading}
+            onClick={() => void reload()}
+            aria-label="Refresh export history"
+          >
+            <RefreshCw size={12} aria-hidden="true" /> Refresh
+          </button>
+        </div>
+
+        {exportHistoryError ? (
+          <div className="upload-error-banner" role="alert">{exportHistoryError}</div>
+        ) : null}
+        {historyDownloadError ? (
+          <div className="upload-error-banner" role="alert">{historyDownloadError}</div>
+        ) : null}
+        {exportHistoryLoading && exportArtifacts.length === 0 ? (
+          <div className="empty-state">Loading export history…</div>
+        ) : exportArtifacts.length === 0 && exportHistoryError ? (
+          <div className="empty-state"><strong>Export history could not be loaded.</strong></div>
+        ) : exportArtifacts.length === 0 ? (
+          <div className="empty-state"><strong>No exports for this tender version yet.</strong></div>
+        ) : (
+          <div className="matrix-container">
+            <table className="doclist-table">
+              <thead>
+                <tr><th>Format</th><th>Generated</th><th>Validation</th><th>Validation details</th><th>Download</th></tr>
+              </thead>
+              <tbody>
+                {exportArtifacts.map((artifact) => {
+                  const passed = artifact.status === "completed" && artifact.validation_status === "passed";
+                  return (
+                    <tr key={artifact.id}>
+                      <td>{artifact.export_format?.toUpperCase() ?? "Export"}</td>
+                      <td>{exportGeneratedAt(artifact.generated_at)}</td>
+                      <td><span className={exportValidationTone(artifact)}>{exportValidationLabel(artifact)}</span></td>
+                      <td>{exportValidationSummary(artifact)}</td>
+                      <td>
+                        {passed ? (
+                          <button
+                            className="button button-secondary button-small"
+                            type="button"
+                            disabled={historyDownloadId !== null}
+                            onClick={() => void downloadHistoricalExport(artifact)}
+                          >
+                            <Download size={12} aria-hidden="true" />
+                            {historyDownloadId === artifact.id ? "Downloading…" : "Download"}
+                          </button>
+                        ) : <span>Unavailable</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="detail-panel" style={{ marginTop: 20 }}>
