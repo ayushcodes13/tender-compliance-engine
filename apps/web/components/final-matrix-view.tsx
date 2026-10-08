@@ -33,6 +33,9 @@ function obligationCoverageMessage(
     | {
         obligation_audit_status?: string;
         potential_omissions?: { pages: number[]; source_quote: string }[];
+        obligation_audit_failed_windows?: {
+          coverage_error_category?: string | null;
+        }[];
       }
     | undefined
 ): string | null {
@@ -49,6 +52,16 @@ function obligationCoverageMessage(
     return `The independent obligation scan found ${count} possible omission${count === 1 ? "" : "s"}${excerpts.length ? `: ${excerpts.join("; ")}` : ""}${remaining > 0 ? `; and ${remaining} more` : ""}. Review the source and add any missing requirement before exporting.`;
   }
   if (coverage.obligation_audit_status === "audit_failed") {
+    const categories = Array.from(
+      new Set(
+        (coverage.obligation_audit_failed_windows ?? [])
+          .map((window) => window.coverage_error_category)
+          .filter((category): category is string => Boolean(category))
+      )
+    );
+    const categoryText = categories.length
+      ? ` Diagnostic category${categories.length === 1 ? "" : "ies"}: ${categories.join(", ")}.`
+      : "";
     const knownFindings = coverage.potential_omissions ?? [];
     const knownPages = Array.from(
       new Set(knownFindings.flatMap((finding) => finding.pages))
@@ -56,7 +69,7 @@ function obligationCoverageMessage(
     const pageText = knownPages.length
       ? ` It also found possible omissions on page${knownPages.length === 1 ? "" : "s"} ${knownPages.join(", ")}.`
       : "";
-    return `The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.${pageText}`;
+    return `The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.${pageText}${categoryText}`;
   }
   if (coverage.obligation_audit_status === "not_available") {
     return "No independent obligation scan is available for this extraction. Completeness was not checked.";

@@ -53,6 +53,7 @@ from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
     LlmCallConfig,
+    LlmCallError,
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow
@@ -1940,6 +1941,7 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     )
                 ).scalar_one()
                 assert audit.coverage_status == "completed"
+                assert audit.coverage_error_category is None
                 assert audit.potential_omissions == [
                     {
                         "page_number": 1,
@@ -1953,5 +1955,78 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     }
                 ]
             assert llm.image_bytes == [png]
+
+        asyncio.run(_run())
+
+    def test_do_extract_persists_page_image_error_category(self, session_cm) -> None:
+        class FailingVisionFake(FakeLlmAdapter):
+            def __init__(self) -> None:
+                super().__init__([ExtractionResponse(candidates=[])])
+
+            async def extract_with_image(self, **_kwargs):
+                raise LlmCallError(
+                    "provider details intentionally omitted",
+                    error_category="image_parse_error",
+                )
+
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            image_key = "rendered/ocr-coverage-error-page.png"
+            png = (
+                b"\x89PNG\r\n\x1a\n"
+                + b"\x00\x00\x00\x0dIHDR"
+                + struct.pack(">II", 1000, 2000)
+            )
+            storage = FakeStorageAdapter()
+            await storage.put(image_key, png, "image/png")
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            processor = JobProcessor(
+                sf,
+                llm=FailingVisionFake(),
+                storage=storage,
+                obligation_coverage_audit_enabled=True,
+            )
+
+            async with sf() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=info["version_id"],
+                        page_number=1,
+                        cleaned_text="Unclear scanned technical text.",
+                        ocr_needed=True,
+                        rendered_image_object_key=image_key,
+                    )
+                )
+                await session.flush()
+                service = DocumentService(session)
+                await processor._do_extract(  # noqa: SLF001
+                    session, service, auth, version, run_id=info["run_id"]
+                )
+                await session.commit()
+
+            async with sf() as session:
+                audit = (
+                    await session.execute(
+                        select(ExtractionWindowAudit).where(
+                            ExtractionWindowAudit.processing_run_id
+                            == info["processing_run_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert audit.coverage_status == "failed"
+                assert audit.coverage_error_category == "image_parse_error"
+                assert audit.potential_omissions == []
 
         asyncio.run(_run())
