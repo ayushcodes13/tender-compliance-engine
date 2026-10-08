@@ -73,6 +73,9 @@ def _docx_table(
     data: bytes,
 ) -> tuple[list[str], list[dict[str, str]], list[CellIssue]]:
     document: Any = Document(BytesIO(data))
+    output_headers: list[str] = []
+    rows: list[dict[str, str]] = []
+    docx_issues: list[CellIssue] = []
     for table in document.tables:
         if not table.rows:
             continue
@@ -82,13 +85,24 @@ def _docx_table(
         if "tender requirement" not in headers:
             continue
         original_headers = [_content_key(cell.text) for cell in table.rows[0].cells]
+        if not output_headers:
+            output_headers = original_headers
+        else:
+            known = {header.casefold() for header in output_headers}
+            current = {header.casefold() for header in original_headers}
+            docx_issues.extend(
+                CellIssue("", "missing_column", header)
+                for header in sorted(known - current)
+            )
+            docx_issues.extend(
+                CellIssue("", "unexpected_column", header)
+                for header in sorted(current - known)
+            )
         id_index = (
             headers.index("requirement id")
             if "requirement id" in headers
             else headers.index("s.no.")
         )
-        rows: list[dict[str, str]] = []
-        visual_issues: list[CellIssue] = []
         for row in table.rows[1:]:
             row_id = _content_key(row.cells[id_index].text)
             rows.append(
@@ -102,15 +116,14 @@ def _docx_table(
                 if index >= len(original_headers):
                     continue
                 if cell._tc.xpath(".//w:drawing | .//w:pict"):
-                    visual_issues.append(
+                    docx_issues.append(
                         CellIssue(
                             row_id=row_id,
                             code="unverified_visual_content",
                             field=original_headers[index],
                         )
                     )
-        return original_headers, rows, visual_issues
-    return [], [], []
+    return output_headers, rows, docx_issues
 
 
 def _xlsx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:

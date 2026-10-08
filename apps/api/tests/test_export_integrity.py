@@ -169,6 +169,43 @@ def test_docx_integrity_rejects_unverified_image_content_in_a_table_cell() -> No
     )
 
 
+def test_docx_integrity_checks_all_tables_with_compliance_headers() -> None:
+    from io import BytesIO
+
+    from docx import Document
+
+    expected_id = str(uuid4())
+    extra_id = str(uuid4())
+    headers = ["Requirement ID", "Tender Requirement"]
+    document = Document()
+    for row_id, text in (
+        (expected_id, "The pump shall deliver 12 L/min."),
+        (extra_id, "The power supply shall be 230 V."),
+    ):
+        table = document.add_table(rows=2, cols=2)
+        for cell, header in zip(table.rows[0].cells, headers, strict=True):
+            cell.text = header
+        table.rows[1].cells[0].text = row_id
+        table.rows[1].cells[1].text = text
+    output = BytesIO()
+    document.save(output)
+
+    result = validate_generated_requirement_cells(
+        [RequirementCell(expected_id, "The pump shall deliver 12 L/min.")],
+        output.getvalue(),
+        export_format="docx",
+        expected_headers=headers,
+    )
+
+    assert result.expected_rows == 1
+    assert result.actual_rows == 2
+    assert result.status == "failed"
+    assert any(
+        issue.row_id == extra_id and issue.code == "unexpected_row"
+        for issue in result.issues
+    )
+
+
 def test_pdf_integrity_checks_all_columns_with_wrapped_tender_text() -> None:
     row = type(
         "PdfRow",
