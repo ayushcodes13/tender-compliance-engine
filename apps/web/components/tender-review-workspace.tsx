@@ -189,6 +189,10 @@ export function TenderReviewWorkspace(props: {
   // it even when it is beyond the first page of the requirement list.
   useEffect(() => {
     if (reqList && !selectedId) {
+      // Coverage findings do not belong to a persisted requirement row yet.
+      // Keep the review workspace unselected so their source quote can open
+      // directly without loading an unrelated requirement from the list.
+      if (initialSourceQuote && !initialRequirementId) return;
       const linked = initialRequirementId
         ? reqList.items.find((item) => item.id === initialRequirementId)
         : undefined;
@@ -196,7 +200,7 @@ export function TenderReviewWorkspace(props: {
         linked?.id ?? initialRequirementId ?? reqList.items[0]?.id ?? ""
       );
     }
-  }, [reqList, selectedId, initialRequirementId]);
+  }, [reqList, selectedId, initialRequirementId, initialSourceQuote]);
 
   // Reset draft text and notes when selection changes.
   useEffect(() => {
@@ -263,7 +267,10 @@ export function TenderReviewWorkspace(props: {
     initialSourcePage !== undefined
       ? selectedSources.find((source) => source.page_number === initialSourcePage)
       : selectedSources[0];
-  const sourcePage = selectedSource?.page_number ?? initialSourcePage ?? 1;
+  // A finding link may identify a tender excerpt without a requirement ID.
+  // In that case the default selected requirement can have a different page;
+  // preserve the immutable page supplied by the citation URL.
+  const sourcePage = initialSourcePage ?? selectedSource?.page_number ?? 1;
 
   const STOP_WORDS = new Set([
     "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
