@@ -148,6 +148,8 @@ class TestXlsxExport:
         assert data["export_format"] == "xlsx"
         assert data["workbook_sha256"]  # non-empty checksum
         assert data["stored_object_id"] is not None
+        assert data["validation_report"]["checked_columns"] == 28
+        assert data["validation_report"]["checked_cells"] == 28
 
     def test_xlsx_export_has_phase2_columns(self):
         (user_id, org_id, proj_id, doc_id, ver, ver_id, req_id) = (
@@ -245,6 +247,8 @@ class TestDocxExport:
         assert data["status"] == "completed"
         assert data["export_format"] == "docx"
         assert data["stored_object_id"] is not None
+        assert data["validation_report"]["checked_columns"] == 11
+        assert data["validation_report"]["checked_cells"] == 11
 
     def test_docx_export_download_and_verify(self):
         (user_id, org_id, proj_id, doc_id, ver, ver_id, req_id) = (
@@ -303,6 +307,8 @@ class TestDocxExport:
         )
         assert response.status_code == 200
         artifact = response.json()
+        assert artifact["validation_report"]["checked_columns"] == 7
+        assert artifact["validation_report"]["checked_cells"] == 7
         download = client.get(
             f"/projects/{proj_id}/documents/{doc_id}/versions/{ver}/exports/{artifact['id']}",
             headers=_headers(user_id, org_id),
@@ -354,6 +360,8 @@ class TestPdfExport:
         assert data["status"] == "completed", data.get("validation_report")
         assert data["export_format"] == "pdf"
         assert data["stored_object_id"] is not None
+        assert data["validation_report"]["checked_columns"] == 9
+        assert data["validation_report"]["checked_cells"] == 9
 
     def test_pdf_export_download_and_verify(self):
         (user_id, org_id, proj_id, doc_id, ver, ver_id, req_id) = (

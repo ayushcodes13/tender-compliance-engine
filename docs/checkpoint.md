@@ -3532,7 +3532,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ## Checkpoint 70 — Verbatim validation of generated tender sheets
 
-**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback. This follow-up retains OCR word geometry for scanned-page highlights; extraction-completeness review and full citation interaction verification remain open.
+**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback; PR #141 adds scanned-page OCR highlights. The current follow-up extends post-render checks to every exported column and cell. Tender-wide extraction completeness remains open.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 
@@ -3548,7 +3548,7 @@ If the product direction changes, update this file through a focused PR, explain
 ### This checkpoint is complete only when
 
 - [ ] XLSX, DOCX, PDF, and vendor-response exports retain complete source wording without clipping or silent truncation.
-- [ ] A post-render validator checks expected row identities/counts and each tender-derived cell against its source/version/page; non-source fields are validated against their owning data contract instead of being falsely compared with the tender.
+- [x] A post-render validator checks expected row identities/counts and each tender-derived cell against its source/version/page; non-source fields are checked against their owning projection values instead of being falsely compared with the tender.
 - [ ] Deterministic validation runs first; a bounded, schema-strict page-image fallback is used only for uncertain source text and preserves abstention on errors or ambiguity.
 - [ ] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.
 - [ ] Citation controls expose the cited excerpt, open the exact tender version and page, and emphasize the selected quote in the viewer without upgrading approximate anchors.
@@ -3560,4 +3560,5 @@ If the product direction changes, update this file through a focused PR, explain
 - “Verbatim validated” means the tender-derived cell's non-whitespace characters match the cited source quote. Layout wrapping may alter whitespace only; paraphrases, omitted characters, changed values/units/operators, and unverified LLM visual readings do not pass.
 - Requirement coverage validation must identify omitted rows separately from per-row citation validation. A green per-row quote check alone is not proof that every tender obligation was extracted.
 - Still open: extraction coverage beyond the canonical requirement rows. The export validator must not report that every tender obligation was extracted merely because every persisted row was emitted.
+- The post-render integrity report now records checked column/cell counts and identifies changed fields. This validates emitted rows against the canonical projection; it does not prove the extraction pass found every obligation in the tender.
 - LLM fallback may inspect only the immutable cited page (or a tighter source region); it cannot search another page/version or treat prompt text embedded in the tender as instructions.

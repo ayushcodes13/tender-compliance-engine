@@ -1,4 +1,4 @@
-"""Post-render integrity checks for tender-derived requirement cells.
+"""Post-render integrity checks for generated compliance-sheet cells.
 
 This module checks the artifact bytes produced by an exporter, rather than
 assuming the projection passed to the exporter is what the client received.
@@ -26,6 +26,7 @@ ExportFormatName = Literal["xlsx", "docx", "pdf"]
 class RequirementCell:
     row_id: str
     text: str
+    fields: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,11 @@ class CellIssue:
         "changed_text",
         "unexpected_row",
         "duplicate_row",
+        "missing_column",
+        "unexpected_column",
+        "changed_cell",
     ]
+    field: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,71 +64,73 @@ def _content_key(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _docx_cells(data: bytes) -> list[RequirementCell]:
+def _docx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
     document: Any = Document(BytesIO(data))
     for table in document.tables:
         if not table.rows:
             continue
         headers = [_content_key(cell.text).casefold() for cell in table.rows[0].cells]
-        if "requirement id" in headers and "tender requirement" in headers:
-            id_idx = headers.index("requirement id")
-            text_idx = headers.index("tender requirement")
-            return [
-                RequirementCell(
-                    row_id=_content_key(row.cells[id_idx].text),
-                    text=row.cells[text_idx].text,
-                )
-                for row in table.rows[1:]
-                if len(row.cells) > max(id_idx, text_idx)
-            ]
-        if "s.no." in headers and "tender requirement" in headers:
-            id_idx = headers.index("s.no.")
-            text_idx = headers.index("tender requirement")
-            return [
-                RequirementCell(
-                    row_id=_content_key(row.cells[id_idx].text),
-                    text=row.cells[text_idx].text,
-                )
-                for row in table.rows[1:]
-                if len(row.cells) > max(id_idx, text_idx)
-            ]
-    return []
+        if not any(h in headers for h in ("requirement id", "s.no.")):
+            continue
+        if "tender requirement" not in headers:
+            continue
+        original_headers = [_content_key(cell.text) for cell in table.rows[0].cells]
+        rows = [
+            {
+                original_headers[index]: cell.text
+                for index, cell in enumerate(row.cells)
+                if index < len(original_headers)
+            }
+            for row in table.rows[1:]
+        ]
+        return original_headers, rows
+    return [], []
 
 
-def _xlsx_cells(data: bytes) -> list[RequirementCell]:
-    workbook: Any = load_workbook(
-        BytesIO(data), read_only=True, data_only=True
-    )
+def _xlsx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    workbook: Any = load_workbook(BytesIO(data), read_only=True, data_only=True)
     try:
         for sheet in workbook.worksheets:
             for row_number, values in enumerate(
                 sheet.iter_rows(min_row=1, max_row=20, values_only=True),
                 start=1,
             ):
-                headers = [
-                    _content_key(str(value or "")).casefold() for value in values
-                ]
-                if "requirement id" not in headers or "tender requirement" not in headers:
+                headers = [_content_key(str(value or "")).casefold() for value in values]
+                has_identity = any(header in headers for header in ("requirement id", "s.no."))
+                if not has_identity or "tender requirement" not in headers:
                     continue
-                id_idx = headers.index("requirement id")
-                text_idx = headers.index("tender requirement")
-                return [
-                    RequirementCell(
-                        row_id=_content_key(str(data_row[id_idx] or "")),
-                        text=str(data_row[text_idx] or ""),
+                original_headers = [_content_key(str(value or "")) for value in values]
+                id_idx = (
+                    headers.index("requirement id")
+                    if "requirement id" in headers
+                    else headers.index("s.no.")
+                )
+                rows: list[dict[str, str]] = []
+                for data_row in sheet.iter_rows(min_row=row_number + 1, values_only=True):
+                    if len(data_row) <= id_idx:
+                        continue
+                    identity = str(data_row[id_idx] or "")
+                    if (
+                        "requirement id" in headers
+                        and re.fullmatch(
+                            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                            identity,
+                        )
+                        is None
+                    ):
+                        continue
+                    if "requirement id" not in headers and re.fullmatch(r"\d+", identity) is None:
+                        continue
+                    rows.append(
+                        {
+                            original_headers[index]: str(value or "")
+                            for index, value in enumerate(data_row)
+                            if index < len(original_headers)
+                        }
                     )
-                    for data_row in sheet.iter_rows(
-                        min_row=row_number + 1, values_only=True
-                    )
-                    if len(data_row) > max(id_idx, text_idx)
-                    and isinstance(data_row[id_idx], str)
-                    and re.fullmatch(
-                        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-                        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-                        data_row[id_idx],
-                    ) is not None
-                ]
-        return []
+                return original_headers, rows
+        return [], []
     finally:
         workbook.close()
 
@@ -141,63 +148,143 @@ def _pdf_text_pages(data: bytes) -> list[str]:
         document.close()
 
 
+def _pdf_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    """Read PDF table cells by their rendered column and row coordinates."""
+    from tender_compliance_api.export.final_pdf import _COLUMNS, _FOOTER_H, _MARGIN
+
+    document: Any = pymupdf.open(stream=data, filetype="pdf")  # type: ignore[no-untyped-call]
+    try:
+        column_starts: list[float] = []
+        current_x = _MARGIN
+        for _field, _header, width in _COLUMNS:
+            column_starts.append(current_x)
+            current_x += width
+        headers: list[str] = []
+        rows: list[dict[str, str]] = []
+        for page_number in range(1, document.page_count):
+            page = document.load_page(page_number)
+            words = page.get_text("words", sort=False)
+            if page_number == 1:
+                headers = page.get_text("text").splitlines()[: len(_COLUMNS)]
+            id_index = next(
+                index
+                for index, (field, _header, _width) in enumerate(_COLUMNS)
+                if field == "requirement_id"
+            )
+            id_left = column_starts[id_index]
+            id_right = id_left + _COLUMNS[id_index][2]
+            row_blocks = [
+                word
+                for word in words
+                if id_left <= float(word[0]) < id_right
+                and re.fullmatch(
+                    r"\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\s*",
+                    str(word[4]),
+                )
+            ]
+            row_blocks.sort(key=lambda word: float(word[1]))
+            row_starts = [float(word[1]) for word in row_blocks]
+            for row_index, _id_word in enumerate(row_blocks):
+                top = row_starts[row_index] - 1
+                bottom = (
+                    row_starts[row_index + 1] - 1
+                    if row_index + 1 < len(row_starts)
+                    else float(page.rect.height) - _MARGIN - _FOOTER_H
+                )
+                values: dict[str, str] = {}
+                for column_index, (_field, header, width) in enumerate(_COLUMNS):
+                    left = column_starts[column_index]
+                    right = left + width
+                    cell_words = [
+                        word
+                        for word in words
+                        if left <= float(word[0]) < right and top <= float(word[1]) < bottom
+                    ]
+                    cell_words.sort(key=lambda word: (float(word[1]), float(word[0])))
+                    values[header] = " ".join(
+                        str(word[4]).strip() for word in cell_words if str(word[4]).strip()
+                    )
+                rows.append(values)
+        return headers, rows
+    finally:
+        document.close()
+
+
 def validate_generated_requirement_cells(
     expected: Sequence[RequirementCell],
     artifact_bytes: bytes,
     export_format: ExportFormatName,
+    expected_headers: Sequence[str] = (),
 ) -> ExportIntegrityResult:
     """Verify every expected row and tender requirement in rendered bytes.
 
-    PDF rows are validated by their complete requirement text and stable
-    requirement IDs in the extracted PDF text layer. DOCX/XLSX rows are
-    matched by their row identity and checked cell by cell.
+    All formats are checked for their expected table columns and row identities.
+    DOCX/XLSX/PDF rows are matched by row identity and every displayed value is
+    compared with its owning projection field. Tender wording is additionally
+    checked against the authorized source version and page by the caller.
     """
     issues: list[CellIssue] = []
     if export_format == "pdf":
-        pages = _pdf_text_pages(artifact_bytes)
-        # The first page contains document metadata, including its document
-        # UUID. Requirement IDs appear only in the subsequent data pages.
-        artifact_text = _content_key("\n".join(pages[1:]))
-        row_ids = [_content_key(row_id) for row_id in re.findall(
-            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-            artifact_text,
-        )]
-        expected_ids = [row.row_id for row in expected]
-        for row in expected:
-            if row.row_id not in artifact_text:
-                issues.append(CellIssue(row.row_id, "missing_row"))
-            elif not _content_key(row.text) or _content_key(row.text) not in artifact_text:
-                issues.append(CellIssue(row.row_id, "missing_text"))
-            elif row_ids.count(row.row_id) > 1:
-                issues.append(CellIssue(row.row_id, "duplicate_row"))
-        for extra_id in sorted(set(row_ids) - set(expected_ids)):
-            issues.append(CellIssue(extra_id, "unexpected_row"))
-        return ExportIntegrityResult(
-            status="failed" if issues else "passed",
-            expected_rows=len(expected),
-            actual_rows=len(set(row_ids)),
-            issues=tuple(issues),
-        )
+        actual_headers, actual_fields = _pdf_table(artifact_bytes)
+    elif export_format == "xlsx":
+        actual_headers, actual_fields = _xlsx_table(artifact_bytes)
+    else:
+        actual_headers, actual_fields = _docx_table(artifact_bytes)
 
-    actual = _xlsx_cells(artifact_bytes) if export_format == "xlsx" else _docx_cells(artifact_bytes)
+    def header_key(value: str) -> str:
+        return _content_key(value).casefold()
+
+    expected_header_keys = {header_key(value) for value in expected_headers}
+    actual_header_keys = [header_key(value) for value in actual_headers]
+    actual_header_set = set(actual_header_keys)
+    if expected_header_keys:
+        for missing_header in sorted(expected_header_keys - actual_header_set):
+            issues.append(CellIssue("", "missing_column", missing_header))
+        for extra_header in sorted(actual_header_set - expected_header_keys):
+            issues.append(CellIssue("", "unexpected_column", extra_header))
+
+    identity_header = "requirement id" if "requirement id" in actual_header_set else "s.no."
+    actual: list[RequirementCell] = []
+    for field_row in actual_fields:
+        normalized = {header_key(key): value for key, value in field_row.items()}
+        row_id = _content_key(normalized.get(identity_header, ""))
+        text = normalized.get("tender requirement", "")
+        actual.append(
+            RequirementCell(
+                row_id=row_id,
+                text=text,
+                fields=normalized,
+            )
+        )
     actual_by_id = {row.row_id: row for row in actual}
-    for row in expected:
-        emitted = actual_by_id.get(row.row_id)
+    for expected_row in expected:
+        emitted = actual_by_id.get(expected_row.row_id)
         if emitted is None:
-            issues.append(CellIssue(row.row_id, "missing_row"))
+            issues.append(CellIssue(expected_row.row_id, "missing_row"))
         elif not _content_key(emitted.text):
-            issues.append(CellIssue(row.row_id, "missing_text"))
-        elif _content_key(emitted.text) != _content_key(row.text):
-            issues.append(CellIssue(row.row_id, "changed_text"))
+            issues.append(CellIssue(expected_row.row_id, "missing_text"))
+        elif _content_key(emitted.text) != _content_key(expected_row.text):
+            issues.append(CellIssue(expected_row.row_id, "changed_text", "tender requirement"))
+        if emitted is not None and expected_row.fields:
+            emitted_fields = emitted.fields or {}
+            for field, expected_value in expected_row.fields.items():
+                if header_key(field) == "tender requirement":
+                    continue
+                actual_value = emitted_fields.get(header_key(field))
+                if actual_value is None or _content_key(actual_value) != _content_key(
+                    expected_value
+                ):
+                    issues.append(CellIssue(expected_row.row_id, "changed_cell", field))
     expected_id_set = {row.row_id for row in expected}
     actual_ids = {row.row_id for row in actual}
     for extra_id in sorted(actual_ids - expected_id_set):
         issues.append(CellIssue(extra_id, "unexpected_row"))
     seen_ids: set[str] = set()
-    for row in actual:
-        if row.row_id in seen_ids:
-            issues.append(CellIssue(row.row_id, "duplicate_row"))
-        seen_ids.add(row.row_id)
+    for actual_row in actual:
+        if actual_row.row_id in seen_ids:
+            issues.append(CellIssue(actual_row.row_id, "duplicate_row"))
+        seen_ids.add(actual_row.row_id)
     return ExportIntegrityResult(
         status="failed" if issues else "passed",
         expected_rows=len(expected),

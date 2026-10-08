@@ -186,6 +186,8 @@ class TestExportGeneration:
         assert body["workbook_sha256"]  # non-empty checksum
         assert body["id"]
         assert body["generated_at"]
+        assert body["validation_report"]["checked_columns"] == 9
+        assert body["validation_report"]["checked_cells"] == 18
 
     def test_export_excludes_superseded(self):
         """Superseded requirements are excluded from the export."""

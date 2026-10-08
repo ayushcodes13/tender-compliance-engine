@@ -1996,9 +1996,16 @@ a {
 
 .matrix-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+.matrix-export-notice {
+  color: var(--color-success);
+  font-size: 12px;
 }
 
 /* ===========================================================================

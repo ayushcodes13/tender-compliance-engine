@@ -54,6 +54,7 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const loadMatrix = async () => {
     setLoading(true);
@@ -80,6 +81,7 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
   const handleExport = async () => {
     setExporting(true);
     setExportError(null);
+    setExportNotice(null);
     try {
       // Trigger XLSX generation on the backend.
       const artifact = await api.createMatrixExport(
@@ -97,7 +99,18 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
           return;
         }
         if (artifact.validation_status === "failed") {
-          setExportError("The generated workbook failed its content check. No file was issued.");
+          const fields = Array.from(
+            new Set(
+              (artifact.validation_report?.issues ?? [])
+                .map((issue) => issue.field)
+                .filter((field): field is string => Boolean(field))
+            )
+          ).slice(0, 4);
+          setExportError(
+            fields.length
+              ? `The generated workbook failed its content check in: ${fields.join(", ")}. No file was issued.`
+              : "The generated workbook failed its content check. No file was issued."
+          );
           return;
         }
         setExportError(
@@ -126,6 +139,9 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      setExportNotice(
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns and ${artifact.validation_report?.checked_cells ?? 0} cells passed the content check for ${artifact.validation_report?.actual_rows ?? rows?.length ?? 0} rows.`
+      );
     } catch (err) {
       setExportError(
         err instanceof Error ? err.message : "Export failed"
@@ -230,6 +246,9 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
         </button>
         {exportError && (
           <span className="error-text">{exportError}</span>
+        )}
+        {exportNotice && (
+          <span className="matrix-export-notice" role="status">{exportNotice}</span>
         )}
       </div>
     </div>
