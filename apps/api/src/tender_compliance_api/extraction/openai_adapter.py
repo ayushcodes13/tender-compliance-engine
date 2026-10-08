@@ -43,21 +43,21 @@ _AZURE_FOUNDRY_API_VERSION = "2024-05-01-preview"
 
 
 def _azure_foundry_base_url(base_url: str | None) -> tuple[str | None, bool]:
-    """Map a bare Azure AI Services host to its models chat-completions route.
+    """Map bare Azure resource hosts to their provider-specific API routes.
 
-    The validation-service endpoint setting is a bare resource URL. Azure AI
-    Services expects ``/models/chat/completions?api-version=...``; the generic
-    OpenAI client otherwise sends ``/chat/completions`` and receives 404.
-    Explicit OpenAI-compatible routes are left as configured.
+    Azure OpenAI resources use the OpenAI v1 surface at ``/openai/v1/``.
+    Azure AI Services inference resources use ``/models/chat/completions``
+    with an API version and ``api-key`` header. Explicit routes are preserved.
     """
     if not base_url:
         return None, False
     parts = urlsplit(base_url.strip())
     host = (parts.hostname or "").lower()
-    is_azure_resource = host.endswith(".openai.azure.com") or host.endswith(
-        ".services.ai.azure.com"
-    )
-    if is_azure_resource and not parts.path.strip("/"):
+    if parts.path.strip("/"):
+        return base_url, False
+    if host.endswith(".openai.azure.com"):
+        return urlunsplit((parts.scheme, parts.netloc, "/openai/v1/", "", "")), False
+    if host.endswith(".services.ai.azure.com"):
         return urlunsplit((parts.scheme, parts.netloc, "/models/", "", "")), True
     return base_url, False
 

@@ -48,9 +48,16 @@ def test_omitted_completion_limits_stay_omitted() -> None:
     assert _completion_options(_config("gpt-5.4-nano", max_tokens=None, temperature=None)) == {}
 
 
-def test_bare_azure_foundry_endpoint_uses_models_route() -> None:
+def test_bare_azure_openai_endpoint_uses_v1_route() -> None:
     assert _azure_foundry_base_url("https://example.openai.azure.com/") == (
-        "https://example.openai.azure.com/models/",
+        "https://example.openai.azure.com/openai/v1/",
+        False,
+    )
+
+
+def test_bare_azure_ai_services_endpoint_uses_models_route() -> None:
+    assert _azure_foundry_base_url("https://example.services.ai.azure.com/") == (
+        "https://example.services.ai.azure.com/models/",
         True,
     )
 
@@ -65,7 +72,7 @@ def test_non_azure_base_url_is_preserved() -> None:
     assert _azure_foundry_base_url(endpoint) == (endpoint, False)
 
 
-def test_bare_azure_endpoint_configures_route_version_and_api_key_header(
+def test_bare_azure_ai_services_endpoint_configures_version_and_api_key_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -77,19 +84,19 @@ def test_bare_azure_endpoint_configures_route_version_and_api_key_header(
     monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(AsyncOpenAI=FakeAsyncOpenAI))
     OpenAiLlmAdapter(
         model="deployment-alias",
-        base_url="https://example.openai.azure.com/",
+        base_url="https://example.services.ai.azure.com/",
         api_key="test-key",
     )._client()
 
     assert captured == {
         "api_key": "test-key",
-        "base_url": "https://example.openai.azure.com/models/",
+        "base_url": "https://example.services.ai.azure.com/models/",
         "default_headers": {"api-key": "test-key"},
         "default_query": {"api-version": "2024-05-01-preview"},
     }
 
 
-def test_openai_client_sends_azure_models_path_api_version_and_key_header(
+def test_openai_client_sends_azure_openai_v1_path_and_bearer_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observed: dict[str, str] = {}
@@ -98,6 +105,7 @@ def test_openai_client_sends_azure_models_path_api_version_and_key_header(
         observed["path"] = request.url.path
         observed["query"] = request.url.query.decode()
         observed["api_key"] = request.headers.get("api-key", "")
+        observed["authorization"] = request.headers.get("authorization", "")
         return httpx.Response(
             200,
             json={
@@ -136,9 +144,10 @@ def test_openai_client_sends_azure_models_path_api_version_and_key_header(
     asyncio.run(exercise())
 
     assert observed == {
-        "path": "/models/chat/completions",
-        "query": "api-version=2024-05-01-preview",
-        "api_key": "test-key",
+        "path": "/openai/v1/chat/completions",
+        "query": "",
+        "api_key": "",
+        "authorization": "Bearer test-key",
     }
 
 
