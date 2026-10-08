@@ -36,11 +36,13 @@ export default function ProjectReviewPage() {
   const initialSourcePage =
     requestedDocumentId &&
     requestedVersion &&
-    initialRequirementId &&
     Number.isInteger(pageParam) &&
     pageParam > 0
       ? pageParam
       : undefined;
+  const rawSourceQuote = searchParams.get("sourceQuote");
+  const initialSourceQuote =
+    rawSourceQuote && rawSourceQuote.length <= 2048 ? rawSourceQuote : undefined;
 
   const [project, setProject] = useState<Project | null>(null);
   const [document, setDocument] = useState<DocumentItem | null>(null);
@@ -142,6 +144,7 @@ export default function ProjectReviewPage() {
         document={document}
         initialRequirementId={initialRequirementId}
         initialSourcePage={initialSourcePage}
+        initialSourceQuote={initialSourceQuote}
       />
     </AppShell>
   );

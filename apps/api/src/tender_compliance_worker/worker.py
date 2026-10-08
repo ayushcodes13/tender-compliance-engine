@@ -259,6 +259,9 @@ def create_worker(
             verbatim_validation_fallback_enabled=(
                 settings.verbatim_validation_fallback_enabled
             ),
+            obligation_coverage_audit_enabled=(
+                settings.obligation_coverage_audit_enabled
+            ),
         ),
         max_concurrency=max_concurrency or settings.max_concurrency,
     )

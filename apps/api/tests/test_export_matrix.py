@@ -48,6 +48,10 @@ from tender_compliance_api.db.models import (
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document import service as document_service
 from tender_compliance_api.export import visual_validation
+from tender_compliance_api.export.validation import (
+    RequirementCell,
+    validate_source_quote_presence,
+)
 from tender_compliance_api.export.visual_validation import PageImageValidationResponse
 from tender_compliance_api.extraction import openai_adapter
 from tender_compliance_api.extraction.adapter import LlmCallResult
@@ -174,7 +178,15 @@ def _add_requirements(project_id, doc_id, ver, reqs_data):
     asyncio.run(_add())
 
 
-def _add_window_audit(doc_id, ver, *, call_status: str, candidate_count: int):
+def _add_window_audit(
+    doc_id,
+    ver,
+    *,
+    call_status: str,
+    candidate_count: int,
+    coverage_status: str = "not_run",
+    potential_omissions: list[str | dict[str, object]] | None = None,
+):
     """Attach one extraction-window result to a parsed test version."""
 
     async def _add():
@@ -221,6 +233,8 @@ def _add_window_audit(doc_id, ver, *, call_status: str, candidate_count: int):
                             "char_end": 20,
                         }
                     ],
+                    coverage_status=coverage_status,
+                    potential_omissions=potential_omissions or [],
                 )
             )
             await session.commit()
@@ -259,6 +273,74 @@ class TestExportGeneration:
         assert body["validation_report"]["window_processing"]["status"] == "not_available"
         assert body["validation_report"]["window_processing"]["completeness_proven"] is False
 
+    def test_source_quote_check_rejects_dropped_range_dash(self):
+        # The supplied MBE output omits the range dash in this tender quote.
+        issues = validate_source_quote_presence(
+            [RequirementCell("temperature-range", "at least 450 1250°C")],
+            {"temperature-range": ["The range is at least 450–1250°C."]},
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("temperature-range", "source_quote_not_found")
+        ]
+
+    def test_export_does_not_accept_source_from_another_version(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, None)],
+        )
+
+        async def _add_other_version_source():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                other_version = DocumentVersion(
+                    document_id=version.document_id,
+                    version_number=ver + 1,
+                    stored_object_id=uuid.uuid4(),
+                    sha256="other-version-sha",
+                    mime_type="application/pdf",
+                    size_bytes=1024,
+                    processing_status=DocumentProcessingStatus.PARSED,
+                )
+                session.add(other_version)
+                await session.flush()
+                session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=other_version.id,
+                        page_number=3,
+                        source_text=requirement.raw_source,
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_add_other_version_source())
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "failed"
+        issues = body["validation_report"]["source_validation"]["issues"]
+        assert len(issues) == 1
+        assert issues[0]["code"] == "source_text_unavailable"
+
     def test_export_is_held_when_an_extraction_window_failed(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
@@ -278,6 +360,81 @@ class TestExportGeneration:
         assert body["validation_report"]["window_processing"]["status"] == "incomplete"
         assert body["validation_report"]["window_processing"]["failed_windows"] == [
             {"window_index": 1, "chunk_id": "window-1", "pages": [3]}
+        ]
+
+    def test_export_is_held_for_unmatched_obligation_coverage_quote(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="completed",
+            potential_omissions=[
+                {
+                    "page_number": 3,
+                    "source_quote": "The pump shall deliver 12 L/min.",
+                }
+            ],
+        )
+
+        resp = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+        body = resp.json()
+        coverage = body["validation_report"]["window_processing"]
+        assert body["status"] == "failed"
+        assert body["validation_status"] == "needs_review"
+        assert coverage["obligation_audit_status"] == "potential_omissions"
+        assert coverage["potential_omissions"] == [
+            {
+                "window_index": 1,
+                "pages": [3],
+                "source_quote": "The pump shall deliver 12 L/min.",
+            }
+        ]
+
+    def test_partial_ocr_coverage_finding_survives_other_page_uncertainty(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="uncertain",
+            potential_omissions=[
+                {
+                    "page_number": 3,
+                    "source_quote": "The motor shall be IP55 rated.",
+                    "bbox": {"x": 30, "y": 40, "width": 120, "height": 20},
+                }
+            ],
+        )
+
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+
+        coverage = response.json()["validation_report"]["window_processing"]
+        assert response.status_code == 200
+        assert response.json()["status"] == "failed"
+        assert coverage["obligation_audit_status"] == "audit_failed"
+        assert coverage["potential_omissions"] == [
+            {
+                "window_index": 1,
+                "pages": [3],
+                "source_quote": "The motor shall be IP55 rated.",
+            }
         ]
 
     def test_ocr_quote_requires_page_image_check_even_when_text_matches(self):
@@ -448,6 +605,7 @@ class TestExportGeneration:
                     session,
                     rows,
                     FakeStorage(),
+                    version.id,
                 )
 
         report = asyncio.run(_validate())

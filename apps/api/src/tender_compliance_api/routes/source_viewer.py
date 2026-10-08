@@ -20,6 +20,7 @@ Routes:
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 import struct
@@ -27,14 +28,20 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
-from tender_compliance_api.db.models import DocumentPage, Requirement, RequirementSource
+from tender_compliance_api.db.models import (
+    DocumentPage,
+    ExtractionDiagnostics,
+    ExtractionWindowAudit,
+    Requirement,
+    RequirementSource,
+)
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.errors import (
@@ -108,7 +115,8 @@ class SourceAnchor(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    requirement_id: UUID
+    anchor_id: str | None = None
+    requirement_id: UUID | None = None
     clause_number: str | None
     page_number: int
     location_type: str
@@ -311,6 +319,7 @@ async def get_page_source_anchors(
     document_id: UUID,
     version_number: int,
     page_number: int,
+    quote: str | None = Query(default=None, max_length=2048),
     auth: AuthContext = Depends(get_auth_context),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
     storage: ObjectStorageAdapter = Depends(get_storage_adapter),  # noqa: B008
@@ -342,21 +351,101 @@ async def get_page_source_anchors(
         list[tuple[RequirementSource, str, list[dict[str, Any]] | None]],
         list(result.all()),
     )
+    quote_page: DocumentPage | None = None
+    quote_record: DocumentPage | None = None
+    coverage_bbox: dict[str, float] | None = None
+    if quote and quote.strip():
+        quote_record = (
+            await session.execute(
+                select(DocumentPage).where(
+                    DocumentPage.document_version_id == version.id,
+                    DocumentPage.page_number == page_number,
+                )
+            )
+        ).scalar_one_or_none()
+        if quote_record is not None and quote_record.cleaned_text:
+            normalized_page_text = re.sub(r"\s+", " ", quote_record.cleaned_text).strip()
+            normalized_quote = re.sub(r"\s+", " ", quote).strip()
+            if normalized_quote and normalized_page_text.count(normalized_quote) == 1:
+                quote_page = quote_record
+        if quote_record is not None:
+            latest_diagnostics = (
+                await session.execute(
+                    select(ExtractionDiagnostics)
+                    .where(
+                        ExtractionDiagnostics.document_version_id == version.id
+                    )
+                    .order_by(
+                        ExtractionDiagnostics.created_at.desc(),
+                        ExtractionDiagnostics.id.desc(),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if latest_diagnostics and latest_diagnostics.processing_run_id:
+                audits = (
+                    await session.execute(
+                        select(ExtractionWindowAudit).where(
+                            ExtractionWindowAudit.processing_run_id
+                            == latest_diagnostics.processing_run_id
+                        )
+                    )
+                ).scalars().all()
+                normalized_quote = re.sub(r"\s+", " ", quote).strip()
+                for audit in audits:
+                    findings = audit.potential_omissions
+                    if not isinstance(findings, list):
+                        continue
+                    for finding in findings:
+                        if (
+                            not isinstance(finding, dict)
+                            or finding.get("page_number") != page_number
+                            or not isinstance(finding.get("source_quote"), str)
+                            or re.sub(r"\s+", " ", finding["source_quote"]).strip()
+                            != normalized_quote
+                        ):
+                            continue
+                        candidate_bbox = finding.get("bbox")
+                        if not isinstance(candidate_bbox, dict):
+                            continue
+                        try:
+                            values = {
+                                key: float(candidate_bbox[key])
+                                for key in ("x", "y", "width", "height")
+                            }
+                        except (KeyError, TypeError, ValueError, OverflowError):
+                            continue
+                        if (
+                            all(math.isfinite(value) for value in values.values())
+                            and values["x"] >= 0
+                            and values["y"] >= 0
+                            and values["width"] > 0
+                            and values["height"] > 0
+                        ):
+                            coverage_bbox = values
+                            break
+                    if coverage_bbox is not None:
+                        break
     page_png: bytes | None = None
     pdf_document: Any | None = None
-    if any(source.bbox is None for source, _quote, _words in sources):
+    if quote_page is not None or coverage_bbox is not None or any(
+        source.bbox is None for source, _quote, _words in sources
+    ):
         try:
             page_png, _ = await svc.get_page_image_bytes(
                 auth, document_id, version_number, page_number, storage
             )
-            original_key = await svc.get_stored_object_key(
-                auth, document_id, version_number
-            )
-            import pymupdf
+            if quote_page is not None or any(
+                source.bbox is None for source, _quote, _words in sources
+            ):
+                original_key = await svc.get_stored_object_key(
+                    auth, document_id, version_number
+                )
+                import pymupdf
 
-            pdf_document = pymupdf.open(  # type: ignore[no-untyped-call]
-                stream=await storage.get(original_key), filetype="pdf"
-            )
+                pdf_document = pymupdf.open(  # type: ignore[no-untyped-call]
+                    stream=await storage.get(original_key), filetype="pdf"
+                )
         except Exception:  # noqa: BLE001 — text/page navigation still works
             pdf_document = None
     anchors: list[SourceAnchor] = []
@@ -371,6 +460,7 @@ async def get_page_source_anchors(
                 bbox = _ocr_quote_bbox(ocr_words, quote_text, page_png)
         anchors.append(
             SourceAnchor(
+                anchor_id=str(source.id),
                 requirement_id=source.requirement_id,
                 clause_number=source.clause_number,
                 page_number=source.page_number,
@@ -385,6 +475,52 @@ async def get_page_source_anchors(
                 ),
             )
         )
+    if quote is not None and (quote_page is not None or coverage_bbox is not None):
+        source_quote = re.sub(r"\s+", " ", quote).strip()
+        if not any(anchor.quote_text == source_quote for anchor in anchors):
+            bbox = coverage_bbox
+            bbox_location_type = "approximate" if bbox is not None else None
+            if bbox is not None and page_png is not None:
+                image_width, image_height = struct.unpack(">II", page_png[16:24])
+                if (
+                    bbox["x"] + bbox["width"] > image_width
+                    or bbox["y"] + bbox["height"] > image_height
+                ):
+                    bbox = None
+                    bbox_location_type = None
+            if bbox is None and quote_page is not None and page_png is not None:
+                if pdf_document is not None:
+                    bbox = _pdf_quote_bbox(
+                        pdf_document, page_number, source_quote, page_png
+                    )
+                if bbox is None:
+                    bbox = _ocr_quote_bbox(
+                        quote_page.ocr_words, source_quote, page_png
+                    )
+            anchor_digest = hashlib.sha256(
+                f"{version.id}:{page_number}:{source_quote}".encode()
+            ).hexdigest()
+            anchors.append(
+                SourceAnchor(
+                    anchor_id=f"coverage-{anchor_digest}",
+                    requirement_id=None,
+                    clause_number=None,
+                    page_number=page_number,
+                    location_type=(
+                        bbox_location_type
+                        or ("exact" if quote_page is not None else "approximate")
+                    ),
+                    source_text=source_quote,
+                    quote_text=source_quote,
+                    bbox=bbox,
+                    ocr_confidence=(
+                        float(quote_record.ocr_confidence)
+                        if quote_record is not None
+                        and quote_record.ocr_confidence is not None
+                        else None
+                    ),
+                )
+            )
     if pdf_document is not None:
         pdf_document.close()
     return anchors

@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0033_extraction_window_audits"
+_HEAD_REV = "0034_obligation_coverage_audit"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -79,6 +79,10 @@ def test_upgrade_head_creates_app_tables(tmp_path):
         column["name"] for column in inspector.get_columns("extraction_candidates")
     }
     assert "verbatim_validation" in candidate_columns
+    window_audit_columns = {
+        column["name"] for column in inspector.get_columns("extraction_window_audits")
+    }
+    assert {"coverage_status", "potential_omissions"}.issubset(window_audit_columns)
     engine.dispose()
 
 

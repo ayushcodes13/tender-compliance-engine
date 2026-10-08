@@ -87,8 +87,10 @@ async def validate_quote_on_page_image(
         if not isinstance(result.response, PageImageValidationResponse):
             raise LlmCallError("page image validator response type mismatch")
         response = result.response
-        if response.verdict != "exact" or float(response.confidence) < MIN_CONFIDENCE:
+        if response.verdict != "exact":
             return response, result.call
+        if float(response.confidence) < MIN_CONFIDENCE:
+            return response.model_copy(update={"verdict": "cannot_tell"}), result.call
         if not response.visible_quote or len(response.visible_quote) > 4096:
             return response.model_copy(update={"verdict": "cannot_tell"}), result.call
         if _layout_key(response.visible_quote) != _layout_key(proposed_quote):

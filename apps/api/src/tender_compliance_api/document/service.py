@@ -8,6 +8,7 @@ enforced in one place, consistent with :mod:`tender_compliance_api.project`.
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -74,6 +75,7 @@ from tender_compliance_api.extraction.constraint_parser import (
     ParsedConstraint,
     parse_constraint,
 )
+from tender_compliance_api.extraction.coverage_audit import quote_is_covered
 from tender_compliance_api.extraction.diagnostics import compute_diagnostics
 from tender_compliance_api.extraction.extractor import CandidateRecord, ExtractionOutcome
 from tender_compliance_api.extraction.qualitative import (
@@ -131,6 +133,7 @@ async def _source_quote_validation_report(
     session: AsyncSession,
     rows: Sequence[FinalMatrixRow | MatrixRow],
     storage: ObjectStorageAdapter,
+    document_version_id: uuid.UUID,
 ) -> dict[str, object]:
     """Check linked source text and require image verification for OCR pages."""
     from tender_compliance_api.export.validation import (  # noqa: PLC0415
@@ -156,6 +159,7 @@ async def _source_quote_validation_report(
                 DocumentPage.ocr_needed,
                 DocumentPage.structural_metadata,
             ).where(RequirementSource.requirement_id.in_(requirement_ids))
+            .where(RequirementSource.document_version_id == document_version_id)
             .outerjoin(
                 DocumentPage,
                 (DocumentPage.document_version_id == RequirementSource.document_version_id)
@@ -324,6 +328,10 @@ async def _extraction_window_coverage_report(
         return {
             "status": "not_available",
             "completeness_proven": False,
+            "obligation_audit_status": "not_available",
+            "obligation_audited_windows": 0,
+            "obligation_audit_failed_windows": [],
+            "potential_omissions": [],
             "message": "No extraction-window audit is available for this version.",
         }
 
@@ -342,6 +350,27 @@ async def _extraction_window_coverage_report(
     expected = max(diagnostics.total_windows, 0)
     missing_count = max(expected - len(audits), 0)
     failed = [audit for audit in audits if audit.call_status != "completed"]
+    emitted_source_rows = list(
+        (
+            await session.execute(
+                select(Requirement.raw_source, RequirementSource.page_number)
+                .join(RequirementSource, RequirementSource.requirement_id == Requirement.id)
+                .where(
+                    Requirement.document_version_id == document_version_id,
+                    Requirement.superseded.is_(False),
+                )
+            )
+        ).all()
+    )
+    page_texts = dict(
+        (
+            await session.execute(
+                select(DocumentPage.page_number, DocumentPage.cleaned_text).where(
+                    DocumentPage.document_version_id == document_version_id
+                )
+            )
+        ).all()
+    )
 
     def window_record(audit: ExtractionWindowAudit) -> dict[str, object]:
         spans = audit.source_spans if isinstance(audit.source_spans, list) else []
@@ -363,9 +392,116 @@ async def _extraction_window_coverage_report(
         if not missing_count and len(audits) == expected and not failed
         else "incomplete"
     )
+    coverage_completed = [
+        audit for audit in audits if audit.coverage_status == "completed"
+    ]
+    coverage_not_run = [
+        audit for audit in audits if audit.coverage_status == "not_run"
+    ]
+    coverage_failed = [
+        audit
+        for audit in audits
+        if audit.coverage_status not in {"completed", "not_run"}
+    ]
+    potential_omissions: list[dict[str, object]] = []
+    seen_omissions: set[tuple[tuple[int, ...], str]] = set()
+    # Keep page-image findings from pages that were audited successfully even
+    # when another page in the same OCR window was unreadable. The window
+    # remains failed closed, but known findings should still reach reviewers.
+    coverage_with_findings = [
+        audit
+        for audit in audits
+        if audit.coverage_status != "not_run"
+        and isinstance(audit.potential_omissions, list)
+        and audit.potential_omissions
+    ]
+    for audit in coverage_with_findings:
+        spans = audit.source_spans if isinstance(audit.source_spans, list) else []
+        pages = sorted(
+            {
+                int(span["page_number"])
+                for span in spans
+                if isinstance(span, dict)
+                and isinstance(span.get("page_number"), int)
+            }
+        )
+        quotes = audit.potential_omissions
+        if not isinstance(quotes, list):
+            continue
+        for item in quotes:
+            explicit_page: int | None = None
+            if isinstance(item, dict):
+                quote = item.get("source_quote")
+                candidate_page = item.get("page_number")
+                if isinstance(candidate_page, int) and not isinstance(candidate_page, bool):
+                    explicit_page = candidate_page
+            else:
+                quote = item
+            if not isinstance(quote, str):
+                continue
+            normalized_quote = re.sub(r"\s+", " ", quote).strip()
+            quote_pages = (
+                [explicit_page]
+                if explicit_page is not None and explicit_page in pages
+                else [
+                    page_number
+                    for page_number in pages
+                    if isinstance(page_texts.get(page_number), str)
+                    and normalized_quote
+                    and re.sub(
+                        r"\s+", " ", str(page_texts[page_number])
+                    ).strip().count(normalized_quote)
+                    == 1
+                ]
+            )
+            finding_pages = quote_pages if len(quote_pages) == 1 else pages
+            same_window_quotes = [
+                raw_source
+                for raw_source, page_number in emitted_source_rows
+                if isinstance(raw_source, str)
+                and len(quote_pages) == 1
+                and page_number in finding_pages
+            ]
+            # A multi-page window cannot be resolved by finding identical
+            # words on some other page; exact page provenance is required.
+            resolved_on_same_page = (
+                len(pages) == 1 or len(quote_pages) == 1
+            )
+            if not resolved_on_same_page or not quote_is_covered(quote, same_window_quotes):
+                key = (tuple(finding_pages), quote)
+                if key in seen_omissions:
+                    continue
+                seen_omissions.add(key)
+                potential_omissions.append(
+                    {
+                        "window_index": audit.window_index,
+                        "pages": finding_pages,
+                        "source_quote": quote,
+                    }
+                )
+
+    if status == "incomplete":
+        coverage_status = "incomplete"
+    elif coverage_failed or (
+        coverage_completed and coverage_not_run
+    ):
+        coverage_status = "audit_failed"
+    elif coverage_not_run or not coverage_completed:
+        coverage_status = "not_available"
+    elif potential_omissions:
+        coverage_status = "potential_omissions"
+    else:
+        coverage_status = "no_potential_omissions"
+
     return {
         "status": status,
         "completeness_proven": False,
+        "obligation_audit_status": coverage_status,
+        "obligation_audited_windows": len(coverage_completed),
+        "obligation_audit_failed_windows": [
+            window_record(audit) for audit in coverage_failed
+        ],
+        "potential_omissions": potential_omissions,
         "expected_windows": expected,
         "audited_windows": len(audits),
         "missing_window_count": missing_count,
@@ -1841,7 +1977,7 @@ class DocumentService:
             integrity_report["window_processing"] = extraction_report
 
             source_report = await _source_quote_validation_report(
-                self._session, rows, storage
+                self._session, rows, storage, version.id
             )
             integrity_report["source_validation"] = source_report
             validation_status = str(source_report["status"])
@@ -1851,6 +1987,13 @@ class DocumentService:
             if extraction_report["status"] == "incomplete":
                 validation_status = "needs_review"
                 raise ValueError("extraction did not audit every source window")
+            obligation_audit_status = extraction_report.get("obligation_audit_status")
+            if obligation_audit_status in {"audit_failed", "potential_omissions"} or (
+                get_settings().is_production
+                and obligation_audit_status == "not_available"
+            ):
+                validation_status = "needs_review"
+                raise ValueError("obligation coverage audit requires review")
 
             # Store the artifact bytes.
             storage_key = build_key(
@@ -2060,7 +2203,7 @@ class DocumentService:
             integrity_report["window_processing"] = extraction_report
 
             source_report = await _source_quote_validation_report(
-                self._session, rows, storage
+                self._session, rows, storage, version.id
             )
             integrity_report["source_validation"] = source_report
             validation_status = str(source_report["status"])
@@ -2070,6 +2213,13 @@ class DocumentService:
             if extraction_report["status"] == "incomplete":
                 validation_status = "needs_review"
                 raise ValueError("extraction did not audit every source window")
+            obligation_audit_status = extraction_report.get("obligation_audit_status")
+            if obligation_audit_status in {"audit_failed", "potential_omissions"} or (
+                get_settings().is_production
+                and obligation_audit_status == "not_available"
+            ):
+                validation_status = "needs_review"
+                raise ValueError("obligation coverage audit requires review")
 
             # Store the workbook bytes.
             storage_key = build_key(
@@ -2968,6 +3118,8 @@ class DocumentService:
                     candidate_count=window.candidate_count,
                     ocr_warning=window.ocr_warning,
                     source_spans=window.source_spans,
+                    coverage_status=window.coverage_status,
+                    potential_omissions=window.potential_omissions,
                 )
             )
         diag = ExtractionDiagnostics(

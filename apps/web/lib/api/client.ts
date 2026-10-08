@@ -299,7 +299,8 @@ export type PageResponse = {
 
 /** A source anchor (bounding box) for overlay on the source viewer. */
 export type SourceAnchor = {
-  requirement_id: string;
+  anchor_id?: string;
+  requirement_id: string | null;
   clause_number: string | null;
   page_number: number;
   location_type: string;
@@ -359,6 +360,23 @@ export type ExportArtifactResponse = {
     window_processing?: {
       status: "complete" | "incomplete" | "not_available";
       completeness_proven: false;
+      obligation_audit_status?:
+        | "no_potential_omissions"
+        | "potential_omissions"
+        | "audit_failed"
+        | "incomplete"
+        | "not_available";
+      obligation_audited_windows?: number;
+      obligation_audit_failed_windows?: {
+        window_index: number;
+        chunk_id: string;
+        pages: number[];
+      }[];
+      potential_omissions?: {
+        window_index: number;
+        pages: number[];
+        source_quote: string;
+      }[];
       expected_windows?: number;
       audited_windows?: number;
       missing_window_count?: number;
@@ -968,11 +986,14 @@ export const api = {
     projectId: string,
     documentId: string,
     version: number,
-    pageNumber: number
-  ) =>
-    apiFetch(
-      `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}/sources`
-    ).then((r) => expectJson<SourceAnchor[]>(r)),
+    pageNumber: number,
+    quote?: string
+  ) => {
+    const query = quote ? `?quote=${encodeURIComponent(quote)}` : "";
+    return apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}/sources${query}`
+    ).then((r) => expectJson<SourceAnchor[]>(r));
+  },
 
   // --- Requirement edit (CP38) ---
 

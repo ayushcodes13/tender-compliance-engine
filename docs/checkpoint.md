@@ -3532,7 +3532,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ## Checkpoint 70 — Verbatim validation of generated tender sheets
 
-**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback; PR #141 adds scanned-page OCR highlights; PR #143 validates every exported column and cell. The current follow-up records each extraction window's call outcome and holds exports when any window failed or was not audited. Tender-wide extraction completeness remains open.
+**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback; PR #141 adds scanned-page OCR highlights; PR #143 validates every exported column and cell. The current follow-up records each extraction window's call outcome, runs an independent obligation scan, and holds exports when a scan is missing, uncertain, or finds possible omissions. OCR-warning windows use their app-selected rendered page images; any returned visual boxes remain approximate and link to that immutable tender page. This second pass is not proof of tender-wide completeness, and live-provider plus supplied-example verification remains part of this checkpoint.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 

@@ -15,6 +15,7 @@ import contextlib
 import struct
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -22,13 +23,18 @@ from tender_compliance_api.db.models import (
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExtractionDiagnostics,
+    ExtractionWindowAudit,
     Membership,
     Organization,
+    ProcessingRun,
+    ProcessingStage,
     Project,
     ProjectStatus,
     Requirement,
     RequirementReviewState,
     RequirementSource,
+    RunStatus,
     TenderDocument,
     User,
 )
@@ -475,6 +481,170 @@ class TestSourceAnchors:
         assert response.json()[0]["bbox"] == {
             "x": 10.0, "y": 20.0, "width": 78.0, "height": 12.0
         }
+
+    def test_coverage_quote_deep_link_returns_only_source_verified_anchor(self):
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+        quote = "The motor shall be IP55 rated."
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + struct.pack(">IIBBBBB", 300, 100, 8, 6, 0, 0, 0)
+            + b"\x00\x00\x00\x00"
+        )
+
+        async def _persist_quote_geometry():
+            async with _session_cm() as session:
+                page = (
+                    await session.execute(
+                        select(DocumentPage).where(
+                            DocumentPage.document_version_id
+                            == select(DocumentVersion.id)
+                            .where(DocumentVersion.document_id == doc_id)
+                            .scalar_subquery(),
+                            DocumentPage.page_number == 1,
+                        )
+                    )
+                ).scalar_one()
+                page.cleaned_text = quote
+                page.ocr_words = [
+                    {
+                        "text": token,
+                        "bbox": {
+                            "x": 10 + index * 20,
+                            "y": 20,
+                            "width": 18,
+                            "height": 12,
+                        },
+                    }
+                    for index, token in enumerate(quote.split())
+                ]
+                await session.commit()
+
+        asyncio.run(_persist_quote_geometry())
+        _make_test_storage()
+        _put_image_sync("rendered/page_1.png", png)
+        try:
+            response = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/sources",
+                params={"quote": quote},
+                headers=_headers(user_id, org_id),
+            )
+            fabricated = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/sources",
+                params={"quote": "The motor shall be IP66 rated."},
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            _clear_test_storage()
+
+        assert response.status_code == 200
+        anchor = next(item for item in response.json() if item["quote_text"] == quote)
+        assert anchor.get("requirement_id") is None
+        assert anchor["location_type"] == "exact"
+        assert anchor["bbox"] == {
+            "x": 10.0, "y": 20.0, "width": 118.0, "height": 12.0
+        }
+        assert fabricated.status_code == 200
+        assert all(
+            item["quote_text"] != "The motor shall be IP66 rated."
+            for item in fabricated.json()
+        )
+
+    @pytest.mark.parametrize("cleaned_text_matches_quote", [False, True])
+    def test_image_audit_quote_opens_with_bounded_approximate_highlight(
+        self, cleaned_text_matches_quote: bool
+    ):
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=3)
+        quote = "Maximum operating temperature shall be 90 °C."
+        bbox = {"x": 30.0, "y": 40.0, "width": 120.0, "height": 20.0}
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + struct.pack(">IIBBBBB", 300, 100, 8, 6, 0, 0, 0)
+            + b"\x00\x00\x00\x00"
+        )
+
+        async def _persist_visual_finding():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id,
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                page = (
+                    await session.execute(
+                        select(DocumentPage).where(
+                            DocumentPage.document_version_id == version.id,
+                            DocumentPage.page_number == 1,
+                        )
+                    )
+                ).scalar_one()
+                page.cleaned_text = (
+                    quote if cleaned_text_matches_quote else "Unclear OCR output"
+                )
+                run = ProcessingRun(
+                    document_version_id=version.id,
+                    run_id=uuid.uuid4(),
+                    attempt=1,
+                    stage=ProcessingStage.EXTRACT,
+                    status=RunStatus.COMPLETED,
+                )
+                session.add(run)
+                await session.flush()
+                session.add(
+                    ExtractionDiagnostics(
+                        document_version_id=version.id,
+                        processing_run_id=run.id,
+                        total_windows=1,
+                        rejection_breakdown={},
+                    )
+                )
+                session.add(
+                    ExtractionWindowAudit(
+                        document_version_id=version.id,
+                        processing_run_id=run.id,
+                        chunk_id="visual-window",
+                        window_index=1,
+                        call_status="completed",
+                        candidate_count=0,
+                        ocr_warning=True,
+                        source_spans=[{"page_number": 1, "char_start": 0, "char_end": 18}],
+                        coverage_status="completed",
+                        potential_omissions=[
+                            {
+                                "page_number": 1,
+                                "source_quote": quote,
+                                "bbox": bbox,
+                            }
+                        ],
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_persist_visual_finding())
+        _make_test_storage()
+        _put_image_sync("rendered/page_1.png", png)
+        try:
+            response = client.get(
+                f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1/sources",
+                params={"quote": quote},
+                headers=_headers(user_id, org_id),
+            )
+        finally:
+            _clear_test_storage()
+
+        assert response.status_code == 200
+        anchor = next(item for item in response.json() if item["quote_text"] == quote)
+        assert anchor.get("requirement_id") is None
+        assert anchor["location_type"] == "approximate"
+        assert anchor["bbox"] == bbox
 
     def test_get_page_sources_empty_for_page_without_anchors(self):
         """GET page sources for a page with no anchors returns empty list."""

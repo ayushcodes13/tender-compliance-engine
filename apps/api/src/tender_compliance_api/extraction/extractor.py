@@ -35,7 +35,7 @@ Behaviour mapped to CP28:
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
@@ -48,6 +48,11 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow
+from tender_compliance_api.extraction.coverage_audit import (
+    audit_page_image_coverage,
+    audit_window_coverage,
+    quote_is_present_in_source,
+)
 from tender_compliance_api.extraction.prompts import (
     EXTRACTION_SYSTEM_PROMPT,
     PROMPT_VERSION,
@@ -116,6 +121,8 @@ class WindowExtractionResult:
     candidate_count: int
     ocr_warning: bool
     source_spans: list[dict[str, Any]]
+    coverage_status: str = "not_run"
+    potential_omissions: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _compose_input(window: SourceWindow) -> str:
@@ -211,6 +218,9 @@ async def extract_from_windows(
     prompt_version: str = PROMPT_VERSION,
     schema_version: str = SCHEMA_VERSION,
     enable_verbatim_fallback: bool = False,
+    enable_obligation_coverage_audit: bool = False,
+    coverage_page_images: Mapping[int, bytes] | None = None,
+    coverage_page_texts: Mapping[int, str] | None = None,
 ) -> ExtractionOutcome:
     """Extract requirement candidates from a list of source windows.
 
@@ -245,6 +255,37 @@ async def extract_from_windows(
     candidates: list[CandidateRecord] = []
     llm_calls: list[LlmCallResult] = []
     window_results: list[WindowExtractionResult] = []
+
+    async def audit_text_coverage(
+        window: SourceWindow, emitted_quotes: list[str]
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Audit one source-bounded text window and retain its page if unique."""
+        result = await audit_window_coverage(window.text, emitted_quotes, llm)
+        await log_call(result.call)
+        llm_calls.append(result.call)
+        page_texts = coverage_page_texts or {}
+        page_numbers = sorted(
+            {
+                source.page_number
+                for source in window.sources
+                if source.page_number is not None
+            }
+        )
+        text_omissions: list[dict[str, Any]] = []
+        for quote in result.potential_omissions:
+            matches = [
+                page_number
+                for page_number in page_numbers
+                if page_number in page_texts
+                and quote_is_present_in_source(page_texts[page_number], quote)
+            ]
+            text_omissions.append(
+                {
+                    "page_number": matches[0] if len(matches) == 1 else None,
+                    "source_quote": quote,
+                }
+            )
+        return result.status, text_omissions
 
     for window_index, window in enumerate(windows, start=1):
         candidate_start = len(candidates)
@@ -285,6 +326,12 @@ async def extract_from_windows(
             )
             await log_call(failed)
             llm_calls.append(failed)
+            coverage_status = "not_run"
+            failed_omissions: list[dict[str, Any]] = []
+            if enable_obligation_coverage_audit and not window.ocr_warning:
+                coverage_status, failed_omissions = await audit_text_coverage(
+                    window, []
+                )
             window_results.append(
                 WindowExtractionResult(
                     chunk_id=window.chunk_id,
@@ -293,6 +340,8 @@ async def extract_from_windows(
                     candidate_count=0,
                     ocr_warning=window.ocr_warning,
                     source_spans=source_spans,
+                    coverage_status=coverage_status,
+                    potential_omissions=failed_omissions,
                 )
             )
             continue
@@ -360,6 +409,18 @@ async def extract_from_windows(
                             )
             candidates.append(record)
 
+        coverage_status = "not_run"
+        window_omissions: list[dict[str, Any]] = []
+        if enable_obligation_coverage_audit and not window.ocr_warning:
+            emitted_quotes = [
+                record.raw_source
+                for record in candidates[candidate_start:]
+                if record.is_valid
+            ]
+            coverage_status, window_omissions = await audit_text_coverage(
+                window, emitted_quotes
+            )
+
         window_results.append(
             WindowExtractionResult(
                 chunk_id=window.chunk_id,
@@ -370,8 +431,88 @@ async def extract_from_windows(
                 candidate_count=len(candidates) - candidate_start,
                 ocr_warning=window.ocr_warning,
                 source_spans=source_spans,
+                coverage_status=coverage_status,
+                potential_omissions=window_omissions,
             )
         )
+
+    if enable_obligation_coverage_audit:
+        page_to_windows: dict[int, list[int]] = {}
+        for index, window in enumerate(windows):
+            if not window.ocr_warning:
+                continue
+            for source in window.sources:
+                if source.page_number is not None:
+                    page_to_windows.setdefault(source.page_number, []).append(index)
+
+        page_results: dict[int, tuple[str, list[dict[str, Any]]]] = {}
+        for page_number in sorted(page_to_windows):
+            page_text = (coverage_page_texts or {}).get(page_number, "")
+            emitted_page_quotes = [
+                record.raw_source
+                for record in candidates
+                if record.is_valid
+                and page_text
+                and quote_is_present_in_source(page_text, record.raw_source)
+                and any(
+                    isinstance(source, dict)
+                    and source.get("page_number") == page_number
+                    for source in record.sources_json
+                )
+            ]
+            audit = await audit_page_image_coverage(
+                page_number,
+                (coverage_page_images or {}).get(page_number),
+                emitted_page_quotes,
+                llm,
+            )
+            await log_call(audit.call)
+            llm_calls.append(audit.call)
+            page_bboxes = dict(audit.potential_omission_bboxes)
+            page_findings = [
+                {
+                    "page_number": page_number,
+                    "source_quote": quote,
+                    **(
+                        {"bbox": page_bboxes[quote]}
+                        if quote in page_bboxes
+                        else {}
+                    ),
+                }
+                for quote in audit.potential_omissions
+            ]
+            page_results[page_number] = (audit.status, page_findings)
+
+        for index, window in enumerate(windows):
+            if not window.ocr_warning:
+                continue
+            pages = sorted(
+                {
+                    source.page_number
+                    for source in window.sources
+                    if source.page_number is not None
+                }
+            )
+            results = [page_results[page] for page in pages if page in page_results]
+            statuses = [status for status, _findings in results]
+            status = (
+                "completed"
+                if statuses and all(item == "completed" for item in statuses)
+                else next(
+                    (item for item in ("failed", "invalid", "uncertain") if item in statuses),
+                    "failed",
+                )
+            )
+            findings = [
+                finding
+                for _page_status, page_findings in results
+                for finding in page_findings
+            ]
+            window_results[index] = replace(
+                window_results[index],
+                coverage_status=status,
+                potential_omissions=findings,
+            )
 
     return ExtractionOutcome(
         candidates=candidates,
