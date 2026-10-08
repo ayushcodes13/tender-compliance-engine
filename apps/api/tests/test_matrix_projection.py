@@ -301,8 +301,8 @@ class TestMatrixProjection:
         assert row.mandatory is None
         assert row.user_notes is None
 
-    def test_multi_source_lowest_page(self):
-        """When a requirement has multiple sources, the lowest page is used."""
+    def test_exact_source_anchor_precedes_lower_approximate_page(self):
+        """The matrix points to the page containing the literal quote."""
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
 
         async def _setup():
@@ -323,6 +323,8 @@ class TestMatrixProjection:
                         document_version_id=version.id,
                         page_number=5,
                         clause_number="5.2",
+                        location_type="exact",
+                        source_text="multi-page req",
                     ),
                     RequirementSource(
                         requirement_id=req.id,
@@ -357,7 +359,7 @@ class TestMatrixProjection:
 
         rows = asyncio.run(_project())
         assert len(rows) == 1
-        assert rows[0].source_page == 3  # lowest page wins
+        assert rows[0].source_page == 5  # exact quote beats lower approximate page
 
     def test_multi_category_first_by_order(self):
         """When a requirement has multiple categories, the first by
