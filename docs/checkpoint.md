@@ -3532,7 +3532,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ## Checkpoint 70 — Verbatim validation of generated tender sheets
 
-**Status:** IN PROGRESS — PRs #140–#143 add post-render artifact/source-quote checks, persisted validation states, strict cited-page fallback, OCR highlights, and per-cell validation. PR #150 adds per-window extraction-call outcomes and an independent source-bounded omission scan; PRs #151–#152 fix quote-only citation navigation and cover clipping/missing/duplicate exports across formats. The second pass is not proof of tender-wide completeness. Live-provider plus supplied-example verification remains part of this checkpoint.
+**Status:** IN PROGRESS — PRs #140–#143 add post-render artifact/source-quote checks, persisted validation states, strict cited-page fallback, OCR highlights, and per-cell validation. PR #150 adds per-window extraction-call outcomes and an independent source-bounded omission scan; PRs #151–#152 fix quote-only citation navigation and cover clipping/missing/duplicate exports across formats. PR #154 preserves Unicode in final PDF exports, and PR #155 covers schema, provider, and image-retrieval failures. The second pass is not proof of tender-wide completeness. Live-provider plus supplied-example verification remains part of this checkpoint.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 
@@ -3553,7 +3553,8 @@ If the product direction changes, update this file through a focused PR, explain
 - [ ] Deterministic validation runs first; a bounded, schema-strict page-image fallback is used only for uncertain source text and preserves abstention on errors or ambiguity.
 - [x] The result is persisted and visible in export history/UI, and invalid/review-required artifacts cannot be represented as fully validated.
 - [ ] Citation controls expose the cited excerpt, open the exact tender version and page, and emphasize the selected quote in the viewer without upgrading approximate anchors.
-- [ ] Tests cover clipping, missing/duplicate rows, exact and mismatched text, OCR uncertainty, malformed/provider-failed fallback, source scoping, and citation navigation/highlighting.
+- [x] Tests cover clipping, missing/duplicate rows, exact and mismatched text, OCR uncertainty, malformed/provider-failed fallback, source scoping, and citation navigation/highlighting.
+  - Coverage includes exact, uncertain, malformed, provider-failed, and image-unavailable outcomes; only an exact cited-page result resolves a row. Provider tests use fakes and do not establish live visual accuracy.
 - [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.
 
 ### Guardrail
