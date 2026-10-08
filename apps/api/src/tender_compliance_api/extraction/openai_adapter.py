@@ -40,6 +40,41 @@ _DEFAULT_TIMEOUT_S: float = 30.0
 _DEFAULT_MAX_RETRIES: int = 2
 
 
+def _completion_options(config: LlmCallConfig) -> dict[str, object]:
+    """Return the existing completion options before provider negotiation."""
+    options: dict[str, object] = {}
+    if config.max_tokens is not None:
+        options["max_tokens"] = config.max_tokens
+    if config.temperature is not None:
+        options["temperature"] = config.temperature
+    return options
+
+
+def _adapt_unsupported_option(error: Exception, options: dict[str, object]) -> bool:
+    """Adapt only explicit 400 unsupported-parameter responses from a provider.
+
+    Some Foundry deployments are configured with an alias that does not expose
+    the underlying model family. Use the provider's typed error fields instead
+    of guessing from the alias. At most two distinct parameter adjustments are
+    possible: ``max_tokens`` to ``max_completion_tokens``, then default
+    temperature by omitting the override.
+    """
+    if getattr(error, "status_code", None) != 400:
+        return False
+
+    code = getattr(error, "code", None)
+    parameter = getattr(error, "param", None)
+    if parameter == "max_tokens" and code == "unsupported_parameter":
+        value = options.pop("max_tokens", None)
+        if value is None or "max_completion_tokens" in options:
+            return False
+        options["max_completion_tokens"] = value
+        return True
+    if parameter == "temperature" and code in {"unsupported_value", "unsupported_parameter"}:
+        return options.pop("temperature", None) is not None
+    return False
+
+
 class OpenAiLlmAdapter(LlmAdapter):
     """OpenAI (default ``gpt-4o``) structured-extraction adapter."""
 
@@ -53,12 +88,8 @@ class OpenAiLlmAdapter(LlmAdapter):
         settings = get_settings()
         self._model: str = model or settings.openai_model
         # Empty base_url → OpenAI default endpoint.
-        self._base_url: str | None = base_url or (
-            settings.openai_base_url or None
-        )
-        self._api_key: str | None = api_key or (
-            settings.openai_api_key or None
-        )
+        self._base_url: str | None = base_url or (settings.openai_base_url or None)
+        self._api_key: str | None = api_key or (settings.openai_api_key or None)
 
     @property
     def provider(self) -> str:
@@ -104,17 +135,19 @@ class OpenAiLlmAdapter(LlmAdapter):
         ]
         timeout = config.timeout_s or _DEFAULT_TIMEOUT_S
         max_retries = config.max_retries or _DEFAULT_MAX_RETRIES
+        options = _completion_options(config)
+        compatibility_adjustments = 0
+        failed_attempts = 0
 
         start = time.monotonic()
-        for _attempt in range(1, max_retries + 1):
+        while failed_attempts < max_retries and compatibility_adjustments <= 2:
             try:
                 completion = await asyncio.wait_for(
                     client.chat.completions.parse(
                         model=config.model,
                         messages=messages,
                         response_format=response_model,
-                        max_tokens=config.max_tokens,
-                        temperature=config.temperature,
+                        **options,
                     ),
                     timeout=timeout,
                 )
@@ -145,11 +178,15 @@ class OpenAiLlmAdapter(LlmAdapter):
                         f"(finish_reason={call.finish_reason})"
                     )
                 return ExtractResult(response=response, call=call)
-            except Exception:
-                pass
+            except Exception as exc:
+                if compatibility_adjustments < 2 and _adapt_unsupported_option(exc, options):
+                    compatibility_adjustments += 1
+                    continue
+                failed_attempts += 1
 
         raise LlmCallError(
-            f"Provider extraction failed after {max_retries} attempts"
+            "Provider extraction failed after bounded retries and any required "
+            "completion-parameter compatibility adjustments"
         ) from None
 
     async def extract_with_image(
@@ -173,25 +210,25 @@ class OpenAiLlmAdapter(LlmAdapter):
                     {"type": "text", "text": user_text},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{image_mime_type};base64,{encoded_image}"
-                        },
+                        "image_url": {"url": f"data:{image_mime_type};base64,{encoded_image}"},
                     },
                 ],
             },
         ]
         timeout = config.timeout_s or _DEFAULT_TIMEOUT_S
         max_retries = config.max_retries or _DEFAULT_MAX_RETRIES
+        options = _completion_options(config)
+        compatibility_adjustments = 0
+        failed_attempts = 0
         start = time.monotonic()
-        for _attempt in range(1, max_retries + 1):
+        while failed_attempts < max_retries and compatibility_adjustments <= 2:
             try:
                 completion = await asyncio.wait_for(
                     client.chat.completions.parse(
                         model=config.model,
                         messages=messages,
                         response_format=response_model,
-                        max_tokens=config.max_tokens,
-                        temperature=config.temperature,
+                        **options,
                     ),
                     timeout=timeout,
                 )
@@ -221,10 +258,14 @@ class OpenAiLlmAdapter(LlmAdapter):
                         f"(finish_reason={call.finish_reason})"
                     )
                 return ExtractResult(response=response, call=call)
-            except Exception:
-                pass
+            except Exception as exc:
+                if compatibility_adjustments < 2 and _adapt_unsupported_option(exc, options):
+                    compatibility_adjustments += 1
+                    continue
+                failed_attempts += 1
         raise LlmCallError(
-            f"Provider image validation failed after {max_retries} attempts"
+            "Provider image validation failed after bounded retries and any "
+            "required completion-parameter compatibility adjustments"
         ) from None
 
 

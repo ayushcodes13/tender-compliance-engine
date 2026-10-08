@@ -3558,6 +3558,8 @@ If the product direction changes, update this file through a focused PR, explain
   - Coverage includes exact, uncertain, malformed, provider-failed, and image-unavailable outcomes; only an exact cited-page result resolves a row. Synthetic native-PDF tests verify unique literal quote geometry and fail closed for changed characters, duplicate quotes, and rotated pages. Provider tests use fakes and do not establish live visual accuracy.
 - [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.
 
+**Provider compatibility note:** The configured Azure Foundry deployment accepts structured outputs and image input through the OpenAI-compatible `/openai/v1` surface, but rejects `max_tokens` and a `temperature` override. Its deployment alias does not identify the underlying model family, so the adapter now responds only to typed HTTP 400 unsupported-parameter errors: it switches to `max_completion_tokens` and then omits the temperature override if required. Other failures remain on the existing bounded retry path. This was verified with a synthetic image only; no tender document was sent. Full supplied-example verification remains open.
+
 ### Guardrail
 
 - “Verbatim validated” means the tender-derived cell's non-whitespace characters match the cited source quote. Layout wrapping may alter whitespace only; paraphrases, omitted characters, changed values/units/operators, and unverified LLM visual readings do not pass.
