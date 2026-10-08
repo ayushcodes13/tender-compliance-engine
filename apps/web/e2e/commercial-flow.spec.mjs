@@ -298,6 +298,29 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
       if (path === "/projects/project-1/submissions/" && method === "GET") {
         return json([]);
       }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix/exports` &&
+        method === "POST" &&
+        url.searchParams.get("template") === "vendor-response"
+      ) {
+        return json({
+          id: "vendor-response-export-1",
+          status: "completed",
+          export_format: "docx",
+        });
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/exports/vendor-response-export-1` &&
+        method === "GET"
+      ) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          body: Buffer.from("browser smoke DOCX"),
+        });
+      }
 
       return json({ detail: `Unhandled browser smoke route: ${method} ${path}` }, 404);
     },
@@ -380,6 +403,11 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByRole("button", { name: "Export XLSX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export DOCX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
+  const [vendorSheetDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
+  ]);
+  expect(vendorSheetDownload.suggestedFilename()).toBe("tender_vendor_response_v1.docx");
   await expect(page.getByRole("button", { name: "Create draft submission" })).toBeVisible();
 
   const sourceLink = page.getByRole("link", {

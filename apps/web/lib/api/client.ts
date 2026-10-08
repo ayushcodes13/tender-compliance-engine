@@ -1258,6 +1258,16 @@ export const api = {
       { method: "POST" }
     ).then((r) => expectJson<ExportArtifactResponse>(r)),
 
+  createVendorResponseSheetExport: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ) =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/final-matrix/exports?fmt=docx&template=vendor-response`,
+      { method: "POST" }
+    ).then((r) => expectJson<ExportArtifactResponse>(r)),
+
   downloadExport: async (
     projectId: string,
     documentId: string,

@@ -28,6 +28,7 @@ from tender_compliance_api.db.models import (
     Project,
     ProjectStatus,
     Requirement,
+    RequirementSource,
     TenderDocument,
     User,
 )
@@ -258,6 +259,67 @@ class TestDocxExport:
         with zipfile.ZipFile(BytesIO(docx_bytes)) as zf:
             names = zf.namelist()
             assert "word/document.xml" in names
+
+    def test_vendor_response_sheet_keeps_full_text_and_blank_response_fields(self):
+        (user_id, org_id, proj_id, doc_id, ver, ver_id, req_id) = (
+            _build_org_project_with_req()
+        )
+        full_text = "The complete tender specification " + ("with all conditions " * 40)
+
+        async def _add_source():
+            async with _session_cm() as session:
+                req = await session.get(Requirement, req_id)
+                assert req is not None
+                req.normalized_text = full_text
+                req.clause_number = "4.2.1"
+                session.add(
+                    RequirementSource(
+                        requirement_id=req_id,
+                        document_version_id=ver_id,
+                        page_number=12,
+                        clause_number="4.2.1",
+                        location_type="exact",
+                        source_text=full_text,
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_add_source())
+        response = client.post(
+            f"/projects/{proj_id}/documents/{doc_id}/versions/{ver}/final-matrix/exports",
+            headers=_headers(user_id, org_id),
+            params={"fmt": "docx", "template": "vendor-response"},
+        )
+        assert response.status_code == 200
+        artifact = response.json()
+        download = client.get(
+            f"/projects/{proj_id}/documents/{doc_id}/versions/{ver}/exports/{artifact['id']}",
+            headers=_headers(user_id, org_id),
+        )
+        assert download.status_code == 200
+
+        from docx import Document
+
+        exported = Document(BytesIO(download.content))
+        rows = exported.tables[0].rows
+        assert rows[0].cells[1].text == "Tender requirement"
+        assert rows[1].cells[1].text == full_text
+        assert rows[1].cells[2].text == "4.2.1"
+        assert rows[1].cells[3].text == "12"
+        assert rows[1].cells[4].text == "Unreviewed"
+        assert rows[1].cells[5].text == ""
+        assert rows[1].cells[6].text == ""
+
+    def test_vendor_response_template_rejects_non_docx(self):
+        (user_id, org_id, proj_id, doc_id, ver, _ver_id, _req_id) = (
+            _build_org_project_with_req()
+        )
+        response = client.post(
+            f"/projects/{proj_id}/documents/{doc_id}/versions/{ver}/final-matrix/exports",
+            headers=_headers(user_id, org_id),
+            params={"fmt": "xlsx", "template": "vendor-response"},
+        )
+        assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------

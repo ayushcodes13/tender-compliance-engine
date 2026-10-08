@@ -3469,3 +3469,31 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 The plan is complete only when all defined checkpoints are checked and crossed out, the relevant end-to-end acceptance tests pass, release gates meet conservative quality/security thresholds, and every final compliance statement is either evidence-backed or explicitly unresolved.
 
 If the product direction changes, update this file through a focused PR, explain why, and continue from the new first unchecked checkpoint.
+
+## ✅ ~~Checkpoint 68 — Tender-derived vendor response sheet~~
+
+**Status:** DONE — added a separate blank vendor response DOCX export.
+
+**Plain-English outcome:** After reviewing extracted tender requirements, a user can export a DOCX response sheet for an OEM to complete. This is a blank response template; it does not assess or claim OEM compliance.
+
+### Scope
+
+1. Export each current, non-superseded requirement in canonical order without truncating its wording.
+2. Preserve known clause and page locations and show the requirement review state.
+3. Leave OEM compliance and deviation/remarks cells empty.
+4. Keep the existing evidence-backed final matrix export unchanged and separate.
+
+### This checkpoint is complete only when
+
+- [x] A user can generate and download a vendor response DOCX from the compliance sheet UI.
+- [x] Every exported requirement is present exactly as stored, including long multi-line text.
+- [x] Known source clause/page and review state are shown; unknown locations are not synthesized.
+- [x] OEM response cells are blank and no compliance status is added.
+- [x] Tests cover full text retention, provenance fields, blank response cells, and the export route.
+- [x] DOCX rendering is visually reviewed and relevant checks pass.
+
+**Implementation note:** Added a separate Vendor Response DOCX export beside final compliance exports. It uses canonical Phase 1 requirements, retains full text and available source locations, shows review state, and leaves OEM response columns blank. It stores an immutable export artifact and emits a distinct audit action. Verification: `pytest tests/test_final_export.py` (12 passed), strict mypy, Ruff, web typecheck/build, the commercial-flow browser test (including download), and rendered DOCX visual review passed.
+
+### Guardrail
+
+- This template is not a final assessment or submission. It must not pre-fill OEM compliance, deviation, evidence, or assessment status.

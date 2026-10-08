@@ -137,6 +137,39 @@ export function FinalMatrixView(props: {
     }
   };
 
+  const exportVendorResponseSheet = async () => {
+    setBusy("export-vendor-response");
+    setError(null);
+    try {
+      const artifact = await api.createVendorResponseSheetExport(
+        projectId,
+        documentId,
+        version
+      );
+      if (artifact.status !== "completed") {
+        throw new Error(artifact.error_message ?? "Export generation failed");
+      }
+      const blob = await api.downloadExport(
+        projectId,
+        documentId,
+        version,
+        artifact.id
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `tender_vendor_response_v${version}.docx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (loading) {
     return <div className="matrix-loading"><RefreshCw size={20} className="spin" /> Loading final compliance sheet…</div>;
   }
@@ -285,6 +318,22 @@ export function FinalMatrixView(props: {
           </button>
         ))}
         </div>
+      </div>
+
+      <div className="export-panel" style={{ marginTop: 12 }}>
+        <div>
+          <strong>Prepare a vendor response sheet</strong>
+          <p>Exports the tender requirements with blank OEM compliance and deviation fields.</p>
+        </div>
+        <button
+          className="button button-secondary"
+          type="button"
+          disabled={busy !== null}
+          onClick={() => void exportVendorResponseSheet()}
+        >
+          <Download size={14} aria-hidden="true" />
+          {busy === "export-vendor-response" ? "Generating…" : "Export vendor response DOCX"}
+        </button>
       </div>
 
       <div className="detail-panel" style={{ marginTop: 20 }}>
