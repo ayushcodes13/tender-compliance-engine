@@ -12,7 +12,7 @@ const item = {
 
 export function WorkflowSection() {
   return (
-    <section className="w-full border-y border-border bg-background py-20 md:py-28">
+    <section className="landing-section-premium w-full border-y border-border bg-background py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-12 text-center"
@@ -21,7 +21,7 @@ export function WorkflowSection() {
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
         >
-          <h2 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
+          <h2 className="font-display text-3xl text-text-primary sm:text-4xl">
             From Tender to Compliance Sheet
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-text-secondary">
@@ -30,7 +30,7 @@ export function WorkflowSection() {
         </motion.div>
 
         <motion.div
-          className="overflow-hidden rounded-xl border border-border bg-surface"
+          className="premium-workflow-card overflow-hidden border border-border bg-surface"
           initial="initial"
           whileInView="animate"
           viewport={{ once: true, amount: 0.2 }}
@@ -49,7 +49,7 @@ export function WorkflowSection() {
               <motion.div
                 key={step.number}
                 className={cn(
-                  "flex items-start gap-5 border-b border-border p-6 last:border-b-0",
+                  "premium-workflow-row flex items-start gap-5 border-b border-border p-6 last:border-b-0",
                   "transition-colors duration-200 hover:bg-surface-elevated",
                 )}
                 variants={{

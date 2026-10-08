@@ -41,7 +41,8 @@
   --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-plus-jakarta);
-  --font-display: var(--font-plus-jakarta);
+  --font-editorial: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Baskerville, Georgia, "Times New Roman", serif;
+  --font-display: var(--font-editorial);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
@@ -119,6 +120,7 @@
   --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-plus-jakarta);
+  --font-editorial: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Baskerville, Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
@@ -172,7 +174,7 @@
   --primary: var(--color-accent);
   --accent: var(--color-accent);
   --sans: var(--font-sans);
-  --serif: var(--font-sans);
+  --serif: var(--font-editorial);
 }
 
 html,
@@ -2394,5 +2396,391 @@ a.project-flow-step:hover {
 
   .review-flow-strip {
     padding: 0 10px;
+  }
+}
+
+
+/* ===========================================================================
+   Editorial premium polish — light technical palette retained
+   =========================================================================== */
+
+:root {
+  --premium-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --premium-glass: rgba(255, 255, 255, 0.84);
+  --premium-glass-strong: rgba(255, 255, 255, 0.94);
+  --premium-border: rgba(197, 206, 216, 0.78);
+  --premium-shadow: 0 22px 60px rgba(23, 32, 51, 0.10);
+  --premium-shadow-soft: 0 12px 32px rgba(23, 32, 51, 0.07);
+}
+
+.font-display,
+.editorial-heading,
+.page-heading h1 {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+.landing-page {
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--color-background);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(23, 32, 51, 0.055) 1px, transparent 1.2px);
+  background-size: 32px 32px;
+  scroll-behavior: smooth;
+}
+
+.landing-navbar {
+  background: rgba(244, 246, 248, 0.86) !important;
+  border-color: rgba(197, 206, 216, 0.74) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.landing-brand {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.landing-nav-link {
+  font-size: 0.69rem !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.landing-pill-cta {
+  border-radius: 999px !important;
+  padding-inline: 1.25rem !important;
+  box-shadow: 0 8px 24px rgba(36, 87, 214, 0.14);
+  transition:
+    transform 240ms var(--premium-ease),
+    box-shadow 240ms var(--premium-ease),
+    background 240ms var(--premium-ease);
+}
+
+.landing-pill-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(36, 87, 214, 0.18);
+}
+
+.landing-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(244, 246, 248, 0.80), rgba(244, 246, 248, 0.92)),
+    radial-gradient(circle at 1px 1px, rgba(23, 32, 51, 0.075) 1px, transparent 1.3px);
+  background-size: auto, 32px 32px;
+}
+
+.landing-hero::before {
+  position: absolute;
+  z-index: -1;
+  top: 8%;
+  left: 50%;
+  width: min(72vw, 980px);
+  height: 560px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(36, 87, 214, 0.12), rgba(36, 87, 214, 0.025) 42%, transparent 70%);
+  content: "";
+  filter: blur(18px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.landing-hero-card {
+  position: relative;
+  border: 1px solid var(--premium-border);
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow: var(--premium-shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.premium-eyebrow,
+.eyebrow,
+.detail-label {
+  font-size: 0.66rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase;
+}
+
+.landing-hero-title {
+  font-size: clamp(3rem, 7vw, 6rem) !important;
+  line-height: 0.98 !important;
+  text-wrap: balance;
+}
+
+.landing-section-premium {
+  position: relative;
+  background: transparent !important;
+}
+
+.premium-feature-card,
+.premium-benefit-card,
+.premium-fact-card {
+  border: 1px solid var(--premium-border) !important;
+  border-radius: 22px;
+  background: var(--premium-glass);
+  padding: 24px !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, var(--shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 280ms var(--premium-ease),
+    border-color 280ms var(--premium-ease),
+    box-shadow 280ms var(--premium-ease),
+    background 280ms var(--premium-ease);
+}
+
+.premium-feature-card:hover,
+.premium-benefit-card:hover,
+.premium-fact-card:hover {
+  border-color: var(--color-border-hover) !important;
+  background: var(--premium-glass-strong);
+  box-shadow: var(--premium-shadow-soft);
+  transform: translateY(-3px);
+}
+
+.premium-feature-card > div:first-child,
+.premium-benefit-card > div:first-child {
+  transition: transform 280ms var(--premium-ease);
+}
+
+.premium-feature-card:hover > div:first-child,
+.premium-benefit-card:hover > div:first-child {
+  transform: scale(1.08);
+}
+
+.premium-workflow-card {
+  overflow: hidden;
+  border-radius: 26px !important;
+  background: var(--premium-glass) !important;
+  box-shadow: var(--premium-shadow-soft);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.premium-workflow-row {
+  transition:
+    background 220ms var(--premium-ease),
+    transform 220ms var(--premium-ease);
+}
+
+.premium-workflow-row:hover {
+  background: rgba(237, 243, 255, 0.62) !important;
+  transform: translateX(3px);
+}
+
+.premium-faq-item {
+  border: 1px solid var(--premium-border) !important;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 20px 22px !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.premium-footer {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.app-frame {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(23, 32, 51, 0.045) 1px, transparent 1.2px);
+  background-size: 32px 32px;
+}
+
+.app-rail {
+  background: rgba(247, 248, 250, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.app-surface {
+  border-color: rgba(197, 206, 216, 0.82);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--premium-shadow-soft);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.product-mark {
+  border-radius: 12px;
+  transition:
+    transform 220ms var(--premium-ease),
+    box-shadow 220ms var(--premium-ease);
+}
+
+.product-brand:hover .product-mark {
+  box-shadow: 0 10px 28px rgba(36, 87, 214, 0.14);
+  transform: translateY(-1px);
+}
+
+.product-brand-copy strong {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 0.98rem;
+  letter-spacing: -0.02em;
+}
+
+.rail-link,
+.button,
+.project-tab,
+.topnav-tab,
+.icon-button,
+.breadcrumb-back {
+  transition:
+    background 220ms var(--premium-ease),
+    border-color 220ms var(--premium-ease),
+    color 220ms var(--premium-ease),
+    transform 220ms var(--premium-ease),
+    box-shadow 220ms var(--premium-ease);
+}
+
+.rail-link {
+  border-radius: 10px;
+}
+
+.rail-link:hover,
+.button:hover:not(:disabled),
+.project-tab:hover,
+.topnav-tab:hover,
+.icon-button:hover,
+.breadcrumb-back:hover {
+  transform: translateY(-1px);
+}
+
+.page-heading {
+  animation: premium-rise 420ms var(--premium-ease) both;
+}
+
+.page-heading h1 {
+  font-size: clamp(2rem, 3.2vw, 3rem);
+  line-height: 1.05;
+}
+
+.detail-panel,
+.doclist-section,
+.upload-section,
+.export-panel,
+.compliance-summary-card,
+.empty-state,
+.empty-list {
+  border-radius: 18px !important;
+}
+
+.detail-panel,
+.doclist-section,
+.export-panel,
+.compliance-summary-card {
+  box-shadow: var(--shadow-sm);
+}
+
+.upload-dropzone {
+  border-radius: 20px !important;
+  background: rgba(248, 250, 252, 0.78);
+  transition:
+    border-color 240ms var(--premium-ease),
+    background 240ms var(--premium-ease),
+    transform 240ms var(--premium-ease),
+    box-shadow 240ms var(--premium-ease);
+}
+
+.upload-dropzone:hover:not(.disabled),
+.upload-dropzone.drag-over {
+  background: rgba(237, 243, 255, 0.72);
+  box-shadow: 0 16px 36px rgba(23, 32, 51, 0.07);
+  transform: translateY(-2px);
+}
+
+.section-title-row h2,
+.detail-section-title {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.project-card-premium {
+  border-radius: 18px !important;
+  background: var(--premium-glass) !important;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 260ms var(--premium-ease),
+    border-color 260ms var(--premium-ease),
+    box-shadow 260ms var(--premium-ease),
+    background 260ms var(--premium-ease) !important;
+}
+
+.project-card-premium:hover {
+  background: var(--premium-glass-strong) !important;
+  box-shadow: var(--premium-shadow-soft);
+  transform: translateY(-3px);
+}
+
+.modal-premium {
+  border-radius: 22px !important;
+  background: rgba(255,255,255,0.96) !important;
+  box-shadow: var(--premium-shadow) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+@keyframes premium-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-page {
+    scroll-behavior: auto;
+  }
+
+  .page-heading,
+  .premium-feature-card,
+  .premium-benefit-card,
+  .premium-fact-card,
+  .project-card-premium,
+  .button,
+  .rail-link,
+  .upload-dropzone {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .landing-hero-card {
+    border-radius: 24px;
+  }
+
+  .landing-hero-title {
+    font-size: clamp(2.6rem, 13vw, 4.25rem) !important;
+  }
+
+  .app-surface {
+    border-radius: 14px;
   }
 }

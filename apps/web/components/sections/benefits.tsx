@@ -12,7 +12,7 @@ const item = {
 
 export function BenefitsSection() {
   return (
-    <section className="w-full bg-surface py-20 md:py-28">
+    <section className="landing-section-premium w-full bg-surface py-20 md:py-28">
       <div className="container mx-auto px-6 md:px-8">
         <motion.div
           className="mb-12 text-center"
@@ -21,7 +21,7 @@ export function BenefitsSection() {
           viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
         >
-          <h2 className="font-display text-3xl font-bold tracking-tight text-text-primary sm:text-4xl">
+          <h2 className="font-display text-3xl text-text-primary sm:text-4xl">
             What the engine guarantees
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-text-secondary">
@@ -47,8 +47,8 @@ export function BenefitsSection() {
               <motion.div
                 key={benefit.title}
                 className={cn(
-                  "flex items-start gap-4 border-t border-border pt-5",
-                  "transition-colors duration-200 hover:border-accent",
+                  "premium-benefit-card flex items-start gap-4",
+                  "hover:border-accent",
                 )}
                 variants={item}
                 transition={{
