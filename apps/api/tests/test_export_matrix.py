@@ -298,6 +298,19 @@ class TestExportGeneration:
             ("quote", "source_quote_not_found")
         ]
 
+    def test_source_quote_check_rejects_changed_spacing_around_hyphen(self):
+        source_quote = "All pre -installation requirements are included."
+        changed_quote = source_quote.replace("pre -installation", "pre-installation")
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("hyphenated-term", changed_quote)],
+            {"hyphenated-term": [source_quote]},
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("hyphenated-term", "source_quote_not_found")
+        ]
+
     def test_export_does_not_accept_source_from_another_version(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
