@@ -14,7 +14,9 @@ import asyncio
 import contextlib
 import struct
 import uuid
+from pathlib import Path
 
+import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -42,6 +44,7 @@ from tender_compliance_api.db.session import get_session
 from tender_compliance_api.main import app
 from tender_compliance_api.routes.source_viewer import (
     _ocr_quote_bbox,
+    _pdf_quote_bbox,
     get_storage_adapter,
 )
 from tender_compliance_api.storage.fake import FakeStorageAdapter
@@ -387,6 +390,65 @@ class TestPageImage:
 
 
 class TestSourceAnchors:
+    def test_pdf_quote_bbox_maps_unique_literal_quote_and_fails_closed(self):
+        pdf = pymupdf.open()
+        page = pdf.new_page(width=300, height=200)
+        fontfile = (
+            Path(__file__).parent.parent
+            / "src/tender_compliance_api/export/fonts/DejaVuSans.ttf"
+        )
+        page.insert_text(
+            (30, 60),
+            "Wafer diameter shall be 4” minimum.",
+            fontname="dejavu",
+            fontfile=str(fontfile),
+        )
+        rendered_png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
+
+        bbox = _pdf_quote_bbox(pdf, 1, "Wafer diameter shall be 4” minimum.", rendered_png)
+
+        assert bbox is not None
+        assert bbox["x"] > 0
+        assert bbox["y"] > 0
+        assert bbox["width"] > 0
+        assert bbox["height"] > 0
+        assert _pdf_quote_bbox(
+            pdf, 1, 'Wafer diameter shall be 4" minimum.', rendered_png
+        ) is None
+
+        page.insert_text(
+            (30, 100),
+            "Wafer diameter shall be 4” minimum.",
+            fontname="dejavu",
+            fontfile=str(fontfile),
+        )
+        duplicated_png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
+        assert _pdf_quote_bbox(
+            pdf, 1, "Wafer diameter shall be 4” minimum.", duplicated_png
+        ) is None
+        pdf.close()
+
+    def test_pdf_quote_bbox_does_not_guess_rotated_page_geometry(self):
+        pdf = pymupdf.open()
+        page = pdf.new_page(width=300, height=200)
+        fontfile = (
+            Path(__file__).parent.parent
+            / "src/tender_compliance_api/export/fonts/DejaVuSans.ttf"
+        )
+        page.insert_text(
+            (30, 60),
+            "Minimum accuracy shall be ±2 mm.",
+            fontname="dejavu",
+            fontfile=str(fontfile),
+        )
+        page.set_rotation(90)
+        rendered_png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
+
+        assert _pdf_quote_bbox(
+            pdf, 1, "Minimum accuracy shall be ±2 mm.", rendered_png
+        ) is None
+        pdf.close()
+
     def test_ocr_quote_bbox_rejects_ambiguous_or_changed_words(self):
         png = (
             b"\x89PNG\r\n\x1a\n"
