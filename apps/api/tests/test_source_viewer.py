@@ -44,6 +44,7 @@ from tender_compliance_api.db.session import get_session
 from tender_compliance_api.main import app
 from tender_compliance_api.routes.source_viewer import (
     _ocr_quote_bbox,
+    _page_quote_fragment,
     _pdf_quote_bbox,
     get_storage_adapter,
 )
@@ -55,6 +56,20 @@ _session_cm = contextlib.asynccontextmanager(get_session)
 
 # Shared fake storage for tests that override the dependency.
 _test_storage: FakeStorageAdapter | None = None
+
+
+def test_page_quote_fragment_uses_exact_page_excerpt_without_upgrading_approximate():
+    raw_source = "first page phrase\nsecond page phrase"
+    assert _page_quote_fragment(
+        source_text="second page phrase",
+        raw_source=raw_source,
+        location_type="exact",
+    ) == "second page phrase"
+    assert _page_quote_fragment(
+        source_text="second page phrase",
+        raw_source=raw_source,
+        location_type="approximate",
+    ) == raw_source
 
 
 def _make_test_storage() -> FakeStorageAdapter:

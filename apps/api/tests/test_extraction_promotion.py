@@ -193,6 +193,46 @@ def test_multiple_fragments_resolve_independently() -> None:
     assert resolved[1].char_start == text2.find(raw)
 
 
+def test_multi_page_window_quote_resolves_to_page_local_fragments() -> None:
+    page_one = "Prefix: Lead words"
+    page_two = "continued text. Suffix"
+    window = "Lead words\ncontinued text."
+    raw = "Lead words\ncontinued text."
+    sources = [
+        {
+            "page_number": 4,
+            "source_text": window,
+            "window_char_start": 0,
+            "window_char_end": len("Lead words"),
+            "page_source_text": page_one,
+            "char_start": 8,
+            "char_end": len(page_one),
+        },
+        {
+            "page_number": 5,
+            "source_text": window,
+            "window_char_start": len("Lead words\n"),
+            "window_char_end": len(window),
+            "page_source_text": page_two,
+            "char_start": 0,
+            "char_end": len("continued text."),
+        },
+    ]
+
+    resolved = resolve_sources(raw, sources)
+
+    assert [source.page_number for source in resolved] == [4, 5]
+    assert [source.source_text for source in resolved] == [
+        "Lead words",
+        "continued text.",
+    ]
+    assert [(source.char_start, source.char_end) for source in resolved] == [
+        (8, len(page_one)),
+        (0, len("continued text.")),
+    ]
+    assert all(source.location_type == "exact" for source in resolved)
+
+
 def test_fragment_without_page_number_is_skipped() -> None:
     resolved = resolve_sources(
         "raw",

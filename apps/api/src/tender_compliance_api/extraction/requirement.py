@@ -40,6 +40,36 @@ def _normalize_ws(text: str | None) -> str:
     return _WS.sub(" ", text).strip()
 
 
+def _unique_normalized_span(text: str, quote: str) -> tuple[int, int] | None:
+    """Return original text offsets for one unique whitespace-normalized quote."""
+    chars: list[str] = []
+    offsets: list[tuple[int, int]] = []
+    index = 0
+    while index < len(text):
+        if text[index].isspace():
+            end = index + 1
+            while end < len(text) and text[end].isspace():
+                end += 1
+            chars.append(" ")
+            offsets.append((index, end))
+            index = end
+        else:
+            chars.append(text[index])
+            offsets.append((index, index + 1))
+            index += 1
+
+    normalized = "".join(chars)
+    target = _normalize_ws(quote)
+    if not target:
+        return None
+    occurrences = [match.start() for match in re.finditer(re.escape(target), normalized)]
+    if len(occurrences) != 1:
+        return None
+    start = occurrences[0]
+    end = start + len(target)
+    return offsets[start][0], offsets[end - 1][1]
+
+
 @dataclass(frozen=True)
 class ResolvedSource:
     """A single resolved source anchor for a Requirement (CP30)."""
@@ -160,6 +190,63 @@ def resolve_sources(
         src_text = frag.get("source_text")
         char_start = frag.get("char_start")
         char_end = frag.get("char_end")
+
+        window_start = frag.get("window_char_start")
+        window_end = frag.get("window_char_end")
+        page_text = frag.get("page_source_text")
+        if (
+            isinstance(src_text, str)
+            and isinstance(page_text, str)
+            and isinstance(window_start, int)
+            and isinstance(window_end, int)
+            and raw_source
+        ):
+            window_quote_start = src_text.find(raw_source)
+            if window_quote_start >= 0:
+                window_quote_end = window_quote_start + len(raw_source)
+                overlap_start = max(window_quote_start, window_start)
+                overlap_end = min(window_quote_end, window_end)
+                if overlap_start >= overlap_end:
+                    continue
+                page_quote = raw_source[
+                    overlap_start - window_quote_start : overlap_end - window_quote_start
+                ]
+                page_span = _unique_normalized_span(page_text, page_quote)
+                if page_span is not None:
+                    is_multi_page_context = len(_iter_sources(sources_json)) > 1
+                    resolved.append(
+                        ResolvedSource(
+                            page_number=page,
+                            clause_number=frag.get("clause_number"),
+                            char_start=page_span[0],
+                            char_end=page_span[1],
+                            bbox=frag.get("bbox"),
+                            ocr_confidence=frag.get("ocr_confidence"),
+                            location_type=(
+                                LocationType.EXACT.value
+                                if allow_exact
+                                else LocationType.APPROXIMATE.value
+                            ),
+                            source_text=(page_quote if is_multi_page_context else src_text),
+                        )
+                    )
+                    continue
+                # The quote maps to this page's window segment, but an
+                # unambiguous page-local character span could not be proven.
+                # Keep the page reference approximate and preserve the window.
+                resolved.append(
+                    ResolvedSource(
+                        page_number=page,
+                        clause_number=frag.get("clause_number"),
+                        char_start=char_start,
+                        char_end=char_end,
+                        bbox=frag.get("bbox"),
+                        ocr_confidence=frag.get("ocr_confidence"),
+                        location_type=LocationType.APPROXIMATE.value,
+                        source_text=src_text,
+                    )
+                )
+                continue
 
         exact_start: int | None = None
         if allow_exact and src_text is not None and raw_source:

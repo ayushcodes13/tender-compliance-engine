@@ -81,6 +81,23 @@ def _safe_structural_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]
     return safe
 
 
+def _page_quote_fragment(
+    *, source_text: str | None, raw_source: str, location_type: str
+) -> str:
+    """Use an exact page-local excerpt when the persisted anchor has one."""
+    if location_type != "exact" or not source_text:
+        return raw_source
+    normalized_source = re.sub(r"\s+", " ", source_text).strip()
+    normalized_raw = re.sub(r"\s+", " ", raw_source).strip()
+    if (
+        normalized_source
+        and normalized_source != normalized_raw
+        and normalized_source in normalized_raw
+    ):
+        return source_text
+    return raw_source
+
+
 def get_storage_adapter() -> ObjectStorageAdapter:
     """Return the configured storage adapter (FakeStorageAdapter by default).
 
@@ -450,6 +467,11 @@ async def get_page_source_anchors(
             pdf_document = None
     anchors: list[SourceAnchor] = []
     for source, quote_text, ocr_words in sources:
+        quote_text = _page_quote_fragment(
+            source_text=source.source_text,
+            raw_source=quote_text,
+            location_type=source.location_type,
+        )
         bbox = dict(source.bbox) if source.bbox else None
         if bbox is None and page_png is not None:
             if pdf_document is not None:

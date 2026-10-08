@@ -234,12 +234,15 @@ class _WindowAccumulator:
     parts: list[str] = field(default_factory=list)
     length: int = 0
     sources: dict[int, list[int]] = field(default_factory=dict)
+    window_spans: dict[int, list[int]] = field(default_factory=dict)
     table_labels: list[str] = field(default_factory=list)
     hierarchy: tuple[str, ...] = ()
     ocr_warning: bool = False
     active_clause: str | None = None
 
     def add(self, seg: _Segment) -> None:
+        window_start = self.length + (1 if self.parts else 0)
+        window_end = window_start + len(seg.text)
         if self.parts:
             self.parts.append(seg.text)
             self.length += 1 + len(seg.text)
@@ -250,6 +253,11 @@ class _WindowAccumulator:
         span = self.sources.setdefault(seg.page_number, [seg.char_start, seg.char_end])
         span[0] = min(span[0], seg.char_start)
         span[1] = max(span[1], seg.char_end)
+        window_span = self.window_spans.setdefault(
+            seg.page_number, [window_start, window_end]
+        )
+        window_span[0] = min(window_span[0], window_start)
+        window_span[1] = max(window_span[1], window_end)
 
         if seg.table_label and seg.table_label not in self.table_labels:
             self.table_labels.append(seg.table_label)
@@ -270,6 +278,7 @@ class _WindowAccumulator:
 
 def _build_contexts(
     page_sources: dict[int, list[int]],
+    window_spans: dict[int, list[int]],
     pages_by_number: dict[int, DocumentPage],
     organization_id: uuid.UUID,
     document_id: uuid.UUID,
@@ -293,12 +302,15 @@ def _build_contexts(
                 clause_number=clause,
                 char_start=start,
                 char_end=end,
+                window_char_start=window_spans[page_number][0],
+                window_char_end=window_spans[page_number][1],
                 # OCR confidence is a parser/OCR signal; carry it through.
                 ocr_confidence=page.ocr_confidence,
                 location_type=LocationType.EXACT,
                 # Trusted window text the candidate citation is checked
                 # against — the full multi-page window text, not a fragment.
                 source_text=window_text,
+                page_source_text=page.cleaned_text,
             )
         )
     return tuple(contexts)
@@ -339,6 +351,7 @@ def _finalize_window(
     overlap = prev_text[-overlap_chars:] if (prev_text and overlap_chars) else None
     contexts = _build_contexts(
         acc.sources,
+        acc.window_spans,
         pages_by_number,
         organization_id,
         document_id,

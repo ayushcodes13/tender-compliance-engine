@@ -64,6 +64,16 @@ class SourceQuoteIssue:
     ]
 
 
+@dataclass(frozen=True)
+class AuthorizedSourceFragment:
+    """A source excerpt tied to one page of the authorized document version."""
+
+    page_number: int | None
+    text: str
+    page_local: bool = True
+    char_start: int | None = None
+
+
 def _content_key(value: str) -> str:
     """Normalize layout whitespace only; preserve all letters and symbols."""
     return re.sub(r"\s+", " ", value).strip()
@@ -324,24 +334,80 @@ def validate_generated_requirement_cells(
 
 def validate_source_quote_presence(
     expected: Sequence[RequirementCell],
-    authorized_sources: Mapping[str, Sequence[str]],
+    authorized_sources: Mapping[
+        str, Sequence[str | AuthorizedSourceFragment]
+    ],
 ) -> tuple[SourceQuoteIssue, ...]:
-    """Check source wording only inside the pages authorized for each row."""
+    """Check exact quotes on one page or across ordered contiguous page fragments."""
     issues: list[SourceQuoteIssue] = []
     for row in expected:
-        sources = [text for text in authorized_sources.get(row.row_id, ()) if text]
+        raw_sources = [
+            source
+            for source in authorized_sources.get(row.row_id, ())
+            if (source.text if isinstance(source, AuthorizedSourceFragment) else source)
+        ]
+        sources = [
+            source
+            if isinstance(source, AuthorizedSourceFragment)
+            else AuthorizedSourceFragment(page_number=None, text=source)
+            for source in raw_sources
+        ]
         if not sources:
             issues.append(SourceQuoteIssue(row.row_id, "source_text_unavailable"))
             continue
         quote = _content_key(row.text)
-        combined_sources = [_content_key(text) for text in sources]
-        if not quote or not any(quote in source for source in combined_sources):
+        exact_sources = sources
+        full_matches = [
+            source for source in exact_sources if quote in _content_key(source.text)
+        ]
+        # A full window copied onto several page anchors is not page-specific
+        # evidence for a cross-page quote. New anchors carry the exact page
+        # fragments instead; legacy single-page records remain compatible.
+        full_match_pages = {source.page_number for source in full_matches}
+        full_match_texts = {_content_key(source.text) for source in full_matches}
+        full_match_is_page_specific = (
+            any(source.page_number is None for source in full_matches)
+            or len(full_match_pages) <= 1
+            or len(full_match_texts) > 1
+        )
+        found = bool(quote and full_matches and full_match_is_page_specific)
+
+        if not found and quote:
+            page_fragments = [
+                source
+                for source in exact_sources
+                if source.page_number is not None and source.page_local
+            ]
+            page_fragments.sort(
+                key=lambda source: (
+                    source.page_number,
+                    source.char_start if source.char_start is not None else -1,
+                )
+            )
+            runs: list[list[AuthorizedSourceFragment]] = []
+            for source in page_fragments:
+                if (
+                    not runs
+                    or source.page_number
+                    != runs[-1][-1].page_number
+                    and source.page_number != (runs[-1][-1].page_number or 0) + 1
+                ):
+                    runs.append([source])
+                else:
+                    runs[-1].append(source)
+            found = any(
+                quote == _content_key("\n".join(source.text for source in run))
+                for run in runs
+            )
+
+        if not found:
             issues.append(SourceQuoteIssue(row.row_id, "source_quote_not_found"))
     return tuple(issues)
 
 
 __all__ = [
     "CellIssue",
+    "AuthorizedSourceFragment",
     "ExportIntegrityResult",
     "RequirementCell",
     "SourceQuoteIssue",
