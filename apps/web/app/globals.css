@@ -41,8 +41,7 @@
   --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-plus-jakarta);
-  --font-editorial: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Baskerville, Georgia, "Times New Roman", serif;
-  --font-display: var(--font-editorial);
+  --font-display: var(--font-plus-jakarta);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
@@ -120,7 +119,6 @@
   --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-plus-jakarta);
-  --font-editorial: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Baskerville, Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
@@ -174,7 +172,6 @@
   --primary: var(--color-accent);
   --accent: var(--color-accent);
   --sans: var(--font-sans);
-  --serif: var(--font-editorial);
 }
 
 html,
@@ -1316,7 +1313,6 @@ a {
   min-height: 200px;
   color: var(--color-text-subtle);
   font-size: 12px;
-  font-style: italic;
 }
 
 .source-text-fallback {
@@ -2467,10 +2463,10 @@ a.project-flow-step:hover {
 .font-display,
 .editorial-heading,
 .page-heading h1 {
-  font-family: var(--font-editorial);
-  font-style: italic;
+  font-family: var(--font-sans);
+  font-style: normal;
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.025em;
 }
 
 .landing-page {
@@ -2681,13 +2677,6 @@ a.project-flow-step:hover {
   transform: translateY(-1px);
 }
 
-.product-brand-copy strong {
-  font-family: var(--font-editorial);
-  font-style: italic;
-  font-size: 0.98rem;
-  letter-spacing: -0.02em;
-}
-
 .rail-link,
 .button,
 .project-tab,
@@ -2760,8 +2749,8 @@ a.project-flow-step:hover {
 
 .section-title-row h2,
 .detail-section-title {
-  font-family: var(--font-editorial);
-  font-style: italic;
+  font-family: var(--font-sans);
+  font-style: normal;
   font-size: 1.1rem;
   font-weight: 600;
   letter-spacing: -0.02em;
