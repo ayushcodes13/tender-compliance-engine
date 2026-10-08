@@ -107,6 +107,7 @@ class JobProcessor:
         ocr: OcrAdapter | None = None,
         llm: LlmAdapter | None = None,
         verbatim_validation_fallback_enabled: bool = False,
+        obligation_coverage_audit_enabled: bool = False,
     ) -> None:
         self._session_factory = session_factory
         self._parser = parser or _default_parser()
@@ -127,6 +128,7 @@ class JobProcessor:
         self._verbatim_validation_fallback_enabled = (
             verbatim_validation_fallback_enabled
         )
+        self._obligation_coverage_audit_enabled = obligation_coverage_audit_enabled
         self._storage = storage or _default_storage()
 
     async def process(self, job: QueuedJob) -> None:
@@ -500,11 +502,34 @@ class JobProcessor:
                 run_id=run_id,
                 stage=ProcessingStage.EXTRACT,
             )
+            coverage_audit_enabled = (
+                self._obligation_coverage_audit_enabled
+                and self._llm.provider != "dev"
+            )
+            coverage_page_images: dict[int, bytes] = {}
+            coverage_page_texts: dict[int, str] = {}
+            if coverage_audit_enabled:
+                for page in pages:
+                    if page.cleaned_text:
+                        coverage_page_texts[page.page_number] = page.cleaned_text
+                    image_key = page.rendered_image_object_key
+                    if image_key:
+                        try:
+                            coverage_page_images[page.page_number] = (
+                                await self._storage.get(image_key)
+                            )
+                        except Exception:
+                            # A missing/unreadable image must fail the visual
+                            # audit closed; never substitute OCR text as proof.
+                            continue
             outcome = await extract_from_windows(
                 windows,
                 self._llm,
                 log_call=lambda call: svc.log_llm_call(run.id, call),
                 enable_verbatim_fallback=self._verbatim_validation_fallback_enabled,
+                enable_obligation_coverage_audit=coverage_audit_enabled,
+                coverage_page_images=coverage_page_images,
+                coverage_page_texts=coverage_page_texts,
             )
             await svc.store_extraction_candidates(
                 auth,

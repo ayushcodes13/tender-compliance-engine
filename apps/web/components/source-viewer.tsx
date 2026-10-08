@@ -15,8 +15,14 @@ export interface SourceViewerProps {
   totalPages?: number;
   /** Requirement whose source location was opened by a citation. */
   selectedRequirementId?: string | null;
+  /** Exact excerpt opened from an obligation-coverage finding. */
+  highlightQuote?: string | null;
   /** Optional class for the container. */
   className?: string;
+}
+
+function normalizeQuoteForSelection(value: string | null | undefined): string {
+  return value?.replace(/\s+/g, " ").trim() ?? "";
 }
 
 /**
@@ -36,6 +42,7 @@ export function SourceViewer({
   onPageChange,
   totalPages,
   selectedRequirementId = null,
+  highlightQuote = null,
   className = "",
 }: SourceViewerProps) {
   const [page, setPage] = useState<PageResponse | null>(null);
@@ -61,7 +68,7 @@ export function SourceViewer({
           .fetchPage(projectId, documentId, version, pageNumber)
           .catch(() => null),
         api
-          .fetchPageSources(projectId, documentId, version, pageNumber)
+          .fetchPageSources(projectId, documentId, version, pageNumber, highlightQuote ?? undefined)
           .catch(() => []),
       ]);
       setPage(pageData);
@@ -82,7 +89,18 @@ export function SourceViewer({
     } finally {
       setLoading(false);
     }
-  }, [projectId, documentId, version, pageNumber]);
+  }, [projectId, documentId, version, pageNumber, highlightQuote]);
+
+  const isSelected = useCallback(
+    (anchor: SourceAnchor) =>
+      Boolean(
+        (selectedRequirementId && anchor.requirement_id === selectedRequirementId) ||
+          (highlightQuote &&
+            normalizeQuoteForSelection(anchor.quote_text) ===
+              normalizeQuoteForSelection(highlightQuote))
+      ),
+    [selectedRequirementId, highlightQuote]
+  );
 
   useEffect(() => {
     void loadPage();
@@ -97,17 +115,15 @@ export function SourceViewer({
   // the selected highlight centered once both the anchor and image geometry
   // are ready, including after a zoom change.
   useEffect(() => {
-    if (!selectedRequirementId) return;
-    const selectedAnchor = anchors.find(
-      (anchor) => anchor.requirement_id === selectedRequirementId
-    );
+    if (!selectedRequirementId && !highlightQuote) return;
+    const selectedAnchor = anchors.find(isSelected);
     if (!selectedAnchor) return;
     selectedAnchorRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "center",
       inline: "center",
     });
-  }, [anchors, imageUrl, imageScale, selectedRequirementId, zoom]);
+  }, [anchors, imageUrl, imageScale, isSelected, zoom]);
 
   const handleZoomIn = () => setZoom((z) => Math.min(200, z + 8));
   const handleZoomOut = () => setZoom((z) => Math.max(50, z - 8));
@@ -223,11 +239,11 @@ export function SourceViewer({
             </div>
 
             <div className="source-page-body">
-              {anchors.map((anchor) => (
+              {anchors.map((anchor, index) => (
                 <div
-                  key={anchor.requirement_id}
-                  ref={anchor.requirement_id === selectedRequirementId ? selectedAnchorRef : null}
-                  className={`source-finding ${anchor.requirement_id === selectedRequirementId ? "selected" : ""}`}
+                  key={anchor.anchor_id ?? anchor.requirement_id ?? `${anchor.quote_text ?? "source"}-${index}`}
+                  ref={isSelected(anchor) ? selectedAnchorRef : null}
+                  className={`source-finding ${isSelected(anchor) ? "selected" : ""}`}
                 >
                   <span
                     className="finding-rule"
@@ -333,10 +349,9 @@ export function SourceViewer({
 
       <div className="source-stage">
         {(() => {
-          const selectedAnchor = anchors.find(
-            (anchor) => anchor.requirement_id === selectedRequirementId
-          );
-          if (!selectedAnchor || selectedAnchor.bbox || !(selectedAnchor.quote_text ?? selectedAnchor.source_text)) {
+          const selectedAnchor = anchors.find(isSelected);
+          const displayedQuote = selectedAnchor?.quote_text ?? selectedAnchor?.source_text ?? highlightQuote;
+          if (!displayedQuote || selectedAnchor?.bbox) {
             return null;
           }
           return (
@@ -346,12 +361,18 @@ export function SourceViewer({
               role="status"
             >
               <strong>
-                {selectedAnchor.location_type === "exact"
+                {!selectedAnchor
+                  ? "Excerpt not located in page text"
+                  : selectedAnchor.location_type === "exact"
                   ? "Exact text anchor · image highlight unavailable"
                   : "Approximate source anchor"}
               </strong>
-              <p><mark>{selectedAnchor.quote_text ?? selectedAnchor.source_text}</mark></p>
-              <span>The page is open, but the system has no verified text-to-image box for this excerpt.</span>
+              <p><mark>{displayedQuote}</mark></p>
+              <span>
+                {!selectedAnchor
+                  ? "The page is open, but this excerpt was not found in its saved text. It has not been highlighted."
+                  : "The page is open, but the system has no verified text-to-image box for this excerpt."}
+              </span>
             </aside>
           );
         })()}
@@ -383,13 +404,13 @@ export function SourceViewer({
               the natural image dimensions; the container scale (zoom) is
               applied via CSS transform so coordinates stay proportional. */}
           {imageUrl &&
-            anchors.map((anchor) => {
+            anchors.map((anchor, index) => {
               const style = getBboxStyle(anchor);
               if (!style) return null;
-              const selected = anchor.requirement_id === selectedRequirementId;
+              const selected = isSelected(anchor);
               return (
                 <div
-                  key={anchor.requirement_id}
+                  key={anchor.anchor_id ?? anchor.requirement_id ?? `${anchor.quote_text ?? "source"}-${index}`}
                   ref={selected ? selectedAnchorRef : null}
                   className={`source-highlight ${anchor.location_type === "exact" ? "exact" : "approximate"} ${selected ? "selected" : ""}`}
                   style={style}

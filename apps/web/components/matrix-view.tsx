@@ -17,6 +17,31 @@ const REVIEW_STATUS_LABELS: Record<string, string> = {
   ocr_warning: "OCR warning",
 };
 
+function coverageAuditMessage(
+  coverage:
+    | {
+        obligation_audit_status?: string;
+        potential_omissions?: { pages: number[]; source_quote: string }[];
+      }
+    | undefined
+): string | null {
+  if (!coverage) return null;
+  if (coverage.obligation_audit_status === "potential_omissions") {
+    const findings = coverage.potential_omissions ?? [];
+    const details = findings.slice(0, 3).map(({ pages, source_quote }) =>
+      `${source_quote}${pages.length ? ` (page${pages.length === 1 ? "" : "s"} ${pages.join(", ")})` : ""}`
+    );
+    return `The independent obligation scan found ${findings.length} possible omission${findings.length === 1 ? "" : "s"}${details.length ? `: ${details.join("; ")}` : ""}. Review the source and add any missing requirement before exporting.`;
+  }
+  if (coverage.obligation_audit_status === "audit_failed") {
+    return "The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.";
+  }
+  if (coverage.obligation_audit_status === "not_available") {
+    return "No independent obligation scan is available for this extraction. Completeness was not checked.";
+  }
+  return null;
+}
+
 function ReviewStatusBadge({ status }: { status: string }) {
   const label = REVIEW_STATUS_LABELS[status] ?? status;
   let icon: React.ReactNode = null;
@@ -93,6 +118,11 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "needs_review") {
           const coverage = artifact.validation_report?.window_processing;
+          const auditMessage = coverageAuditMessage(coverage);
+          if (auditMessage) {
+            setExportError(auditMessage);
+            return;
+          }
           if (coverage?.status === "incomplete") {
             const failedPages = Array.from(
               new Set(
@@ -157,12 +187,16 @@ export function MatrixView({ projectId, documentId, version }: MatrixViewProps) 
       const coverage = artifact.validation_report?.window_processing;
       const coverageNotice =
         coverage?.status === "complete"
-          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows; this does not prove every requirement was identified.`
+          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
           : coverage?.status === "not_available"
-            ? " No extraction-window audit is available, so extraction completeness was not checked."
+            ? " No extraction-window processing audit is available."
             : "";
+      const obligationNotice =
+        coverage?.obligation_audit_status === "no_potential_omissions"
+          ? " The independent scan found no unmatched obligation excerpts; this is not proof that every obligation was identified."
+          : " An independent obligation scan was not available, so whole-tender completeness is unverified.";
       setExportNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns and ${artifact.validation_report?.checked_cells ?? 0} cells passed the content check for ${artifact.validation_report?.actual_rows ?? rows?.length ?? 0} rows.${coverageNotice}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns and ${artifact.validation_report?.checked_cells ?? 0} cells passed the content check for ${artifact.validation_report?.actual_rows ?? rows?.length ?? 0} rows.${coverageNotice}${obligationNotice}`
       );
     } catch (err) {
       setExportError(

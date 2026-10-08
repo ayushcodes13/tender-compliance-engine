@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import struct
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -29,6 +30,11 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
+from tender_compliance_api.extraction.coverage_audit import (
+    ImageCoverageQuote,
+    ImageObligationCoverageResponse,
+    ObligationCoverageResponse,
+)
 from tender_compliance_api.extraction.extractor import (
     CandidateRecord,
     ExtractionOutcome,
@@ -125,6 +131,14 @@ def _make_log() -> tuple[list[LlmCallResult], Any]:
     return calls, log_call
 
 
+def _fake_png(width: int = 1000, height: int = 2000) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0dIHDR"
+        + struct.pack(">II", width, height)
+    )
+
+
 # ---------------------------------------------------------------------------
 # 1. The happy path: a confirmed candidate that matches the window text.
 # ---------------------------------------------------------------------------
@@ -155,6 +169,224 @@ def test_confirmed_candidate_validated_and_persistable() -> None:
         assert rec.chunk_id == window.chunk_id
         assert len(calls) == 1
         assert calls[0].status == "completed"
+
+    asyncio.run(_run())
+
+
+def test_independent_coverage_audit_flags_unemitted_source_obligation() -> None:
+    async def _run() -> None:
+        text = (
+            "The pump shall deliver 12 L/min.\n"
+            "The motor shall be IP55 rated."
+        )
+        window = _window(_page(text), text)
+        llm = FakeLlmAdapter(
+            [
+                _response([_cand("Deliver 12 L/min", "The pump shall deliver 12 L/min.")]),
+                ObligationCoverageResponse(
+                    quotes=[
+                        "The pump shall deliver 12 L/min.",
+                        "The motor shall be IP55 rated.",
+                    ]
+                ),
+            ]
+        )
+        logged, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_obligation_coverage_audit=True,
+            coverage_page_texts={1: text},
+        )
+        assert len(outcome.llm_calls) == 2
+        assert [call.call_site for call in logged] == [
+            "extract_candidates",
+            "audit_obligation_coverage",
+        ]
+        assert outcome.window_results[0].coverage_status == "completed"
+        assert outcome.window_results[0].potential_omissions == [
+            {"page_number": 1, "source_quote": "The motor shall be IP55 rated."}
+        ]
+
+    asyncio.run(_run())
+
+
+def test_ocr_coverage_uses_app_selected_page_image_and_keeps_page_finding() -> None:
+    class VisionFake(FakeLlmAdapter):
+        def __init__(self, responses: list[BaseModel]) -> None:
+            super().__init__(responses)
+            self.images: list[bytes] = []
+
+        async def extract_with_image(self, **kwargs: Any) -> ExtractResult:
+            self.images.append(kwargs["image_bytes"])
+            return await self.extract(
+                system_prompt=kwargs["system_prompt"],
+                user_text=kwargs["user_text"],
+                response_model=kwargs["response_model"],
+                config=kwargs["config"],
+            )
+
+    async def _run() -> None:
+        text = "The pump shall deliver 12 L/min."
+        window = _window(_page(text, ocr_needed=True), text, ocr_warning=True)
+        vision_quote = "The motor shall be IP55 rated."
+        llm = VisionFake(
+            [
+                _response([]),
+                ImageObligationCoverageResponse(
+                    quotes=[
+                        ImageCoverageQuote(
+                            source_quote=vision_quote,
+                            confidence=0.999,
+                            bbox={"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05},
+                        )
+                    ],
+                    confidence=0.999,
+                    uncertain=False,
+                ),
+            ]
+        )
+        calls, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_obligation_coverage_audit=True,
+            coverage_page_images={1: _fake_png()},
+            coverage_page_texts={1: text},
+        )
+
+        assert llm.images == [_fake_png()]
+        assert outcome.window_results[0].coverage_status == "completed"
+        assert outcome.window_results[0].potential_omissions == [
+            {
+                "page_number": 1,
+                "source_quote": vision_quote,
+                "bbox": {"x": 100.0, "y": 400.0, "width": 300.0, "height": 100.0},
+            }
+        ]
+        assert [call.call_site for call in calls] == [
+            "extract_candidates",
+            "audit_obligation_coverage_page_image",
+        ]
+
+    asyncio.run(_run())
+
+
+def test_ocr_page_split_across_windows_is_audited_once_against_all_candidates() -> None:
+    class VisionFake(FakeLlmAdapter):
+        def __init__(self, responses: list[BaseModel]) -> None:
+            super().__init__(responses)
+            self.images: list[bytes] = []
+
+        async def extract_with_image(self, **kwargs: Any) -> ExtractResult:
+            self.images.append(kwargs["image_bytes"])
+            return await self.extract(
+                system_prompt=kwargs["system_prompt"],
+                user_text=kwargs["user_text"],
+                response_model=kwargs["response_model"],
+                config=kwargs["config"],
+            )
+
+    async def _run() -> None:
+        pump = "The pump shall deliver 12 L/min."
+        motor = "The motor shall be IP55 rated."
+        page_text = f"{pump}\n{motor}"
+        page = _page(page_text, ocr_needed=True)
+        windows = [
+            _window(page, pump, chunk_id="first", ocr_warning=True),
+            _window(page, motor, chunk_id="second", ocr_warning=True),
+        ]
+        llm = VisionFake(
+            [
+                _response([_cand("Pump flow requirement", pump)]),
+                _response([_cand("Motor ingress rating", motor)]),
+                ImageObligationCoverageResponse(
+                    quotes=[
+                        ImageCoverageQuote(source_quote=pump, confidence=0.999),
+                        ImageCoverageQuote(source_quote=motor, confidence=0.999),
+                    ],
+                    confidence=0.999,
+                    uncertain=False,
+                ),
+            ]
+        )
+        outcome = await extract_from_windows(
+            windows,
+            llm,
+            log_call=lambda _call: asyncio.sleep(0),
+            enable_obligation_coverage_audit=True,
+            coverage_page_images={1: _fake_png()},
+            coverage_page_texts={1: page_text},
+        )
+
+        assert llm.images == [_fake_png()]
+        assert [result.coverage_status for result in outcome.window_results] == [
+            "completed",
+            "completed",
+        ]
+        assert all(not result.potential_omissions for result in outcome.window_results)
+        assert sum(
+            call.call_site == "audit_obligation_coverage_page_image"
+            for call in outcome.llm_calls
+        ) == 1
+
+    asyncio.run(_run())
+
+
+def test_ocr_coverage_fails_closed_when_page_image_is_unavailable() -> None:
+    async def _run() -> None:
+        text = "The pump shall deliver 12 L/min."
+        window = _window(_page(text, ocr_needed=True), text, ocr_warning=True)
+        llm = FakeLlmAdapter([_response([])])
+        calls, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_obligation_coverage_audit=True,
+            coverage_page_texts={1: text},
+        )
+        assert outcome.window_results[0].coverage_status == "failed"
+        assert outcome.window_results[0].potential_omissions == []
+        assert calls[-1].status == "failed"
+        assert calls[-1].call_site == "audit_obligation_coverage_page_image"
+
+    asyncio.run(_run())
+
+
+def test_ocr_coverage_uncertain_image_result_remains_unresolved() -> None:
+    class VisionFake(FakeLlmAdapter):
+        async def extract_with_image(self, **kwargs: Any) -> ExtractResult:
+            return await self.extract(
+                system_prompt=kwargs["system_prompt"],
+                user_text=kwargs["user_text"],
+                response_model=kwargs["response_model"],
+                config=kwargs["config"],
+            )
+
+    async def _run() -> None:
+        text = "Unreadable scanned text"
+        window = _window(_page(text, ocr_needed=True), text, ocr_warning=True)
+        llm = VisionFake(
+            [
+                _response([]),
+                ImageObligationCoverageResponse(
+                    quotes=[], confidence=0.75, uncertain=True
+                ),
+            ]
+        )
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=lambda _call: asyncio.sleep(0),
+            enable_obligation_coverage_audit=True,
+            coverage_page_images={1: _fake_png()},
+            coverage_page_texts={1: text},
+        )
+        assert outcome.window_results[0].coverage_status == "uncertain"
+        assert outcome.window_results[0].potential_omissions == []
 
     asyncio.run(_run())
 

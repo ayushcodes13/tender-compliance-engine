@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # rows. It is enabled by default; calls still require a configured API key.
     verbatim_validation_fallback_enabled: bool = True
 
+    # Independent per-window pass that looks for technical obligations omitted
+    # by primary extraction. It never proves completeness; failed or uncovered
+    # audit results are retained for review.
+    obligation_coverage_audit_enabled: bool = True
+
     # Processing limits
     max_retries: int = 5
     max_concurrency: int = 4
@@ -104,6 +109,8 @@ class Settings(BaseSettings):
             )
         if not self.openai_api_key.strip():
             errors.append("OPENAI_API_KEY is required")
+        if not self.obligation_coverage_audit_enabled:
+            errors.append("OBLIGATION_COVERAGE_AUDIT_ENABLED must be true")
         if self.malware_scanner_mode.strip().lower() != "clamav":
             errors.append("MALWARE_SCANNER_MODE=clamav is required")
         if not self.clamav_host.strip():

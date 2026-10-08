@@ -116,6 +116,7 @@ export function TenderReviewWorkspace(props: {
   document?: DocumentItem | null;
   initialRequirementId?: string;
   initialSourcePage?: number;
+  initialSourceQuote?: string;
 }) {
   const {
     projectId,
@@ -124,6 +125,7 @@ export function TenderReviewWorkspace(props: {
     document,
     initialRequirementId,
     initialSourcePage,
+    initialSourceQuote,
   } = props;
   const [selectedId, setSelectedId] = useState<string>("");
   const [filter, setFilter] = useState("all");
@@ -261,7 +263,7 @@ export function TenderReviewWorkspace(props: {
     initialSourcePage !== undefined
       ? selectedSources.find((source) => source.page_number === initialSourcePage)
       : selectedSources[0];
-  const sourcePage = selectedSource?.page_number ?? 1;
+  const sourcePage = selectedSource?.page_number ?? initialSourcePage ?? 1;
 
   const STOP_WORDS = new Set([
     "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
@@ -616,7 +618,7 @@ export function TenderReviewWorkspace(props: {
                 <span>{detailError}</span>
               </div>
             </div>
-          ) : initialSourcePage !== undefined && !selectedSource ? (
+          ) : initialSourcePage !== undefined && initialRequirementId !== undefined && !selectedSource ? (
             <div className="source-stage">
               <div className="empty-list" role="status">
                 <CircleAlert size={18} aria-hidden="true" />
@@ -634,7 +636,8 @@ export function TenderReviewWorkspace(props: {
               documentId={documentId}
               version={version}
               pageNumber={sourcePage}
-              selectedRequirementId={selectedId}
+              selectedRequirementId={initialSourceQuote ? null : selectedId}
+              highlightQuote={initialSourceQuote}
               totalPages={undefined}
               onPageChange={(page) => {
                 /* Page navigation handled within SourceViewer */

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/client";
 
 type ExportFormat = "xlsx" | "docx" | "pdf";
+type PotentialOmission = { pages: number[]; source_quote: string };
 
 const statusLabel = (value: string | null) =>
   value ? value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unassessed";
@@ -24,6 +25,42 @@ function exportFieldSummary(issues: { field?: string }[] | undefined): string {
     )
   ).slice(0, 4);
   return fields.length ? ` Fields checked: ${fields.join(", ")}.` : "";
+}
+
+function obligationCoverageMessage(
+  coverage:
+    | {
+        obligation_audit_status?: string;
+        potential_omissions?: { pages: number[]; source_quote: string }[];
+      }
+    | undefined
+): string | null {
+  if (!coverage) return null;
+  if (coverage.obligation_audit_status === "potential_omissions") {
+    const excerpts = (coverage.potential_omissions ?? []).slice(0, 3).map((finding) => {
+      const pages = finding.pages.length
+        ? `page${finding.pages.length === 1 ? "" : "s"} ${finding.pages.join(", ")}`
+        : "page unavailable";
+      return `“${finding.source_quote}” (${pages})`;
+    });
+    const count = coverage.potential_omissions?.length ?? 0;
+    const remaining = count - excerpts.length;
+    return `The independent obligation scan found ${count} possible omission${count === 1 ? "" : "s"}${excerpts.length ? `: ${excerpts.join("; ")}` : ""}${remaining > 0 ? `; and ${remaining} more` : ""}. Review the source and add any missing requirement before exporting.`;
+  }
+  if (coverage.obligation_audit_status === "audit_failed") {
+    const knownFindings = coverage.potential_omissions ?? [];
+    const knownPages = Array.from(
+      new Set(knownFindings.flatMap((finding) => finding.pages))
+    ).sort((a, b) => a - b);
+    const pageText = knownPages.length
+      ? ` It also found possible omissions on page${knownPages.length === 1 ? "" : "s"} ${knownPages.join(", ")}.`
+      : "";
+    return `The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.${pageText}`;
+  }
+  if (coverage.obligation_audit_status === "not_available") {
+    return "No independent obligation scan is available for this extraction. Completeness was not checked.";
+  }
+  return null;
 }
 
 const statusTone = (value: string | null) => {
@@ -51,6 +88,7 @@ export function FinalMatrixView(props: {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
+  const [coverageFindings, setCoverageFindings] = useState<PotentialOmission[]>([]);
 
   const reload = async () => {
     setLoading(true);
@@ -119,6 +157,7 @@ export function FinalMatrixView(props: {
     setBusy(`export-${format}`);
     setError(null);
     setValidationNotice(null);
+    setCoverageFindings([]);
     try {
       const artifact = await api.createFinalMatrixExport(
         projectId,
@@ -137,6 +176,14 @@ export function FinalMatrixView(props: {
         }
         if (artifact.validation_status === "needs_review") {
           const coverage = artifact.validation_report?.window_processing;
+          if (coverage?.potential_omissions?.length) {
+            setCoverageFindings(coverage.potential_omissions);
+          }
+          if (coverage?.obligation_audit_status === "potential_omissions") {
+            throw new Error(obligationCoverageMessage(coverage) ?? "Review possible omissions before exporting.");
+          }
+          const obligationMessage = obligationCoverageMessage(coverage);
+          if (obligationMessage) throw new Error(obligationMessage);
           if (coverage?.status === "incomplete") {
             const failedPages = Array.from(
               new Set(
@@ -179,12 +226,16 @@ export function FinalMatrixView(props: {
       const coverage = artifact.validation_report?.window_processing;
       const coverageNotice =
         coverage?.status === "complete"
-          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows; this does not prove every requirement was identified.`
+          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
           : coverage?.status === "not_available"
-            ? " No extraction-window audit is available, so extraction completeness was not checked."
+            ? " No extraction-window processing audit is available."
             : "";
+      const obligationNotice =
+        coverage?.obligation_audit_status === "no_potential_omissions"
+          ? " The independent scan found no unmatched obligation excerpts; this is not proof that every obligation was identified."
+          : " An independent obligation scan was not available, so whole-tender completeness is unverified.";
       setValidationNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}${obligationNotice}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -197,6 +248,7 @@ export function FinalMatrixView(props: {
     setBusy("export-vendor-response");
     setError(null);
     setValidationNotice(null);
+    setCoverageFindings([]);
     try {
       const artifact = await api.createVendorResponseSheetExport(
         projectId,
@@ -214,6 +266,14 @@ export function FinalMatrixView(props: {
         }
         if (artifact.validation_status === "needs_review") {
           const coverage = artifact.validation_report?.window_processing;
+          if (coverage?.potential_omissions?.length) {
+            setCoverageFindings(coverage.potential_omissions);
+          }
+          if (coverage?.obligation_audit_status === "potential_omissions") {
+            throw new Error(obligationCoverageMessage(coverage) ?? "Review possible omissions before exporting.");
+          }
+          const obligationMessage = obligationCoverageMessage(coverage);
+          if (obligationMessage) throw new Error(obligationMessage);
           if (coverage?.status === "incomplete") {
             const failedPages = Array.from(
               new Set(
@@ -256,12 +316,16 @@ export function FinalMatrixView(props: {
       const coverage = artifact.validation_report?.window_processing;
       const coverageNotice =
         coverage?.status === "complete"
-          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows; this does not prove every requirement was identified.`
+          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
           : coverage?.status === "not_available"
-            ? " No extraction-window audit is available, so extraction completeness was not checked."
+            ? " No extraction-window processing audit is available."
             : "";
+      const obligationNotice =
+        coverage?.obligation_audit_status === "no_potential_omissions"
+          ? " The independent scan found no unmatched obligation excerpts; this is not proof that every obligation was identified."
+          : " An independent obligation scan was not available, so whole-tender completeness is unverified.";
       setValidationNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}${obligationNotice}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -287,6 +351,27 @@ export function FinalMatrixView(props: {
       </div>
 
       {error ? <div className="upload-error-banner" role="alert"><AlertCircle size={14} />{error}</div> : null}
+      {coverageFindings.length ? (
+        <div className="source-highlight-unavailable" role="alert" style={{ marginTop: 12 }}>
+          <strong>Potentially omitted tender requirements</strong>
+          <ul>
+            {coverageFindings.map((finding, index) => (
+              <li key={`${finding.pages.join("-")}-${index}`} style={{ marginTop: 10 }}>
+                <p><mark>{finding.source_quote}</mark></p>
+                {finding.pages.map((page) => (
+                  <Link
+                    key={page}
+                    className="text-action"
+                    href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}&sourceQuote=${encodeURIComponent(finding.source_quote)}`}
+                  >
+                    Open tender page {page} and inspect excerpt
+                  </Link>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {validationNotice ? (
         <div className="compliance-ready-banner" role="status">
           <CheckCircle size={15} aria-hidden="true" />

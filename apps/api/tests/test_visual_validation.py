@@ -94,7 +94,7 @@ def test_visual_validation_accepts_only_exact_quote_from_supplied_page():
     [
         ("not_exact", 1.0, "Minimum accuracy: ±2 mm", "not_exact"),
         ("cannot_tell", 1.0, "", "cannot_tell"),
-        ("exact", 0.98, "Minimum accuracy: ±2 mm", "exact"),
+        ("exact", 0.98, "Minimum accuracy: ±2 mm", "cannot_tell"),
         ("exact", 1.0, "Minimum accuracy: ±3 mm", "not_exact"),
     ],
 )

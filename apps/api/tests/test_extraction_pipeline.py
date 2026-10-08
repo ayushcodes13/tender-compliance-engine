@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import struct
 import uuid
 
 import pytest
@@ -55,6 +56,10 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 from tender_compliance_api.extraction.chunking import SourceWindow
+from tender_compliance_api.extraction.coverage_audit import (
+    ImageCoverageQuote,
+    ImageObligationCoverageResponse,
+)
 from tender_compliance_api.extraction.extractor import (
     CandidateRecord,
     ExtractionOutcome,
@@ -79,6 +84,7 @@ from tender_compliance_api.extraction.schema import (
 from tender_compliance_api.extraction.verbatim_validation import (
     VerbatimValidationResponse,
 )
+from tender_compliance_api.storage.fake import FakeStorageAdapter
 from tender_compliance_api.storage.keys import build_key
 from tender_compliance_worker.processor import JobProcessor
 
@@ -1834,5 +1840,118 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     )
                 ).scalars().all()
                 assert len(rows) == 1
+
+        asyncio.run(_run())
+
+    def test_do_extract_loads_saved_page_image_for_ocr_coverage_audit(
+        self, session_cm
+    ) -> None:
+        class VisionFake(FakeLlmAdapter):
+            def __init__(self) -> None:
+                super().__init__(
+                    [
+                        ExtractionResponse(candidates=[]),
+                        ImageObligationCoverageResponse(
+                            quotes=[
+                                ImageCoverageQuote(
+                                    source_quote=(
+                                        "The enclosure shall be sealed to IP65."
+                                    ),
+                                    confidence=0.999,
+                                    bbox={
+                                        "x": 0.1,
+                                        "y": 0.1,
+                                        "width": 0.5,
+                                        "height": 0.04,
+                                    },
+                                )
+                            ],
+                            confidence=0.999,
+                            uncertain=False,
+                        ),
+                    ]
+                )
+                self.image_bytes: list[bytes] = []
+
+            async def extract_with_image(self, **kwargs):
+                self.image_bytes.append(kwargs["image_bytes"])
+                return await self.extract(
+                    system_prompt=kwargs["system_prompt"],
+                    user_text=kwargs["user_text"],
+                    response_model=kwargs["response_model"],
+                    config=kwargs["config"],
+                )
+
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            image_key = "rendered/ocr-coverage-page.png"
+            png = (
+                b"\x89PNG\r\n\x1a\n"
+                + b"\x00\x00\x00\x0dIHDR"
+                + struct.pack(">II", 1000, 2000)
+            )
+            storage = FakeStorageAdapter()
+            await storage.put(image_key, png, "image/png")
+            llm = VisionFake()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            processor = JobProcessor(
+                sf,
+                llm=llm,
+                storage=storage,
+                obligation_coverage_audit_enabled=True,
+            )
+
+            async with sf() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=info["version_id"],
+                        page_number=1,
+                        cleaned_text="The enclosure shall be sealed to IP6S.",
+                        ocr_needed=True,
+                        rendered_image_object_key=image_key,
+                    )
+                )
+                await session.flush()
+                service = DocumentService(session)
+                await processor._do_extract(  # noqa: SLF001
+                    session, service, auth, version, run_id=info["run_id"]
+                )
+                await session.commit()
+
+            async with sf() as session:
+                audit = (
+                    await session.execute(
+                        select(ExtractionWindowAudit).where(
+                            ExtractionWindowAudit.processing_run_id
+                            == info["processing_run_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert audit.coverage_status == "completed"
+                assert audit.potential_omissions == [
+                    {
+                        "page_number": 1,
+                        "source_quote": "The enclosure shall be sealed to IP65.",
+                        "bbox": {
+                            "x": 100.0,
+                            "y": 200.0,
+                            "width": 500.0,
+                            "height": 80.0,
+                        },
+                    }
+                ]
+            assert llm.image_bytes == [png]
 
         asyncio.run(_run())

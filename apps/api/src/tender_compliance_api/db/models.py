@@ -1127,6 +1127,12 @@ class ExtractionWindowAudit(Base):
         Boolean(), nullable=False, default=False, server_default="0"
     )
     source_spans: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    coverage_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_run", server_default="not_run"
+    )
+    potential_omissions: Mapped[list[Any]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
