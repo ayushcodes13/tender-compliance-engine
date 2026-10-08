@@ -339,7 +339,9 @@ export type ExportArtifactResponse = {
     artifact_integrity?: "passed" | "failed";
     expected_rows?: number;
     actual_rows?: number;
-    issues?: { row_id: string; code: string }[];
+    checked_columns?: number;
+    checked_cells?: number;
+    issues?: { row_id: string; code: string; field?: string }[];
     source_validation?: {
       status: "passed" | "needs_review";
       checked_rows: number;

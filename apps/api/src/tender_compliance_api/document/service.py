@@ -1654,33 +1654,43 @@ class DocumentService:
             # catches exporter clipping, dropped rows, and altered tender
             # wording rather than assuming the in-memory projection survived
             # rendering unchanged.
+            from tender_compliance_api.export.expected import (  # noqa: PLC0415
+                final_matrix_docx,
+                final_matrix_pdf,
+                final_matrix_xlsx,
+                vendor_response_docx,
+            )
             from tender_compliance_api.export.validation import (  # noqa: PLC0415
-                RequirementCell,
                 validate_generated_requirement_cells,
             )
 
-            expected_cells = [
-                RequirementCell(
-                    row_id=(
-                        str(row.serial)
-                        if vendor_response_template
-                        else str(row.requirement_id)
-                    ),
-                    text=row.raw_source,
-                )
-                for row in rows
-            ]
+            if vendor_response_template:
+                assert vendor_rows is not None
+                expected_headers, expected_cells = vendor_response_docx(vendor_rows)
+            elif export_format == ExportFormat.XLSX:
+                assert final_rows is not None
+                expected_headers, expected_cells = final_matrix_xlsx(final_rows)
+            elif export_format == ExportFormat.DOCX:
+                assert final_rows is not None
+                expected_headers, expected_cells = final_matrix_docx(final_rows)
+            else:
+                assert final_rows is not None
+                expected_headers, expected_cells = final_matrix_pdf(final_rows)
             integrity = validate_generated_requirement_cells(
                 expected_cells,
                 artifact_bytes,
                 export_format=fmt,  # type: ignore[arg-type]
+                expected_headers=expected_headers,
             )
             integrity_report = {
                 "artifact_integrity": integrity.status,
                 "expected_rows": integrity.expected_rows,
                 "actual_rows": integrity.actual_rows,
+                "checked_columns": len(expected_headers),
+                "checked_cells": len(expected_headers) * len(rows),
                 "issues": [
                     {"row_id": issue.row_id, "code": issue.code}
+                    | ({"field": issue.field} if issue.field else {})
                     for issue in integrity.issues
                 ],
             }
@@ -1868,25 +1878,29 @@ class DocumentService:
             )
             workbook_bytes = save_matrix_workbook(wb)
 
+            from tender_compliance_api.export.expected import (  # noqa: PLC0415
+                phase1_matrix_xlsx,
+            )
             from tender_compliance_api.export.validation import (  # noqa: PLC0415
-                RequirementCell,
                 validate_generated_requirement_cells,
             )
 
+            expected_headers, expected_cells = phase1_matrix_xlsx(rows)
             integrity = validate_generated_requirement_cells(
-                [
-                    RequirementCell(str(row.requirement_id), row.raw_source)
-                    for row in rows
-                ],
+                expected_cells,
                 workbook_bytes,
                 export_format="xlsx",
+                expected_headers=expected_headers,
             )
             integrity_report = {
                 "artifact_integrity": integrity.status,
                 "expected_rows": integrity.expected_rows,
                 "actual_rows": integrity.actual_rows,
+                "checked_columns": len(expected_headers),
+                "checked_cells": len(expected_headers) * len(rows),
                 "issues": [
                     {"row_id": issue.row_id, "code": issue.code}
+                    | ({"field": issue.field} if issue.field else {})
                     for issue in integrity.issues
                 ],
             }

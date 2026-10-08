@@ -15,6 +15,17 @@ type ExportFormat = "xlsx" | "docx" | "pdf";
 const statusLabel = (value: string | null) =>
   value ? value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unassessed";
 
+function exportFieldSummary(issues: { field?: string }[] | undefined): string {
+  const fields = Array.from(
+    new Set(
+      (issues ?? [])
+        .map((issue) => issue.field)
+        .filter((field): field is string => Boolean(field))
+    )
+  ).slice(0, 4);
+  return fields.length ? ` Fields checked: ${fields.join(", ")}.` : "";
+}
+
 const statusTone = (value: string | null) => {
   if (value === "compliant") return "status-pill status-reviewed";
   if (value === "non_compliant") return "status-pill status-error";
@@ -121,7 +132,7 @@ export function FinalMatrixView(props: {
             (artifact.validation_report?.issues?.length ?? 0) +
             (artifact.validation_report?.source_validation?.issues.length ?? 0);
           throw new Error(
-            `The generated file failed its content check (${issueCount} row issue${issueCount === 1 ? "" : "s"}). No file was issued. Review the tender wording and source links, then try again.`
+            `The generated file failed its content check (${issueCount} issue${issueCount === 1 ? "" : "s"}).${exportFieldSummary(artifact.validation_report?.issues)} No file was issued. Review the tender wording and source links, then try again.`
           );
         }
         if (artifact.validation_status === "needs_review") {
@@ -152,7 +163,7 @@ export function FinalMatrixView(props: {
       const llmCount =
         artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
       setValidationNotice(
-        `File integrity and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -177,7 +188,7 @@ export function FinalMatrixView(props: {
             (artifact.validation_report?.issues?.length ?? 0) +
             (artifact.validation_report?.source_validation?.issues.length ?? 0);
           throw new Error(
-            `The generated response sheet failed its content check (${issueCount} row issue${issueCount === 1 ? "" : "s"}). No file was issued.`
+            `The generated response sheet failed its content check (${issueCount} issue${issueCount === 1 ? "" : "s"}).${exportFieldSummary(artifact.validation_report?.issues)} No file was issued.`
           );
         }
         if (artifact.validation_status === "needs_review") {
@@ -208,7 +219,7 @@ export function FinalMatrixView(props: {
       const llmCount =
         artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
       setValidationNotice(
-        `File integrity and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
+        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
