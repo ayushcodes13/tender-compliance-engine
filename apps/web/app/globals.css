@@ -2473,6 +2473,8 @@ a.project-flow-step:hover {
   height: 100dvh;
   overflow-x: hidden;
   overflow-y: auto;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   background-color: var(--color-background);
   background-image:
     radial-gradient(circle at 1px 1px, rgba(23, 32, 51, 0.055) 1px, transparent 1.2px);
@@ -2488,7 +2490,8 @@ a.project-flow-step:hover {
 }
 
 .landing-brand {
-  font-family: var(--font-sans);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   font-style: normal;
   font-size: 1.02rem;
   font-weight: 600;
@@ -2562,10 +2565,13 @@ a.project-flow-step:hover {
 }
 
 .landing-hero-title {
-  font-family: var(--font-sans);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   font-style: normal;
-  font-size: clamp(3rem, 7vw, 6rem) !important;
-  line-height: 0.98 !important;
+  font-size: clamp(2.75rem, 5.5vw, 4.75rem) !important;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.04 !important;
   text-wrap: balance;
 }
 
