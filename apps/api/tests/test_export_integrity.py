@@ -18,7 +18,10 @@ from tender_compliance_api.export.final_xlsx import (
     build_final_matrix_workbook,
     save_workbook_bytes,
 )
-from tender_compliance_api.export.validation import validate_generated_requirement_cells
+from tender_compliance_api.export.validation import (
+    RequirementCell,
+    validate_generated_requirement_cells,
+)
 from tender_compliance_api.export.vendor_response_docx import build_vendor_response_docx
 from tender_compliance_api.export.xlsx import build_matrix_workbook, save_matrix_workbook
 from tender_compliance_api.matrix.projection import FinalMatrixRow, MatrixRow
@@ -121,6 +124,48 @@ def test_export_integrity_catches_missing_column_header() -> None:
     assert result.status == "failed"
     assert any(
         issue.code == "missing_column" and issue.field == "user notes" for issue in result.issues
+    )
+
+
+def test_docx_integrity_rejects_unverified_image_content_in_a_table_cell() -> None:
+    from base64 import b64decode
+    from io import BytesIO
+
+    from docx import Document
+    from docx.shared import Inches
+
+    row_id = str(uuid4())
+    requirement_text = "The pump shall deliver 12 L/min."
+    headers = ["Requirement ID", "Tender Requirement", "Compliance"]
+    document = Document()
+    table = document.add_table(rows=2, cols=len(headers))
+    for cell, header in zip(table.rows[0].cells, headers, strict=True):
+        cell.text = header
+    row = table.rows[1]
+    row.cells[0].text = row_id
+    row.cells[1].text = requirement_text
+    # The cell's text matches, but the embedded image may contain additional or
+    # substituted visible content which a text-only DOCX read cannot inspect.
+    png = b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j64sAAAAASUVORK5CYII="
+    )
+    row.cells[1].paragraphs[0].add_run().add_picture(BytesIO(png), width=Inches(0.01))
+    output = BytesIO()
+    document.save(output)
+
+    result = validate_generated_requirement_cells(
+        [RequirementCell(row_id, requirement_text)],
+        output.getvalue(),
+        export_format="docx",
+        expected_headers=headers,
+    )
+
+    assert result.status == "failed"
+    assert any(
+        issue.row_id == row_id
+        and issue.code == "unverified_visual_content"
+        and issue.field == "Tender Requirement"
+        for issue in result.issues
     )
 
 

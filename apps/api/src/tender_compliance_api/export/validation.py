@@ -41,6 +41,7 @@ class CellIssue:
         "missing_column",
         "unexpected_column",
         "changed_cell",
+        "unverified_visual_content",
     ]
     field: str | None = None
 
@@ -68,7 +69,9 @@ def _content_key(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _docx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
+def _docx_table(
+    data: bytes,
+) -> tuple[list[str], list[dict[str, str]], list[CellIssue]]:
     document: Any = Document(BytesIO(data))
     for table in document.tables:
         if not table.rows:
@@ -79,16 +82,35 @@ def _docx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
         if "tender requirement" not in headers:
             continue
         original_headers = [_content_key(cell.text) for cell in table.rows[0].cells]
-        rows = [
-            {
-                original_headers[index]: cell.text
-                for index, cell in enumerate(row.cells)
-                if index < len(original_headers)
-            }
-            for row in table.rows[1:]
-        ]
-        return original_headers, rows
-    return [], []
+        id_index = (
+            headers.index("requirement id")
+            if "requirement id" in headers
+            else headers.index("s.no.")
+        )
+        rows: list[dict[str, str]] = []
+        visual_issues: list[CellIssue] = []
+        for row in table.rows[1:]:
+            row_id = _content_key(row.cells[id_index].text)
+            rows.append(
+                {
+                    original_headers[index]: cell.text
+                    for index, cell in enumerate(row.cells)
+                    if index < len(original_headers)
+                }
+            )
+            for index, cell in enumerate(row.cells):
+                if index >= len(original_headers):
+                    continue
+                if cell._tc.xpath(".//w:drawing | .//w:pict"):
+                    visual_issues.append(
+                        CellIssue(
+                            row_id=row_id,
+                            code="unverified_visual_content",
+                            field=original_headers[index],
+                        )
+                    )
+        return original_headers, rows, visual_issues
+    return [], [], []
 
 
 def _xlsx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
@@ -231,10 +253,13 @@ def validate_generated_requirement_cells(
     issues: list[CellIssue] = []
     if export_format == "pdf":
         actual_headers, actual_fields = _pdf_table(artifact_bytes)
+        visual_issues: list[CellIssue] = []
     elif export_format == "xlsx":
         actual_headers, actual_fields = _xlsx_table(artifact_bytes)
+        visual_issues = []
     else:
-        actual_headers, actual_fields = _docx_table(artifact_bytes)
+        actual_headers, actual_fields, visual_issues = _docx_table(artifact_bytes)
+    issues.extend(visual_issues)
 
     def header_key(value: str) -> str:
         return _content_key(value).casefold()
