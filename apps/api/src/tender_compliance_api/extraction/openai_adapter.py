@@ -136,7 +136,11 @@ class OpenAiLlmAdapter(LlmAdapter):
         return AsyncOpenAI(
             api_key=self._api_key,
             base_url=base_url,
-            default_headers={"api-key": self._api_key} if azure_models_route else None,
+            default_headers=(
+                {"api-key": self._api_key}
+                if azure_models_route and self._api_key is not None
+                else None
+            ),
             default_query={"api-version": _AZURE_FOUNDRY_API_VERSION}
             if azure_models_route
             else None,

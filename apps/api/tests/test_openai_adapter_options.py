@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from types import SimpleNamespace
 
 from pydantic import BaseModel
@@ -57,6 +58,28 @@ def test_explicit_openai_compatible_endpoint_is_preserved() -> None:
 def test_non_azure_base_url_is_preserved() -> None:
     endpoint = "https://api.example.com/v1"
     assert _azure_foundry_base_url(endpoint) == (endpoint, False)
+
+
+def test_bare_azure_endpoint_configures_route_version_and_api_key_header(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeAsyncOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(AsyncOpenAI=FakeAsyncOpenAI))
+    OpenAiLlmAdapter(
+        model="deployment-alias",
+        base_url="https://example.openai.azure.com/",
+        api_key="test-key",
+    )._client()
+
+    assert captured == {
+        "api_key": "test-key",
+        "base_url": "https://example.openai.azure.com/models/",
+        "default_headers": {"api-key": "test-key"},
+        "default_query": {"api-version": "2024-05-01-preview"},
+    }
 
 
 def test_unsupported_max_tokens_adapts_to_completion_tokens() -> None:
