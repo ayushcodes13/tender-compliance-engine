@@ -20,6 +20,7 @@ from typing import cast
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import init_engine
 from tender_compliance_api.extraction.adapter import LlmAdapter
+from tender_compliance_api.extraction.dev_adapter import DevLlmAdapter
 from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.ocr.tesseract import TesseractOcrAdapter
@@ -137,14 +138,35 @@ class Worker:
             "Worker started (concurrency=%d, queue=%s)",
             self._max_concurrency, queue_name,
         )
+        heartbeat_task: asyncio.Task[None] | None = None
+        if isinstance(self._queue, RedisQueueAdapter):
+            heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        try:
+            while self._running:
+                try:
+                    await self.run_once(queue_name)
+                except KeyboardInterrupt:
+                    break
+                except Exception:  # noqa: BLE001
+                    logger.exception("Worker error in run loop")
+                await asyncio.sleep(1)
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+
+    async def _heartbeat_loop(self) -> None:
+        """Renew the processing-worker lease independently of job duration."""
+        assert isinstance(self._queue, RedisQueueAdapter)
         while self._running:
             try:
-                await self.run_once(queue_name)
-            except KeyboardInterrupt:
-                break
+                await self._queue.heartbeat_worker()
             except Exception:  # noqa: BLE001
-                logger.exception("Worker error in run loop")
-            await asyncio.sleep(1)
+                logger.exception("Could not publish worker heartbeat")
+            await asyncio.sleep(3)
 
     def stop(self) -> None:
         self._running = False
@@ -164,13 +186,15 @@ def create_worker(
 
     Production validates its durable database, Redis queue, object storage,
     model credential, and pilot auth mode before constructing the worker.
-    Development may still fall back to :class:`FakeQueueAdapter`.  Defaults:
+    Development may still fall back to :class:`FakeQueueAdapter`.  When
+    ``OPENAI_API_KEY`` is absent in development, a deterministic
+    :class:`DevLlmAdapter` is used so the full extraction pipeline is
+    exercisable locally without network access.  Defaults:
     :class:`CompositeParserAdapter` dispatching to
     :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
     (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
     :class:`TesseractOcrAdapter` (CP21).  The LLM extraction default is
-    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``docs/review.md``); inject a
-    :class:`FakeLlmAdapter` for tests.
+    :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``docs/review.md``).
     """
     settings = get_settings()
     settings.validate_runtime_configuration()
@@ -211,7 +235,16 @@ def create_worker(
                 "OPENAI_API_KEY is required for the production worker. "
                 "Set it in the environment before starting the stack."
             )
-        llm = OpenAiLlmAdapter()
+        if settings.app_env == "development" and not settings.openai_api_key:
+            # Local development without a configured model: use the deterministic
+            # DevLlmAdapter so the full extraction pipeline is exercisable
+            # end-to-end without network access to a provider.  DevLlmAdapter
+            # applies rule-based extraction that respects the CP25
+            # source-substring boundary (raw_source is always a verbatim line
+            # from the trusted window text).
+            llm = DevLlmAdapter()
+        else:
+            llm = OpenAiLlmAdapter()
 
     return Worker(
         queue=queue,

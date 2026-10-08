@@ -6,8 +6,8 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP61 are marked DONE. See the recorded PRs and
-implementation notes on each entry above; nothing is currently queued.
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP66 are marked DONE. See the implementation
+notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
 
@@ -461,9 +461,56 @@ Phase 2 evaluation + production release
   - ruff/mypy clean. pytest 1072 passed, 2 skipped. Quality gates pass
     (invented_negative_rate=0, numeric_fidelity=0, false_compliance=0).
 
----
+- [x] ✅ ~~CP54–CP61 — Live end-to-end acceptance & post-completion defect log~~
+  - Status: DONE — landed on `main` via PR #126 (squash commit `cade9d0`
+    "feat: complete Phase 2 live stack on main"). The persistence + parser fix was
+    consolidated into the Phase-2 promotion squash-merge; scoped PRs #127/#128/#129/#130
+    were folded (closed) — their changes are live on `main` via cade9d0.
+  - Defect found during live acceptance (default zero-UUID dev stack, `single_workspace`
+    auth, SQLite + local storage + fake scanner + deterministic `RuleBasedQualitativeReasoner`):
+    Phase-2 service mutations flushed rows in-session but **never committed** them, so
+    `compliance_assessments`, `conflicts`, clarification/deviation rows rolled back at
+    request end. HTTP 201s returned valid IDs yet data was invisible across requests;
+    final-matrix rows were all `None`; submission `assessment_snapshot` was empty. Unit
+    tests masked it (they commit at the test level).
+  - Fix: terminal success-path commit added to the 12 mutating methods —
+    `compliance/service.py` (`_create_assessment`, `confirm_assessment`,
+    `override_assessment`, `reopen_assessment`, `add_comment` → `await
+    self._session.commit()`), `compliance/conflict_detection.py` (`record_conflicts`,
+    `resolve_conflict` → `await self._db.commit()`), `compliance/missing_evidence.py`
+    (`create_clarification`, `answer_clarification`, `edit_clarification`,
+    `create_deviation`, `review_deviation` → `await self._db.commit()`). Read-only
+    delegates left untouched. `expire_on_commit=False` (`db/session.py:79`) keeps
+    returned ORM objects loaded.
+  - Secondary defect fixed in the same pass: `extraction/vendor_spec.py` label char
+    class `[A-Za-z][A-Za-z][A-Za-z\s/-]+?` matches `\n`, swallowing a preceding
+    non-spec line into the label and dropping the following spec (e.g. page-2
+    `humidity=90`), which suppressed the 1.4 (80 vs 90) conflict. Fix: label group now
+    `[A-Za-z][A-Za-z][A-Za-z /-]+?`. Regression test `TestColonSpecs::test_spec_preceded_by_non_spec_line`.
+  - Tests: 4 cross-session persistence regression classes + 1 parser regression.
+    Negative check: disabling the commit makes `test_assess_persists_for_subsequent_session`
+    FAIL (count 0); restoring → PASS.
+  - Gate: Phase-2 suites on `main` + fix: `pytest tests/test_compliance_*.py
+    tests/test_conflict_*.py tests/test_missing_*.py tests/test_vendor_spec.py
+    tests/test_final_*.py tests/test_submission.py tests/test_phase2_eval.py -q` →
+    **140 passed**. `ruff check` / `mypy` clean on changed files.
+  - Live acceptance on `main` (services restarted on cade9d0, DB `/tmp/tce-final.db`):
+    `GET /health` 200; `GET .../final-matrix` 200, **8 rows all with
+    `assessment_status`**; 1.4 `has_unresolved_conflict=True` (humidity 80-vs-90);
+    `compliance_assessments=16` (v1+v2/req, identical status = versioning, NOT
+    duplicates); `conflicts=1` (`parameter_value`, `humidity`, 5 sources traced to
+    evidence + `source_text`); `submissions=2` both `approved` with non-null
+    `assessment_snapshot` (1781 + 3562 bytes); XLSX export valid `PK\x03\x04`.
+  - Per-requirement statuses (deterministic, non-fabricated): 1.1 `not_demonstrated`
+    ("has no number"); 1.2 `non_compliant` `max_le` (150ms>100ms); 1.4 `compliant`
+    `max_lt_percentage` (80<85); 1.5/2.1/2.3 `not_demonstrated` (`no_constraint_parsed`);
+    2.2 `human_review_required` `uncertain_state` (both partial); 2.4
+    `human_review_required` `parameter_mismatch` (temperature vs humidity).
+  - Known limitation (not fixed, non-fabricating by design): watt `W`, bare `1000
+    users`, bare `4 GB` outside `_UNIT_QUANTITY` → `not_demonstrated`. Unit-coverage
+    extension deferred to a separate enhancement PR (decided, not fabricated).
 
-# Stage A — Product contract and existing foundation
+---
 
 What already exists and the rules every later checkpoint must preserve.
 
@@ -3239,8 +3286,158 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Never trade false compliance for a better-looking completion rate.
 
+## ✅ ~~Checkpoint 62 — Private-pilot startup and processing readiness~~
+
+**Status:** DONE — implementation and Compose smoke completed on `fix/pilot-readiness-worker`.
+
+**Plain-English outcome:** The documented pilot startup succeeds only when the API, web UI, dependencies, and document-processing worker are actually available.
+
+### What we will do
+
+1. Supply the worker with the validated private-pilot runtime configuration.
+2. Have the worker publish a short-lived Redis heartbeat while it polls.
+3. Make production readiness fail closed when no worker heartbeat is present.
+4. Correct the web container health check to probe the address the server listens on.
+5. Add regression coverage and keep the setup/readiness instructions accurate.
+
+### This checkpoint is complete only when
+
+- [x] A default configured Compose start no longer restarts the worker for missing settings.
+- [x] Production readiness reports the worker and becomes not-ready when its heartbeat is absent or Redis is unavailable.
+- [x] Development readiness keeps working without a production worker lease.
+- [x] The web service health check succeeds after binding Next.js to the container's IPv4 listener.
+- [x] Relevant API tests and the Compose startup smoke pass.
+
+### Implementation notes
+
+- Added a 15-second Redis worker lease renewed every 3 seconds while the worker
+  polls. Production `/ready` fails closed if the lease is missing; `/health`
+  remains liveness-only.
+- Added the runtime settings required by production validation to the Compose
+  worker, bound the Next.js standalone server to `0.0.0.0` inside the web
+  container, and made both web health probes use IPv4 loopback.
+- Verified on 2026-10-07 with an x86_64 Compose run: API, worker, scanner,
+  database, Redis, and web healthy; `/ready` returned worker ready; stopping the
+  worker changed readiness to 503/unavailable after the lease expired, and
+  restarting it restored readiness. Dashboard returned HTTP 200.
+- The local smoke used a placeholder OpenAI key and does not verify provider
+  authentication or actual extraction.
+
+### Guardrail
+
+- Do not claim that a configured AI key proves provider authentication or a successful extraction.
+- Liveness remains separate from readiness so a dependency failure does not hide the API process state.
+
+## ✅ ~~Checkpoint 63 — Private pilot network boundary and ARM64 scanner~~
+
+**Status:** DONE — verified with a native ARM64 local Compose run and CI manifest/binding checks.
+
+**Plain-English outcome:** The browser UI stays local by default, and the bundled malware scanner image runs on both x86_64 and ARM64 hosts.
+
+### What we did
+
+1. Bind the web UI to loopback by default while retaining an explicit `PILOT_WEB_BIND` override.
+2. Use the official Debian ClamAV image variant.
+3. Check in CI that the default web binding is loopback and the scanner publishes an ARM64 manifest.
+4. Document private proxy/VPN requirements for remote client access to the unauthenticated single-workspace pilot.
+
+### This checkpoint is complete only when
+
+- [x] A default Compose configuration binds the web UI to `127.0.0.1`.
+- [x] CI verifies the scanner image includes `linux/arm64`.
+- [x] Deployment/security documentation explains the private remote-access boundary.
+- [x] Local Compose starts with the native host architecture and the UI/readiness checks pass.
+
+### Guardrail
+
+- Do not expose unauthenticated single-workspace mode directly to a public/shared network.
+
+## ✅ ~~Checkpoint 64 — Client-visible processing recovery history~~
+
+**Status:** DONE — verified by frontend typecheck and browser smoke.
+
+**Plain-English outcome:** A client can see which document stage failed, how many attempts were recorded, and safely retry the same immutable upload.
+
+### What we did
+
+1. Read the existing per-version processing-run history for failed and partial tender uploads.
+2. Show a compact stage/status/attempt/timestamp summary alongside the existing retry action.
+3. Keep raw exception text out of the client-facing history.
+4. Explain that retry reprocesses the same source version.
+
+### This checkpoint is complete only when
+
+- [x] Failed and partial documents show persisted stage history when available.
+- [x] History shows the retry action and preserves the original source version.
+- [x] Missing run history fails gracefully without hiding the retry action.
+- [x] Browser coverage confirms useful safe history appears and raw error text is not rendered.
+- [x] Frontend typecheck and browser smoke pass.
+
+### Guardrail
+
+- Do not present raw worker/provider exception strings as client-facing diagnostics.
+- Do not mutate the uploaded source version when retrying.
+
+## Checkpoint 65 — ~~Safe unexpected failure messages and diagnostics~~
+
+**Status:** DONE — typed API failures remain distinct; unexpected failures and historical persisted diagnostics are sanitized.
+
+**Plain-English outcome:** Unexpected failures stay useful to operators without returning exception text, document data, or provider details to clients or ordinary logs.
+
+### What we will do
+
+1. Return stable client messages for unexpected API failures while preserving correct 4xx/5xx status behavior.
+2. Keep persisted run/export errors and audit metadata free of raw exception text.
+3. Replace parser/renderer and worker exception strings in client-visible diagnostics with safe stage-specific messages.
+4. Preserve correlation IDs, error categories, stage, attempt, and source-version identity for support and audit.
+5. Add regression tests for API responses, stored diagnostic records, and source-viewer warnings.
+
+### This checkpoint is complete only when
+
+- [x] Unexpected API errors return safe messages and do not convert internal failures into not-found responses.
+- [x] Existing and newly stored processing/export errors do not expose raw exception text.
+- [x] Parser/renderer errors remain visible as useful, safe warnings without losing page-level isolation.
+- [x] Safe diagnostics retain status, stage, attempt, and correlation information.
+- [x] Relevant API/parser/worker tests pass.
+
+**Implementation note:** Added stable safe messages, redacted historical response fields, removed raw parser/renderer/provider error details from persisted diagnostics and audit metadata, and retained categorized operator logs. Verification: API suite 1123 passed, 2 skipped; Ruff passed.
+
+### Guardrail
+
+- Do not include provider payloads, source text, credentials, storage URLs, or raw exception strings in client responses, audit metadata, or ordinary logs.
+- Keep typed domain errors and intentional validation messages distinct from unexpected server failures.
+
+## Checkpoint 66 — ~~Source navigation from the final matrix~~
+
+**Status:** DONE — final-matrix source links open the exact saved tender version, requirement, and page in review.
+
+**Plain-English outcome:** A reviewer can open a final-matrix requirement directly at its tender citation, while unknown or stale locations remain visibly unresolved.
+
+### What we will do
+
+1. Show the stored tender source page beside each final-matrix requirement.
+2. Link only rows with a valid positive source page to the exact tender document version and matching requirement in the review workspace.
+3. Carry document ID/version, requirement ID, and page through the route; select the matching requirement and display the requested page and anchor.
+4. Show an explicit unavailable state if the document version is missing or the page cannot be matched to the selected requirement's stored source anchors.
+5. Add browser regression coverage for exact navigation and unknown locations.
+
+### This checkpoint is complete only when
+
+- [x] Final-matrix source links retain the exact document version, requirement identity, and page.
+- [x] Review workspace selects the linked requirement and source page.
+- [x] Missing or invalid locations never create a page link; stale version/page targets show unavailable and never silently fall back to a different source.
+- [x] End-to-end browser coverage and frontend typecheck pass.
+- [x] Production web build succeeds.
+
+**Implementation note:** Added a tender-source column to the final matrix with links bound to document/version/requirement/page. The review workspace can load a linked requirement outside the first list page; stale page and document-version targets show explicit unavailable states. Also fixed hook ordering that broke the review workspace when requirements loaded. Verification: frontend typecheck and production build passed; Playwright E2E 14 passed.
+
+### Guardrail
+
+- Never infer a page or clause when source metadata is absent.
+- Do not change requirement text, source anchors, or assessment state as part of navigation.
+
 # Plan completion rule
 
-The plan is complete only when CP00 through CP61 are checked and crossed out, the relevant end-to-end acceptance tests pass, release gates meet conservative quality/security thresholds, and every final compliance statement is either evidence-backed or explicitly unresolved.
+The plan is complete only when all defined checkpoints are checked and crossed out, the relevant end-to-end acceptance tests pass, release gates meet conservative quality/security thresholds, and every final compliance statement is either evidence-backed or explicitly unresolved.
 
 If the product direction changes, update this file through a focused PR, explain why, and continue from the new first unchecked checkpoint.

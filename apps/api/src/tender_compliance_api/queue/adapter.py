@@ -109,6 +109,14 @@ class QueueAdapter(abc.ABC):
         """Return the approximate number of jobs (available + in-flight)."""
         raise NotImplementedError
 
+    async def heartbeat_worker(self) -> None:
+        """Publish a short-lived signal that a production worker is polling."""
+        return None
+
+    async def worker_ready(self) -> bool:
+        """Return whether a production worker has sent a recent heartbeat."""
+        return False
+
     async def close(self) -> None:
         """Release provider resources when the adapter owns any.
 

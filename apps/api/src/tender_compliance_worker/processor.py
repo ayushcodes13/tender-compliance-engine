@@ -39,9 +39,11 @@ from tender_compliance_api.db.models import (
     StoredObject,
 )
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
+from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.extraction.adapter import LlmAdapter
 from tender_compliance_api.extraction.chunking import build_source_windows
 from tender_compliance_api.extraction.extractor import extract_from_windows
+from tender_compliance_api.logs import error_category
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.parser.adapter import ParserAdapter, ParseResult
 from tender_compliance_api.queue import QueuedJob
@@ -300,7 +302,7 @@ class JobProcessor:
                 stage=ProcessingStage.PARSE,
                 run_id=run_id,
                 error_type="ParseError",
-                error_message=parse_result.fatal_error,
+                error_message=PROCESSING_STAGE_FAILURE,
             )
             return False
 
@@ -354,7 +356,10 @@ class JobProcessor:
             )
         except Exception as exc:  # noqa: BLE001 — never fail parsing on render
             logger.warning(
-                "page rendering failed for version %s: %s", version.id, exc
+                "page rendering failed for version %s (error_type=%s, category=%s)",
+                version.id,
+                type(exc).__name__,
+                error_category(exc),
             )
             # Synthesize a fatal RenderResult so the failure is recorded
             # per-page (via store_rendered_pages) rather than only logged.
@@ -364,7 +369,7 @@ class JobProcessor:
                 render_dpi=self._renderer.render_dpi,
                 page_count=0,
                 pages=[],
-                fatal_error=f"renderer raised: {exc!r}",
+                fatal_error="The page renderer could not process this document.",
             )
         try:
             await svc.store_rendered_pages(
@@ -376,9 +381,10 @@ class JobProcessor:
             )
         except Exception as exc:  # noqa: BLE001 — storage failure is non-fatal
             logger.warning(
-                "storing rendered pages failed for version %s: %s",
+                "storing rendered pages failed for version %s (error_type=%s, category=%s)",
                 version.id,
-                exc,
+                type(exc).__name__,
+                error_category(exc),
             )
 
     async def _do_ocr(
@@ -422,10 +428,13 @@ class JobProcessor:
             error_message: str | None = None
         except Exception as exc:  # noqa: BLE001 — never fail the job on OCR
             logger.warning(
-                "OCR stage failed for version %s: %s", version.id, exc
+                "OCR stage failed for version %s (error_type=%s, category=%s)",
+                version.id,
+                type(exc).__name__,
+                error_category(exc),
             )
             error_type = "OCRError"
-            error_message = str(exc)
+            error_message = PROCESSING_STAGE_FAILURE
 
         await svc.complete_run(
             auth,
@@ -531,21 +540,33 @@ class JobProcessor:
                 except Exception as prom_exc:  # noqa: BLE001
                     logger.warning(
                         "EXTRACT requirement promotion failed for version "
-                        "%s: %s", version.id, prom_exc,
+                        "%s (error_type=%s, category=%s)",
+                        version.id,
+                        type(prom_exc).__name__,
+                        error_category(prom_exc),
                     )
             except Exception as rec_exc:  # noqa: BLE001
                 logger.warning(
-                    "EXTRACT reconciliation failed for version %s: %s",
-                    version.id, rec_exc,
+                    "EXTRACT reconciliation failed for version %s "
+                    "(error_type=%s, category=%s)",
+                    version.id,
+                    type(rec_exc).__name__,
+                    error_category(rec_exc),
                 )
             # Record one diagnostics row for this run (CP31) — best-effort,
             # never strands the version if it fails.
             try:
+                # Pass the run_id *column* value (run.run_id), not the row PK
+                # (run.id): capture_extraction_diagnostics resolves the run via
+                # get_run, which matches ProcessingRun.run_id. The PK is a
+                # different column and is not what get_run looks up, so passing
+                # it raises "processing run … not found" and silently drops the
+                # diagnostics row (caught + warned above).
                 await svc.capture_extraction_diagnostics(
                     auth,
                     document_id=version.document_id,
                     version_number=version.version_number,
-                    run_id=run.id,
+                    run_id=run.run_id,
                     outcome=outcome,
                     reconciliation_outcome=reconciliation_outcome,
                     promoted_count=promoted,
@@ -553,11 +574,15 @@ class JobProcessor:
             except Exception as diag_exc:  # noqa: BLE001
                 logger.warning(
                     "EXTRACT diagnostics capture failed for version %s: %s",
-                    version.id, diag_exc,
+                    version.id,
+                    type(diag_exc).__name__,
                 )
         except Exception as exc:  # noqa: BLE001 — never strand the version
             logger.warning(
-                "EXTRACT stage failed for version %s: %s", version.id, exc
+                "EXTRACT stage failed for version %s (error_type=%s, category=%s)",
+                version.id,
+                type(exc).__name__,
+                error_category(exc),
             )
             await svc.complete_run(
                 auth,
@@ -566,7 +591,7 @@ class JobProcessor:
                 stage=ProcessingStage.EXTRACT,
                 run_id=run_id,
                 error_type="ExtractionError",
-                error_message=str(exc),
+                error_message=PROCESSING_STAGE_FAILURE,
             )
             return
 
@@ -636,7 +661,12 @@ class JobProcessor:
             data = await self._storage.get(stored.storage_key)
             parsed = await self._parser.parse(data, version.mime_type)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("OEM parse failed for version %s: %s", version.id, exc)
+            logger.warning(
+                "OEM parse failed for version %s (error_type=%s, category=%s)",
+                version.id,
+                type(exc).__name__,
+                error_category(exc),
+            )
             version.processing_status = DocumentProcessingStatus.FAILED
             await audit.log(
                 organization_id=auth.organization_id,
@@ -802,6 +832,6 @@ async def record_failure(
             stage=ProcessingStage(str(payload["stage"])),
             run_id=uuid.UUID(str(payload["run_id"])),
             error_type=type(error).__name__,
-            error_message=str(error)[:1024],
+            error_message=PROCESSING_STAGE_FAILURE,
         )
         await session.commit()

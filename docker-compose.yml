@@ -27,7 +27,7 @@ services:
       retries: 10
 
   clamav:
-    image: clamav/clamav:stable
+    image: clamav/clamav-debian:stable
     restart: unless-stopped
     environment:
       CLAMD_CONF_StreamMaxLength: 60M
@@ -108,6 +108,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tce}:${POSTGRES_PASSWORD:-tce-password}@postgres:5432/${POSTGRES_DB:-tce}
       REDIS_URL: redis://redis:6379/0
       OBJECT_STORAGE_LOCAL_PATH: /app/object-storage
+      AUTH_MODE: single_workspace
+      MALWARE_SCANNER_MODE: clamav
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: 3310
+      MALWARE_SCAN_TIMEOUT_SECONDS: ${MALWARE_SCAN_TIMEOUT_SECONDS:-30}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env before starting the pilot}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
@@ -127,10 +132,11 @@ services:
         condition: service_healthy
     environment:
       BACKEND_INTERNAL_URL: http://api:8000
+      HOSTNAME: 0.0.0.0
     ports:
-      - "3000:3000"
+      - "${PILOT_WEB_BIND:-127.0.0.1}:3000:3000"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
       interval: 10s
       timeout: 5s
       start_period: 10s

@@ -17,6 +17,7 @@ import logging
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
+from tender_compliance_api.errors import PAGE_TEXT_FAILURE, PROCESSING_STAGE_FAILURE
 from tender_compliance_api.parser.adapter import (
     PageResult,
     ParserAdapter,
@@ -59,21 +60,22 @@ class PypdfParserAdapter(ParserAdapter):
         try:
             reader = PdfReader(io.BytesIO(data))
         except PdfReadError as exc:
+            logger.warning("pypdf rejected document (%s)", type(exc).__name__)
             return ParseResult(
                 parser_name=self.name,
                 parser_version=self.version,
                 page_count=0,
                 pages=[],
-                fatal_error=f"PDF could not be read: {exc}",
+                fatal_error=PROCESSING_STAGE_FAILURE,
             )
         except Exception as exc:  # noqa: BLE001 — any parse failure is non-fatal
-            logger.warning("pypdf unexpected error: %s", exc)
+            logger.warning("pypdf unexpected error (%s)", type(exc).__name__)
             return ParseResult(
                 parser_name=self.name,
                 parser_version=self.version,
                 page_count=0,
                 pages=[],
-                fatal_error=f"PDF parsing failed: {exc!r}",
+                fatal_error=PROCESSING_STAGE_FAILURE,
             )
 
         # --- Encryption check ---
@@ -94,7 +96,7 @@ class PypdfParserAdapter(ParserAdapter):
             page_number = i + 1  # 1-indexed
             try:
                 text = page.extract_text() or ""
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 pages.append(
                     PageResult(
                         page_number=page_number,
@@ -102,7 +104,7 @@ class PypdfParserAdapter(ParserAdapter):
                         text_length=0,
                         ocr_needed=True,
                         warnings=[],
-                        error=f"text extraction failed: {exc!r}",
+                        error=PAGE_TEXT_FAILURE,
                     )
                 )
                 continue

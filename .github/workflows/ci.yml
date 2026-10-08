@@ -188,6 +188,32 @@ jobs:
           fi
           grep -q "OPENAI_API_KEY" /tmp/compose-empty.err
           docker compose config >/dev/null
+      - name: Verify private pilot binding and scanner architectures
+        run: |
+          set -euo pipefail
+          docker compose config --format json > /tmp/tce-compose.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path("/tmp/tce-compose.json").read_text())
+          web_port = config["services"]["web"]["ports"][0]
+          assert web_port["published"] == "3000", web_port
+          assert web_port["host_ip"] == "127.0.0.1", web_port
+          assert config["services"]["clamav"]["image"] == "clamav/clamav-debian:stable"
+          PY
+          docker buildx imagetools inspect --raw clamav/clamav-debian:stable > /tmp/clamav-manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path("/tmp/clamav-manifest.json").read_text())
+          platforms = {
+              (entry.get("platform", {}).get("os"), entry.get("platform", {}).get("architecture"))
+              for entry in manifest.get("manifests", [])
+          }
+          assert ("linux", "arm64") in platforms, platforms
+          PY
       - name: Start product through the documented one-command handoff
         run: ./scripts/pilot-start.sh
       - name: Verify same-origin product readiness
@@ -202,6 +228,7 @@ jobs:
           data = json.loads(Path("/tmp/tce-ready.json").read_text())
           assert data["status"] == "ready", data
           assert data["components"]["malware_scanner"] == "ready", data
+          assert data["components"]["worker"] == "ready", data
           PY
           cat /tmp/tce-ready.json
           docker compose ps

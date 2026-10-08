@@ -11,12 +11,13 @@ wire — and never include full document bodies (guardrail from CP35).
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,8 +38,16 @@ from tender_compliance_api.document.service import (
     DocumentService,
     TransitionError,
 )
+from tender_compliance_api.errors import EXPORT_FAILURE
+from tender_compliance_api.logs import (
+    error_category,
+    get_correlation_id,
+    get_logger,
+    log_event,
+)
 
 router = APIRouter(prefix="/projects", tags=["requirements"])
+logger = get_logger("routes.requirements")
 
 
 # ---------------------------------------------------------------------------
@@ -1112,6 +1121,12 @@ class ExportArtifactResponse(BaseModel):
     generated_at: datetime | None
     export_format: str | None = None
 
+    @field_validator("error_message", mode="before")
+    @classmethod
+    def hide_raw_error_message(cls, value: str | None) -> str | None:
+        """Redact raw error text from historical and newly stored records."""
+        return EXPORT_FAILURE if value else None
+
 
 @router.post(
     "/{project_id}/documents/{document_id}/versions/{version_number}/exports",
@@ -1155,10 +1170,19 @@ async def create_export(
         )
         failing_artifact = result.scalar_one_or_none()
         if failing_artifact is None:
+            log_event(
+                logger,
+                logging.ERROR,
+                "matrix_export_failed_without_artifact",
+                correlation_id=get_correlation_id(),
+                operation="matrix_export",
+                error_type=type(exc).__name__,
+                error_category=error_category(exc),
+            )
             raise HTTPException(
                 status_code=500,
-                detail=f"Export failed: {exc}",
-            ) from exc
+                detail=EXPORT_FAILURE,
+            ) from None
         await session.commit()
         return ExportArtifactResponse.model_validate(failing_artifact)
 
@@ -1214,10 +1238,19 @@ async def create_final_matrix_export(
         )
         failing_artifact = result.scalar_one_or_none()
         if failing_artifact is None:
+            log_event(
+                logger,
+                logging.ERROR,
+                "final_matrix_export_failed_without_artifact",
+                correlation_id=get_correlation_id(),
+                operation="final_matrix_export",
+                error_type=type(exc).__name__,
+                error_category=error_category(exc),
+            )
             raise HTTPException(
                 status_code=500,
-                detail=f"Export failed: {exc}",
-            ) from exc
+                detail=EXPORT_FAILURE,
+            ) from None
         await session.commit()
         return ExportArtifactResponse.model_validate(failing_artifact)
 
@@ -1268,10 +1301,19 @@ async def download_export(
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
+        log_event(
+            logger,
+            logging.ERROR,
+            "export_download_failed",
+            correlation_id=get_correlation_id(),
+            operation="export_download",
+            error_type=type(exc).__name__,
+            error_category=error_category(exc),
+        )
         raise HTTPException(
             status_code=500,
-            detail=f"Export download failed: {exc}",
-        ) from exc
+            detail=EXPORT_FAILURE,
+        ) from None
 
     artifact = await session.get(ExportArtifact, export_id)
     export_format = (

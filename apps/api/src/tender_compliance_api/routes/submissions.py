@@ -7,6 +7,7 @@ Each route is tenant-scoped via :class:`AuthContext`.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -18,7 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.db.session import get_session
-from tender_compliance_api.document.service import DocumentService
+from tender_compliance_api.document.service import (
+    DocumentNotFoundError,
+    DocumentService,
+)
+from tender_compliance_api.errors import UNEXPECTED_REQUEST_FAILURE
+from tender_compliance_api.logs import (
+    error_category,
+    get_correlation_id,
+    get_logger,
+    log_event,
+)
 from tender_compliance_api.submission.service import (
     SubmissionNotFoundError,
     SubmissionService,
@@ -29,6 +40,7 @@ router = APIRouter(
     prefix="/projects/{project_id}/submissions",
     tags=["submissions"],
 )
+logger = get_logger("routes.submissions")
 
 
 class SubmissionResponse(BaseModel):
@@ -75,8 +87,19 @@ async def create_submission(
     doc_svc = DocumentService(session)
     try:
         rows = await doc_svc.get_final_matrix_rows(auth, document_id, version_number)
+    except DocumentNotFoundError:
+        raise HTTPException(404, "Document version not found") from None
     except Exception as exc:
-        raise HTTPException(404, str(exc)) from exc
+        log_event(
+            logger,
+            logging.ERROR,
+            "submission_matrix_load_failed",
+            correlation_id=get_correlation_id(),
+            operation="create_submission",
+            error_type=type(exc).__name__,
+            error_category=error_category(exc),
+        )
+        raise HTTPException(500, UNEXPECTED_REQUEST_FAILURE) from None
 
     sha = SubmissionService.compute_matrix_sha256(rows)
 
@@ -88,7 +111,16 @@ async def create_submission(
     except SubmissionNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(500, f"Submission failed: {exc}") from exc
+        log_event(
+            logger,
+            logging.ERROR,
+            "submission_create_failed",
+            correlation_id=get_correlation_id(),
+            operation="create_submission",
+            error_type=type(exc).__name__,
+            error_category=error_category(exc),
+        )
+        raise HTTPException(500, UNEXPECTED_REQUEST_FAILURE) from None
 
     await session.commit()
     return SubmissionResponse.model_validate(submission)

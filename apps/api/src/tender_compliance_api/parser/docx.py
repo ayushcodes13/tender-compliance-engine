@@ -35,6 +35,7 @@ from typing import Any
 from docx import Document
 from docx.oxml.ns import qn
 
+from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.parser.adapter import (
     PageResult,
     ParserAdapter,
@@ -96,13 +97,13 @@ class DocxParserAdapter(ParserAdapter):
         try:
             document = Document(io.BytesIO(data))
         except Exception as exc:  # noqa: BLE001 — untrusted input, never raise
-            logger.warning("docx parse failed: %s", exc)
+            logger.warning("docx parse failed (%s)", type(exc).__name__)
             return ParseResult(
                 parser_name=self.name,
                 parser_version=self.version,
                 page_count=0,
                 pages=[],
-                fatal_error=f"DOCX could not be read: {exc!r}",
+                fatal_error=PROCESSING_STAGE_FAILURE,
             )
 
         # Walk the document body in element order so that paragraphs and

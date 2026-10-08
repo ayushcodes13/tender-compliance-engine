@@ -44,7 +44,9 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     User,
 )
-from tender_compliance_api.document.service import DocumentService
+from tender_compliance_api.document.service import (
+    DocumentService,
+)
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
@@ -73,6 +75,7 @@ from tender_compliance_api.extraction.schema import (
     UncertaintyLevel,
 )
 from tender_compliance_api.storage.keys import build_key
+from tender_compliance_worker.processor import JobProcessor
 
 # ---------------------------------------------------------------------------
 # DB helpers (self-contained; tests/ is not a package)
@@ -401,7 +404,8 @@ class TestRunMetadataPersistence:
                     )
                 ).scalar_one()
                 assert row.status is ExtractionRunStatus.FAILED
-                assert row.error_message == "connection timed out"
+                assert row.error_message != "connection timed out"
+                assert "processing stage" in (row.error_message or "").lower()
                 assert row.finish_reason is None
 
         asyncio.run(_run())
@@ -1572,5 +1576,85 @@ class TestExtractionDiagnostics:
                     info["processing_run_id"],
                     second_processing_run_id,
                 }
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# CP31 regression — EXTRACT-stage call-site anchor (CP28 orchestrator)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractStageDiagnosticsCaptureCP31:
+    """The EXTRACT orchestrator (``JobProcessor._do_extract``) must anchor the
+    CP31 diagnostics row to the run's ``run_id`` *column* (the value
+    :meth:`DocumentService.get_run` resolves — matched against
+    ``ProcessingRun.run_id``), never the row PK (``ProcessingRun.id``).
+
+    Previously the call site passed ``run.id`` (PK). ``get_run`` then matched
+    nothing, raised ``DocumentNotFoundError`` ("processing run … not found"),
+    and the (best-effort) handler in ``_do_extract`` swallowed it — silently
+    dropping the diagnostics row. ``run.run_id`` is the column value
+    ``get_run`` looks up, so the row is captured.
+
+    This end-to-end test exercises the real call site: it FAILS with the bug
+    (no diagnostics row) and PASSES with the fix (row present)."""
+
+    def test_do_extract_persists_diagnostics_row(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            text = "The enclosure shall be sealed to IP65 minimum ingress protection."
+            fake = FakeLlmAdapter(
+                responses=[
+                    ExtractionResponse(
+                        candidates=[_candidate("Sealed to IP65 minimum.", text)]
+                    )
+                ]
+            )
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            proc = JobProcessor(sf, llm=fake)
+
+            async with sf() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                # _load_pages queries DocumentPage by version_id; the extractor
+                # chunks these windows and the fake LLM answers per window.
+                session.add(
+                    DocumentPage(
+                        document_version_id=info["version_id"],
+                        page_number=1,
+                        cleaned_text=text,
+                        ocr_needed=False,
+                    )
+                )
+                await session.flush()
+                svc = DocumentService(session)
+                await proc._do_extract(  # noqa: SLF001 — exercising private stage
+                    session, svc, auth, version, run_id=info["run_id"]
+                )
+                await session.commit()
+
+            # The diagnostics row must exist — proof the orchestrator passed the
+            # run_id *column* (run.run_id) to capture_extraction_diagnostics.
+            async with sf() as session:
+                rows = (
+                    await session.execute(
+                        select(ExtractionDiagnostics).where(
+                            ExtractionDiagnostics.processing_run_id
+                            == info["processing_run_id"]
+                        )
+                    )
+                ).scalars().all()
+                assert len(rows) == 1
 
         asyncio.run(_run())

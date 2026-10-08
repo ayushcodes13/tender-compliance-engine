@@ -15,6 +15,7 @@ import contextlib
 import uuid
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from tender_compliance_api.db.models import (
     DocumentPage,
@@ -212,6 +213,45 @@ def _setup_other_org():
 
 
 class TestPageMetadata:
+    def test_historical_exception_text_is_redacted(self):
+        user_id, org_id, project_id = _build_org_project()
+        doc_id, ver = _create_doc_version_with_pages(project_id, num_pages=1)
+
+        async def _inject_historical_metadata():
+            async with _session_cm() as session:
+                page = (
+                    await session.execute(
+                        select(DocumentPage).where(
+                            DocumentPage.document_version_id
+                            == select(DocumentVersion.id)
+                            .where(DocumentVersion.document_id == doc_id)
+                            .scalar_subquery(),
+                            DocumentPage.page_number == 1,
+                        )
+                    )
+                ).scalars().first()
+                assert page is not None
+                page.structural_metadata = {
+                    "error": "provider token SECRET leaked from parser",
+                    "warnings": [
+                        "page render failed: /private/path SECRET",
+                        "page has no text layer",
+                    ],
+                }
+                await session.commit()
+
+        asyncio.run(_inject_historical_metadata())
+        response = client.get(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/pages/1",
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "SECRET" not in response.text
+        assert "provider token" not in response.text
+        assert "Page preview rendering failed" in body["structural_metadata"]["warnings"][0]
+        assert "page has no text layer" in body["structural_metadata"]["warnings"][1]
+
     def test_get_page_returns_metadata(self):
         """GET page returns text, OCR, structural metadata."""
         user_id, org_id, project_id = _build_org_project()

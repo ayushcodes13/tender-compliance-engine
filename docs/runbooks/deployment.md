@@ -41,8 +41,13 @@ Readiness through the same path used by the browser:
 curl -fsS http://localhost:3000/api/backend/ready
 ```
 
-The API binds to localhost in this mode; the browser uses the same-origin
-Next.js proxy and the shared document volume is internal to the Docker stack.
+Both the API and web UI bind to localhost by default (`127.0.0.1`). The browser
+uses the same-origin Next.js proxy and the shared document volume is internal
+to the Docker stack. This pilot has no user sign-in, so do not bind the web UI
+to a public or shared network. For remote client access, keep the Compose
+binding on loopback and put a trusted reverse proxy or VPN access boundary in
+front of it. `PILOT_WEB_BIND` can change the host bind address when required;
+only use a private, access-controlled boundary for that deployment.
 
 ### 2. Public multi-customer SaaS
 
@@ -84,7 +89,9 @@ FastAPI API ───── PostgreSQL
 - `GET /health` — process liveness.
 - `GET /ready` — checks the dependencies needed to serve the product,
   including database, queue, durable document storage, and production AI
-configuration.
+  configuration. Production readiness also requires a recent processing
+  worker heartbeat from Redis; the worker renews its short-lived lease while
+  polling the queue.
 - Browser/deployment checks should prefer
   `GET /api/backend/ready` through the web app because that proves both the
   frontend proxy and backend dependencies are reachable.
@@ -174,7 +181,9 @@ Required automated release checks:
 - frontend typecheck + production build;
 - API, worker, and web container builds;
 - full bundled Compose startup;
-- `http://localhost:3000/api/backend/ready` returns `status=ready`.
+- `http://localhost:3000/api/backend/ready` returns `status=ready`, including
+  `components.worker=ready` after the processing worker publishes its Redis
+  heartbeat.
 
 After those checks, use
 [POST61_RELEASE_REVIEW.md](../POST61_RELEASE_REVIEW.md) with real customer-like

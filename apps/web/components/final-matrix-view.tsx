@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle, Download, LockKeyhole, RefreshCw } from "lucide-react";
+import Link from "next/link";
 
 import {
   api,
@@ -204,6 +205,7 @@ export function FinalMatrixView(props: {
             <tr>
               <th>#</th>
               <th>Tender requirement</th>
+              <th>Tender source</th>
               <th>Vendor fact</th>
               <th>Evidence</th>
               <th>Assessment</th>
@@ -213,6 +215,10 @@ export function FinalMatrixView(props: {
           </thead>
           <tbody>
             {rows.map((row) => {
+              const sourcePage =
+                Number.isInteger(row.source_page) && (row.source_page ?? 0) > 0
+                  ? row.source_page
+                  : null;
               const issues = [
                 row.has_unresolved_conflict ? "Conflict" : null,
                 row.clarification_statuses.some((s) => s === "pending") ? "Clarification" : null,
@@ -222,6 +228,19 @@ export function FinalMatrixView(props: {
                 <tr key={row.requirement_id} className={issues.length || !row.assessment_is_confirmed ? "unresolved" : ""}>
                   <td>{row.serial}</td>
                   <td>{row.tender_requirement}</td>
+                  <td>
+                    {sourcePage !== null ? (
+                      <Link
+                        className="button button-secondary button-small"
+                        href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&requirementId=${encodeURIComponent(row.requirement_id)}&page=${sourcePage}`}
+                        aria-label={`Open tender source for requirement ${row.serial}, page ${sourcePage}`}
+                      >
+                        Page {sourcePage} · Open source
+                      </Link>
+                    ) : (
+                      <span>Location unavailable</span>
+                    )}
+                  </td>
                   <td>
                     {row.vendor_spec_value !== null
                       ? `${row.vendor_spec_parameter ?? "Value"}: ${row.vendor_spec_value} ${row.vendor_spec_unit ?? ""}`

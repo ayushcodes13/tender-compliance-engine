@@ -204,7 +204,8 @@ class TestDocxParserAdapter:
         adapter = DocxParserAdapter()
         result = asyncio.run(adapter.parse(b"not a real docx", DOCX_MIME_TYPE))
         assert result.fatal_error is not None
-        assert "DOCX could not be read" in result.fatal_error
+        assert "processing stage" in result.fatal_error.lower()
+        assert "not a real docx" not in result.fatal_error
         assert result.pages == []
 
     def test_empty_document_is_single_empty_page(self) -> None:

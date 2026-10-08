@@ -16,6 +16,7 @@ import logging
 
 import pymupdf
 
+from tender_compliance_api.errors import PAGE_RENDER_FAILURE, PROCESSING_STAGE_FAILURE
 from tender_compliance_api.renderer.adapter import (
     RendererAdapter,
     RenderPageResult,
@@ -75,7 +76,7 @@ class PymupdfRendererAdapter(RendererAdapter):
         try:
             doc = pymupdf.open(stream=data, filetype="pdf")  # type: ignore[no-untyped-call]
         except Exception as exc:  # noqa: BLE001 — any open failure is non-fatal
-            logger.warning("pymupdf document open error: %s", exc)
+            logger.warning("pymupdf document open error (%s)", type(exc).__name__)
             if "password" in str(exc).lower() or "encrypted" in str(exc).lower():
                 return self._encrypted(data, str(exc))
             return RenderResult(
@@ -84,7 +85,7 @@ class PymupdfRendererAdapter(RendererAdapter):
                 render_dpi=self._dpi,
                 page_count=0,
                 pages=[],
-                fatal_error=f"PDF could not be opened for rendering: {exc!r}",
+                fatal_error=PROCESSING_STAGE_FAILURE,
             )
 
         try:
@@ -99,7 +100,7 @@ class PymupdfRendererAdapter(RendererAdapter):
                     page = doc[i]
                     pix = page.get_pixmap(dpi=self._dpi)
                     png_bytes = pix.tobytes("png")  # type: ignore[no-untyped-call]
-                except Exception as exc:  # noqa: BLE001 — per-page failure
+                except Exception:  # noqa: BLE001 — per-page failure
                     pages.append(
                         RenderPageResult(
                             page_number=page_number,
@@ -107,7 +108,7 @@ class PymupdfRendererAdapter(RendererAdapter):
                             content_type="image/png",
                             render_dpi=self._dpi,
                             warnings=[],
-                            error=f"page render failed: {exc!r}",
+                            error=PAGE_RENDER_FAILURE,
                         )
                     )
                     continue

@@ -23,6 +23,8 @@ import asyncio
 import uuid
 from typing import Any
 
+from sqlalchemy import select
+
 from tender_compliance_api.audit.service import AuditService
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.compliance.missing_evidence import (
@@ -30,10 +32,12 @@ from tender_compliance_api.compliance.missing_evidence import (
     MissingEvidenceService,
 )
 from tender_compliance_api.db.models import (
+    ClarificationRequest,
     ClarificationStatus,
     Conflict,
     ConflictResolution,
     ConstraintNormalizationState,
+    Deviation,
     DeviationStatus,
     DeviationType,
     DocumentProcessingStatus,
@@ -1089,3 +1093,91 @@ class TestNoFabricationCP57:
         dev = asyncio.run(_run())
         assert dev.original_requirement == "Shall operate from -20 °C to +60 °C."
         assert dev.proposed_alternative == "Propose -10 °C to +50 °C."
+
+
+# ---------------------------------------------------------------------------
+# Regression: create_deviation / answer_clarification must commit so their
+# rows survive across requests (deviations + clarifications endpoints).
+# ---------------------------------------------------------------------------
+
+
+class TestMissingEvidencePersistenceAcrossSessions:
+    def test_create_deviation_persists_for_subsequent_session(
+        self, session_cm
+    ) -> None:
+        user_id, org_id, proj_id = _setup_project_and_tenant(session_cm)
+        auth = _make_user_auth(user_id, org_id)
+        req_id = _setup_requirement(session_cm, proj_id)
+
+        async def _run():
+            async with session_cm() as session:
+                svc = MissingEvidenceService(
+                    db=session, audit=AuditService(session)
+                )
+                return await svc.create_deviation(
+                    auth=auth,
+                    project_id=proj_id,
+                    requirement_id=req_id,
+                    deviation_type=DeviationType.SCOPE,
+                    original_requirement="The product shall weigh < 5 kg.",
+                    proposed_alternative="exclude weight limit",
+                    rationale="component unavailable",
+                )
+
+        dev = asyncio.run(_run())
+        assert dev.id is not None
+
+        async def _count() -> int:
+            async with session_cm() as s:
+                rows = (
+                    await s.execute(
+                        select(Deviation).where(Deviation.requirement_id == req_id)
+                    )
+                ).scalars().all()
+                return len(rows)
+
+        count = asyncio.run(_count())
+        assert count == 1, f"deviation not persisted across sessions (got {count})"
+
+    def test_answer_clarification_persists_for_subsequent_session(
+        self, session_cm
+    ) -> None:
+        user_id, org_id, proj_id = _setup_project_and_tenant(session_cm)
+        auth = _make_user_auth(user_id, org_id)
+        req_id = _setup_requirement(session_cm, proj_id)
+
+        async def _run():
+            async with session_cm() as session:
+                svc = MissingEvidenceService(
+                    db=session, audit=AuditService(session)
+                )
+                cr = await svc.create_clarification(
+                    auth=auth,
+                    project_id=proj_id,
+                    question="Is the product CE marked?",
+                    context=ClarificationContext(reason="missing_evidence"),
+                    requirement_id=req_id,
+                )
+                answered = await svc.answer_clarification(
+                    auth=auth,
+                    project_id=proj_id,
+                    clarification_id=cr.id,
+                    answer="Yes, per EN 60950.",
+                )
+                return answered.id
+
+        clar_id = asyncio.run(_run())
+
+        async def _count() -> int:
+            async with session_cm() as s:
+                rows = (
+                    await s.execute(
+                        select(ClarificationRequest).where(
+                            ClarificationRequest.id == clar_id
+                        )
+                    )
+                ).scalars().all()
+                return len(rows)
+
+        count = asyncio.run(_count())
+        assert count == 1, f"clarification not persisted across sessions (got {count})"
