@@ -440,6 +440,42 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
       }
       if (
         path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix/exports` &&
+        method === "POST" &&
+        url.searchParams.get("fmt") === "pdf"
+      ) {
+        return json({
+          id: "image-validation-failed-export-1",
+          status: "failed",
+          export_format: "pdf",
+          generated_at: createdAt,
+          requirement_count: 2,
+          validation_status: "needs_review",
+          validation_report: {
+            issues: [],
+            source_validation: {
+              status: "needs_review",
+              checked_rows: 1,
+              issues: [{ row_id: requirementId, code: "ocr_visual_verification_required" }],
+              llm_fallback_results: [{
+                row_id: requirementId,
+                page_number: 12,
+                status: "needs_review",
+                call_status: "failed",
+                error_category: "image_parse_error",
+              }],
+            },
+            window_processing: {
+              status: "complete",
+              completeness_proven: false,
+              obligation_audit_status: "no_potential_omissions",
+              potential_omissions: [],
+            },
+          },
+        });
+      }
+      if (
+        path ===
           `/projects/project-1/documents/${tenderDocumentId}/versions/1/exports` &&
         method === "GET"
       ) {
@@ -599,6 +635,8 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByText(/This export is unavailable for download until it has a passing result\./)).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Export PDF" }).click();
+  await expect(page.getByText(/Image validation error category: image_parse_error\./)).toBeVisible();
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export vendor response DOCX" }).click(),

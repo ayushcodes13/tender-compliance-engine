@@ -355,6 +355,7 @@ export type ExportArtifactResponse = {
         provider?: string;
         model?: string;
         call_status?: string;
+        error_category?: string | null;
       }[];
     };
     window_processing?: {

@@ -28,6 +28,17 @@ function exportFieldSummary(issues: { field?: string }[] | undefined): string {
   return fields.length ? ` Fields checked: ${fields.join(", ")}.` : "";
 }
 
+function safeDiagnosticCategories(values: (string | null | undefined)[]): string[] {
+  return Array.from(
+    new Set(
+      values.filter(
+        (value): value is string =>
+          typeof value === "string" && /^[a-z0-9_]{1,64}$/i.test(value)
+      )
+    )
+  );
+}
+
 function obligationCoverageMessage(
   coverage:
     | {
@@ -52,11 +63,9 @@ function obligationCoverageMessage(
     return `The independent obligation scan found ${count} possible omission${count === 1 ? "" : "s"}${excerpts.length ? `: ${excerpts.join("; ")}` : ""}${remaining > 0 ? `; and ${remaining} more` : ""}. Review the source and add any missing requirement before exporting.`;
   }
   if (coverage.obligation_audit_status === "audit_failed") {
-    const categories = Array.from(
-      new Set(
-        (coverage.obligation_audit_failed_windows ?? [])
-          .map((window) => window.coverage_error_category)
-          .filter((category): category is string => Boolean(category))
+    const categories = safeDiagnosticCategories(
+      (coverage.obligation_audit_failed_windows ?? []).map(
+        (window) => window.coverage_error_category
       )
     );
     const categoryText = categories.length
@@ -90,6 +99,38 @@ function obligationCoverageSummary(
     return " The independent scan did not complete, so whole-tender completeness needs human review.";
   }
   return " Whole-tender completeness was not verified because no independent obligation scan is available.";
+}
+
+function sourceValidationDiagnostic(
+  validation:
+    | {
+        llm_fallback_results?: {
+          status: string;
+          call_status?: string;
+          error_category?: string | null;
+        }[];
+      }
+    | undefined
+): string {
+  const results = validation?.llm_fallback_results ?? [];
+  const categories = safeDiagnosticCategories(
+    results
+      .filter((result) => result.call_status === "failed")
+      .map((result) => result.error_category)
+  );
+  const unavailableCount = results.filter(
+    (result) => result.status === "image_unavailable"
+  ).length;
+  const details: string[] = [];
+  if (categories.length) {
+    details.push(`Image validation error category: ${categories.join(", ")}.`);
+  }
+  if (unavailableCount) {
+    details.push(
+      `The source page image could not be retrieved for ${unavailableCount} validation check${unavailableCount === 1 ? "" : "s"}.`
+    );
+  }
+  return details.length ? ` ${details.join(" ")}` : "";
 }
 
 const statusTone = (value: string | null) => {
@@ -349,7 +390,7 @@ export function FinalMatrixView(props: {
           }
           const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
           throw new Error(
-            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before this file can be issued. Open each row's source citation and verify the exact wording.`
+            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before this file can be issued. Open each row's source citation and verify the exact wording.${sourceValidationDiagnostic(artifact.validation_report?.source_validation)}`
           );
         }
         throw new Error(artifact.error_message ?? "Export generation failed");
@@ -440,7 +481,7 @@ export function FinalMatrixView(props: {
           }
           const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
           throw new Error(
-            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before the response sheet can be issued.`
+            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before the response sheet can be issued.${sourceValidationDiagnostic(artifact.validation_report?.source_validation)}`
           );
         }
         throw new Error(artifact.error_message ?? "Export generation failed");
