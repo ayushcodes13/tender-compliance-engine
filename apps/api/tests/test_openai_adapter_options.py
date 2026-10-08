@@ -7,6 +7,7 @@ from tender_compliance_api.extraction.adapter import LlmCallConfig
 from tender_compliance_api.extraction.openai_adapter import (
     OpenAiLlmAdapter,
     _adapt_unsupported_option,
+    _azure_foundry_base_url,
     _completion_options,
 )
 
@@ -39,6 +40,23 @@ def test_other_models_keep_legacy_completion_options() -> None:
 
 def test_omitted_completion_limits_stay_omitted() -> None:
     assert _completion_options(_config("gpt-5.4-nano", max_tokens=None, temperature=None)) == {}
+
+
+def test_bare_azure_foundry_endpoint_uses_models_route() -> None:
+    assert _azure_foundry_base_url("https://example.openai.azure.com/") == (
+        "https://example.openai.azure.com/models/",
+        True,
+    )
+
+
+def test_explicit_openai_compatible_endpoint_is_preserved() -> None:
+    endpoint = "https://example.openai.azure.com/openai/v1"
+    assert _azure_foundry_base_url(endpoint) == (endpoint, False)
+
+
+def test_non_azure_base_url_is_preserved() -> None:
+    endpoint = "https://api.example.com/v1"
+    assert _azure_foundry_base_url(endpoint) == (endpoint, False)
 
 
 def test_unsupported_max_tokens_adapts_to_completion_tokens() -> None:

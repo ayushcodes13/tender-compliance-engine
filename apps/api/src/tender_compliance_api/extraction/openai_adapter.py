@@ -23,6 +23,7 @@ import asyncio
 import base64
 import time
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel
 
@@ -38,6 +39,27 @@ from tender_compliance_api.extraction.adapter import (
 #: Fallback when a config omits a timeout / retry budget.
 _DEFAULT_TIMEOUT_S: float = 30.0
 _DEFAULT_MAX_RETRIES: int = 2
+_AZURE_FOUNDRY_API_VERSION = "2024-05-01-preview"
+
+
+def _azure_foundry_base_url(base_url: str | None) -> tuple[str | None, bool]:
+    """Map a bare Azure AI Services host to its models chat-completions route.
+
+    The validation-service endpoint setting is a bare resource URL. Azure AI
+    Services expects ``/models/chat/completions?api-version=...``; the generic
+    OpenAI client otherwise sends ``/chat/completions`` and receives 404.
+    Explicit OpenAI-compatible routes are left as configured.
+    """
+    if not base_url:
+        return None, False
+    parts = urlsplit(base_url.strip())
+    host = (parts.hostname or "").lower()
+    is_azure_resource = host.endswith(".openai.azure.com") or host.endswith(
+        ".services.ai.azure.com"
+    )
+    if is_azure_resource and not parts.path.strip("/"):
+        return urlunsplit((parts.scheme, parts.netloc, "/models/", "", "")), True
+    return base_url, False
 
 
 def _completion_options(config: LlmCallConfig) -> dict[str, object]:
@@ -110,7 +132,15 @@ class OpenAiLlmAdapter(LlmAdapter):
 
         from openai import AsyncOpenAI
 
-        return AsyncOpenAI(api_key=self._api_key, base_url=self._base_url)
+        base_url, azure_models_route = _azure_foundry_base_url(self._base_url)
+        return AsyncOpenAI(
+            api_key=self._api_key,
+            base_url=base_url,
+            default_headers={"api-key": self._api_key} if azure_models_route else None,
+            default_query={"api-version": _AZURE_FOUNDRY_API_VERSION}
+            if azure_models_route
+            else None,
+        )
 
     async def extract(
         self,
