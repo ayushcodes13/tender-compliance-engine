@@ -4,6 +4,11 @@ const createdAt = "2026-10-04T12:00:00Z";
 const tenderDocumentId = "00000000-0000-4000-8000-000000000010";
 const requirementId = "00000000-0000-4000-8000-000000000001";
 const otherRequirementId = "00000000-0000-4000-8000-000000000002";
+const firstSourceId = "00000000-0000-4000-8000-000000000101";
+const secondSourceId = "00000000-0000-4000-8000-000000000102";
+const thirdSourceId = "00000000-0000-4000-8000-000000000103";
+const secondSourceQuote = "The equipment shall include a local emergency stop.";
+const thirdSourceQuote = "The control panel shall display active fault codes.";
 const coverageQuote = "The instrument shall include installation and operator training.";
 
 function project(status = "draft") {
@@ -66,6 +71,7 @@ function finalMatrixRow() {
     category: "Motion",
     clause: "4.2",
     source_page: 12,
+    source_anchor_id: firstSourceId,
     mandatory: true,
     user_notes: null,
     review_status: "reviewed",
@@ -253,13 +259,32 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
           updated_at: null,
           constraints: [],
           sources: [{
-            id: "source-1",
+            id: firstSourceId,
             requirement_id: requirementId,
             page_number: 12,
             clause_number: "4.2",
             location_type: "exact",
             source_text: finalMatrixRow().raw_source,
+            quote_text: finalMatrixRow().raw_source,
             ocr_confidence: 0.99,
+          }, {
+            id: secondSourceId,
+            requirement_id: requirementId,
+            page_number: 14,
+            clause_number: "4.3",
+            location_type: "approximate",
+            source_text: secondSourceQuote,
+            quote_text: secondSourceQuote,
+            ocr_confidence: 0.81,
+          }, {
+            id: thirdSourceId,
+            requirement_id: requirementId,
+            page_number: 14,
+            clause_number: "4.4",
+            location_type: "approximate",
+            source_text: thirdSourceQuote,
+            quote_text: thirdSourceQuote,
+            ocr_confidence: 0.81,
           }],
           revisions: [],
           notes: [],
@@ -288,14 +313,70 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
         method === "GET"
       ) {
         return json([{
+          anchor_id: firstSourceId,
           requirement_id: requirementId,
           clause_number: "4.2",
           page_number: 12,
           location_type: "exact",
           source_text: finalMatrixRow().raw_source,
+          quote_text: finalMatrixRow().raw_source,
           bbox: null,
           ocr_confidence: 0.99,
         }]);
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/14` &&
+        method === "GET"
+      ) {
+        return json({
+          page_number: 14,
+          has_image: true,
+          ocr_needed: true,
+          ocr_confidence: 0.81,
+          cleaned_text: `${secondSourceQuote} ${thirdSourceQuote}`,
+          extracted_text: `${secondSourceQuote} ${thirdSourceQuote}`,
+          structural_metadata: null,
+          created_at: createdAt,
+        });
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/14/sources` &&
+        method === "GET"
+      ) {
+        return json([{
+          anchor_id: secondSourceId,
+          requirement_id: requirementId,
+          clause_number: "4.3",
+          page_number: 14,
+          location_type: "approximate",
+          source_text: secondSourceQuote,
+          quote_text: secondSourceQuote,
+          bbox: { x: 10, y: 10, width: 60, height: 12 },
+          ocr_confidence: 0.81,
+        }, {
+          anchor_id: thirdSourceId,
+          requirement_id: requirementId,
+          clause_number: "4.4",
+          page_number: 14,
+          location_type: "approximate",
+          source_text: thirdSourceQuote,
+          quote_text: thirdSourceQuote,
+          bbox: { x: 10, y: 30, width: 60, height: 12 },
+          ocr_confidence: 0.81,
+        }]);
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/14/image` &&
+        method === "GET"
+      ) {
+        return route.fulfill({
+          status: 200,
+          contentType: "image/svg+xml",
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80" viewBox="0 0 100 80"><rect width="100" height="80" fill="#fff"/><path d="M5 5h90M5 20h90M5 35h90M5 50h90" stroke="#cbd5e1"/></svg>',
+        });
       }
       if (
         path ===
@@ -532,11 +613,11 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   });
   await expect(sourceLink).toHaveAttribute(
     "href",
-    `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12`
+    `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}`
   );
   await sourceLink.click();
   await expect(page).toHaveURL(
-    new RegExp(`/projects/project-1/review\\?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12$`)
+    new RegExp(`/projects/project-1/review\\?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}$`)
   );
   await expect(page.getByText("Page 12 · Clause 4.2", { exact: true })).toBeVisible();
   await expect(page.getByText(finalMatrixRow().raw_source, { exact: true }).first()).toBeVisible();
@@ -550,4 +631,29 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(
     page.getByText(/The cited tender document version is unavailable/).first()
   ).toBeVisible();
+
+  await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}`);
+  await expect(page.getByText("Page 12 · No rendered image", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".source-finding.selected").getByText(finalMatrixRow().raw_source, { exact: true })
+  ).toBeVisible();
+  const citationChip = page.locator(".citation-chip").first();
+  await citationChip.hover();
+  const citationPreview = page.locator(".citation-glance").first();
+  await expect(citationPreview).toContainText(finalMatrixRow().raw_source);
+  await expect(citationPreview).toContainText("Exact anchor");
+
+  await page.getByRole("button", { name: "Open source on page 14, clause 4.3" }).click();
+  await expect(page).toHaveURL(new RegExp(`page=14&sourceId=${secondSourceId}$`));
+  await expect(page.getByAltText("Page 14 of Technical Tender v1")).toBeVisible();
+  const selectedCitation = page.locator(".source-highlight.approximate.selected");
+  await expect(selectedCitation).toHaveCount(1);
+  await expect(selectedCitation).toHaveAttribute("title", `Approximate source: ${secondSourceQuote}`);
+
+  await page.getByRole("button", { name: "Open source on page 14, clause 4.4" }).click();
+  await expect(page).toHaveURL(new RegExp(`page=14&sourceId=${thirdSourceId}$`));
+  const secondSelectedCitation = page.locator(".source-highlight.approximate.selected");
+  await expect(secondSelectedCitation).toHaveCount(1);
+  await expect(secondSelectedCitation).toHaveAttribute("title", `Approximate source: ${thirdSourceQuote}`);
+  await expect(secondSelectedCitation.getByText("4.4Approx", { exact: true })).toBeVisible();
 });

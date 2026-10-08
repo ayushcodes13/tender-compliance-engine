@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { SourceViewer } from "@/components/source-viewer";
 import { EvidencePanel } from "@/components/evidence-panel";
@@ -31,7 +32,7 @@ import {
   NoteSummary,
   RequirementDetail,
   RequirementListResponse,
-  SourceAnchor,
+  RequirementSourceSummary,
 } from "@/lib/api/client";
 
 /** Status for the local UI state (mirrors backend RequirementReviewState). */
@@ -116,6 +117,7 @@ export function TenderReviewWorkspace(props: {
   document?: DocumentItem | null;
   initialRequirementId?: string;
   initialSourcePage?: number;
+  initialSourceId?: string;
   initialSourceQuote?: string;
 }) {
   const {
@@ -125,9 +127,17 @@ export function TenderReviewWorkspace(props: {
     document,
     initialRequirementId,
     initialSourcePage,
+    initialSourceId,
     initialSourceQuote,
   } = props;
+  const router = useRouter();
   const [selectedId, setSelectedId] = useState<string>("");
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(
+    initialSourceId ?? null
+  );
+  const [sourcePageOverride, setSourcePageOverride] = useState<number | undefined>(
+    initialSourcePage
+  );
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(false);
@@ -140,6 +150,11 @@ export function TenderReviewWorkspace(props: {
   const [notesError, setNotesError] = useState<string | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
   const [vendorReady, setVendorReady] = useState(false);
+
+  useEffect(() => {
+    setActiveSourceId(initialSourceId ?? null);
+    setSourcePageOverride(initialSourcePage);
+  }, [initialSourceId, initialSourcePage]);
 
   useEffect(() => {
     void api
@@ -229,7 +244,7 @@ export function TenderReviewWorkspace(props: {
     if (reviewQueue.length === 0) return;
     const base = Math.max(reviewIndex, 0);
     const next = (base + direction + reviewQueue.length) % reviewQueue.length;
-    setSelectedId(reviewQueue[next].id);
+    selectRequirement(reviewQueue[next].id);
   };
 
   // Keep all hooks above the loading/error/empty-state returns below. The
@@ -264,12 +279,51 @@ export function TenderReviewWorkspace(props: {
   }, [reqList?.items, selectedSummary]);
   const selectedStatus: RequirementStatus = (selectedSummary?.review_state ??
     "unreviewed") as RequirementStatus;
-  const selectedSources = detail?.sources ?? [];
+  const selectedSources = detail?.id === selectedId ? detail.sources : [];
+  const selectedSourceById = activeSourceId
+    ? selectedSources.find((source) => source.id === activeSourceId)
+    : undefined;
+  const preferredSourcePage = sourcePageOverride;
   const selectedSource =
-    initialSourcePage !== undefined
-      ? selectedSources.find((source) => source.page_number === initialSourcePage)
-      : selectedSources[0];
-  const sourcePage = selectedSource?.page_number ?? initialSourcePage ?? 1;
+    selectedSourceById ??
+    (preferredSourcePage !== undefined
+      ? selectedSources.find((source) => source.page_number === preferredSourcePage)
+      : selectedSources[0]);
+  const sourcePage =
+    selectedSource?.page_number ?? preferredSourcePage ?? 1;
+  const requestedCitationMissing =
+    initialRequirementId !== undefined &&
+    ((initialSourceId !== undefined &&
+      activeSourceId === initialSourceId &&
+      selectedSource?.id !== initialSourceId) ||
+      (initialSourceId === undefined &&
+        sourcePageOverride !== undefined &&
+        !selectedSource));
+
+  const selectRequirement = (requirementId: string) => {
+    setSelectedId(requirementId);
+    setActiveSourceId(null);
+    setSourcePageOverride(undefined);
+  };
+
+  const openCitation = (
+    requirementId: string,
+    source: RequirementSourceSummary
+  ) => {
+    setSelectedId(requirementId);
+    setActiveSourceId(source.id);
+    setSourcePageOverride(source.page_number);
+    const query = new URLSearchParams({
+      documentId,
+      version: String(version),
+      requirementId,
+      page: String(source.page_number),
+      sourceId: source.id,
+    });
+    router.replace(`/projects/${projectId}/review?${query.toString()}`, {
+      scroll: false,
+    });
+  };
 
   const STOP_WORDS = new Set([
     "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
@@ -546,7 +600,7 @@ export function TenderReviewWorkspace(props: {
                   <button
                     type="button"
                     className="requirement-card-main"
-                    onClick={() => setSelectedId(item.id)}
+                    onClick={() => selectRequirement(item.id)}
                     aria-pressed={active}
                   >
                     <div className="requirement-meta-line">
@@ -574,12 +628,12 @@ export function TenderReviewWorkspace(props: {
                   {selectedSources
                     .filter((src) => src.requirement_id === item.id)
                     .map((src) => (
-                      <span key={src.requirement_id} className="citation-wrap">
+                      <span key={src.id} className="citation-wrap">
                         <button
                           type="button"
                           className="citation-chip"
-                          onClick={() => setSelectedId(item.id)}
-                          aria-label={`Open source on page ${src.page_number}`}
+                          onClick={() => openCitation(item.id, src)}
+                          aria-label={`Open source on page ${src.page_number}, clause ${src.clause_number ?? "unlabeled"}`}
                         >
                           <FileText size={12} aria-hidden="true" />
                           {document?.display_name ?? "tender.pdf"} · p.{src.page_number}
@@ -624,15 +678,19 @@ export function TenderReviewWorkspace(props: {
                 <span>{detailError}</span>
               </div>
             </div>
-          ) : initialSourcePage !== undefined && initialRequirementId !== undefined && !selectedSource ? (
+          ) : requestedCitationMissing ? (
             <div className="source-stage">
               <div className="empty-list" role="status">
                 <CircleAlert size={18} aria-hidden="true" />
-                <strong>Cited page is unavailable for this requirement</strong>
+                <strong>
+                  {initialSourceId
+                    ? "Cited source anchor is unavailable for this requirement"
+                    : "Cited page is unavailable for this requirement"}
+                </strong>
                 <span>
-                  The saved source location could not be matched. Review the
-                  tender requirement and its available citations before relying
-                  on a page reference.
+                  The requested source location could not be matched to this
+                  immutable document version. Review the tender requirement and
+                  its available citations before relying on a page reference.
                 </span>
               </div>
             </div>
@@ -645,7 +703,13 @@ export function TenderReviewWorkspace(props: {
               selectedRequirementId={
                 initialSourceQuote && !selectedId ? null : selectedId || null
               }
-              highlightQuote={selectedId ? null : initialSourceQuote}
+              selectedAnchorId={selectedSource?.id ?? null}
+              highlightQuote={
+                selectedSource?.quote_text ??
+                selectedSource?.source_text ??
+                initialSourceQuote ??
+                null
+              }
               totalPages={undefined}
               onPageChange={(page) => {
                 /* Page navigation handled within SourceViewer */

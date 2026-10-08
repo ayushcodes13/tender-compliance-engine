@@ -15,6 +15,8 @@ export interface SourceViewerProps {
   totalPages?: number;
   /** Requirement whose source location was opened by a citation. */
   selectedRequirementId?: string | null;
+  /** Persisted source anchor selected by a citation. */
+  selectedAnchorId?: string | null;
   /** Exact excerpt opened from an obligation-coverage finding. */
   highlightQuote?: string | null;
   /** Optional class for the container. */
@@ -42,6 +44,7 @@ export function SourceViewer({
   onPageChange,
   totalPages,
   selectedRequirementId = null,
+  selectedAnchorId = null,
   highlightQuote = null,
   className = "",
 }: SourceViewerProps) {
@@ -92,14 +95,16 @@ export function SourceViewer({
   }, [projectId, documentId, version, pageNumber, highlightQuote]);
 
   const isSelected = useCallback(
-    (anchor: SourceAnchor) =>
-      Boolean(
+    (anchor: SourceAnchor) => {
+      if (selectedAnchorId) return anchor.anchor_id === selectedAnchorId;
+      return Boolean(
         (selectedRequirementId && anchor.requirement_id === selectedRequirementId) ||
           (highlightQuote &&
             normalizeQuoteForSelection(anchor.quote_text) ===
               normalizeQuoteForSelection(highlightQuote))
-      ),
-    [selectedRequirementId, highlightQuote]
+      );
+    },
+    [selectedRequirementId, selectedAnchorId, highlightQuote]
   );
 
   useEffect(() => {
@@ -239,6 +244,17 @@ export function SourceViewer({
             </div>
 
             <div className="source-page-body">
+              {selectedAnchorId &&
+              !anchors.some((anchor) => anchor.anchor_id === selectedAnchorId) ? (
+                <aside className="source-highlight-unavailable" role="status">
+                  <strong>Selected citation could not be located</strong>
+                  {highlightQuote ? <p><mark>{highlightQuote}</mark></p> : null}
+                  <span>
+                    The immutable page is open, but the saved source anchor is
+                    unavailable. No other excerpt has been highlighted.
+                  </span>
+                </aside>
+              ) : null}
               {anchors.map((anchor, index) => (
                 <div
                   key={anchor.anchor_id ?? anchor.requirement_id ?? `${anchor.quote_text ?? "source"}-${index}`}

@@ -574,7 +574,7 @@ export function FinalMatrixView(props: {
                     {sourcePage !== null ? (
                       <Link
                         className="button button-secondary button-small"
-                        href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&requirementId=${encodeURIComponent(row.requirement_id)}&page=${sourcePage}`}
+                        href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&requirementId=${encodeURIComponent(row.requirement_id)}&page=${sourcePage}${row.source_anchor_id ? `&sourceId=${encodeURIComponent(row.source_anchor_id)}` : ""}`}
                         aria-label={`Open tender source for requirement ${row.serial}, page ${sourcePage}`}
                       >
                         Page {sourcePage} · Open source

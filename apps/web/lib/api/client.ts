@@ -395,6 +395,7 @@ export type FinalMatrixRowResponse = {
   category: string | null;
   clause: string | null;
   source_page: number | null;
+  source_anchor_id?: string | null;
   mandatory: boolean | null;
   user_notes: string | null;
   review_status: string;
