@@ -132,9 +132,10 @@ async def _source_quote_validation_report(
     rows: Sequence[FinalMatrixRow | MatrixRow],
     storage: ObjectStorageAdapter,
 ) -> dict[str, object]:
-    """Check linked source text, then use a bounded page-image fallback."""
+    """Check linked source text and require image verification for OCR pages."""
     from tender_compliance_api.export.validation import (  # noqa: PLC0415
         RequirementCell,
+        SourceQuoteIssue,
         validate_source_quote_presence,
     )
     from tender_compliance_api.export.visual_validation import (  # noqa: PLC0415
@@ -144,7 +145,7 @@ async def _source_quote_validation_report(
 
     requirement_ids = [row.requirement_id for row in rows]
     sources_by_requirement: dict[str, list[str]] = {}
-    pages_by_requirement: dict[str, list[tuple[int, str | None]]] = {}
+    pages_by_requirement: dict[str, list[tuple[int, str | None, bool]]] = {}
     if requirement_ids:
         result = await session.execute(
             select(
@@ -152,6 +153,8 @@ async def _source_quote_validation_report(
                 RequirementSource.source_text,
                 RequirementSource.page_number,
                 DocumentPage.rendered_image_object_key,
+                DocumentPage.ocr_needed,
+                DocumentPage.structural_metadata,
             ).where(RequirementSource.requirement_id.in_(requirement_ids))
             .outerjoin(
                 DocumentPage,
@@ -159,19 +162,55 @@ async def _source_quote_validation_report(
                 & (DocumentPage.page_number == RequirementSource.page_number),
             )
         )
-        for requirement_id, source_text, page_number, image_key in result:
-            if source_text:
-                sources_by_requirement.setdefault(str(requirement_id), []).append(
+        for (
+            requirement_id,
+            source_text,
+            page_number,
+            image_key,
+            page_ocr_needed,
+            structural_metadata,
+        ) in result:
+            requirement_key = str(requirement_id)
+            if isinstance(source_text, str) and source_text:
+                sources_by_requirement.setdefault(requirement_key, []).append(
                     source_text
                 )
-            pages_by_requirement.setdefault(str(requirement_id), []).append(
-                (page_number, image_key)
+            if not isinstance(page_number, int):
+                continue
+            page_metadata = (
+                structural_metadata if isinstance(structural_metadata, dict) else {}
+            )
+            pages_by_requirement.setdefault(requirement_key, []).append(
+                (
+                    page_number,
+                    image_key if isinstance(image_key, str) else None,
+                    bool(page_ocr_needed)
+                    or bool(page_metadata.get("error")),
+                )
             )
 
     expected = [
         RequirementCell(str(row.requirement_id), row.raw_source) for row in rows
     ]
     issues = list(validate_source_quote_presence(expected, sources_by_requirement))
+    visual_required_ids = {
+        str(row.requirement_id) for row in rows if row.ocr_warning
+    }
+    visual_required_ids.update(
+        requirement_id
+        for requirement_id, page_sources in pages_by_requirement.items()
+        if any(page_ocr_warning for _, _, page_ocr_warning in page_sources)
+    )
+    issue_ids = {
+        issue.row_id
+        for issue in issues
+        if issue.code
+        in {"source_quote_not_found", "ocr_visual_verification_required"}
+    }
+    issues.extend(
+        SourceQuoteIssue(requirement_id, "ocr_visual_verification_required")
+        for requirement_id in sorted(visual_required_ids - issue_ids)
+    )
     settings = get_settings()
     adapter: LlmAdapter | None = None
     if settings.verbatim_validation_fallback_enabled and settings.openai_api_key.strip():
@@ -187,12 +226,17 @@ async def _source_quote_validation_report(
     resolved_ids: set[str] = set()
     if adapter is not None:
         for issue in issues:
-            if issue.code != "source_quote_not_found":
+            if issue.code not in {
+                "source_quote_not_found",
+                "ocr_visual_verification_required",
+            }:
                 continue
             row = row_by_id.get(issue.row_id)
             if row is None:
                 continue
-            for page_number, image_key in pages_by_requirement.get(issue.row_id, []):
+            for page_number, image_key, _ in pages_by_requirement.get(
+                issue.row_id, []
+            ):
                 if image_key is None:
                     continue
                 key = (page_number, image_key)

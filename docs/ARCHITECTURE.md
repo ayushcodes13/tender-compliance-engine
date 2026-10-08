@@ -147,17 +147,16 @@ LLM must not:
 
 LLM output is schema-validated before persistence.
 
-An optional `VERBATIM_VALIDATION_FALLBACK_ENABLED` second pass runs only when
-the deterministic source-substring check rejects a candidate in a single-page
-source window (up to three fallback calls per window). It may return an exact
-source quote from that same window; local
-guards recheck the quote, material numbers/units, and technical tokens. The
-recovered candidate keeps its original normalized wording and is persisted
-only into `NEEDS_CLARIFICATION` or `OCR_WARNING` review. Its selected quote is
-anchored approximately because the model does not establish exact offsets.
-Provider failure, malformed output, ambiguity, or a non-literal quote leaves
-the candidate rejected. The flag defaults to false and uses the configured
-extraction provider/model when enabled.
+The `VERBATIM_VALIDATION_FALLBACK_ENABLED` second pass runs when the
+deterministic source-substring check rejects a candidate in a single-page
+source window (up to three fallback calls per window). At export, every row
+whose cited page has an OCR warning also requires strict page-image validation,
+even when its quote matches the extracted OCR text. A strict result may verify
+an exact quote from that cited page; it cannot repair OCR, change wording, or
+move the citation. Provider failure, malformed output, ambiguity, unavailable
+page images, or a non-literal quote leaves the artifact in review. The flag is
+enabled by default and calls require a configured model API key; explicitly
+setting it to false disables the fallback.
 
 ## Deterministic responsibility
 
