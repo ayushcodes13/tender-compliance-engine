@@ -386,12 +386,8 @@ def validate_source_quote_presence(
             )
             runs: list[list[AuthorizedSourceFragment]] = []
             for source in page_fragments:
-                if (
-                    not runs
-                    or source.page_number
-                    != runs[-1][-1].page_number
-                    and source.page_number != (runs[-1][-1].page_number or 0) + 1
-                ):
+                previous_page = runs[-1][-1].page_number if runs else None
+                if not runs or source.page_number != (previous_page or 0) + 1:
                     runs.append([source])
                 else:
                     runs[-1].append(source)

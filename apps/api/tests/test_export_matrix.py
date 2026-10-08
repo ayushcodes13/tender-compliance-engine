@@ -335,6 +335,10 @@ class TestExportGeneration:
                 AuthorizedSourceFragment(17, "The machine shall test", page_local=True),
                 AuthorizedSourceFragment(18, "continuously at 1000/s", page_local=False),
             ],
+            [
+                AuthorizedSourceFragment(17, "The machine shall test", page_local=True),
+                AuthorizedSourceFragment(17, "continuously at 1000/s.", page_local=True),
+            ],
         ],
     )
     def test_source_quote_check_fails_closed_on_gaps_or_approximate_fragments(
