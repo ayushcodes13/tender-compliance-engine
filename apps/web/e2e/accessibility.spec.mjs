@@ -140,10 +140,30 @@ test.describe("accessibility", () => {
     await mockProjects(page, []);
     await page.goto("/dashboard");
     await expect(
-      page.getByRole("button", { name: "Create tender project" }),
+      page.getByRole("button", { name: "Create project" }),
     ).toBeVisible();
     await settle(page);
     await expectNoSeriousViolations(page, "/dashboard (empty state)");
+  });
+
+  test("project search filters and archived projects collapse", async ({ page }) => {
+    const archived = { ...seedProject(), id: "project-archived", name: "Old Tender", status: "archived" };
+    await mockProjects(page, [seedProject(), archived]);
+    await page.goto("/dashboard");
+    await expect(page.getByText("Pilot Tender")).toBeVisible();
+    await expect(page.getByText("Old Tender")).not.toBeVisible();
+
+    await page.getByRole("searchbox", { name: "Search tenders" }).fill("Pilot");
+    await expect(page.getByText("Pilot Tender")).toBeVisible();
+    await expect(page.getByText("Old Tender")).not.toBeVisible();
+
+    await page.getByRole("searchbox", { name: "Search tenders" }).fill("");
+    const archivedSection = page.locator("details");
+    await expect(archivedSection).toBeVisible();
+    await expect(archivedSection).not.toHaveAttribute("open", "");
+    await archivedSection.locator("summary").click();
+    await expect(archivedSection).toHaveAttribute("open", "");
+    await expect(page.getByText("Old Tender")).toBeVisible();
   });
 
   test("create-project dialog has no serious WCAG A/AA violations", async ({

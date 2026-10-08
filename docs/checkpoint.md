@@ -6,7 +6,7 @@
 
 ## Current position
 
-Completed checkpoints are crossed out below. All checkpoints CP00 through CP66 are marked DONE. See the implementation
+Completed checkpoints are crossed out below. All checkpoints CP00 through CP67 are marked DONE. See the implementation
 notes on each entry; follow-up hardening work is recorded below as it is identified.
 
 The repository has the complete Phase 1 extraction pipeline through CP48 (end-to-end acceptance and release gate), including: real persistence (CP06–CP11), object storage and upload validation (CP12–CP16), document processing state machine and Redis-backed worker (CP17–CP18), source-preserving parsing/rendering/OCR (CP19–CP24), structured extraction schema and LLM adapter through reconciliation/diagnostics (CP25–CP31), the RequirementConstraint model + normalization states (CP32), deterministic numeric/operator/unit parsing (CP33), qualitative condition extraction with OCR/ambiguity escalation (CP34), requirement list/detail API (CP35), source viewer (CP36), three-pane review UI (CP37), requirement editing and revision history (CP38), split/merge/mandatory/categories (CP39), review-state machine and audit (CP40), matrix projection (CP41), XLSX export (CP42), benchmark dataset (CP43), eval harness and quality gates (CP44), adversarial/security tests (CP45), observability (CP46), deployment configuration (CP47), and Phase 1 end-to-end acceptance and release gate (CP48).
@@ -3435,6 +3435,34 @@ Extend the proven source-preserving pipeline to vendor/OEM evidence and produce 
 
 - Never infer a page or clause when source metadata is absent.
 - Do not change requirement text, source anchors, or assessment state as part of navigation.
+
+## Checkpoint 67 — ~~Polished project workspace~~
+
+**Status:** DONE — refreshed the project landing hierarchy and added search and a collapsible archived-project section.
+
+**Plain-English outcome:** Clients can scan current tender work, find a project, and keep archived work out of the way without losing access to it.
+
+### What we did
+
+1. Clarify the Projects page heading and first-project onboarding state.
+2. Summarize project counts from persisted project statuses only.
+3. Add search over project name and external tender ID.
+4. Keep archived projects available in a collapsed section with a count.
+5. Improve project cards and the create-project dialog while preserving keyboard access and existing routes.
+
+### This checkpoint is complete only when
+
+- [x] The project list has a clear visual hierarchy and helpful empty/loading/error states.
+- [x] Search filters active and archived projects without changing project data or workflow.
+- [x] Archived projects are collapsed by default and remain reachable by keyboard.
+- [x] Project creation and navigation remain available with accessible focus behavior.
+- [x] Frontend typecheck, production build, and relevant browser checks pass.
+
+**Implementation note:** Updated the project dashboard with status-based workspace summaries, searchable project cards, a collapsed archive, and a clearer create-project modal. Updated the commercial-flow browser assertions for the renamed create controls. Verification: frontend typecheck and production build passed; all 15 Playwright browser checks passed.
+
+### Guardrail
+
+- Do not imply requirement counts, extraction completeness, or workflow completion unless the underlying persisted data provides that information.
 
 # Plan completion rule
 

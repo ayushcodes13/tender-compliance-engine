@@ -315,9 +315,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   ).toBeVisible();
 
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Create tender project" }).click();
-  await page.getByPlaceholder("Project name").fill("Pilot Tender");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByLabel("Project name").fill("Pilot Tender");
+  await page.getByRole("dialog").getByRole("button", { name: "Create project" }).click();
 
   await expect(page).toHaveURL(/\/projects\/project-1$/);
   await expect(page.getByRole("heading", { name: "Pilot Tender" })).toBeVisible();
