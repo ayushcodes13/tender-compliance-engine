@@ -189,6 +189,10 @@ export function TenderReviewWorkspace(props: {
   // it even when it is beyond the first page of the requirement list.
   useEffect(() => {
     if (reqList && !selectedId) {
+      // Coverage findings do not belong to a persisted requirement row yet.
+      // Keep the review workspace unselected so their source quote can open
+      // directly without loading an unrelated requirement from the list.
+      if (initialSourceQuote && !initialRequirementId) return;
       const linked = initialRequirementId
         ? reqList.items.find((item) => item.id === initialRequirementId)
         : undefined;
@@ -196,7 +200,7 @@ export function TenderReviewWorkspace(props: {
         linked?.id ?? initialRequirementId ?? reqList.items[0]?.id ?? ""
       );
     }
-  }, [reqList, selectedId, initialRequirementId]);
+  }, [reqList, selectedId, initialRequirementId, initialSourceQuote]);
 
   // Reset draft text and notes when selection changes.
   useEffect(() => {
@@ -248,7 +252,9 @@ export function TenderReviewWorkspace(props: {
           superseded: detail.superseded,
           created_at: detail.created_at,
         }
-      : reqList?.items[0]);
+      : selectedId
+        ? reqList?.items.find((item) => item.id === selectedId)
+        : undefined);
   const visibleRequirements = useMemo(() => {
     const items = reqList?.items ?? [];
     if (selectedSummary && !items.some((item) => item.id === selectedSummary.id)) {
@@ -636,8 +642,10 @@ export function TenderReviewWorkspace(props: {
               documentId={documentId}
               version={version}
               pageNumber={sourcePage}
-              selectedRequirementId={initialSourceQuote ? null : selectedId}
-              highlightQuote={initialSourceQuote}
+              selectedRequirementId={
+                initialSourceQuote && !selectedId ? null : selectedId || null
+              }
+              highlightQuote={selectedId ? null : initialSourceQuote}
               totalPages={undefined}
               onPageChange={(page) => {
                 /* Page navigation handled within SourceViewer */

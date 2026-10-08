@@ -4,6 +4,7 @@ const createdAt = "2026-10-04T12:00:00Z";
 const tenderDocumentId = "00000000-0000-4000-8000-000000000010";
 const requirementId = "00000000-0000-4000-8000-000000000001";
 const otherRequirementId = "00000000-0000-4000-8000-000000000002";
+const coverageQuote = "The instrument shall include installation and operator training.";
 
 function project(status = "draft") {
   return {
@@ -295,6 +296,61 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
           ocr_confidence: 0.99,
         }]);
       }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/9` &&
+        method === "GET"
+      ) {
+        return json({
+          page_number: 9,
+          has_image: false,
+          ocr_needed: false,
+          ocr_confidence: 0.99,
+          cleaned_text: coverageQuote,
+          extracted_text: coverageQuote,
+          structural_metadata: null,
+          created_at: createdAt,
+        });
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/pages/9/sources` &&
+        method === "GET"
+      ) {
+        expect(url.searchParams.get("quote")).toBe(coverageQuote);
+        return json([{
+          requirement_id: null,
+          clause_number: null,
+          page_number: 9,
+          location_type: "approximate",
+          source_text: coverageQuote,
+          quote_text: coverageQuote,
+          bbox: null,
+          ocr_confidence: null,
+        }]);
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix/exports` &&
+        method === "POST" &&
+        url.searchParams.get("fmt") === "xlsx"
+      ) {
+        return json({
+          id: "review-required-export-1",
+          status: "failed",
+          validation_status: "needs_review",
+          validation_report: {
+            issues: [],
+            source_validation: { issues: [] },
+            window_processing: {
+              status: "complete",
+              completeness_proven: false,
+              obligation_audit_status: "potential_omissions",
+              potential_omissions: [{ pages: [9], source_quote: coverageQuote }],
+            },
+          },
+        });
+      }
       if (path === "/projects/project-1/submissions/" && method === "GET") {
         return json([]);
       }
@@ -417,6 +473,20 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByRole("button", { name: "Export XLSX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export DOCX" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
+  await page.getByRole("button", { name: "Export XLSX" }).click();
+  const findingLink = page.getByRole("link", {
+    name: "Open tender page 9 and inspect excerpt",
+  });
+  await expect(findingLink).toBeVisible();
+  await findingLink.click();
+  await expect(page).toHaveURL(/page=9&sourceQuote=/);
+  await expect(page.getByText("Page 9 · No rendered image", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".source-finding.selected").getByText(coverageQuote, { exact: true })
+  ).toBeVisible();
+
+  await page.goto("/projects/project-1/matrix");
+  await expect(page.getByRole("heading", { name: "Final compliance sheet" })).toBeVisible();
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
