@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
@@ -1203,20 +1203,34 @@ async def create_final_matrix_export(
         default=ExportFormat.XLSX,
         description="Export format: xlsx, docx, or pdf",
     ),
+    template: Literal["vendor-response"] | None = Query(  # noqa: B008
+        default=None,
+        description="Use the blank tender-derived vendor response template (DOCX only).",
+    ),
     auth: AuthContext = Depends(get_auth_context),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> ExportArtifactResponse:
-    """Generate a final-compliance-matrix export (CP60).
+    """Generate a final-matrix export or tender response template (CP60/CP68).
 
     Uses the canonical final matrix projection (CP59).  Supports XLSX, DOCX,
     and PDF formats.  The artifact is stored immutably in object storage and
-    an audit event is logged.  If generation fails, a FAILED artifact is
-    recorded and the error is propagated.
+    an audit event is logged. The optional vendor-response template uses the
+    canonical Phase 1 requirements and is available as DOCX only. If generation
+    fails, a FAILED artifact is recorded and the error is propagated.
     """
+    if template is not None and fmt != ExportFormat.DOCX:
+        raise HTTPException(
+            status_code=422,
+            detail="The vendor response template is available as DOCX only",
+        )
     svc = DocumentService(session)
     try:
         artifact = await svc.export_final_matrix(
-            auth, document_id, version_number, export_format=fmt,
+            auth,
+            document_id,
+            version_number,
+            export_format=fmt,
+            vendor_response_template=template == "vendor-response",
         )
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

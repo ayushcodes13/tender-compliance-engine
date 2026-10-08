@@ -1402,12 +1402,14 @@ class DocumentService:
         version_number: int,
         *,
         export_format: ExportFormat = ExportFormat.XLSX,
+        vendor_response_template: bool = False,
         storage: ObjectStorageAdapter | None = None,
     ) -> ExportArtifact:
-        """Generate a final-compliance-matrix deliverable and persist it (CP60).
+        """Generate a final matrix or blank vendor response and persist it.
 
-        Uses the canonical ``project_final_matrix_rows`` projection (CP59) —
-        no duplicated column logic.  The artifact bytes are written to object
+        Final matrix exports use ``project_final_matrix_rows`` (CP59); the
+        optional vendor response DOCX uses ``project_matrix_rows`` (CP41).
+        The artifact bytes are written to object
         storage and an :class:`ExportArtifact` metadata row records the actor,
         format, requirement count, checksum, and timestamp.
 
@@ -1419,12 +1421,29 @@ class DocumentService:
         """
         from tender_compliance_api.matrix.projection import (  # noqa: PLC0415
             project_final_matrix_rows,
+            project_matrix_rows,
         )
 
         version = await self.get_version_or_raise(auth, document_id, version_number)
         project_id = await self._project_id_for(document_id)
 
-        rows = await project_final_matrix_rows(self._session, version.id)
+        vendor_rows: list[MatrixRow] | None = None
+        final_rows: list[FinalMatrixRow] | None = None
+        tender_name: str | None = None
+        if vendor_response_template:
+            if export_format != ExportFormat.DOCX:
+                raise ValueError("The vendor response template is available as DOCX only")
+            vendor_rows = await project_matrix_rows(self._session, version.id)
+            tender_name_result = await self._session.execute(
+                select(TenderDocument.display_name).where(
+                    TenderDocument.id == document_id
+                )
+            )
+            tender_name = tender_name_result.scalar_one()
+        else:
+            final_rows = await project_final_matrix_rows(self._session, version.id)
+        rows = vendor_rows if vendor_rows is not None else final_rows
+        assert rows is not None
 
         if storage is None:
             storage = _resolve_storage()
@@ -1432,13 +1451,14 @@ class DocumentService:
         try:
             fmt = export_format.value
             if export_format == ExportFormat.XLSX:
+                assert final_rows is not None
                 from tender_compliance_api.export.final_xlsx import (  # noqa: PLC0415
                     build_final_matrix_workbook,
                     save_workbook_bytes,
                 )
 
                 wb, checksum = build_final_matrix_workbook(
-                    rows,
+                    final_rows,
                     project_name=str(document_id),
                     document_id=document_id,
                     version_number=version_number,
@@ -1452,30 +1472,45 @@ class DocumentService:
                 )
                 ext = "xlsx"
             elif export_format == ExportFormat.DOCX:
-                from tender_compliance_api.export.final_docx import (  # noqa: PLC0415
-                    build_final_matrix_docx,
-                )
+                if vendor_response_template:
+                    assert vendor_rows is not None
+                    assert tender_name is not None
+                    from tender_compliance_api.export.vendor_response_docx import (  # noqa: PLC0415
+                        build_vendor_response_docx,
+                    )
 
-                artifact_bytes = build_final_matrix_docx(
-                    rows,
-                    project_name=str(document_id),
-                    document_id=document_id,
-                    version_number=version_number,
-                    actor_id=auth.actor_id,
-                    requirement_count=len(rows),
-                )
+                    artifact_bytes = build_vendor_response_docx(
+                        vendor_rows,
+                        tender_name=tender_name,
+                        document_version=version_number,
+                    )
+                else:
+                    assert final_rows is not None
+                    from tender_compliance_api.export.final_docx import (  # noqa: PLC0415
+                        build_final_matrix_docx,
+                    )
+
+                    artifact_bytes = build_final_matrix_docx(
+                        final_rows,
+                        project_name=str(document_id),
+                        document_id=document_id,
+                        version_number=version_number,
+                        actor_id=auth.actor_id,
+                        requirement_count=len(rows),
+                    )
                 content_type = (
                     "application/vnd.openxmlformats-"
                     "officedocument.wordprocessingml.document"
                 )
                 ext = "docx"
             elif export_format == ExportFormat.PDF:
+                assert final_rows is not None
                 from tender_compliance_api.export.final_pdf import (  # noqa: PLC0415
                     build_final_matrix_pdf,
                 )
 
                 artifact_bytes = build_final_matrix_pdf(
-                    rows,
+                    final_rows,
                     project_name=str(document_id),
                     document_id=document_id,
                     version_number=version_number,
@@ -1493,7 +1528,11 @@ class DocumentService:
                 project_id=project_id,
                 document_id=document_id,
                 version=version_number,
-                original_filename=f"final_matrix_v{version_number}.{ext}",
+                original_filename=(
+                    f"vendor_response_v{version_number}.{ext}"
+                    if vendor_response_template
+                    else f"final_matrix_v{version_number}.{ext}"
+                ),
             )
             obj_info = await storage.put(
                 storage_key,
@@ -1506,7 +1545,11 @@ class DocumentService:
                 project_id=project_id,
                 document_id=document_id,
                 storage_key=storage_key,
-                filename=f"final_matrix_v{version_number}.{ext}",
+                filename=(
+                    f"vendor_response_v{version_number}.{ext}"
+                    if vendor_response_template
+                    else f"final_matrix_v{version_number}.{ext}"
+                ),
                 content_type=obj_info.content_type,
                 content_length=obj_info.content_length,
                 checksum_sha256=obj_info.checksum_sha256,
@@ -1530,7 +1573,11 @@ class DocumentService:
             await self._audit.log(
                 organization_id=auth.organization_id,
                 actor_id=auth.actor_id,
-                action="final_matrix.export",
+                action=(
+                    "vendor_response.export"
+                    if vendor_response_template
+                    else "final_matrix.export"
+                ),
                 entity_type="export",
                 entity_id=artifact.id,
                 project_id=project_id,
@@ -1538,6 +1585,7 @@ class DocumentService:
                     "document_id": str(document_id),
                     "version_number": version_number,
                     "format": fmt,
+                    "template": "vendor_response" if vendor_response_template else "final_matrix",
                     "requirement_count": len(rows),
                     "sha256": obj_info.checksum_sha256,
                     "storage_key": storage_key,
@@ -1563,7 +1611,11 @@ class DocumentService:
             await self._audit.log(
                 organization_id=auth.organization_id,
                 actor_id=auth.actor_id,
-                action="final_matrix.export.failed",
+                action=(
+                    "vendor_response.export.failed"
+                    if vendor_response_template
+                    else "final_matrix.export.failed"
+                ),
                 entity_type="export",
                 entity_id=artifact.id,
                 project_id=project_id,
