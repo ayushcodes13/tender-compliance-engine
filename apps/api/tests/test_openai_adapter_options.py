@@ -9,7 +9,7 @@ import pytest
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
-from tender_compliance_api.extraction.adapter import LlmCallConfig
+from tender_compliance_api.extraction.adapter import LlmCallConfig, LlmCallError
 from tender_compliance_api.extraction.openai_adapter import (
     OpenAiLlmAdapter,
     _adapt_unsupported_option,
@@ -182,6 +182,53 @@ def test_unrelated_provider_error_does_not_change_request_options() -> None:
     options: dict[str, object] = {"max_tokens": 1200, "temperature": 0}
     assert not _adapt_unsupported_option(ProviderError(), options)
     assert options == {"max_tokens": 1200, "temperature": 0}
+
+
+def test_image_provider_failure_keeps_safe_provider_category(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ProviderError(Exception):
+        status_code = 400
+        code = "image_parse_error"
+        param = None
+
+    class FakeCompletions:
+        async def parse(self, **_kwargs: object) -> object:
+            raise ProviderError("private provider response details")
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
+    adapter = OpenAiLlmAdapter(
+        model="deployment-alias",
+        base_url="https://example.openai.azure.com/openai/v1/",
+        api_key="test-key",
+    )
+    monkeypatch.setattr(adapter, "_client", lambda: fake_client)
+
+    class Probe(BaseModel):
+        description: str
+
+    with pytest.raises(LlmCallError) as captured:
+        asyncio.run(
+            adapter.extract_with_image(
+                system_prompt="trusted instructions",
+                user_text="synthetic test",
+                image_bytes=b"synthetic image",
+                image_mime_type="image/png",
+                response_model=Probe,
+                config=LlmCallConfig(
+                    provider="openai",
+                    model="deployment-alias",
+                    prompt_version="test",
+                    schema_version="test",
+                    max_retries=1,
+                ),
+            )
+        )
+
+    assert captured.value.error_category == "image_parse_error"
+    assert "private provider response details" not in str(captured.value)
 
 
 def test_image_call_retries_only_with_provider_rejected_options_removed() -> None:

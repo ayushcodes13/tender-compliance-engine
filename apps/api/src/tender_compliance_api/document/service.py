@@ -285,6 +285,7 @@ async def _source_quote_validation_report(
                         "prompt_tokens": call.prompt_tokens,
                         "completion_tokens": call.completion_tokens,
                         "total_tokens": call.total_tokens,
+                        "error_category": call.error_category,
                     }
                 )
                 if accepted:

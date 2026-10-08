@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import re
 import time
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -95,6 +96,37 @@ def _adapt_unsupported_option(error: Exception, options: dict[str, object]) -> b
     if parameter == "temperature" and code in {"unsupported_value", "unsupported_parameter"}:
         return options.pop("temperature", None) is not None
     return False
+
+
+def _provider_error_category(error: Exception | None) -> str:
+    """Return a bounded, non-sensitive category from the final provider error."""
+    if error is None:
+        return "provider_error"
+    if isinstance(error, LlmCallError) and error.error_category:
+        return error.error_category
+
+    code = getattr(error, "code", None)
+    if isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", code):
+        return code.lower()
+
+    status = getattr(error, "status_code", None)
+    if status in {401, 403}:
+        return "authentication_error"
+    if status == 429:
+        return "rate_limit_error"
+    if isinstance(status, int) and 400 <= status < 500:
+        return "provider_request_error"
+    if isinstance(status, int) and status >= 500:
+        return "provider_server_error"
+
+    name = type(error).__name__.lower()
+    if "timeout" in name:
+        return "timeout"
+    if "connection" in name:
+        return "connection_error"
+    if "lengthfinishreason" in name or "validation" in name:
+        return "invalid_structured_response"
+    return "provider_error"
 
 
 class OpenAiLlmAdapter(LlmAdapter):
@@ -172,6 +204,7 @@ class OpenAiLlmAdapter(LlmAdapter):
         options = _completion_options(config)
         compatibility_adjustments = 0
         failed_attempts = 0
+        last_error: Exception | None = None
 
         start = time.monotonic()
         while failed_attempts < max_retries and compatibility_adjustments <= 2:
@@ -209,10 +242,12 @@ class OpenAiLlmAdapter(LlmAdapter):
                 if response is None:
                     raise LlmCallError(
                         "OpenAI returned no parsed structured response "
-                        f"(finish_reason={call.finish_reason})"
+                        f"(finish_reason={call.finish_reason})",
+                        error_category="invalid_structured_response",
                     )
                 return ExtractResult(response=response, call=call)
             except Exception as exc:
+                last_error = exc
                 if compatibility_adjustments < 2 and _adapt_unsupported_option(exc, options):
                     compatibility_adjustments += 1
                     continue
@@ -220,7 +255,8 @@ class OpenAiLlmAdapter(LlmAdapter):
 
         raise LlmCallError(
             "Provider extraction failed after bounded retries and any required "
-            "completion-parameter compatibility adjustments"
+            "completion-parameter compatibility adjustments",
+            error_category=_provider_error_category(last_error),
         ) from None
 
     async def extract_with_image(
@@ -254,6 +290,7 @@ class OpenAiLlmAdapter(LlmAdapter):
         options = _completion_options(config)
         compatibility_adjustments = 0
         failed_attempts = 0
+        last_error: Exception | None = None
         start = time.monotonic()
         while failed_attempts < max_retries and compatibility_adjustments <= 2:
             try:
@@ -289,17 +326,20 @@ class OpenAiLlmAdapter(LlmAdapter):
                 if response is None:
                     raise LlmCallError(
                         "OpenAI returned no parsed image response "
-                        f"(finish_reason={call.finish_reason})"
+                        f"(finish_reason={call.finish_reason})",
+                        error_category="invalid_structured_response",
                     )
                 return ExtractResult(response=response, call=call)
             except Exception as exc:
+                last_error = exc
                 if compatibility_adjustments < 2 and _adapt_unsupported_option(exc, options):
                     compatibility_adjustments += 1
                     continue
                 failed_attempts += 1
         raise LlmCallError(
             "Provider image validation failed after bounded retries and any "
-            "required completion-parameter compatibility adjustments"
+            "required completion-parameter compatibility adjustments",
+            error_category=_provider_error_category(last_error),
         ) from None
 
 

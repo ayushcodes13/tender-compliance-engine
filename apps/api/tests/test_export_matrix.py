@@ -605,6 +605,7 @@ class TestExportGeneration:
                         status="failed",
                         error_message="page image validation failed",
                         call_site="test_page_image_validation",
+                        error_category="image_parse_error",
                     ),
                 )
             return (
@@ -700,6 +701,11 @@ class TestExportGeneration:
             assert report["llm_fallback_results"][0]["call_status"] == (
                 "failed" if fallback_outcome == "provider_failed" else "completed"
             )
+            if fallback_outcome == "provider_failed":
+                assert (
+                    report["llm_fallback_results"][0]["error_category"]
+                    == "image_parse_error"
+                )
 
     def test_completed_windows_are_not_reported_as_proof_of_completeness(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
