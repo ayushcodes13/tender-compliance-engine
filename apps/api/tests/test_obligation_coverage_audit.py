@@ -22,20 +22,26 @@ from tender_compliance_api.extraction.fake import FakeLlmAdapter
 
 
 def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
-    assert PROMPT_VERSION == "1.1.0"
+    assert PROMPT_VERSION == "1.2.0"
     for prompt in (SYSTEM_PROMPT, IMAGE_SYSTEM_PROMPT):
         assert OBLIGATION_SCOPE in prompt
-        assert "technical specifications" in prompt
-        assert "installation" in prompt
-        assert "warranty" in prompt
-        assert "tables of contents" in prompt
-        assert "bidder eligibility" in prompt
-        assert "Incoterms" in prompt
-        assert "Bare equipment names, table parameter labels" in prompt
-        assert "Delivery timing" in prompt
-        assert "installation duties remain in scope" in prompt
-        assert "instructions about how to prepare or" in prompt
-        assert "A title or heading is not an obligation by itself." in prompt
+        normalized_prompt = " ".join(prompt.split())
+        assert "technical specifications" in normalized_prompt
+        assert "installation" in normalized_prompt
+        assert "warranty" in normalized_prompt
+        assert "tables of contents" in normalized_prompt
+        assert "supplier capability evidence required for technical" in normalized_prompt
+        assert "prior system supply, installation or commissioning" in normalized_prompt
+        assert "vendor qualification" in normalized_prompt
+        assert "bidder identity or beneficial-ownership declarations" in normalized_prompt
+        assert "country-based limits on subcontracting" in normalized_prompt
+        assert "Incoterms" in normalized_prompt
+        assert "Bare equipment" in normalized_prompt
+        assert "table parameter labels" in normalized_prompt
+        assert "Delivery timing" in normalized_prompt
+        assert "installation duties remain in scope" in normalized_prompt
+        assert "instructions about how to prepare or" in normalized_prompt
+        assert "A title or heading is not an obligation by itself." in normalized_prompt
 
 
 def test_cover_and_contents_window_can_complete_with_no_obligations() -> None:
