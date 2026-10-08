@@ -167,7 +167,11 @@ async def project_matrix_rows(
             MatrixRow(
                 serial=i,
                 requirement_id=req.id,
-                tender_requirement=req.normalized_text,
+                # Tender wording is a source quote, not the normalized
+                # reviewer-facing interpretation. Export consumers need the
+                # literal source text so validation can compare it without
+                # trying to reverse normalization.
+                tender_requirement=req.raw_source,
                 category=first_cat_by_req.get(req.id),
                 clause=req.clause_number,
                 source_page=first_page_by_req.get(req.id),
@@ -468,7 +472,10 @@ async def project_final_matrix_rows(
             FinalMatrixRow(
                 serial=i,
                 requirement_id=req.id,
-                tender_requirement=req.normalized_text,
+                # Final-sheet tender text must remain verbatim. Keep
+                # normalized_text available as its own domain field, but do
+                # not export it as if it were the original tender wording.
+                tender_requirement=req.raw_source,
                 category=first_cat_by_req.get(req.id),
                 clause=req.clause_number,
                 source_page=first_page_by_req.get(req.id),

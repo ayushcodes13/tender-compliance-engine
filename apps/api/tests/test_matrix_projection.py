@@ -174,7 +174,7 @@ class TestMatrixProjection:
 
         rows = asyncio.run(_project())
         assert len(rows) == 1
-        assert rows[0].tender_requirement == "req1"
+        assert rows[0].tender_requirement == "raw_req1"
         assert rows[0].serial == 1
 
     def test_preserves_display_order(self):
@@ -213,7 +213,9 @@ class TestMatrixProjection:
                 return await project_matrix_rows(session, version.id)
 
         rows = asyncio.run(_project())
-        assert [r.tender_requirement for r in rows] == ["first", "second", "third"]
+        assert [r.tender_requirement for r in rows] == [
+            "raw_first", "raw_second", "raw_third"
+        ]
         assert [r.serial for r in rows] == [1, 2, 3]
 
     def test_null_display_order_sorted_last(self):
@@ -251,8 +253,8 @@ class TestMatrixProjection:
                 return await project_matrix_rows(session, version.id)
 
         rows = asyncio.run(_project())
-        assert rows[0].tender_requirement == "ordered"
-        assert rows[1].tender_requirement == "no_order"
+        assert rows[0].tender_requirement == "raw_ordered"
+        assert rows[1].tender_requirement == "raw_no_order"
 
     def test_missing_metadata_represented_honestly(self):
         """Requirements without sources, categories, or notes have nulls."""
@@ -450,11 +452,11 @@ class TestMatrixEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 2
-        assert data[0]["tender_requirement"] == "Requirement A"
+        assert data[0]["tender_requirement"] == "raw_Requirement A"
         assert data[0]["serial"] == 1
         assert data[0]["mandatory"] is True
         assert data[0]["clause"] == "5.1"
-        assert data[1]["tender_requirement"] == "Requirement B"
+        assert data[1]["tender_requirement"] == "raw_Requirement B"
         assert data[1]["serial"] == 2
         # mandatory=None is excluded by exclude_none
         assert "mandatory" not in data[1]
@@ -489,7 +491,7 @@ class TestMatrixEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
-        assert data[0]["tender_requirement"] == "active"
+        assert data[0]["tender_requirement"] == "raw_active"
 
     def test_matrix_tenant_isolation(self):
         """Cross-org access to matrix returns 404."""

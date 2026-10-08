@@ -13,6 +13,8 @@ export interface SourceViewerProps {
   onPageChange?: (page: number) => void;
   /** Optional total page count for display. */
   totalPages?: number;
+  /** Requirement whose source location was opened by a citation. */
+  selectedRequirementId?: string | null;
   /** Optional class for the container. */
   className?: string;
 }
@@ -33,6 +35,7 @@ export function SourceViewer({
   pageNumber,
   onPageChange,
   totalPages,
+  selectedRequirementId = null,
   className = "",
 }: SourceViewerProps) {
   const [page, setPage] = useState<PageResponse | null>(null);
@@ -44,6 +47,7 @@ export function SourceViewer({
   const [imageScale, setImageScale] = useState(1);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const selectedAnchorRef = useRef<HTMLDivElement>(null);
 
   const loadPage = useCallback(async () => {
     setLoading(true);
@@ -88,6 +92,22 @@ export function SourceViewer({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadPage]);
+
+  // Citation navigation can finish before the page image has rendered. Keep
+  // the selected highlight centered once both the anchor and image geometry
+  // are ready, including after a zoom change.
+  useEffect(() => {
+    if (!selectedRequirementId) return;
+    const selectedAnchor = anchors.find(
+      (anchor) => anchor.requirement_id === selectedRequirementId
+    );
+    if (!selectedAnchor) return;
+    selectedAnchorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "center",
+    });
+  }, [anchors, imageUrl, imageScale, selectedRequirementId, zoom]);
 
   const handleZoomIn = () => setZoom((z) => Math.min(200, z + 8));
   const handleZoomOut = () => setZoom((z) => Math.max(50, z - 8));
@@ -204,12 +224,16 @@ export function SourceViewer({
 
             <div className="source-page-body">
               {anchors.map((anchor) => (
-                <div key={anchor.requirement_id} className="source-finding">
+                <div
+                  key={anchor.requirement_id}
+                  ref={anchor.requirement_id === selectedRequirementId ? selectedAnchorRef : null}
+                  className={`source-finding ${anchor.requirement_id === selectedRequirementId ? "selected" : ""}`}
+                >
                   <span
                     className="finding-rule"
                     aria-hidden="true"
                   />
-                  <mark>{anchor.source_text ?? "(no source text)"}</mark>
+                  <mark>{anchor.quote_text ?? anchor.source_text ?? "(no source text)"}</mark>
                   <span className="source-anchor-label">
                     Clause {anchor.clause_number ?? "?"} ·{" "}
                     {anchor.location_type === "exact"
@@ -308,6 +332,29 @@ export function SourceViewer({
       </div>
 
       <div className="source-stage">
+        {(() => {
+          const selectedAnchor = anchors.find(
+            (anchor) => anchor.requirement_id === selectedRequirementId
+          );
+          if (!selectedAnchor || selectedAnchor.bbox || !(selectedAnchor.quote_text ?? selectedAnchor.source_text)) {
+            return null;
+          }
+          return (
+            <aside
+              ref={selectedAnchorRef}
+              className="source-highlight-unavailable"
+              role="status"
+            >
+              <strong>
+                {selectedAnchor.location_type === "exact"
+                  ? "Exact text anchor · image highlight unavailable"
+                  : "Approximate source anchor"}
+              </strong>
+              <p><mark>{selectedAnchor.quote_text ?? selectedAnchor.source_text}</mark></p>
+              <span>The page is open, but the system has no verified text-to-image box for this excerpt.</span>
+            </aside>
+          );
+        })()}
         <div
           ref={containerRef}
           className="source-image-container"
@@ -339,12 +386,14 @@ export function SourceViewer({
             anchors.map((anchor) => {
               const style = getBboxStyle(anchor);
               if (!style) return null;
+              const selected = anchor.requirement_id === selectedRequirementId;
               return (
                 <div
                   key={anchor.requirement_id}
-                  className={`source-highlight ${anchor.location_type === "exact" ? "exact" : "approximate"}`}
+                  ref={selected ? selectedAnchorRef : null}
+                  className={`source-highlight ${anchor.location_type === "exact" ? "exact" : "approximate"} ${selected ? "selected" : ""}`}
                   style={style}
-                  title={`${anchor.location_type === "exact" ? "Exact" : "Approximate"} source: ${anchor.source_text ?? ""}`}
+                  title={`${anchor.location_type === "exact" ? "Exact" : "Approximate"} source: ${anchor.quote_text ?? anchor.source_text ?? ""}`}
                 >
                   <span className="source-highlight-label">
                     {anchor.clause_number ?? "?"}

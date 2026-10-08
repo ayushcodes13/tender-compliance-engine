@@ -152,6 +152,7 @@ def _add_requirements(project_id, doc_id, ver, reqs_data):
                             document_version_id=version.id,
                             page_number=page,
                             clause_number=clause,
+                            source_text=f"raw_{text}",
                         )
                     )
             await session.commit()
@@ -180,7 +181,7 @@ class TestExportGeneration:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "completed"
+        assert body["status"] == "completed", body.get("validation_report")
         assert body["requirement_count"] == 2
         assert body["workbook_sha256"]  # non-empty checksum
         assert body["id"]
@@ -208,7 +209,7 @@ class TestExportGeneration:
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
             project_id, doc_id, ver,
-            [("No order", None, None, None, False, None),
+            [("No order", None, None, None, False, 4),
              ("Ordered", 1, True, "5.1", False, 3)],
         )
 
@@ -297,6 +298,14 @@ class TestExportHistory:
                 )
                 req = result.scalar_one()
                 req.normalized_text = "Req A (updated)"
+                req.raw_source = "Req A (updated)"
+                source_result = await session.execute(
+                    select(RequirementSource).where(
+                        RequirementSource.requirement_id == req.id
+                    )
+                )
+                source = source_result.scalar_one()
+                source.source_text = req.raw_source
                 await session.commit()
 
         asyncio.run(_modify())
@@ -332,7 +341,7 @@ class TestExportDownload:
         _add_requirements(
             project_id, doc_id, ver,
             [("Req A", 1, True, "5.1", False, 3),
-             ("Req B", 2, None, None, False, None)],
+             ("Req B", 2, None, None, False, 6)],
         )
 
         resp = client.post(

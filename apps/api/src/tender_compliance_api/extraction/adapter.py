@@ -111,6 +111,24 @@ class LlmAdapter(ABC):
         """
         raise NotImplementedError
 
+    async def extract_with_image(
+        self,
+        *,
+        system_prompt: str,
+        user_text: str,
+        image_bytes: bytes,
+        image_mime_type: str,
+        response_model: type[BaseModel],
+        config: LlmCallConfig,
+    ) -> ExtractResult:
+        """Run a structured call with one source page image.
+
+        Adapters that do not support image input fail closed. The image is
+        always application-selected from the requirement's trusted source
+        page; callers must never accept a model-selected page or document.
+        """
+        raise LlmCallError("adapter does not support image input")
+
 
 __all__ = [
     "ExtractResult",

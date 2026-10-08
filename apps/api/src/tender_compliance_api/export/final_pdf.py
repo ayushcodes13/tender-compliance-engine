@@ -7,6 +7,7 @@ invents compliance facts (CP60 guardrail).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -18,13 +19,13 @@ import pymupdf
 from tender_compliance_api.matrix.projection import FinalMatrixRow
 
 # Page geometry (points; 1 inch = 72 pt, A4 = 595 × 842).
-_PAGE_W = 595
-_PAGE_H = 842
+_PAGE_W = 842
+_PAGE_H = 595
 _MARGIN = 40.0
-_HEADER_H = 36
-_FOOTER_H = 12
-_ROW_H = 14
-_HEADER_ROW_Y = _PAGE_H - _MARGIN - _HEADER_H
+_HEADER_H = 28
+_FOOTER_H = 18
+_BODY_W = _PAGE_W - (2 * _MARGIN)
+_FONT_SIZE = 6.5
 
 _ASSESSMENT_STATUS_LABELS: dict[str, str] = {
     "compliant": "Compliant",
@@ -38,14 +39,14 @@ _ASSESSMENT_STATUS_LABELS: dict[str, str] = {
 # Column definitions: (field_name, header, width_pts)
 _COLUMNS: list[tuple[str, str, float]] = [
     ("serial", "S.No.", 30),
-    ("requirement_id", "Req ID", 100),
-    ("tender_requirement", "Tender Requirement", 120),
-    ("assessment_status", "Assessment", 70),
-    ("vendor_spec_value", "V.Value", 45),
-    ("vendor_spec_unit", "V.Unit", 40),
-    ("evidence_id", "Evidence ID", 100),
-    ("assessment_is_confirmed", "Confirmed", 50),
-    ("has_unresolved_conflict", "Conflict", 50),
+    ("requirement_id", "Requirement ID", 143),
+    ("tender_requirement", "Tender Requirement", 245),
+    ("assessment_status", "Assessment", 75),
+    ("vendor_spec_value", "V.Value", 55),
+    ("vendor_spec_unit", "V.Unit", 48),
+    ("evidence_id", "Evidence ID", 70),
+    ("assessment_is_confirmed", "Confirmed", 48),
+    ("has_unresolved_conflict", "Conflict", 48),
 ]
 
 
@@ -76,8 +77,8 @@ def _row_text(row: FinalMatrixRow) -> list[str]:
         status = row.assessment_suggested_status
     return [
         _fmt(row.serial),
-        _fmt(row.requirement_id)[:8],
-        _truncate(_fmt(row.tender_requirement), 80),
+        str(row.requirement_id),
+        _fmt(row.tender_requirement),
         _assess_label(status),
         _fmt(row.vendor_spec_value),
         _fmt(row.vendor_spec_unit),
@@ -89,10 +90,26 @@ def _row_text(row: FinalMatrixRow) -> list[str]:
     ]
 
 
-def _truncate(text: str, max_len: int) -> str:
-    if len(text) <= max_len:
-        return text
-    return text[: max_len - 3] + "..."
+def _estimated_lines(text: str, width: float) -> int:
+    """Estimate wrapped lines without changing the text we put in the PDF."""
+    lines = 1
+    current_width = 0.0
+    for token in re.split(r"(\s+)", text):
+        newline_count = token.count("\n")
+        if newline_count:
+            lines += newline_count
+            current_width = 0.0
+            token = token.replace("\n", "")
+            if not token:
+                continue
+        token_width = pymupdf.get_text_length(
+            token, fontname="helv", fontsize=_FONT_SIZE
+        )
+        if current_width and current_width + token_width > width:
+            lines += 1
+            current_width = 0.0
+        current_width += token_width
+    return lines
 
 
 def build_final_matrix_pdf(
@@ -120,6 +137,8 @@ def build_final_matrix_pdf(
     for _, _, width in _COLUMNS:
         x_positions.append(x)
         x += width
+    if x - _MARGIN > _BODY_W:
+        raise ValueError("Final PDF columns exceed the printable page width")
 
     # --- Title page ---
     page = doc.new_page(width=_PAGE_W, height=_PAGE_H)
@@ -139,14 +158,9 @@ def build_final_matrix_pdf(
         page.insert_text((_MARGIN, meta_y), f"{label}: {val}", fontsize=9)
         meta_y += 16
 
-    # --- Data pages ---
-    data_rect_top = _MARGIN
-    data_rect_bottom = _PAGE_H - _MARGIN - _FOOTER_H
-    available_height = data_rect_bottom - data_rect_top - _HEADER_H
-    rows_per_page = int(available_height // _ROW_H)
-
-    total_rows = len(rows)
-    if total_rows == 0:
+    # --- Data pages. Requirement cells wrap and grow vertically; content is
+    # never clipped or abbreviated to fit a fixed-height table row. ---
+    if not rows:
         page = doc.new_page(width=_PAGE_W, height=_PAGE_H)
         page.insert_text(
             (_PAGE_W / 2, _PAGE_H / 2),
@@ -154,59 +168,61 @@ def build_final_matrix_pdf(
             fontsize=12, fontname="helv",
         )
     else:
-        start = 0
         page_num = 0
-        while start < total_rows:
-            page_num += 1
-            page = doc.new_page(width=_PAGE_W, height=_PAGE_H)
+        y: float = float(_PAGE_H)
+        data_page: pymupdf.Page | None = None
 
-            # Header row
-            y = _HEADER_ROW_Y
+        def new_data_page() -> tuple[pymupdf.Page, float]:
+            nonlocal page_num
+            page_num += 1
+            next_page = doc.new_page(width=_PAGE_W, height=_PAGE_H)
+            header_y = _MARGIN
             for col_idx, (_, header, _) in enumerate(_COLUMNS):
-                page.insert_text(
-                    (x_positions[col_idx], y),
+                next_page.insert_text(
+                    (x_positions[col_idx], header_y + 8),
                     header, fontsize=7, fontname="hebo",
                 )
-            y += _ROW_H
-
-            # Separator line
-            page.draw_line(
-                pymupdf.Point(_MARGIN, y),  # type: ignore[no-untyped-call]
-                pymupdf.Point(_PAGE_W - _MARGIN, y),  # type: ignore[no-untyped-call]
+            body_y = header_y + _HEADER_H
+            next_page.draw_line(
+                pymupdf.Point(_MARGIN, body_y),  # type: ignore[no-untyped-call]
+                pymupdf.Point(_PAGE_W - _MARGIN, body_y),  # type: ignore[no-untyped-call]
             )
-            y += 2
-
-            end = min(start + rows_per_page, total_rows)
-            for i in range(start, end):
-                row = rows[i]
-                texts = _row_text(row)
-                for col_idx, text in enumerate(texts):
-                    page.insert_text(
-                        (x_positions[col_idx], y),
-                        text, fontsize=6.5, fontname="helv",
-                    )
-                y += _ROW_H
-
-                # Page break check
-                if y > data_rect_bottom - _ROW_H:
-                    break
-
-            # If we broke early due to space, continue on next page
-            if y > data_rect_bottom - _ROW_H:
-                start = i + 1
-            else:
-                start = end
-                # This page is done; advance to next batch
-                if start >= total_rows:
-                    break
-
-            # Footer
-            footer_y = _PAGE_H - _MARGIN
-            page.insert_text(
-                (_MARGIN, footer_y),
+            next_page.insert_text(
+                (_MARGIN, _PAGE_H - _MARGIN / 2),
                 f"Page {page_num}  |  Generated: {generated_at.strftime('%Y-%m-%d %H:%M:%S UTC')}",
                 fontsize=7, fontname="helv",
             )
+            return next_page, body_y + 4
+
+        for row in rows:
+            texts = _row_text(row)
+            line_counts = [
+                _estimated_lines(text, width - 6)
+                for text, (_, _, width) in zip(texts, _COLUMNS, strict=True)
+            ]
+            row_height = max(16.0, max(line_counts) * 8.5 + 6)
+            if data_page is None or y + row_height > _PAGE_H - _MARGIN - _FOOTER_H:
+                data_page, y = new_data_page()
+            for col_idx, text in enumerate(texts):
+                x_start = x_positions[col_idx] + 2
+                col_width = _COLUMNS[col_idx][2] - 4
+                data_page.insert_textbox(
+                    pymupdf.Rect(  # type: ignore[no-untyped-call]
+                        x_start, y, x_start + col_width, y + row_height
+                    ),
+                    text,
+                    fontsize=_FONT_SIZE,
+                    fontname="helv",
+                    lineheight=1.15,
+                )
+            y += row_height
+            data_page.draw_line(
+                pymupdf.Point(_MARGIN, y),  # type: ignore[no-untyped-call]
+                pymupdf.Point(_PAGE_W - _MARGIN, y),  # type: ignore[no-untyped-call]
+                color=(0.78, 0.82, 0.86),
+                width=0.35,
+            )
+            y += 2
 
     buf = BytesIO()
     doc.save(buf)  # type: ignore[no-untyped-call]

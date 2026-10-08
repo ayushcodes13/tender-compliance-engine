@@ -19,6 +19,7 @@ import zipfile
 from io import BytesIO
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from tender_compliance_api.db.models import (
     DocumentProcessingStatus,
@@ -105,6 +106,15 @@ def _build_org_project_with_req():
             )
             session.add(req)
             await session.commit()
+            session.add(
+                RequirementSource(
+                    requirement_id=req.id,
+                    document_version_id=version.id,
+                    page_number=1,
+                    source_text=req.raw_source,
+                )
+            )
+            await session.commit()
             return (
                 user_id, org_id, project_id, str(doc.id),
                 version.version_number, version.id, req.id,
@@ -133,7 +143,7 @@ class TestXlsxExport:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "completed"
+        assert data["status"] == "completed", data.get("validation_report")
         assert data["requirement_count"] == 1
         assert data["export_format"] == "xlsx"
         assert data["workbook_sha256"]  # non-empty checksum
@@ -271,17 +281,18 @@ class TestDocxExport:
                 req = await session.get(Requirement, req_id)
                 assert req is not None
                 req.normalized_text = full_text
+                req.raw_source = full_text
                 req.clause_number = "4.2.1"
-                session.add(
-                    RequirementSource(
-                        requirement_id=req_id,
-                        document_version_id=ver_id,
-                        page_number=12,
-                        clause_number="4.2.1",
-                        location_type="exact",
-                        source_text=full_text,
+                source_result = await session.execute(
+                    select(RequirementSource).where(
+                        RequirementSource.requirement_id == req_id
                     )
                 )
+                source = source_result.scalar_one()
+                source.page_number = 12
+                source.clause_number = "4.2.1"
+                source.location_type = "exact"
+                source.source_text = full_text
                 await session.commit()
 
         asyncio.run(_add_source())
@@ -340,7 +351,7 @@ class TestPdfExport:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "completed"
+        assert data["status"] == "completed", data.get("validation_report")
         assert data["export_format"] == "pdf"
         assert data["stored_object_id"] is not None
 

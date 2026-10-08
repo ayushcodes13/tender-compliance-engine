@@ -1268,6 +1268,10 @@ a {
   background: var(--color-bg-offset);
 }
 
+.source-finding.selected {
+  box-shadow: 0 0 0 2px var(--color-warning), 0 6px 18px rgba(21, 35, 50, 0.12);
+}
+
 .finding-rule {
   position: absolute;
   top: 8px;
@@ -1372,6 +1376,46 @@ a {
   border: 2px dashed var(--color-warning);
   border-radius: 0;
   background: rgba(180, 82, 6, 0.06);
+}
+
+.source-highlight.selected {
+  z-index: 3;
+  border-width: 3px;
+  background: rgba(245, 190, 56, 0.28);
+  box-shadow: 0 0 0 3px rgba(245, 190, 56, 0.22);
+}
+
+.source-highlight-unavailable {
+  margin: 0 12px 12px;
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--review-highlight);
+  padding: 10px 12px;
+  color: var(--color-text);
+}
+
+.source-highlight-unavailable strong {
+  display: block;
+  color: var(--color-warning);
+  font-size: 11px;
+}
+
+.source-highlight-unavailable p {
+  margin: 7px 0 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.source-highlight-unavailable mark {
+  border-radius: 2px;
+  background: var(--review-highlight-strong);
+  color: inherit;
+}
+
+.source-highlight-unavailable span {
+  color: var(--color-text-muted);
+  font-size: 10px;
 }
 
 .source-highlight-label {

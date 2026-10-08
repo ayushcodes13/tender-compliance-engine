@@ -29,6 +29,7 @@ from tender_compliance_api.db.models import (
     Project,
     ProjectStatus,
     Requirement,
+    RequirementSource,
     TenderDocument,
     User,
 )
@@ -104,6 +105,14 @@ def _setup_full_project():
             )
             session.add(req)
             await session.flush()
+            session.add(
+                RequirementSource(
+                    requirement_id=req.id,
+                    document_version_id=version.id,
+                    page_number=1,
+                    source_text=req.raw_source,
+                )
+            )
 
             # Final matrix route should work even with no evidence/assessments
             await session.commit()

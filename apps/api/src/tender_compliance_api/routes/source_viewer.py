@@ -20,6 +20,8 @@ Routes:
 
 from __future__ import annotations
 
+import re
+import struct
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -31,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
-from tender_compliance_api.db.models import RequirementSource
+from tender_compliance_api.db.models import Requirement, RequirementSource
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.errors import (
@@ -110,8 +112,53 @@ class SourceAnchor(BaseModel):
     page_number: int
     location_type: str
     source_text: str | None
+    quote_text: str | None
     bbox: dict[str, Any] | None
     ocr_confidence: float | None
+
+
+def _pdf_quote_bbox(
+    pdf_document: Any,
+    page_number: int,
+    quote: str,
+    rendered_png: bytes,
+) -> dict[str, float] | None:
+    """Map one unique literal PDF text quote to rendered-page pixel coordinates."""
+    if (
+        len(rendered_png) < 24
+        or rendered_png[:8] != b"\x89PNG\r\n\x1a\n"
+        or not quote.strip()
+    ):
+        return None
+    try:
+        page = pdf_document.load_page(page_number - 1)
+        if page.rotation != 0:
+            return None
+        normalized_quote = re.sub(r"\s+", " ", quote).strip()
+        page_text = re.sub(r"\s+", " ", page.get_text(sort=True)).strip()
+        if not normalized_quote or page_text.count(normalized_quote) != 1:
+            return None
+        rectangles = page.search_for(normalized_quote)
+        if not rectangles:
+            return None
+        image_width, image_height = struct.unpack(">II", rendered_png[16:24])
+        page_rect = page.rect
+        if image_width <= 0 or image_height <= 0 or page_rect.width <= 0 or page_rect.height <= 0:
+            return None
+        scale_x = image_width / page_rect.width
+        scale_y = image_height / page_rect.height
+        x0 = min(rect.x0 for rect in rectangles)
+        y0 = min(rect.y0 for rect in rectangles)
+        x1 = max(rect.x1 for rect in rectangles)
+        y1 = max(rect.y1 for rect in rectangles)
+        return {
+            "x": x0 * scale_x,
+            "y": y0 * scale_y,
+            "width": (x1 - x0) * scale_x,
+            "height": (y1 - y0) * scale_y,
+        }
+    except Exception:  # noqa: BLE001 — missing/unmappable geometry stays unknown
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +253,7 @@ async def get_page_source_anchors(
     page_number: int,
     auth: AuthContext = Depends(get_auth_context),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
+    storage: ObjectStorageAdapter = Depends(get_storage_adapter),  # noqa: B008
 ) -> list[SourceAnchor]:
     """Return all requirement source anchors for a page.
 
@@ -218,21 +266,54 @@ async def get_page_source_anchors(
     except DocumentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     result = await session.execute(
-        select(RequirementSource).where(
+        select(RequirementSource, Requirement.raw_source)
+        .join(Requirement, Requirement.id == RequirementSource.requirement_id)
+        .where(
             RequirementSource.document_version_id == version.id,
             RequirementSource.page_number == page_number,
         )
     )
-    sources = list(result.scalars().all())
-    return [
+    sources = list(result.all())
+    page_png: bytes | None = None
+    pdf_document: Any | None = None
+    if any(source.bbox is None for source, _quote in sources):
+        try:
+            page_png, _ = await svc.get_page_image_bytes(
+                auth, document_id, version_number, page_number, storage
+            )
+            original_key = await svc.get_stored_object_key(
+                auth, document_id, version_number
+            )
+            import pymupdf
+
+            pdf_document = pymupdf.open(  # type: ignore[no-untyped-call]
+                stream=await storage.get(original_key), filetype="pdf"
+            )
+        except Exception:  # noqa: BLE001 — text/page navigation still works
+            pdf_document = None
+    anchors = [
         SourceAnchor(
             requirement_id=s.requirement_id,
             clause_number=s.clause_number,
             page_number=s.page_number,
             location_type=s.location_type,
             source_text=s.source_text,
-            bbox=dict(s.bbox) if s.bbox else None,
+            quote_text=quote_text,
+            bbox=(
+                dict(s.bbox)
+                if s.bbox
+                else (
+                    _pdf_quote_bbox(
+                        pdf_document, page_number, quote_text, page_png
+                    )
+                    if pdf_document is not None and page_png is not None
+                    else None
+                )
+            ),
             ocr_confidence=float(s.ocr_confidence) if s.ocr_confidence else None,
         )
-        for s in sources
+        for s, quote_text in sources
     ]
+    if pdf_document is not None:
+        pdf_document.close()
+    return anchors

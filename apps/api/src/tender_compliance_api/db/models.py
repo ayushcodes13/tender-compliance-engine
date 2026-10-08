@@ -1756,6 +1756,12 @@ class ExportArtifact(Base):
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    validation_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_run", server_default="not_run"
+    )
+    validation_report: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - convenience
         return (

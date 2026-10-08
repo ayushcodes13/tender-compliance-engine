@@ -17,7 +17,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,6 +86,7 @@ class RequirementSourceSummary(BaseModel):
     clause_number: str | None
     location_type: str
     source_text: str | None
+    quote_text: str | None = None
     ocr_confidence: float | None
 
 
@@ -132,6 +133,13 @@ class RequirementDetail(BaseModel):
     revisions: list[RevisionSummary]
     notes: list[NoteSummary]
     categories: list[CategorySummary]
+
+    @model_validator(mode="after")
+    def attach_verbatim_quote(self) -> RequirementDetail:
+        """Expose the requirement quote separately from its page text window."""
+        for source in self.sources:
+            source.quote_text = self.raw_source
+        return self
 
 
 class RequirementListResponse(BaseModel):
@@ -1120,6 +1128,8 @@ class ExportArtifactResponse(BaseModel):
     workbook_sha256: str
     generated_at: datetime | None
     export_format: str | None = None
+    validation_status: str = "not_run"
+    validation_report: dict[str, Any] | None = None
 
     @field_validator("error_message", mode="before")
     @classmethod
