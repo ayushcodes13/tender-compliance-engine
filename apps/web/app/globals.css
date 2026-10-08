@@ -1377,8 +1377,23 @@ a {
 .source-highlight.selected {
   z-index: 3;
   border-width: 3px;
-  background: rgba(245, 190, 56, 0.28);
-  box-shadow: 0 0 0 3px rgba(245, 190, 56, 0.22);
+  background: color-mix(in srgb, var(--review-highlight-strong) 72%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--review-highlight-strong) 58%, transparent);
+}
+
+.source-highlight.selected.exact {
+  border-color: #b88700;
+}
+
+.source-highlight.selected.approximate {
+  border-color: #b88700;
+  background: color-mix(in srgb, var(--review-highlight-strong) 60%, transparent);
+}
+
+.source-highlight.selected .source-highlight-label {
+  background: var(--review-highlight-strong);
+  color: var(--color-text);
+  outline: 1px solid #b88700;
 }
 
 .source-highlight-unavailable {
