@@ -41,6 +41,7 @@ from tender_compliance_api.db.models import (
     ExtractionReconciliation,
     ExtractionRun,
     ExtractionRunStatus,
+    ExtractionWindowAudit,
     OemDocument,
     OemDocumentVersion,
     OemTextSegment,
@@ -247,6 +248,93 @@ async def _source_quote_validation_report(
             for issue in unresolved_issues
         ],
         "llm_fallback_results": fallback_results,
+    }
+
+
+async def _extraction_window_coverage_report(
+    session: AsyncSession,
+    document_version_id: uuid.UUID,
+) -> dict[str, object]:
+    """Report whether the latest extraction run reached every source window.
+
+    This is processing coverage only. A successful model call does not prove
+    that the model found every technical obligation in that window.
+    """
+    diagnostics = (
+        await session.execute(
+            select(ExtractionDiagnostics)
+            .where(ExtractionDiagnostics.document_version_id == document_version_id)
+            .order_by(
+                ExtractionDiagnostics.created_at.desc(),
+                ExtractionDiagnostics.id.desc(),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if diagnostics is None or diagnostics.processing_run_id is None:
+        return {
+            "status": "not_available",
+            "completeness_proven": False,
+            "message": "No extraction-window audit is available for this version.",
+        }
+
+    audits = list(
+        (
+            await session.execute(
+                select(ExtractionWindowAudit)
+                .where(
+                    ExtractionWindowAudit.processing_run_id
+                    == diagnostics.processing_run_id
+                )
+                .order_by(ExtractionWindowAudit.window_index.asc())
+            )
+        ).scalars().all()
+    )
+    expected = max(diagnostics.total_windows, 0)
+    missing_count = max(expected - len(audits), 0)
+    failed = [audit for audit in audits if audit.call_status != "completed"]
+
+    def window_record(audit: ExtractionWindowAudit) -> dict[str, object]:
+        spans = audit.source_spans if isinstance(audit.source_spans, list) else []
+        return {
+            "window_index": audit.window_index,
+            "chunk_id": audit.chunk_id,
+            "pages": sorted(
+                {
+                    int(span["page_number"])
+                    for span in spans
+                    if isinstance(span, dict)
+                    and isinstance(span.get("page_number"), int)
+                }
+            ),
+        }
+
+    status = (
+        "complete"
+        if not missing_count and len(audits) == expected and not failed
+        else "incomplete"
+    )
+    return {
+        "status": status,
+        "completeness_proven": False,
+        "expected_windows": expected,
+        "audited_windows": len(audits),
+        "missing_window_count": missing_count,
+        "failed_windows": [window_record(audit) for audit in failed],
+        "zero_candidate_windows": [
+            window_record(audit)
+            for audit in audits
+            if audit.call_status == "completed" and audit.candidate_count == 0
+        ],
+        "ocr_warning_windows": [
+            window_record(audit) for audit in audits if audit.ocr_warning
+        ],
+        "message": (
+            "Every recorded source window received a completed extraction call. "
+            "This does not prove that every technical obligation was identified."
+            if status == "complete"
+            else "One or more source windows were not successfully audited."
+        ),
     }
 
 
@@ -1698,6 +1786,11 @@ class DocumentService:
                 validation_status = "failed"
                 raise ValueError("generated sheet failed content validation")
 
+            extraction_report = await _extraction_window_coverage_report(
+                self._session, version.id
+            )
+            integrity_report["window_processing"] = extraction_report
+
             source_report = await _source_quote_validation_report(
                 self._session, rows, storage
             )
@@ -1705,6 +1798,10 @@ class DocumentService:
             validation_status = str(source_report["status"])
             if validation_status != "passed":
                 raise ValueError("generated sheet requires source review")
+
+            if extraction_report["status"] == "incomplete":
+                validation_status = "needs_review"
+                raise ValueError("extraction did not audit every source window")
 
             # Store the artifact bytes.
             storage_key = build_key(
@@ -1908,6 +2005,11 @@ class DocumentService:
                 validation_status = "failed"
                 raise ValueError("generated matrix failed content validation")
 
+            extraction_report = await _extraction_window_coverage_report(
+                self._session, version.id
+            )
+            integrity_report["window_processing"] = extraction_report
+
             source_report = await _source_quote_validation_report(
                 self._session, rows, storage
             )
@@ -1915,6 +2017,10 @@ class DocumentService:
             validation_status = str(source_report["status"])
             if validation_status != "passed":
                 raise ValueError("generated matrix requires source review")
+
+            if extraction_report["status"] == "incomplete":
+                validation_status = "needs_review"
+                raise ValueError("extraction did not audit every source window")
 
             # Store the workbook bytes.
             storage_key = build_key(
@@ -2802,6 +2908,19 @@ class DocumentService:
             promoted_count=promoted_count,
             reconciliation_outcome=reconciliation_outcome,
         )
+        for window in outcome.window_results:
+            self._session.add(
+                ExtractionWindowAudit(
+                    document_version_id=version.id,
+                    processing_run_id=run.id,
+                    chunk_id=window.chunk_id,
+                    window_index=window.window_index,
+                    call_status=window.call_status,
+                    candidate_count=window.candidate_count,
+                    ocr_warning=window.ocr_warning,
+                    source_spans=window.source_spans,
+                )
+            )
         diag = ExtractionDiagnostics(
             document_version_id=version.id,
             processing_run_id=run.id,

@@ -3532,7 +3532,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ## Checkpoint 70 — Verbatim validation of generated tender sheets
 
-**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback; PR #141 adds scanned-page OCR highlights. The current follow-up extends post-render checks to every exported column and cell. Tender-wide extraction completeness remains open.
+**Status:** IN PROGRESS — PR #140 adds post-render artifact/source-quote checks, persisted validation states, and a strict cited-page fallback; PR #141 adds scanned-page OCR highlights; PR #143 validates every exported column and cell. The current follow-up records each extraction window's call outcome and holds exports when any window failed or was not audited. Tender-wide extraction completeness remains open.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 
@@ -3561,4 +3561,5 @@ If the product direction changes, update this file through a focused PR, explain
 - Requirement coverage validation must identify omitted rows separately from per-row citation validation. A green per-row quote check alone is not proof that every tender obligation was extracted.
 - Still open: extraction coverage beyond the canonical requirement rows. The export validator must not report that every tender obligation was extracted merely because every persisted row was emitted.
 - The post-render integrity report now records checked column/cell counts and identifies changed fields. This validates emitted rows against the canonical projection; it does not prove the extraction pass found every obligation in the tender.
+- Per-window extraction records distinguish a failed provider call from a successful call that returned no candidates. Complete call coverage is only evidence that each recorded window reached the model; it does not prove that every obligation in those windows was identified.
 - LLM fallback may inspect only the immutable cited page (or a tighter source region); it cannot search another page/version or treat prompt text embedded in the tender as instructions.

@@ -36,7 +36,7 @@ Behaviour mapped to CP28:
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
 from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
@@ -103,6 +103,19 @@ class ExtractionOutcome:
 
     candidates: list[CandidateRecord]
     llm_calls: list[LlmCallResult]
+    window_results: list[WindowExtractionResult] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class WindowExtractionResult:
+    """Auditable call outcome for one deterministic source window."""
+
+    chunk_id: str
+    window_index: int
+    call_status: str
+    candidate_count: int
+    ocr_warning: bool
+    source_spans: list[dict[str, Any]]
 
 
 def _compose_input(window: SourceWindow) -> str:
@@ -231,8 +244,19 @@ async def extract_from_windows(
 
     candidates: list[CandidateRecord] = []
     llm_calls: list[LlmCallResult] = []
+    window_results: list[WindowExtractionResult] = []
 
-    for window in windows:
+    for window_index, window in enumerate(windows, start=1):
+        candidate_start = len(candidates)
+        source_spans = [
+            {
+                "page_number": source.page_number,
+                "clause_number": source.clause_number,
+                "char_start": source.char_start,
+                "char_end": source.char_end,
+            }
+            for source in window.sources
+        ]
         user_text = _compose_input(window)
         try:
             result = await llm.extract(
@@ -261,6 +285,16 @@ async def extract_from_windows(
             )
             await log_call(failed)
             llm_calls.append(failed)
+            window_results.append(
+                WindowExtractionResult(
+                    chunk_id=window.chunk_id,
+                    window_index=window_index,
+                    call_status="failed",
+                    candidate_count=0,
+                    ocr_warning=window.ocr_warning,
+                    source_spans=source_spans,
+                )
+            )
             continue
 
         await log_call(result.call)
@@ -326,7 +360,29 @@ async def extract_from_windows(
                             )
             candidates.append(record)
 
-    return ExtractionOutcome(candidates=candidates, llm_calls=llm_calls)
+        window_results.append(
+            WindowExtractionResult(
+                chunk_id=window.chunk_id,
+                window_index=window_index,
+                call_status=(
+                    "completed" if result.call.status == "completed" else "failed"
+                ),
+                candidate_count=len(candidates) - candidate_start,
+                ocr_warning=window.ocr_warning,
+                source_spans=source_spans,
+            )
+        )
+
+    return ExtractionOutcome(
+        candidates=candidates,
+        llm_calls=llm_calls,
+        window_results=window_results,
+    )
 
 
-__all__ = ["CandidateRecord", "ExtractionOutcome", "extract_from_windows"]
+__all__ = [
+    "CandidateRecord",
+    "ExtractionOutcome",
+    "WindowExtractionResult",
+    "extract_from_windows",
+]
