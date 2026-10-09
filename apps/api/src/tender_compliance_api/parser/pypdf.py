@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
@@ -28,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 #: Minimum text length to consider a page's native text trustworthy.
 _MIN_TRUSTWORTHY_TEXT_LEN = 5
+_SUSPICIOUS_HYPHEN_SPACING = re.compile(
+    r"[A-Za-z](?:\s+[-\u2010-\u2015]\s*|[-\u2010-\u2015]\s+)[A-Za-z]"
+)
 
 
 class PypdfParserAdapter(ParserAdapter):
@@ -114,6 +118,7 @@ class PypdfParserAdapter(ParserAdapter):
 
             warnings: list[str] = []
             ocr_needed = False
+            visual_verification_required = False
 
             if not text:
                 # No native text — likely a scanned raster page.
@@ -135,6 +140,18 @@ class PypdfParserAdapter(ParserAdapter):
                     "scanned-with-text-overlay page"
                 )
 
+            # pypdf can preserve a text layer while inserting spaces around
+            # hyphens that are not visible in the rendered page (for example,
+            # "III -V" for "III-V"). Keep that native text for traceability,
+            # but require strict page-image verification before treating its
+            # extracted requirements or citations as confirmed.
+            if _SUSPICIOUS_HYPHEN_SPACING.search(text):
+                visual_verification_required = True
+                warnings.append(
+                    "native text has suspicious whitespace around a hyphen; "
+                    "compare with rendered page"
+                )
+
             pages.append(
                 PageResult(
                     page_number=page_number,
@@ -143,6 +160,7 @@ class PypdfParserAdapter(ParserAdapter):
                     ocr_needed=ocr_needed,
                     warnings=warnings,
                     error=None,
+                    visual_verification_required=visual_verification_required,
                 )
             )
 

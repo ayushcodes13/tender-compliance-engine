@@ -162,8 +162,9 @@ def _segment_page(page: DocumentPage) -> list[_Segment]:
     # A page is "uncertain" if it was OCR-derived or carries a parse/structure
     # error from cleanup.  All segments from such a page inherit the flag so the
     # extraction orchestrator (CP28.7) can bump affected candidates' uncertainty.
-    page_ocr_warning = bool(page.ocr_needed) or bool(
-        (page.structural_metadata or {}).get("error")
+    page_metadata = page.structural_metadata or {}
+    page_ocr_warning = bool(page.ocr_needed) or bool(page_metadata.get("error")) or bool(
+        page_metadata.get("visual_verification_required")
     )
 
     cur_kind: str | None = None

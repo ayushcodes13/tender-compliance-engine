@@ -269,6 +269,18 @@ class TestPypdfParserAdapter:
         assert result.pages[0].text == "Single page content"
         assert result.pages[0].ocr_needed is False
 
+    def test_suspicious_native_hyphen_spacing_requires_visual_verification(self) -> None:
+        pdf_bytes = _make_text_pdf(["Chuck model III -V for vacuum table"])
+        result = asyncio.run(
+            _parse(PypdfParserAdapter(), pdf_bytes, "application/pdf")
+        )
+
+        page = result.pages[0]
+        assert page.ocr_needed is False
+        assert page.visual_verification_required is True
+        assert "III -V" in page.text
+        assert any("suspicious whitespace around a hyphen" in w for w in page.warnings)
+
     def test_blank_pages_flag_ocr_needed(self) -> None:
         """Blank pages (no text layer) are flagged as needing OCR."""
         pdf_bytes = _make_blank_pdf(2)

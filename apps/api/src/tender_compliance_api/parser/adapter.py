@@ -39,6 +39,7 @@ class PageResult:
     ocr_needed: bool
     warnings: list[str] = field(default_factory=list)
     error: str | None = None
+    visual_verification_required: bool = False
 
 
 @dataclass(frozen=True)
