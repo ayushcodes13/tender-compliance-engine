@@ -36,7 +36,7 @@ from tender_compliance_api.extraction.adapter import (
 )
 from tender_compliance_api.logs import error_category as categorize_error
 
-PROMPT_VERSION = "1.3.0"
+PROMPT_VERSION = "1.4.0"
 SCHEMA_VERSION = "1.0.0"
 CALL_SITE = "audit_obligation_coverage"
 IMAGE_CALL_SITE = "audit_obligation_coverage_page_image"
@@ -60,11 +60,15 @@ bidder identity or beneficial-ownership declarations, bid security, bid
 deadlines, submission formats, and instructions about how to prepare or submit
 the bid. Exclude general procurement-law restrictions unrelated to the offered
 system, such as country-based limits on subcontracting. Exclude commercial
-quote terms such as price, payment, freight, and Incoterms. Bare equipment
-names, table parameter labels, and quantity labels identify a row; they are
-not obligations by themselves. Include the actual technical specification in
-an adjacent cell or bullet. Delivery timing and installation duties remain in
-scope when they state what the supplier must do. Do not report an excerpt
+quote and cost-allocation terms such as prices, payment, tender fees, taxes,
+incidental labor or transport charges, transit insurance, freight, Incoterms,
+and liquidated damages. Bare equipment names, table parameter labels, and
+quantity labels identify a row; they are not obligations by themselves.
+Include the actual technical specification in an adjacent cell or bullet.
+Delivery timing and installation duties remain in scope when they state what
+the supplier must do. Do not exclude technical delivery, packaging safety,
+installation, training, warranty, maintenance, or support duties merely because
+they appear near a commercial term. Do not report an excerpt
 solely because it states a right, remedy, liability disclaimer, acceptance
 decision, or evaluation step belonging to the purchaser or committee. This
 includes buyer discretion to cancel, reject, ban, or take remedial action;

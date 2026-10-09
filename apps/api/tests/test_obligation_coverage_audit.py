@@ -30,7 +30,7 @@ from tender_compliance_api.extraction.fake import FakeLlmAdapter
 
 
 def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
-    assert PROMPT_VERSION == "1.3.0"
+    assert PROMPT_VERSION == "1.4.0"
     for prompt in (SYSTEM_PROMPT, IMAGE_SYSTEM_PROMPT):
         assert OBLIGATION_SCOPE in prompt
         normalized_prompt = " ".join(prompt.split())
@@ -44,6 +44,10 @@ def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
         assert "bidder identity or beneficial-ownership declarations" in normalized_prompt
         assert "country-based limits on subcontracting" in normalized_prompt
         assert "Incoterms" in normalized_prompt
+        assert "tender fees, taxes" in normalized_prompt
+        assert "incidental labor or transport charges, transit insurance" in normalized_prompt
+        assert "liquidated damages" in normalized_prompt
+        assert "Do not exclude technical delivery, packaging safety" in normalized_prompt
         assert "Bare equipment" in normalized_prompt
         assert "table parameter labels" in normalized_prompt
         assert "Delivery timing" in normalized_prompt
