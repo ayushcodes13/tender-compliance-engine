@@ -16,7 +16,7 @@ from tender_compliance_api.extraction.adapter import (
 )
 from tender_compliance_api.logs import error_category as categorize_error
 
-PROMPT_VERSION = "1.2.0"
+PROMPT_VERSION = "1.3.0"
 SCHEMA_VERSION = "1.1.0"
 CALL_SITE = "validate_generated_sheet_page_image"
 MIN_CONFIDENCE = 0.99
@@ -38,6 +38,12 @@ within the requirement exactly. A bullet glyph inside a technical expression
 or sentence is not a list marker.
 Return exactly one decision for each item_id, with no duplicates or extras.
 For exact, return the complete visible matching wording in visible_quote.
+An OCR quote may contain a standalone lowercase "o" at the start of a line
+where the image shows a hollow-circle list bullet. Treat that "o" as a
+presentation marker only when the image clearly shows a bullet there; omit
+that marker from visible_quote and explicitly state in reason that the leading
+"o" is a visible bullet/marker/circle. If the image shows the letter "o",
+preserve it as wording and do not return exact when it is absent from the candidate.
 If any character is unclear, omitted, added, or changed, return cannot_tell
 or not_exact and an empty visible_quote. Never correct OCR or infer text.
 """.strip()
@@ -95,6 +101,36 @@ def _layout_key(text: str) -> str:
     # hyphens (for example, "III -V"). Ignore only spacing artifacts.
     collapsed = re.sub(r"\s*-\s*", "-", collapsed)
     return re.sub(r"\s+([,.;:!?])", r"\1", collapsed)
+
+
+def _same_visible_wording(
+    proposed_quote: str,
+    visible_quote: str,
+    *,
+    confirmed_ocr_marker: bool,
+) -> bool:
+    """Match layout markers while narrowly allowing OCR's ``o`` bullet alias.
+
+    The visual model must first return ``exact`` and provide its own transcription
+    of the image. A lowercase ``o`` is removed only when it is a standalone
+    line-leading token before an uppercase letter or digit, and only from the
+    candidate side when the model's visible transcription omits it. This keeps
+    an actual visible leading ``o`` in the independently returned quote literal.
+    """
+    if _layout_key(visible_quote) == _layout_key(proposed_quote):
+        return True
+    ocr_marker = re.compile(r"(?m)^[ \t]*o[ \t]+(?=[A-Z0-9])")
+    if not confirmed_ocr_marker or not ocr_marker.search(proposed_quote):
+        return False
+    return _layout_key(visible_quote) == _layout_key(ocr_marker.sub("", proposed_quote))
+
+
+def _confirms_ocr_open_circle(reason: str) -> bool:
+    """Require an explicit marker explanation before normalizing OCR ``o``."""
+    return bool(
+        re.search(r"\bo\b", reason, flags=re.IGNORECASE)
+        and re.search(r"\b(?:bullet|marker|circle)\b", reason, flags=re.IGNORECASE)
+    )
 
 
 async def validate_quote_on_page_image(
@@ -206,8 +242,10 @@ async def validate_quotes_on_page_image(
                 validated[decision.item_id] = decision.model_copy(
                     update={"verdict": "cannot_tell"}
                 )
-            elif _layout_key(decision.visible_quote) != _layout_key(
-                quote_by_id[decision.item_id]
+            elif not _same_visible_wording(
+                quote_by_id[decision.item_id],
+                decision.visible_quote,
+                confirmed_ocr_marker=_confirms_ocr_open_circle(decision.reason),
             ):
                 validated[decision.item_id] = decision.model_copy(
                     update={"verdict": "not_exact"}
