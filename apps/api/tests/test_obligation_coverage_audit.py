@@ -250,6 +250,42 @@ def test_example2_utility_row_audit_surfaces_missing_required_details() -> None:
     assert result.potential_omissions == (source_quote,)
 
 
+@pytest.mark.parametrize(
+    "source_quote",
+    [
+        pytest.param(
+            "Brochure detailing technical specifications and performance, list of "
+            "industrial and educational establishments where the items enquired "
+            "have been supplied must be provided.",
+            id="example2-page20-capability-evidence",
+        ),
+        pytest.param(
+            "BIDDER shall be responsible for installation / demonstration wherever "
+            "applicable and for after sales service during the warranty period and "
+            "thereafter as mentioned in the contract.",
+            id="example3-page8-after-sales-service",
+        ),
+        pytest.param(
+            "The Supplier shall provide such packing of the Goods as is required "
+            "to prevent their damage or deterioration during transit to their "
+            "final destination.",
+            id="example3-page8-packaging-safety",
+        ),
+    ],
+)
+def test_sample_source_obligation_absent_from_rows_is_surfaced_for_review(
+    source_quote: str,
+) -> None:
+    # These source-verified clauses were absent from the generated sample rows.
+    # The audit only surfaces a potential omission; a reviewer must verify it.
+    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[source_quote])])
+
+    result = asyncio.run(audit_window_coverage(source_quote, [], adapter))
+
+    assert result.status == "completed"
+    assert result.potential_omissions == (source_quote,)
+
+
 def test_accepts_split_rows_that_cover_every_non_whitespace_source_character() -> None:
     quote = "The pump shall deliver 12 L/min under continuous operation."
     assert _find_potential_omissions(
