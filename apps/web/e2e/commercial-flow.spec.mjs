@@ -264,7 +264,11 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
             page_number: 12,
             clause_number: "4.2",
             location_type: "exact",
-            source_text: finalMatrixRow().raw_source,
+            source_text: [
+              "Full tender page context preceding and following the requirement.",
+              finalMatrixRow().raw_source,
+              "Additional unrelated page context.",
+            ].join(" "),
             quote_text: finalMatrixRow().raw_source,
             ocr_confidence: 0.99,
           }, {
@@ -790,6 +794,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
 
   await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}`);
   await expect(page.getByText("Page 12 · No rendered image", { exact: true })).toBeVisible();
+  const reviewEvidencePane = page.getByRole("complementary", {
+    name: "Requirement evidence and review",
+  });
+  await expect(reviewEvidencePane.locator("blockquote")).toHaveText(
+    finalMatrixRow().raw_source
+  );
   await expect(
     page.locator(".source-finding.selected").getByText(finalMatrixRow().raw_source, { exact: true })
   ).toBeVisible();

@@ -291,6 +291,8 @@ export function TenderReviewWorkspace(props: {
     (preferredSourcePage !== undefined
       ? selectedSources.find((source) => source.page_number === preferredSourcePage)
       : selectedSources[0]);
+  const selectedSourceExcerpt =
+    selectedSource?.quote_text?.trim() || selectedSource?.source_text;
   const sourcePage =
     selectedSource?.page_number ?? preferredSourcePage ?? 1;
   const requestedCitationMissing =
@@ -719,10 +721,7 @@ export function TenderReviewWorkspace(props: {
               }
               selectedAnchorId={selectedSource?.id ?? null}
               highlightQuote={
-                selectedSource?.quote_text ??
-                selectedSource?.source_text ??
-                initialSourceQuote ??
-                null
+                selectedSourceExcerpt ?? initialSourceQuote ?? null
               }
               totalPages={undefined}
               onPageChange={(page) => {
@@ -780,8 +779,8 @@ export function TenderReviewWorkspace(props: {
                 </div>
               </div>
 
-              {selectedSource?.source_text ? (
-                <blockquote>{selectedSource.source_text}</blockquote>
+              {selectedSourceExcerpt ? (
+                <blockquote>{selectedSourceExcerpt}</blockquote>
               ) : (
                 <p style={{ color: "var(--text-tertiary)" }}>
                   No source text available.
