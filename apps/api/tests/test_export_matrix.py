@@ -454,6 +454,39 @@ class TestExportGeneration:
             ("pyrometer-range", "source_quote_not_found")
         ]
 
+    def test_example2_ln2_requirement_rejects_dropped_en_dash(self):
+        # Example 2 page 27 has an en dash before "so that"; the response DOCX
+        # omits it, which a text comparison that strips punctuation would miss.
+        source_page = AuthorizedSourceFragment(
+            page_number=27,
+            text=(
+                "pumping well (if applicable) – so that smooth functioning of the "
+                "MBE is achieved."
+            ),
+            page_local=True,
+            authoritative_page_text=True,
+        )
+        exact_source_wording = RequirementCell(
+            "ln2-functioning",
+            "pumping well (if applicable) – so that smooth functioning of the MBE is achieved.",
+            source_page=27,
+        )
+        sampled_output_wording = RequirementCell(
+            "ln2-functioning",
+            "pumping well (if applicable) so that smooth functioning of the MBE is achieved.",
+            source_page=27,
+        )
+
+        assert validate_source_quote_presence(
+            [exact_source_wording], {"ln2-functioning": [source_page]}
+        ) == ()
+        issues = validate_source_quote_presence(
+            [sampled_output_wording], {"ln2-functioning": [source_page]}
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("ln2-functioning", "source_quote_not_found")
+        ]
+
     def test_example3_delivery_period_rejects_sampled_ten_month_substitution(self):
         # Example 3 page 22 states "Within 8 Weeks"; its supplied response
         # sheet says "within 10 months", which is absent from the tender.
