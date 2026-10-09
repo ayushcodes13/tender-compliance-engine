@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0035_worker_audit_actor"
-down_revision: str | None = "0034_obligation_coverage_audit"
+down_revision: str | None = "0035_coverage_error_category"
 branch_labels: str | None = None
 depends_on: str | None = None
 
