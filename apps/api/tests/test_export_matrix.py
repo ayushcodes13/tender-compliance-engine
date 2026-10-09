@@ -454,6 +454,48 @@ class TestExportGeneration:
             ("pyrometer-range", "source_quote_not_found")
         ]
 
+    def test_example1_wafer_diameter_rejects_straight_quote_for_curly_inch_mark(self):
+        # Example 1 page 10 uses a curly closing quote after 4; the supplied
+        # response DOCX renders a straight quote in the wafer-chuck row.
+        source_page = AuthorizedSourceFragment(
+            page_number=10,
+            text=(
+                "Vacuum-backed chuck – should handle samples of 10mm by 10mm "
+                "to wafer diameter of 4”\n"
+                "• Fine positioning of the XY table with digital readout\n"
+                "• X-Y movement range – minimum 25 mm\n"
+                "• Chuck Stage XY Resolution: 10 µm\n"
+                "• Micro-finish roughness and/or Teflon coated"
+            ),
+            page_local=True,
+            authoritative_page_text=True,
+        )
+        exact_source_wording = RequirementCell(
+            "wafer-chuck",
+            "• Vacuum-backed chuck – should handle samples of 10mm by 10mm "
+            "to wafer diameter of 4”\n"
+            "• Fine positioning of the XY table with digital readout\n"
+            "• X-Y movement range – minimum 25 mm\n"
+            "• Chuck Stage XY Resolution: 10 µm\n"
+            "• Micro-finish roughness and/or Teflon coated",
+            source_page=10,
+        )
+        sampled_output_wording = RequirementCell(
+            "wafer-chuck",
+            exact_source_wording.text.replace("4”", '4"'),
+            source_page=10,
+        )
+
+        assert validate_source_quote_presence(
+            [exact_source_wording], {"wafer-chuck": [source_page]}
+        ) == ()
+        issues = validate_source_quote_presence(
+            [sampled_output_wording], {"wafer-chuck": [source_page]}
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("wafer-chuck", "source_quote_not_found")
+        ]
+
     def test_example2_ln2_requirement_rejects_dropped_en_dash(self):
         # Example 2 page 27 has an en dash before "so that"; the response DOCX
         # omits it, which a text comparison that strips punctuation would miss.
