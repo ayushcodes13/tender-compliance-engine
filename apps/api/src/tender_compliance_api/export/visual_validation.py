@@ -20,6 +20,7 @@ SCHEMA_VERSION = "1.0.0"
 CALL_SITE = "validate_generated_sheet_page_image"
 MIN_CONFIDENCE = 0.99
 MAX_CALLS_PER_PAGE = 3
+MAX_CONCURRENT_VALIDATIONS = 4
 
 SYSTEM_PROMPT = """\
 You validate whether one generated tender requirement cell reproduces the
