@@ -300,6 +300,24 @@ class TestExportGeneration:
             ("quote", "source_quote_not_found")
         ]
 
+    def test_source_quote_check_ignores_only_standalone_list_bullet_markers(self):
+        source = "\uf0b7 Accuracy: ±0.5%\n\uf0b7 Power supply: 380V / 400V"
+        quote = "Accuracy: ±0.5%\nPower supply: 380V / 400V"
+
+        assert validate_source_quote_presence(
+            [RequirementCell("list-quote", quote)], {"list-quote": [source]}
+        ) == ()
+
+        embedded_bullet_source = "Accuracy • 0.5%"
+        embedded_bullet_quote = "Accuracy 0.5%"
+        issues = validate_source_quote_presence(
+            [RequirementCell("embedded-bullet", embedded_bullet_quote)],
+            {"embedded-bullet": [embedded_bullet_source]},
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("embedded-bullet", "source_quote_not_found")
+        ]
+
     def test_source_quote_check_rejects_changed_spacing_around_hyphen(self):
         source_quote = "All pre -installation requirements are included."
         changed_quote = source_quote.replace("pre -installation", "pre-installation")

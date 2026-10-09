@@ -7,6 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from tender_compliance_api.export.visual_validation import (
     CALL_SITE,
+    PROMPT_VERSION,
     PageImageValidationResponse,
     validate_quote_on_page_image,
 )
@@ -88,6 +89,62 @@ def test_visual_validation_accepts_only_exact_quote_from_supplied_page():
     assert adapter.call_args["user_text"] == (
         '{"page_number":7,"proposed_quote":"Minimum accuracy: ±2 mm"}'
     )
+
+
+def test_visual_validation_ignores_only_standalone_list_bullet_markers():
+    adapter = FakeAdapter(
+        _response(visible_quote="• Accuracy: ±0.5%\n\uf0a7 Force: 25 kN\n\uf0b7 Power: 220 V")
+    )
+
+    response, _ = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="Accuracy: ±0.5%\nForce: 25 kN\nPower: 220 V",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "exact"
+    assert adapter.call_args is not None
+    assert "Standalone bullet glyphs" in adapter.call_args["system_prompt"]
+
+
+def test_visual_validation_does_not_ignore_bullet_glyph_inside_requirement_text():
+    adapter = FakeAdapter(_response(visible_quote="Accuracy 0.5%"))
+
+    response, _ = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="Accuracy • 0.5%",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "not_exact"
+
+
+def test_visual_validation_preserves_single_line_legend_symbol():
+    adapter = FakeAdapter(_response(visible_quote="= active"))
+
+    response, call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="● = active",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "not_exact"
+    assert call.prompt_version == PROMPT_VERSION == "1.1.0"
 
 
 @pytest.mark.parametrize(
