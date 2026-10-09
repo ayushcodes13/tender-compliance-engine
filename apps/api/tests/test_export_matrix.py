@@ -428,6 +428,32 @@ class TestExportGeneration:
             ("temperature-range", "source_quote_not_found")
         ]
 
+    def test_example2_pyrometer_range_rejects_dropped_en_dash(self):
+        # Example 2 page 24 says 450–1250°C; the supplied response DOCX drops
+        # the range dash and renders the values as "450 1250°C".
+        source_page = AuthorizedSourceFragment(
+            page_number=24,
+            text="Pyrometer range of at least 450–1250°C, fully integrated with MBE control.",
+            page_local=True,
+            authoritative_page_text=True,
+        )
+        exact_source_wording = RequirementCell(
+            "pyrometer-range", "range of at least 450–1250°C", source_page=24
+        )
+        sampled_output_wording = RequirementCell(
+            "pyrometer-range", "range of at least 450 1250°C", source_page=24
+        )
+
+        assert validate_source_quote_presence(
+            [exact_source_wording], {"pyrometer-range": [source_page]}
+        ) == ()
+        issues = validate_source_quote_presence(
+            [sampled_output_wording], {"pyrometer-range": [source_page]}
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("pyrometer-range", "source_quote_not_found")
+        ]
+
     def test_example3_delivery_period_rejects_sampled_ten_month_substitution(self):
         # Example 3 page 22 states "Within 8 Weeks"; its supplied response
         # sheet says "within 10 months", which is absent from the tender.
