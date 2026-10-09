@@ -417,7 +417,11 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
         method === "POST"
       ) {
         const body = request.postDataJSON();
-        expect(body).toEqual({ page_number: 9, source_quote: coverageQuote });
+        expect(body).toEqual({
+          page_number: 9,
+          source_quote: coverageQuote,
+          requirement_type: "obligation",
+        });
         return json({
           id: "coverage-requirement-1",
           document_version_id: "version-1",
@@ -651,6 +655,15 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     name: "Open tender page 9 and inspect excerpt",
   });
   await expect(findingLink).toBeVisible();
+  const requirementType = page.getByLabel("Requirement type");
+  await expect(requirementType).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Add excerpt as unreviewed requirement" })
+  ).toBeDisabled();
+  await requirementType.selectOption("obligation");
+  await expect(
+    page.getByRole("button", { name: "Add excerpt as unreviewed requirement" })
+  ).toBeEnabled();
   await page.getByRole("button", { name: "Add excerpt as unreviewed requirement" }).click();
   await expect(page.getByRole("button", { name: "Added for review" })).toBeVisible();
   await expect(page.getByText(/Run an export again to recheck coverage/)).toBeVisible();

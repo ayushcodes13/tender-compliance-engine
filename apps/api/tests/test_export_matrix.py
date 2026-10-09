@@ -707,6 +707,180 @@ class TestExportGeneration:
         assert coverage["obligation_audit_status"] == "no_potential_omissions"
         assert coverage["potential_omissions"] == []
 
+    @pytest.mark.parametrize(
+        ("second_page_verdict", "expected_status"),
+        [("exact", "passed"), ("cannot_tell", "needs_review")],
+    )
+    def test_multi_page_ocr_quote_checks_each_page_local_fragment(
+        self, monkeypatch, second_page_verdict, expected_status
+    ):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        first_fragment = "The machine shall test"
+        second_fragment = "continuously at 1000/s."
+        quote = f"{first_fragment}\n{second_fragment}"
+
+        async def _add_multi_page_ocr_source():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = Requirement(
+                    document_version_id=version.id,
+                    promotion_key=f"pk-{uuid.uuid4().hex}",
+                    requirement_type="obligation",
+                    normalized_text=quote,
+                    raw_source=quote,
+                    uncertainty="uncertain",
+                    ocr_warning=True,
+                    review_state=RequirementReviewState.OCR_WARNING,
+                    display_order=1,
+                    mandatory=True,
+                    superseded=False,
+                    clause_number="4.1",
+                )
+                session.add(requirement)
+                await session.flush()
+                session.add_all(
+                    [
+                        RequirementSource(
+                            requirement_id=requirement.id,
+                            document_version_id=version.id,
+                            page_number=17,
+                            clause_number="4.1",
+                            char_start=120,
+                            char_end=120 + len(first_fragment),
+                            location_type="exact",
+                            source_text=first_fragment,
+                        ),
+                        RequirementSource(
+                            requirement_id=requirement.id,
+                            document_version_id=version.id,
+                            page_number=18,
+                            clause_number="4.1",
+                            char_start=4,
+                            char_end=4 + len(second_fragment),
+                            location_type="exact",
+                            source_text=second_fragment,
+                        ),
+                    ]
+                )
+                session.add_all(
+                    [
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=17,
+                            cleaned_text=f"Prefix. {first_fragment}",
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-17.png",
+                        ),
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=18,
+                            cleaned_text=f"{second_fragment} Suffix.",
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-18.png",
+                        ),
+                    ]
+                )
+                await session.commit()
+                return requirement.id
+
+        requirement_id = asyncio.run(_add_multi_page_ocr_source())
+
+        class FakeAdapter:
+            pass
+
+        class FakeStorage:
+            async def get(self, key: str) -> bytes:
+                return key.encode()
+
+        checked: list[tuple[int, str]] = []
+
+        async def fake_visual_check(**kwargs):
+            checked.append((kwargs["page_number"], kwargs["proposed_quote"]))
+            quote_part = kwargs["proposed_quote"]
+            verdict = (
+                second_page_verdict if kwargs["page_number"] == 18 else "exact"
+            )
+            return (
+                PageImageValidationResponse(
+                    verdict=verdict,
+                    confidence=0.99 if verdict == "exact" else 0.5,
+                    visible_quote=quote_part if verdict == "exact" else "",
+                    reason=(
+                        "The page-local excerpt is visibly present."
+                        if verdict == "exact"
+                        else "The page-local excerpt is unclear."
+                    ),
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+            ),
+        )
+        monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                return await document_service._source_quote_validation_report(
+                    session,
+                    rows,
+                    FakeStorage(),
+                    version.id,
+                )
+
+        report = asyncio.run(_validate())
+
+        assert checked == [(17, first_fragment), (18, second_fragment)]
+        assert report["status"] == expected_status
+        if second_page_verdict == "exact":
+            assert report["llm_assisted_rows"] == [str(requirement_id)]
+        else:
+            assert report["llm_assisted_rows"] == []
+            assert report["issues"] == [
+                {"row_id": str(requirement_id), "code": "ocr_visual_verification_required"}
+            ]
+        assert [result["page_number"] for result in report["llm_fallback_results"]] == [
+            17,
+            18,
+        ]
+
     def test_partial_ocr_coverage_finding_survives_other_page_uncertainty(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(
