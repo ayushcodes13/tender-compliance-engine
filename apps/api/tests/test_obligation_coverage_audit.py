@@ -22,7 +22,7 @@ from tender_compliance_api.extraction.fake import FakeLlmAdapter
 
 
 def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
-    assert PROMPT_VERSION == "1.2.0"
+    assert PROMPT_VERSION == "1.3.0"
     for prompt in (SYSTEM_PROMPT, IMAGE_SYSTEM_PROMPT):
         assert OBLIGATION_SCOPE in prompt
         normalized_prompt = " ".join(prompt.split())
@@ -40,8 +40,35 @@ def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
         assert "table parameter labels" in normalized_prompt
         assert "Delivery timing" in normalized_prompt
         assert "installation duties remain in scope" in normalized_prompt
+        assert (
+            "Do not report an excerpt solely because it states a right, remedy"
+            in normalized_prompt
+        )
+        assert (
+            "buyer discretion to cancel, reject, ban, or take remedial action"
+            in normalized_prompt
+        )
+        assert "committee decisions to invite bidders or seek feedback" in normalized_prompt
+        assert "explicit supplier cure deadlines" in normalized_prompt
         assert "instructions about how to prepare or" in normalized_prompt
         assert "A title or heading is not an obligation by itself." in normalized_prompt
+
+
+def test_coverage_audit_retains_supplier_cure_duty_alongside_buyer_remedies() -> None:
+    source = (
+        "The purchaser may reject the equipment. "
+        "The supplier shall remedy defects within two days. "
+        "The purchaser may ban a supplier that fails to comply."
+    )
+    supplier_duty = "The supplier shall remedy defects within two days."
+    adapter = FakeLlmAdapter(
+        [ObligationCoverageResponse(quotes=[supplier_duty])]
+    )
+
+    result = asyncio.run(audit_window_coverage(source, [], adapter))
+
+    assert result.status == "completed"
+    assert result.potential_omissions == (supplier_duty,)
 
 
 def test_cover_and_contents_window_can_complete_with_no_obligations() -> None:

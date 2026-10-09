@@ -36,7 +36,7 @@ from tender_compliance_api.extraction.adapter import (
 )
 from tender_compliance_api.logs import error_category as categorize_error
 
-PROMPT_VERSION = "1.2.0"
+PROMPT_VERSION = "1.3.0"
 SCHEMA_VERSION = "1.0.0"
 CALL_SITE = "audit_obligation_coverage"
 IMAGE_CALL_SITE = "audit_obligation_coverage_page_image"
@@ -63,8 +63,17 @@ quote terms such as price, payment, freight, and Incoterms. Bare equipment
 names, table parameter labels, and quantity labels identify a row; they are
 not obligations by themselves. Include the actual technical specification in
 an adjacent cell or bullet. Delivery timing and installation duties remain in
-scope when they state what the supplier must do. A title or heading is not an
-obligation by itself.
+scope when they state what the supplier must do. Do not report an excerpt
+solely because it states a right, remedy, liability disclaimer, acceptance
+decision, or evaluation step belonging to the purchaser or committee. This
+includes buyer discretion to cancel, reject, ban, or take remedial action;
+buyer statements that it is not liable for losses; and committee decisions
+to invite bidders or seek feedback. Include a nearby supplier obligation only
+when the source explicitly states the supplier action. When a passage mixes
+buyer remedies with supplier duties, return only the smallest complete
+verbatim supplier-duty excerpt. Keep explicit supplier cure deadlines,
+replacement/repair duties, and required demonstrations in scope. A title or
+heading is not an obligation by itself.
 """.strip()
 
 SYSTEM_PROMPT = f"""\
