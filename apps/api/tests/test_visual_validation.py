@@ -101,6 +101,21 @@ def test_visual_validation_accepts_only_exact_quote_from_supplied_page():
     )
 
 
+def test_visual_validation_ignores_only_layout_whitespace_around_hyphen():
+    adapter = FakeAdapter(_response(visible_quote="III-V requirement"))
+    response, _call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="III -V requirement",
+            page_number=10,
+            image_bytes=b"page-ten",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+    assert response is not None
+    assert response.verdict == "exact"
+
+
 def test_visual_batch_validates_each_quote_against_the_same_page():
     adapter = FakeAdapter(
         PageImageBatchResponse(

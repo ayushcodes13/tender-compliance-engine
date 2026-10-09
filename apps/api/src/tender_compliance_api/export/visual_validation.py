@@ -90,7 +90,11 @@ def _layout_key(text: str) -> str:
     # repeated list structure provides evidence that they are list markers.
     markers = list(marker_pattern.finditer(text))
     without_list_markers = marker_pattern.sub("", text) if len(markers) >= 2 else text
-    return re.sub(r"\s+", " ", without_list_markers).strip()
+    collapsed = re.sub(r"\s+", " ", without_list_markers).strip()
+    # PDF text extraction may insert whitespace around visually contiguous
+    # hyphens (for example, "III -V"). Ignore only spacing artifacts.
+    collapsed = re.sub(r"\s*-\s*", "-", collapsed)
+    return re.sub(r"\s+([,.;:!?])", r"\1", collapsed)
 
 
 async def validate_quote_on_page_image(
@@ -130,6 +134,7 @@ async def validate_quotes_on_page_image(
     image_bytes: bytes,
     image_mime_type: str,
     adapter: LlmAdapter,
+    call_site: str = CALL_SITE,
 ) -> tuple[dict[str, PageImageQuoteDecision], LlmCallResult]:
     """Validate up to six independently quoted cells against one cited page.
 
@@ -153,7 +158,7 @@ async def validate_quotes_on_page_image(
         model=adapter.model,
         prompt_version=PROMPT_VERSION,
         schema_version=SCHEMA_VERSION,
-        call_site=CALL_SITE,
+        call_site=call_site,
         temperature=0,
         max_retries=1,
         max_tokens=4000,
@@ -224,7 +229,7 @@ async def validate_quotes_on_page_image(
             finish_reason=None,
             status="failed",
             error_message="page image validation failed",
-            call_site=CALL_SITE,
+            call_site=call_site,
             error_category=(
                 exc.error_category
                 if isinstance(exc, LlmCallError) and exc.error_category

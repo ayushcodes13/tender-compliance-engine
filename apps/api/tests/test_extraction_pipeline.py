@@ -49,6 +49,10 @@ from tender_compliance_api.db.models import (
 from tender_compliance_api.document.service import (
     DocumentService,
 )
+from tender_compliance_api.export.visual_validation import (
+    PageImageBatchResponse,
+    PageImageQuoteDecision,
+)
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
@@ -81,9 +85,6 @@ from tender_compliance_api.extraction.schema import (
     RequirementType,
     TrustedSourceContext,
     UncertaintyLevel,
-)
-from tender_compliance_api.extraction.verbatim_validation import (
-    VerbatimValidationResponse,
 )
 from tender_compliance_api.storage.fake import FakeStorageAdapter
 from tender_compliance_api.storage.keys import build_key
@@ -779,7 +780,7 @@ class TestExtractStageCandidates:
 
         asyncio.run(_run())
 
-    def test_fallback_result_and_call_audit_are_persisted(self, session_cm) -> None:
+    def test_page_image_fallback_result_and_call_audit_are_persisted(self, session_cm) -> None:
         async def _run() -> None:
             info = await _create_version_with_run(session_cm)
             sf = _get_session_factory()
@@ -807,14 +808,28 @@ class TestExtractStageCandidates:
                 requirement_type=RequirementType.OBLIGATION,
                 uncertainty=UncertaintyLevel.CONFIRMED,
             )
-            llm = FakeLlmAdapter(
+            class VisionFake(FakeLlmAdapter):
+                async def extract_with_image(self, **kwargs):
+                    return await self.extract(
+                        system_prompt=kwargs["system_prompt"],
+                        user_text=kwargs["user_text"],
+                        response_model=kwargs["response_model"],
+                        config=kwargs["config"],
+                    )
+
+            llm = VisionFake(
                 responses=[
                     ExtractionResponse(candidates=[candidate]),
-                    VerbatimValidationResponse(
-                        verdict="supported",
-                        confidence=0.99,
-                        matched_source=text,
-                        reason="Exact source text recovered.",
+                    PageImageBatchResponse(
+                        decisions=[
+                            PageImageQuoteDecision(
+                                item_id="0",
+                                verdict="exact",
+                                confidence=0.99,
+                                visible_quote=text,
+                                reason="Exact wording is visible on the cited page.",
+                            )
+                        ]
                     ),
                 ]
             )
@@ -832,6 +847,7 @@ class TestExtractStageCandidates:
                         info["processing_run_id"], call
                     ),
                     enable_verbatim_fallback=True,
+                    coverage_page_images={1: b"page-image"},
                 )
                 await svc.store_extraction_candidates(
                     auth,
@@ -866,9 +882,9 @@ class TestExtractStageCandidates:
                 assert candidate_row.is_valid is True
                 assert candidate_row.persistable is True
                 assert candidate_row.uncertainty == "uncertain"
-                assert candidate_row.raw_source == text
+                assert candidate_row.raw_source == candidate.raw_source
                 assert candidate_row.verbatim_validation["status"] == (
-                    "recovered_for_human_review"
+                    "exact_page_image_match_for_human_review"
                 )
                 run_rows = (
                     await session.execute(
@@ -881,7 +897,7 @@ class TestExtractStageCandidates:
                 assert len(run_rows) == 2
                 assert {run.call_site for run in run_rows} == {
                     "extract_candidates",
-                    "validate_verbatim_source",
+                    "validate_extraction_candidate_page_image",
                 }
                 requirement = (
                     await session.execute(

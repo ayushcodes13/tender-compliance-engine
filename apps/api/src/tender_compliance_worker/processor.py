@@ -507,9 +507,13 @@ class JobProcessor:
                 self._obligation_coverage_audit_enabled
                 and self._llm.provider != "dev"
             )
+            candidate_image_validation_enabled = (
+                self._verbatim_validation_fallback_enabled
+                and self._llm.provider != "dev"
+            )
             coverage_page_images: dict[int, bytes] = {}
             coverage_page_texts: dict[int, str] = {}
-            if coverage_audit_enabled:
+            if coverage_audit_enabled or candidate_image_validation_enabled:
                 for page in pages:
                     if page.cleaned_text:
                         coverage_page_texts[page.page_number] = page.cleaned_text

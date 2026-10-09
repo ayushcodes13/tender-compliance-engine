@@ -41,6 +41,16 @@ from dataclasses import dataclass, field, replace
 from typing import Any, cast
 
 from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
+from tender_compliance_api.export.visual_validation import (
+    MAX_CALLS_PER_PAGE as MAX_IMAGE_VALIDATION_CALLS_PER_PAGE,
+)
+from tender_compliance_api.export.visual_validation import (
+    MAX_QUOTES_PER_CALL as MAX_IMAGE_QUOTES_PER_CALL,
+)
+from tender_compliance_api.export.visual_validation import (
+    PageImageQuote,
+    validate_quotes_on_page_image,
+)
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
@@ -354,7 +364,7 @@ async def extract_from_windows(
             fallback_calls = 0
             for cand in _iter_candidates(result):
                 record = _to_record(window, cand)
-                if not record.is_valid and enable_verbatim_fallback:
+                if not record.is_valid and enable_verbatim_fallback and not window.ocr_warning:
                     trusted_text = window.sources[0].source_text if window.sources else None
                     if trusted_text and len(window.sources) == 1:
                         if fallback_calls >= MAX_FALLBACKS_PER_WINDOW:
@@ -439,6 +449,113 @@ async def extract_from_windows(
     candidates = [candidate for outcome in outcomes for candidate in outcome.candidates]
     llm_calls = [call for outcome in outcomes for call in outcome.calls]
     window_results = [outcome.result for outcome in outcomes]
+
+    # Native text on a flagged page is not a trusted basis for candidate
+    # citations. Validate each candidate against only its single cited page
+    # image, with the same batch and call limits used at export.
+    image_candidates_by_page: dict[int, list[int]] = {}
+    window_by_chunk = {window.chunk_id: window for window in windows}
+    for candidate_index, record in enumerate(candidates) if enable_verbatim_fallback else ():
+        window = window_by_chunk.get(record.chunk_id)
+        if not record.ocr_warning or window is None:
+            continue
+        if len(window.sources) != 1:
+            candidates[candidate_index] = replace(
+                record,
+                persistable=False,
+                verbatim_validation={"status": "single_cited_page_required"},
+            )
+            continue
+        page_number = window.sources[0].page_number
+        if page_number is not None:
+            image_candidates_by_page.setdefault(page_number, []).append(candidate_index)
+        else:
+            candidates[candidate_index] = replace(
+                record,
+                persistable=False,
+                verbatim_validation={"status": "cited_page_unavailable"},
+            )
+
+    for page_number, candidate_indexes in sorted(image_candidates_by_page.items()):
+        page_image = (coverage_page_images or {}).get(page_number)
+        if not page_image:
+            for index in candidate_indexes:
+                candidates[index] = replace(
+                    candidates[index],
+                    persistable=False,
+                    verbatim_validation={
+                        "status": "page_image_unavailable",
+                        "page_number": page_number,
+                    },
+                )
+            continue
+        max_page_items = MAX_IMAGE_QUOTES_PER_CALL * MAX_IMAGE_VALIDATION_CALLS_PER_PAGE
+        for index in candidate_indexes[max_page_items:]:
+            candidates[index] = replace(
+                candidates[index],
+                persistable=False,
+                verbatim_validation={
+                    "status": "image_validation_budget_exhausted",
+                    "page_number": page_number,
+                },
+            )
+        batch_starts = range(
+            0,
+            min(len(candidate_indexes), max_page_items),
+            MAX_IMAGE_QUOTES_PER_CALL,
+        )
+        for batch_start in batch_starts:
+            batch_indexes = candidate_indexes[
+                batch_start : batch_start + MAX_IMAGE_QUOTES_PER_CALL
+            ]
+            items = [
+                PageImageQuote(item_id=str(index), proposed_quote=candidates[index].raw_source)
+                for index in batch_indexes
+                if candidates[index].raw_source.strip()
+            ]
+            if not items:
+                continue
+            decisions, image_call = await validate_quotes_on_page_image(
+                items=items,
+                page_number=page_number,
+                image_bytes=page_image,
+                image_mime_type="image/png",
+                adapter=llm,
+                call_site="validate_extraction_candidate_page_image",
+            )
+            llm_calls.append(image_call)
+            for item in items:
+                index = int(item.item_id)
+                record = candidates[index]
+                decision = decisions.get(item.item_id)
+                if decision is None or decision.verdict != "exact":
+                    candidates[index] = replace(
+                        record,
+                        persistable=False,
+                        verbatim_validation={
+                            "status": "image_validation_failed"
+                            if image_call.status != "completed"
+                            else "image_not_exact",
+                            "verdict": decision.verdict if decision else None,
+                            "confidence": float(decision.confidence) if decision else None,
+                            "page_number": page_number,
+                        },
+                    )
+                    continue
+                candidates[index] = replace(
+                    record,
+                    is_valid=True,
+                    persistable=True,
+                    uncertainty=UncertaintyLevel.UNCERTAIN.value,
+                    rejection_reason=None,
+                    verbatim_validation={
+                        "status": "exact_page_image_match_for_human_review",
+                        "confidence": float(decision.confidence),
+                        "page_number": page_number,
+                        "original_quote": record.raw_source,
+                    },
+                )
+
     # AsyncSession-backed callbacks are not safe to invoke concurrently. Persist
     # model-call audit rows in deterministic window/call order after inference.
     for call in llm_calls:
