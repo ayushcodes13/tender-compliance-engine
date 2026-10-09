@@ -22,6 +22,7 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter
 
 from tender_compliance_api.db.models import DocumentPage
+from tender_compliance_api.export.visual_validation import PageImageQuoteDecision
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
@@ -878,6 +879,92 @@ def test_ocr_warning_elevates_confirmed_to_uncertain() -> None:
         # cannot be persisted as a confirmed requirement while uncertain
         assert rec.persistable is False
         assert rec.is_valid is True  # citation still valid
+
+    asyncio.run(_run())
+
+
+def test_ocr_warning_candidate_requires_exact_cited_page_image(monkeypatch) -> None:
+    async def _run() -> None:
+        text = "The controller shall support III -V wafers."
+        page = _page(text, ocr_needed=True)
+        window = _window(page, text, ocr_warning=True)
+        cand = _cand("III-V support", raw_source=text)
+        llm = FakeLlmAdapter(responses=[_response([cand])])
+        calls, log_call = _make_log()
+        image_calls: list[dict[str, Any]] = []
+
+        async def exact_image_validation(**kwargs):
+            image_calls.append(kwargs)
+            item = kwargs["items"][0]
+            return (
+                {
+                    item.item_id: PageImageQuoteDecision(
+                        item_id=item.item_id,
+                        verdict="exact",
+                        confidence=1.0,
+                        visible_quote=text.replace("III -V", "III-V"),
+                        reason="Exact wording is visible on the cited page.",
+                    )
+                },
+                LlmCallResult(
+                    provider="fake",
+                    model="fake",
+                    prompt_version="1",
+                    schema_version="1",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="validate_extraction_candidate_page_image",
+                ),
+            )
+
+        monkeypatch.setattr(
+            "tender_compliance_api.extraction.extractor.validate_quotes_on_page_image",
+            exact_image_validation,
+        )
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_verbatim_fallback=True,
+            coverage_page_images={1: _fake_png()},
+        )
+        record = outcome.candidates[0]
+        assert image_calls[0]["page_number"] == 1
+        assert record.is_valid is True
+        assert record.persistable is True
+        assert record.uncertainty == UncertaintyLevel.UNCERTAIN.value
+        assert record.verbatim_validation["status"] == "exact_page_image_match_for_human_review"
+        assert calls[-1].call_site == "validate_extraction_candidate_page_image"
+
+    asyncio.run(_run())
+
+
+def test_ocr_warning_candidate_fails_closed_when_page_image_is_missing() -> None:
+    async def _run() -> None:
+        text = "The unit shall operate below 30 dB(A)."
+        window = _window(_page(text, ocr_needed=True), text, ocr_warning=True)
+        llm = FakeLlmAdapter(
+            responses=[_response([_cand("Noise limit", raw_source=text)])]
+        )
+        _calls, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_verbatim_fallback=True,
+        )
+        record = outcome.candidates[0]
+        assert record.is_valid is True
+        assert record.persistable is False
+        assert record.verbatim_validation == {
+            "status": "page_image_unavailable",
+            "page_number": 1,
+        }
 
     asyncio.run(_run())
 
