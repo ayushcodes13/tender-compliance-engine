@@ -454,6 +454,34 @@ class TestExportGeneration:
             ("pyrometer-range", "source_quote_not_found")
         ]
 
+    def test_example2_optional_materials_rejects_missing_final_letter(self):
+        # Tender page 29 says "Evaporation Materials"; the supplied response
+        # DOCX drops the final "s" in the optional-materials row.
+        source_page = AuthorizedSourceFragment(
+            page_number=29,
+            text="MBE grade high purity Evaporation Materials:",
+            page_local=True,
+            authoritative_page_text=True,
+        )
+        exact_source_wording = RequirementCell(
+            "optional-materials", "MBE grade high purity Evaporation Materials:",
+            source_page=29,
+        )
+        sampled_output_wording = RequirementCell(
+            "optional-materials", "MBE grade high purity Evaporation Material:",
+            source_page=29,
+        )
+
+        assert validate_source_quote_presence(
+            [exact_source_wording], {"optional-materials": [source_page]}
+        ) == ()
+        issues = validate_source_quote_presence(
+            [sampled_output_wording], {"optional-materials": [source_page]}
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("optional-materials", "source_quote_not_found")
+        ]
+
     def test_example1_wafer_diameter_rejects_straight_quote_for_curly_inch_mark(self):
         # Example 1 page 10 uses a curly closing quote after 4; the supplied
         # response DOCX renders a straight quote in the wafer-chuck row.
