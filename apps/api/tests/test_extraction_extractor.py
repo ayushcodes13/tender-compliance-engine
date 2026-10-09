@@ -356,6 +356,36 @@ def test_ocr_coverage_fails_closed_when_page_image_is_unavailable() -> None:
     asyncio.run(_run())
 
 
+def test_ocr_coverage_preserves_bounded_provider_error_category() -> None:
+    class FailingVisionFake(FakeLlmAdapter):
+        async def extract_with_image(self, **_kwargs: Any) -> ExtractResult:
+            raise LlmCallError(
+                "provider response omitted intentionally",
+                error_category="image_parse_error",
+            )
+
+    async def _run() -> None:
+        text = "The pump shall deliver 12 L/min."
+        window = _window(_page(text, ocr_needed=True), text, ocr_warning=True)
+        calls, log_call = _make_log()
+        outcome = await extract_from_windows(
+            [window],
+            FailingVisionFake([_response([])]),
+            log_call=log_call,
+            enable_obligation_coverage_audit=True,
+            coverage_page_images={1: _fake_png()},
+            coverage_page_texts={1: text},
+        )
+
+        result = outcome.window_results[0]
+        assert result.coverage_status == "failed"
+        assert result.coverage_error_category == "image_parse_error"
+        assert calls[-1].error_category == "image_parse_error"
+        assert calls[-1].error_message == "page image obligation audit failed"
+
+    asyncio.run(_run())
+
+
 def test_ocr_coverage_uncertain_image_result_remains_unresolved() -> None:
     class VisionFake(FakeLlmAdapter):
         async def extract_with_image(self, **kwargs: Any) -> ExtractResult:

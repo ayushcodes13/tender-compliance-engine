@@ -82,7 +82,11 @@ def test_upgrade_head_creates_app_tables(tmp_path):
     window_audit_columns = {
         column["name"] for column in inspector.get_columns("extraction_window_audits")
     }
-    assert {"coverage_status", "potential_omissions"}.issubset(window_audit_columns)
+    assert {
+        "coverage_status",
+        "coverage_error_category",
+        "potential_omissions",
+    }.issubset(window_audit_columns)
     engine.dispose()
 
 

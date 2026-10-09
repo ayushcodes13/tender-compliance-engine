@@ -13,6 +13,7 @@ from tender_compliance_api.export.visual_validation import (
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
+    LlmCallError,
     LlmCallResult,
 )
 
@@ -147,7 +148,10 @@ def test_visual_validation_malformed_response_fails_closed():
 def test_visual_validation_provider_error_fails_closed():
     class FailingAdapter(FakeAdapter):
         async def extract_with_image(self, **kwargs) -> ExtractResult:
-            raise RuntimeError("provider unavailable")
+            raise LlmCallError(
+                "provider call failed",
+                error_category="image_parse_error",
+            )
 
     response, call = asyncio.run(
         validate_quote_on_page_image(
@@ -162,6 +166,7 @@ def test_visual_validation_provider_error_fails_closed():
     assert response is None
     assert call.status == "failed"
     assert call.error_message == "page image validation failed"
+    assert call.error_category == "image_parse_error"
     assert call.call_site == CALL_SITE
 
 

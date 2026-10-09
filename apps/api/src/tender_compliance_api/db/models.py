@@ -1134,6 +1134,9 @@ class ExtractionWindowAudit(Base):
     coverage_status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="not_run", server_default="not_run"
     )
+    coverage_error_category: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
     potential_omissions: Mapped[list[Any]] = mapped_column(
         JSON, nullable=False, default=list, server_default="[]"
     )

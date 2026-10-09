@@ -122,6 +122,7 @@ class WindowExtractionResult:
     ocr_warning: bool
     source_spans: list[dict[str, Any]]
     coverage_status: str = "not_run"
+    coverage_error_category: str | None = None
     potential_omissions: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -445,7 +446,7 @@ async def extract_from_windows(
                 if source.page_number is not None:
                     page_to_windows.setdefault(source.page_number, []).append(index)
 
-        page_results: dict[int, tuple[str, list[dict[str, Any]]]] = {}
+        page_results: dict[int, tuple[str, list[dict[str, Any]], str | None]] = {}
         for page_number in sorted(page_to_windows):
             page_text = (coverage_page_texts or {}).get(page_number, "")
             emitted_page_quotes = [
@@ -481,7 +482,11 @@ async def extract_from_windows(
                 }
                 for quote in audit.potential_omissions
             ]
-            page_results[page_number] = (audit.status, page_findings)
+            page_results[page_number] = (
+                audit.status,
+                page_findings,
+                audit.call.error_category,
+            )
 
         for index, window in enumerate(windows):
             if not window.ocr_warning:
@@ -494,7 +499,7 @@ async def extract_from_windows(
                 }
             )
             results = [page_results[page] for page in pages if page in page_results]
-            statuses = [status for status, _findings in results]
+            statuses = [status for status, _findings, _category in results]
             status = (
                 "completed"
                 if statuses and all(item == "completed" for item in statuses)
@@ -505,12 +510,17 @@ async def extract_from_windows(
             )
             findings = [
                 finding
-                for _page_status, page_findings in results
+                for _page_status, page_findings, _category in results
                 for finding in page_findings
             ]
+            error_category = next(
+                (category for _status, _findings, category in results if category),
+                None,
+            )
             window_results[index] = replace(
                 window_results[index],
                 coverage_status=status,
+                coverage_error_category=error_category,
                 potential_omissions=findings,
             )
 
