@@ -11,7 +11,9 @@ wire — and never include full document bodies (guardrail from CP35).
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import re
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -21,15 +23,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tender_compliance_api.audit.service import write_audit_event
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.db.models import (
+    DocumentPage,
     DocumentVersion,
     ExportArtifact,
     ExportFormat,
     ExportStatus,
+    Project,
     Requirement,
     RequirementReviewState,
+    RequirementSource,
+    TenderDocument,
 )
 from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document.service import (
@@ -37,6 +44,7 @@ from tender_compliance_api.document.service import (
     DocumentNotFoundError,
     DocumentService,
     TransitionError,
+    validate_ocr_page_quote_from_image,
 )
 from tender_compliance_api.errors import EXPORT_FAILURE
 from tender_compliance_api.logs import (
@@ -172,6 +180,21 @@ class EditRequirementRequest(BaseModel):
     normalized_text: str
     expected_updated_at: datetime | None = None
     note: str | None = None
+
+
+class AddRequirementFromSourceRequest(BaseModel):
+    """Reviewer-confirmed source excerpt from a coverage finding."""
+
+    page_number: int = Field(..., ge=1)
+    source_quote: str = Field(..., min_length=1, max_length=2048)
+    requirement_type: Literal["obligation", "prohibition", "permission"]
+
+    @field_validator("source_quote")
+    @classmethod
+    def quote_must_contain_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("source_quote must contain non-whitespace text")
+        return value
 
 
 class CategorySummary(BaseModel):
@@ -422,6 +445,147 @@ async def edit_requirement(
             },
         ) from exc
 
+    await session.commit()
+    await session.refresh(req)
+    return RequirementDetail.model_validate(req)
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/requirements/from-source",
+    response_model=RequirementDetail,
+    response_model_exclude_none=True,
+    status_code=201,
+)
+async def add_requirement_from_source(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    body: AddRequirementFromSourceRequest = Body(...),  # noqa: B008
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RequirementDetail:
+    """Add a reviewer-confirmed coverage finding only when its quote is on-page."""
+    scoped = await session.execute(
+        select(DocumentVersion)
+        .join(TenderDocument, TenderDocument.id == DocumentVersion.document_id)
+        .join(Project, Project.id == TenderDocument.project_id)
+        .where(
+            Project.id == project_id,
+            Project.organization_id == auth.organization_id,
+            TenderDocument.id == document_id,
+            DocumentVersion.version_number == version_number,
+        )
+    )
+    version = scoped.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Document version not found")
+
+    page = (
+        await session.execute(
+            select(DocumentPage).where(
+                DocumentPage.document_version_id == version.id,
+                DocumentPage.page_number == body.page_number,
+            )
+        )
+    ).scalar_one_or_none()
+    if page is None or not page.cleaned_text:
+        raise HTTPException(status_code=422, detail="The selected page has no verifiable text")
+    page_text = page.cleaned_text
+
+    tokens = re.split(r"\s+", body.source_quote.strip())
+    quote_pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
+    matches = list(quote_pattern.finditer(page_text))
+    ocr_derived = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
+    image_validation: dict[str, object] | None = None
+    if not matches:
+        if not ocr_derived:
+            raise HTTPException(
+                status_code=422,
+                detail="The excerpt does not match text on the selected page",
+            )
+        image_validation = await validate_ocr_page_quote_from_image(page, body.source_quote)
+        if image_validation.get("status") != "exact":
+            raise HTTPException(
+                status_code=422,
+                detail="The excerpt could not be verified against the rendered OCR page",
+            )
+
+    quote_digest = hashlib.sha256(body.source_quote.encode("utf-8")).hexdigest()
+    promotion_key = hashlib.sha256(
+        f"coverage-source:v2:{version.id}:{quote_digest}".encode()
+    ).hexdigest()
+    existing = (
+        await session.execute(
+            select(Requirement)
+            .where(
+                Requirement.document_version_id == version.id,
+                Requirement.promotion_key == promotion_key,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.superseded:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "A matching requirement was superseded; restore or replace it "
+                    "before adding this finding"
+                ),
+            )
+        return RequirementDetail.model_validate(existing)
+
+    exact_match = len(matches) == 1 and matches[0].group(0) == body.source_quote
+    # ocr_needed is cleared when OCR completes. Persisted OCR confidence or
+    # OCR word geometry still identifies OCR-derived text and must retain its
+    # uncertainty after successful recognition.
+    ocr_warning = ocr_derived
+    req = Requirement(
+        document_version_id=version.id,
+        processing_run_id=None,
+        promotion_key=promotion_key,
+        requirement_type=body.requirement_type,
+        normalized_text=body.source_quote,
+        raw_source=body.source_quote,
+        uncertainty="uncertain" if ocr_warning else "confirmed",
+        clause_number=None,
+        ocr_warning=ocr_warning,
+        review_state=(
+            RequirementReviewState.OCR_WARNING
+            if ocr_warning
+            else RequirementReviewState.UNREVIEWED
+        ),
+        sources=[
+            RequirementSource(
+                document_version_id=version.id,
+                page_number=body.page_number,
+                clause_number=None,
+                char_start=matches[0].start() if exact_match else None,
+                char_end=matches[0].end() if exact_match else None,
+                location_type="exact" if exact_match else "approximate",
+                source_text=body.source_quote,
+                ocr_confidence=page.ocr_confidence,
+            )
+        ],
+    )
+    session.add(req)
+    await session.flush()
+    await write_audit_event(
+        session,
+        auth,
+        "requirement.add_from_coverage_finding",
+        entity_type="requirement",
+        entity_id=req.id,
+        project_id=project_id,
+        metadata={
+            "document_version_id": str(version.id),
+            "page_number": body.page_number,
+            **(
+                {"visual_source_validation": image_validation}
+                if image_validation is not None
+                else {}
+            ),
+        },
+    )
     await session.commit()
     await session.refresh(req)
     return RequirementDetail.model_validate(req)
