@@ -204,6 +204,76 @@ def _candidate(text: str, raw: str) -> RequirementCandidate:
     )
 
 
+class _ConcurrentTrackingAdapter(LlmAdapter):
+    provider = "tracking"
+    model = "tracking"
+
+    def __init__(self) -> None:
+        self.active = 0
+        self.max_active = 0
+
+    async def extract(
+        self, *, system_prompt: str, user_text: str, response_model: type,
+        config: LlmCallConfig,
+    ) -> ExtractResult:
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        await asyncio.sleep(0.002 * (int(user_text[-1]) % 4 + 1))
+        self.active -= 1
+        call = LlmCallResult(
+            provider=self.provider, model=self.model,
+            prompt_version=config.prompt_version, schema_version=config.schema_version,
+            latency_ms=0, prompt_tokens=None, completion_tokens=None,
+            total_tokens=None, cost_usd=None, finish_reason="stop",
+            status="completed", call_site=config.call_site,
+        )
+        return ExtractResult(
+            response=ExtractionResponse(candidates=[
+                _candidate(f"Requirement {user_text[-1]}", user_text)
+            ]),
+            call=call,
+        )
+
+
+class TestBoundedWindowConcurrency:
+    def test_runs_windows_concurrently_and_preserves_ordered_audit(self) -> None:
+        async def _run() -> None:
+            org_id, doc_id, version_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+            windows = [
+                SourceWindow(
+                    chunk_id=f"chunk-{index}", text=f"source text {index}",
+                    sources=(TrustedSourceContext(
+                        organization_id=org_id, document_id=doc_id,
+                        document_version_id=version_id, page_number=index + 1,
+                        source_text=f"source text {index}",
+                    ),),
+                )
+                for index in range(8)
+            ]
+            adapter = _ConcurrentTrackingAdapter()
+            logged: list[LlmCallResult] = []
+            in_log = False
+
+            async def log_call(call: LlmCallResult) -> None:
+                nonlocal in_log
+                assert not in_log
+                in_log = True
+                await asyncio.sleep(0)
+                logged.append(call)
+                in_log = False
+
+            outcome = await extract_from_windows(windows, adapter, log_call=log_call)
+            assert 1 < adapter.max_active <= 4
+            assert [item.chunk_id for item in outcome.candidates] == [
+                f"chunk-{index}" for index in range(8)
+            ]
+            assert [item.window_index for item in outcome.window_results] == list(range(1, 9))
+            assert logged == outcome.llm_calls
+            assert len(logged) == 8
+
+        asyncio.run(_run())
+
+
 class TestFakeLlmAdapter:
     def test_drives_extraction_without_network(self) -> None:
         raw = "shall be painted RAL 9005"
