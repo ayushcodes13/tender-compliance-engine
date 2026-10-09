@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "e2e": "playwright test --config=playwright.config.mjs"
+    "e2e": "playwright test --config=playwright.config.mjs",
+    "e2e:proxy": "playwright test --config=playwright.proxy.config.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

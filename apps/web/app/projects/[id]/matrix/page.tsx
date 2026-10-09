@@ -152,6 +152,7 @@ export default function ProjectMatrixPage() {
             projectId={projectId}
             documentId={document.document_id}
             version={document.version_number}
+            documentName={document.display_name}
           />
         </div>
       </div>

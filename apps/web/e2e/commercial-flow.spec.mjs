@@ -667,11 +667,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}`
   );
   await sourceLink.click();
-  await expect(page).toHaveURL(
-    new RegExp(`/projects/project-1/review\\?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}$`)
-  );
-  await expect(page.getByText("Page 12 · Clause 4.2", { exact: true })).toBeVisible();
-  await expect(page.getByText(finalMatrixRow().raw_source, { exact: true }).first()).toBeVisible();
+  const matrixEvidence = page.getByRole("dialog", { name: "Evidence" });
+  await expect(matrixEvidence).toBeVisible();
+  await expect(matrixEvidence).toContainText("Page 12");
+  await expect(matrixEvidence).toContainText(finalMatrixRow().raw_source);
+  await expect(matrixEvidence).toContainText("Exact source anchor");
+  await matrixEvidence.getByRole("button", { name: "Close evidence panel" }).click();
 
   await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=13`);
   await expect(
@@ -693,17 +694,24 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   const citationPreview = page.locator(".citation-glance").first();
   await expect(citationPreview).toContainText(finalMatrixRow().raw_source);
   await expect(citationPreview).toContainText("Exact anchor");
+  await citationChip.click();
+  const reviewEvidence = page.getByRole("dialog", { name: "Evidence" });
+  await expect(reviewEvidence).toBeVisible();
+  await expect(reviewEvidence).toContainText("Exact source anchor");
+  await expect(reviewEvidence).toContainText(finalMatrixRow().raw_source);
+  await reviewEvidence.getByRole("button", { name: "Close evidence panel" }).click();
 
   await page.getByRole("button", { name: "Open source on page 14, clause 4.3" }).click();
   await expect(page).toHaveURL(new RegExp(`page=14&sourceId=${secondSourceId}$`));
   await expect(page.getByAltText("Page 14 of Technical Tender v1")).toBeVisible();
-  const selectedCitation = page.locator(".source-highlight.approximate.selected");
+  const selectedCitation = page.getByRole("dialog", { name: "Evidence" }).locator(".source-highlight.approximate.selected");
   await expect(selectedCitation).toHaveCount(1);
   await expect(selectedCitation).toHaveAttribute("title", `Approximate source: ${secondSourceQuote}`);
+  await page.getByRole("dialog", { name: "Evidence" }).getByRole("button", { name: "Close evidence panel" }).click();
 
   await page.getByRole("button", { name: "Open source on page 14, clause 4.4" }).click();
   await expect(page).toHaveURL(new RegExp(`page=14&sourceId=${thirdSourceId}$`));
-  const secondSelectedCitation = page.locator(".source-highlight.approximate.selected");
+  const secondSelectedCitation = page.getByRole("dialog", { name: "Evidence" }).locator(".source-highlight.approximate.selected");
   await expect(secondSelectedCitation).toHaveCount(1);
   await expect(secondSelectedCitation).toHaveAttribute("title", `Approximate source: ${thirdSourceQuote}`);
   await expect(secondSelectedCitation.getByText("4.4Approx", { exact: true })).toBeVisible();
