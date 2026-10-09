@@ -49,6 +49,7 @@ from tender_compliance_api.db.session import get_session
 from tender_compliance_api.document import service as document_service
 from tender_compliance_api.export import visual_validation
 from tender_compliance_api.export.validation import (
+    AuthorizedSourceFragment,
     RequirementCell,
     validate_source_quote_presence,
 )
@@ -275,6 +276,130 @@ class TestExportGeneration:
         assert body["validation_report"]["window_processing"]["status"] == "not_available"
         assert body["validation_report"]["window_processing"]["completeness_proven"] is False
 
+    @pytest.mark.parametrize(
+        ("image_verdict", "expected_status", "expected_validation"),
+        [
+            ("exact", "completed", "passed"),
+            ("not_exact", "failed", "needs_review"),
+        ],
+    )
+    def test_final_export_routes_ocr_uncertainty_through_image_gate(
+        self, monkeypatch, image_verdict, expected_status, expected_validation
+    ):
+        """The final artifact is issued only after the source-page fallback passes."""
+        from tender_compliance_api.storage.fake import FakeStorageAdapter
+
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _mark_uncertain_and_add_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        cleaned_text=requirement.raw_source,
+                        ocr_needed=True,
+                        rendered_image_object_key="rendered/page-3.png",
+                    )
+                )
+                await session.commit()
+                return requirement.raw_source, str(requirement.id)
+
+        quote, requirement_id = asyncio.run(_mark_uncertain_and_add_page())
+        storage = FakeStorageAdapter()
+        storage._store["rendered/page-3.png"] = b"rendered-source-page"
+
+        class FakeAdapter:
+            provider = "fake"
+            model = "fake-vision"
+
+        checked: list[dict[str, object]] = []
+
+        async def fake_visual_check(**kwargs):
+            checked.append(kwargs)
+            exact = image_verdict == "exact"
+            return (
+                PageImageValidationResponse(
+                    verdict=image_verdict,
+                    confidence=0.99,
+                    visible_quote=kwargs["proposed_quote"] if exact else "",
+                    reason="Checked the complete proposed wording against page 3.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        monkeypatch.setattr(document_service, "_resolve_storage", lambda: storage)
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+                is_production=False,
+            ),
+        )
+        monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/final-matrix/exports",
+            headers=_headers(user_id, org_id),
+            params={"fmt": "xlsx"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == expected_status
+        assert body["validation_status"] == expected_validation
+        source_validation = body["validation_report"]["source_validation"]
+        assert len(checked) == 1
+        assert checked[0]["proposed_quote"] == quote
+        assert checked[0]["page_number"] == 3
+        assert checked[0]["image_bytes"] == b"rendered-source-page"
+        assert checked[0]["image_mime_type"] == "image/png"
+        assert isinstance(checked[0]["adapter"], FakeAdapter)
+        assert source_validation["llm_assisted_rows"] == (
+            [requirement_id] if image_verdict == "exact" else []
+        )
+        assert source_validation["llm_fallback_results"][0]["status"] == (
+            "exact" if image_verdict == "exact" else "needs_review"
+        )
+
     def test_source_quote_check_rejects_dropped_range_dash(self):
         # The supplied MBE output omits the range dash in this tender quote.
         issues = validate_source_quote_presence(
@@ -300,6 +425,24 @@ class TestExportGeneration:
             ("quote", "source_quote_not_found")
         ]
 
+    def test_source_quote_check_ignores_only_standalone_list_bullet_markers(self):
+        source = "\uf0b7 Accuracy: ±0.5%\n\uf0b7 Power supply: 380V / 400V"
+        quote = "Accuracy: ±0.5%\nPower supply: 380V / 400V"
+
+        assert validate_source_quote_presence(
+            [RequirementCell("list-quote", quote)], {"list-quote": [source]}
+        ) == ()
+
+        embedded_bullet_source = "Accuracy • 0.5%"
+        embedded_bullet_quote = "Accuracy 0.5%"
+        issues = validate_source_quote_presence(
+            [RequirementCell("embedded-bullet", embedded_bullet_quote)],
+            {"embedded-bullet": [embedded_bullet_source]},
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("embedded-bullet", "source_quote_not_found")
+        ]
+
     def test_source_quote_check_rejects_changed_spacing_around_hyphen(self):
         source_quote = "All pre -installation requirements are included."
         changed_quote = source_quote.replace("pre -installation", "pre-installation")
@@ -311,6 +454,80 @@ class TestExportGeneration:
 
         assert [(issue.row_id, issue.code) for issue in issues] == [
             ("hyphenated-term", "source_quote_not_found")
+        ]
+
+    def test_source_quote_check_accepts_complete_ordered_adjacent_page_fragments(self):
+        quote = "The machine shall test\ncontinuously at 1000/s."
+        fragments = [
+            AuthorizedSourceFragment(17, "The machine shall test", page_local=True, char_start=120),
+            AuthorizedSourceFragment(18, "continuously at 1000/s.", page_local=True, char_start=4),
+        ]
+
+        assert validate_source_quote_presence(
+            [RequirementCell("spanning-quote", quote, source_page=17)],
+            {"spanning-quote": fragments},
+        ) == ()
+
+    def test_source_quote_check_does_not_validate_from_a_different_page(self):
+        quote = "The machine shall test continuously at 1000/s."
+        fragments = [
+            AuthorizedSourceFragment(17, quote, page_local=True, char_start=120),
+            AuthorizedSourceFragment(18, "A different clause.", page_local=True, char_start=4),
+        ]
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("wrong-citation", quote, source_page=18)],
+            {"wrong-citation": fragments},
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("wrong-citation", "source_quote_not_found")
+        ]
+
+    def test_source_quote_check_rejects_full_window_repeated_on_page_anchors(self):
+        quote = "The machine shall test continuously at 1000/s."
+        full_window = f"Prefix. {quote} Suffix."
+        fragments = [
+            AuthorizedSourceFragment(17, full_window, page_local=False, char_start=8),
+            AuthorizedSourceFragment(18, full_window, page_local=False, char_start=8),
+        ]
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("repeated-window", quote, source_page=17)],
+            {"repeated-window": fragments},
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("repeated-window", "source_quote_not_found")
+        ]
+
+    @pytest.mark.parametrize(
+        "fragments",
+        [
+            [
+                AuthorizedSourceFragment(17, "The machine shall test", page_local=True),
+                AuthorizedSourceFragment(19, "continuously at 1000/s.", page_local=True),
+            ],
+            [
+                AuthorizedSourceFragment(17, "The machine shall test", page_local=True),
+                AuthorizedSourceFragment(18, "continuously at 1000/s", page_local=False),
+            ],
+            [
+                AuthorizedSourceFragment(17, "The machine shall test", page_local=True),
+                AuthorizedSourceFragment(17, "continuously at 1000/s.", page_local=True),
+            ],
+        ],
+    )
+    def test_source_quote_check_fails_closed_on_gaps_or_approximate_fragments(
+        self, fragments
+    ):
+        quote = "The machine shall test continuously at 1000/s."
+        issues = validate_source_quote_presence(
+            [RequirementCell("spanning-quote", quote)],
+            {"spanning-quote": fragments},
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("spanning-quote", "source_quote_not_found")
         ]
 
     def test_export_does_not_accept_source_from_another_version(self):
@@ -804,6 +1021,300 @@ class TestExportGeneration:
                     report["llm_fallback_results"][0]["error_category"]
                     == "image_parse_error"
                 )
+
+    def test_fallback_cannot_validate_a_quote_on_a_different_page(self, monkeypatch):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _add_later_source_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                first_source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                first_source.source_text = "unrelated OCR text"
+                session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=version.id,
+                        page_number=7,
+                        clause_number="5.1",
+                        location_type="approximate",
+                        source_text=requirement.raw_source,
+                    )
+                )
+                session.add_all(
+                    [
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=3,
+                            cleaned_text="unrelated OCR text",
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-3.png",
+                        ),
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=7,
+                            cleaned_text=requirement.raw_source,
+                            ocr_needed=False,
+                            rendered_image_object_key="rendered/page-7.png",
+                        ),
+                    ]
+                )
+                await session.commit()
+
+        asyncio.run(_add_later_source_page())
+
+        class FakeAdapter:
+            pass
+
+        class FakeStorage:
+            async def get(self, key: str) -> bytes:
+                return key.encode("utf-8")
+
+        checked_pages: list[int] = []
+
+        async def fake_visual_check(**kwargs):
+            page_number = kwargs["page_number"]
+            checked_pages.append(page_number)
+            exact = page_number == 7
+            return (
+                PageImageValidationResponse(
+                    verdict="exact" if exact else "cannot_tell",
+                    confidence=0.99 if exact else 0.2,
+                    visible_quote=kwargs["proposed_quote"] if exact else "",
+                    reason="Visible on page." if exact else "Not visible on cited page.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+            ),
+        )
+        monkeypatch.setattr(
+            openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter()
+        )
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                assert rows[0].source_page == 3
+                return await document_service._source_quote_validation_report(
+                    session, rows, FakeStorage(), version.id
+                )
+
+        report = asyncio.run(_validate())
+        assert report["status"] == "needs_review"
+        assert report["llm_assisted_rows"] == []
+        assert checked_pages == [3]
+        assert report["llm_fallback_results"][0]["page_number"] == 3
+
+    @pytest.mark.parametrize(
+        ("second_page_exact", "expected_status"),
+        [(True, "passed"), (False, "needs_review")],
+    )
+    def test_multi_page_visual_fallback_requires_every_page_fragment(
+        self, monkeypatch, second_page_exact, expected_status
+    ):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        quote = "Measure once across the page\nbreak at 1000/s."
+        first_fragment = "Measure once across the page"
+        second_fragment = "break at 1000/s."
+        _add_requirements(
+            project_id, doc_id, ver,
+            [(quote, 1, True, "5.1", False, 17)],
+        )
+
+        async def _configure_multi_page_source():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.raw_source = quote
+                requirement.ocr_warning = True
+                source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                source.page_number = 17
+                source.location_type = "exact"
+                source.source_text = first_fragment
+                source.char_start = 100
+                source.char_end = 100 + len(first_fragment)
+                session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=version.id,
+                        page_number=18,
+                        location_type="exact",
+                        source_text=second_fragment,
+                        char_start=0,
+                        char_end=len(second_fragment),
+                    )
+                )
+                session.add_all(
+                    [
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=17,
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-17.png",
+                        ),
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=18,
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-18.png",
+                        ),
+                    ]
+                )
+                await session.commit()
+
+        asyncio.run(_configure_multi_page_source())
+
+        class FakeAdapter:
+            pass
+
+        class FakeStorage:
+            async def get(self, key: str) -> bytes:
+                return key.encode()
+
+        checked: list[dict[str, object]] = []
+
+        async def fake_visual_check(**kwargs):
+            checked.append(kwargs)
+            exact = kwargs["page_number"] == 17 or second_page_exact
+            return (
+                PageImageValidationResponse(
+                    verdict="exact" if exact else "not_exact",
+                    confidence=0.99 if exact else 1.0,
+                    visible_quote=kwargs["proposed_quote"] if exact else "",
+                    reason="Checked this page fragment.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_multi_page_validation",
+                ),
+            )
+
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+            ),
+        )
+        monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        expected_row_ids: list[str] = []
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                expected_row_ids.extend(str(row.requirement_id) for row in rows)
+                return await document_service._source_quote_validation_report(
+                    session, rows, FakeStorage(), version.id
+                )
+
+        report = asyncio.run(_validate())
+
+        assert [item["page_number"] for item in checked] == [17, 18]
+        assert [item["proposed_quote"] for item in checked] == [
+            first_fragment,
+            second_fragment,
+        ]
+        assert report["status"] == expected_status
+        assert report["llm_assisted_rows"] == (
+            expected_row_ids if expected_status == "passed" else []
+        )
 
     def test_completed_windows_are_not_reported_as_proof_of_completeness(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()

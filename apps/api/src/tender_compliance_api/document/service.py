@@ -11,6 +11,7 @@ import hashlib
 import re
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -113,6 +114,16 @@ if TYPE_CHECKING:
     from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 
 
+@dataclass(frozen=True)
+class _SourcePageForValidation:
+    page_number: int
+    image_key: str | None
+    ocr_warning: bool
+    source_text: str | None
+    location_type: str
+    char_start: int | None
+
+
 #: Deterministic namespace for rendered-image object keys, so that
 #: re-rendering the same version/page/DPI overwrites the same storage key
 #: instead of producing duplicate blobs (CP20 idempotency).
@@ -185,6 +196,7 @@ async def _source_quote_validation_report(
 ) -> dict[str, object]:
     """Check linked source text and require image verification for OCR pages."""
     from tender_compliance_api.export.validation import (  # noqa: PLC0415
+        AuthorizedSourceFragment,
         RequirementCell,
         SourceQuoteIssue,
         validate_source_quote_presence,
@@ -195,14 +207,21 @@ async def _source_quote_validation_report(
     )
 
     requirement_ids = [row.requirement_id for row in rows]
-    sources_by_requirement: dict[str, list[str]] = {}
-    pages_by_requirement: dict[str, list[tuple[int, str | None, bool]]] = {}
+    # The exported page is authoritative. Keep that page and any later
+    # page-local fragments needed to verify a quote that continues forward.
+    selected_page_by_requirement = {
+        str(row.requirement_id): row.source_page for row in rows
+    }
+    sources_by_requirement: dict[str, list[AuthorizedSourceFragment]] = {}
+    pages_by_requirement: dict[str, list[_SourcePageForValidation]] = {}
     if requirement_ids:
         result = await session.execute(
             select(
                 RequirementSource.requirement_id,
                 RequirementSource.source_text,
                 RequirementSource.page_number,
+                RequirementSource.location_type,
+                RequirementSource.char_start,
                 DocumentPage.rendered_image_object_key,
                 DocumentPage.ocr_needed,
                 DocumentPage.structural_metadata,
@@ -218,31 +237,47 @@ async def _source_quote_validation_report(
             requirement_id,
             source_text,
             page_number,
+            location_type,
+            char_start,
             image_key,
             page_ocr_needed,
             structural_metadata,
         ) in result:
             requirement_key = str(requirement_id)
-            if isinstance(source_text, str) and source_text:
-                sources_by_requirement.setdefault(requirement_key, []).append(
-                    source_text
-                )
             if not isinstance(page_number, int):
                 continue
+            selected_page = selected_page_by_requirement.get(requirement_key)
+            if selected_page is not None and page_number < selected_page:
+                continue
+            if isinstance(source_text, str) and source_text:
+                sources_by_requirement.setdefault(requirement_key, []).append(
+                    AuthorizedSourceFragment(
+                        page_number=(page_number if isinstance(page_number, int) else None),
+                        text=source_text,
+                        page_local=location_type == "exact",
+                        char_start=(char_start if isinstance(char_start, int) else None),
+                    )
+                )
             page_metadata = (
                 structural_metadata if isinstance(structural_metadata, dict) else {}
             )
             pages_by_requirement.setdefault(requirement_key, []).append(
-                (
-                    page_number,
-                    image_key if isinstance(image_key, str) else None,
-                    bool(page_ocr_needed)
+                _SourcePageForValidation(
+                    page_number=page_number,
+                    image_key=image_key if isinstance(image_key, str) else None,
+                    ocr_warning=bool(page_ocr_needed)
                     or bool(page_metadata.get("error")),
+                    source_text=(source_text if isinstance(source_text, str) else None),
+                    location_type=str(location_type),
+                    char_start=(char_start if isinstance(char_start, int) else None),
                 )
             )
 
     expected = [
-        RequirementCell(str(row.requirement_id), row.raw_source) for row in rows
+        RequirementCell(
+            str(row.requirement_id), row.raw_source, source_page=row.source_page
+        )
+        for row in rows
     ]
     issues = list(validate_source_quote_presence(expected, sources_by_requirement))
     visual_required_ids = {
@@ -251,7 +286,7 @@ async def _source_quote_validation_report(
     visual_required_ids.update(
         requirement_id
         for requirement_id, page_sources in pages_by_requirement.items()
-        if any(page_ocr_warning for _, _, page_ocr_warning in page_sources)
+        if any(page.ocr_warning for page in page_sources)
     )
     issue_ids = {
         issue.row_id
@@ -280,6 +315,86 @@ async def _source_quote_validation_report(
     page_calls: dict[tuple[int, str | None], int] = {}
     fallback_results: list[dict[str, object]] = []
     resolved_ids: set[str] = set()
+
+    def validation_parts(
+        quote: str,
+        page_sources: Sequence[_SourcePageForValidation],
+        selected_page: int | None,
+    ) -> list[tuple[_SourcePageForValidation, str]]:
+        normalized_quote = re.sub(r"\s+", " ", quote).strip()
+        exact_sources = [
+            page
+            for page in page_sources
+            if page.location_type == "exact" and page.source_text
+            and (selected_page is None or page.page_number >= selected_page)
+        ]
+        pages_to_check = (
+            [page for page in exact_sources if page.page_number == selected_page]
+            if selected_page is not None
+            else exact_sources
+        )
+        text_pages: dict[str, set[int]] = {}
+        for page in exact_sources:
+            page_text = re.sub(r"\s+", " ", page.source_text or "").strip()
+            text_pages.setdefault(page_text, set()).add(page.page_number)
+        duplicated_window_texts = {
+            page_text for page_text, numbers in text_pages.items() if len(numbers) > 1
+        }
+        for page in sorted(pages_to_check, key=lambda item: item.page_number):
+            normalized_source = re.sub(r"\s+", " ", page.source_text or "").strip()
+            if (
+                normalized_quote
+                and normalized_quote in normalized_source
+                and normalized_source not in duplicated_window_texts
+            ):
+                return [(page, quote)]
+
+        by_page: dict[int, list[_SourcePageForValidation]] = {}
+        for page in exact_sources:
+            by_page.setdefault(page.page_number, []).append(page)
+        ordered_pages = sorted(by_page)
+        if selected_page is not None:
+            ordered_pages = [page for page in ordered_pages if page >= selected_page]
+            if selected_page not in ordered_pages:
+                ordered_pages = []
+        if ordered_pages and all(
+            current == previous + 1
+            for previous, current in zip(ordered_pages, ordered_pages[1:], strict=False)
+        ):
+            page_parts = []
+            for page_number in ordered_pages:
+                page_items = sorted(
+                    by_page[page_number],
+                    key=lambda item: (
+                        item.char_start if item.char_start is not None else -1
+                    ),
+                )
+                page_parts.append(
+                    "\n".join(item.source_text or "" for item in page_items)
+                )
+            if re.sub(r"\s+", " ", "\n".join(page_parts)).strip() == normalized_quote:
+                representative_by_page = {
+                    page_number: min(
+                        by_page[page_number],
+                        key=lambda item: (
+                            item.char_start if item.char_start is not None else -1
+                        ),
+                    )
+                    for page_number in ordered_pages
+                }
+                return [
+                    (representative_by_page[page_number], page_part)
+                    for page_number, page_part in zip(
+                        ordered_pages, page_parts, strict=True
+                    )
+                ]
+
+        unique_pages = {page.page_number: page for page in page_sources}
+        if selected_page is not None:
+            selected = unique_pages.get(selected_page)
+            return [(selected, quote)] if selected is not None else []
+        return [(page, quote) for page in unique_pages.values()]
+
     if adapter is not None:
         for issue in issues:
             if issue.code not in {
@@ -291,13 +406,47 @@ async def _source_quote_validation_report(
             row = row_by_id.get(issue.row_id)
             if row is None:
                 continue
-            for page_number, image_key, _ in pages_by_requirement.get(
-                issue.row_id, []
-            ):
+            page_sources = pages_by_requirement.get(issue.row_id, [])
+            parts = validation_parts(
+                row.raw_source,
+                page_sources,
+                selected_page_by_requirement.get(issue.row_id),
+            )
+            if not parts:
+                fallback_results.append(
+                    {
+                        "row_id": issue.row_id,
+                        "status": "source_page_unavailable",
+                        "call_status": "not_run",
+                    }
+                )
+                continue
+            all_parts_exact = True
+            for page_source, proposed_quote in parts:
+                page_number = page_source.page_number
+                image_key = page_source.image_key
                 if image_key is None:
-                    continue
+                    fallback_results.append(
+                        {
+                            "row_id": issue.row_id,
+                            "page_number": page_number,
+                            "status": "image_unavailable",
+                            "call_status": "not_run",
+                        }
+                    )
+                    all_parts_exact = False
+                    break
                 key = (page_number, image_key)
                 if page_calls.get(key, 0) >= MAX_CALLS_PER_PAGE:
+                    fallback_results.append(
+                        {
+                            "row_id": issue.row_id,
+                            "page_number": page_number,
+                            "status": "call_limit_reached",
+                            "call_status": "not_run",
+                        }
+                    )
+                    all_parts_exact = False
                     continue
                 page_calls[key] = page_calls.get(key, 0) + 1
                 try:
@@ -308,11 +457,13 @@ async def _source_quote_validation_report(
                             "row_id": issue.row_id,
                             "page_number": page_number,
                             "status": "image_unavailable",
+                            "call_status": "not_run",
                         }
                     )
-                    continue
+                    all_parts_exact = False
+                    break
                 response, call = await validate_quote_on_page_image(
-                    proposed_quote=row.raw_source,
+                    proposed_quote=proposed_quote,
                     page_number=page_number,
                     image_bytes=image_bytes,
                     image_mime_type="image/png",
@@ -336,9 +487,11 @@ async def _source_quote_validation_report(
                         "error_category": call.error_category,
                     }
                 )
-                if accepted:
-                    resolved_ids.add(issue.row_id)
+                if not accepted:
+                    all_parts_exact = False
                     break
+            if all_parts_exact:
+                resolved_ids.add(issue.row_id)
 
     unresolved_issues = [issue for issue in issues if issue.row_id not in resolved_ids]
     return {

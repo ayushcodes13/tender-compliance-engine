@@ -245,6 +245,14 @@ class TestMultiPageWindows:
         assert p2.document_version_id == _VERSION
         assert p1.char_end <= len(pages[0].cleaned_text or "")
         assert p2.char_end <= len(pages[1].cleaned_text or "")
+        assert p1.window_char_start == 0
+        assert p1.window_char_end == len("1 Scope\nThe handrail shall be painted RAL 9005.")
+        assert p2.window_char_start == p1.window_char_end + 1
+        assert p2.window_char_end == len(w.text)
+        assert p1.page_source_text == (pages[0].cleaned_text or "")[p1.char_start:p1.char_end]
+        assert p2.page_source_text == (pages[1].cleaned_text or "")[p2.char_start:p2.char_end]
+        assert p1.page_source_char_start == p1.char_start
+        assert p2.page_source_char_start == p2.char_start
         # Both fragments reference the shared trusted window text.
         for src in w.sources:
             assert src.source_text == w.text
