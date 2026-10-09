@@ -3591,6 +3591,8 @@ If the product direction changes, update this file through a focused PR, explain
 
 **Typed visual-outcome follow-up:** Export validation reports now preserve whether the cited-page check found exact wording, a wording mismatch, an inconclusive result, provider/image unavailability, or a per-page call-budget stop. Stable reason codes are stored without the model's free-text explanation or any tender text. Export review messages distinguish a visual mismatch from an inconclusive check. Focused API and commercial-flow browser regression coverage verifies the persisted and rendered outcomes; provider behavior remains subject to the live-evidence limits above.
 
+**Example 3 delivery-period regression (2026-10-09):** Manual source inspection confirmed tender page 22 says “Within 8 Weeks from the date of Purchase order,” while the supplied response DOCX says “within 10 months of acceptance of PO by the vendor.” A focused export-validator regression now verifies the exact source wording passes and the sampled 10-month substitution is rejected as `source_quote_not_found` on cited page 22. This catches the concrete mismatch at the per-row source-validation layer; it does not complete row-by-row sample classification or tender-wide coverage review.
+
 ### Guardrail
 
 - “Verbatim validated” means the tender-derived cell's non-whitespace wording matches the cited source quote. Standalone list-bullet glyphs at line starts, including Word's private-use `U+F0B7` marker, are treated as presentation markers in deterministic and visual matching; layout wrapping may alter whitespace. Paraphrases, omitted wording, changed values/units/operators, and unverified LLM visual readings do not pass.
