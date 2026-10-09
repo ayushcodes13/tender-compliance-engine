@@ -14,7 +14,7 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallResult,
 )
 
-PROMPT_VERSION = "1.0.0"
+PROMPT_VERSION = "1.1.0"
 SCHEMA_VERSION = "1.0.0"
 CALL_SITE = "validate_generated_sheet_page_image"
 MIN_CONFIDENCE = 0.99
@@ -48,11 +48,14 @@ class PageImageValidationResponse(BaseModel):
 
 
 def _layout_key(text: str) -> str:
-    without_list_markers = re.sub(
-        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7\uf0b7][ \t]+",
-        "",
-        text,
+    marker_pattern = re.compile(
+        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\uf0a7\uf0b7][ \t]+"
     )
+    # A single line-leading glyph can be a meaningful legend or expression
+    # symbol (for example, "● = active"). Treat glyphs as layout only when
+    # repeated list structure provides evidence that they are list markers.
+    markers = list(marker_pattern.finditer(text))
+    without_list_markers = marker_pattern.sub("", text) if len(markers) >= 2 else text
     return re.sub(r"\s+", " ", without_list_markers).strip()
 
 

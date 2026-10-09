@@ -7,6 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from tender_compliance_api.export.visual_validation import (
     CALL_SITE,
+    PROMPT_VERSION,
     PageImageValidationResponse,
     validate_quote_on_page_image,
 )
@@ -125,6 +126,24 @@ def test_visual_validation_does_not_ignore_bullet_glyph_inside_requirement_text(
 
     assert response is not None
     assert response.verdict == "not_exact"
+
+
+def test_visual_validation_preserves_single_line_legend_symbol():
+    adapter = FakeAdapter(_response(visible_quote="= active"))
+
+    response, call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="● = active",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "not_exact"
+    assert call.prompt_version == PROMPT_VERSION == "1.1.0"
 
 
 @pytest.mark.parametrize(
