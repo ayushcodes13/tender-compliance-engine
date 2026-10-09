@@ -388,9 +388,9 @@ export function FinalMatrixView(props: {
   };
 
   const addCoverageFinding = async (finding: PotentialOmission, page: number) => {
-    const key = finding.source_quote;
+    const key = coverageReviewKey(page, finding.source_quote);
     setValidationNotice(null);
-    const requirementType = coverageTypes[key];
+    const requirementType = coverageTypes[finding.source_quote];
     if (!requirementType) {
       setError("Choose whether the excerpt is an obligation, prohibition, or permission before adding it.");
       return;
@@ -783,7 +783,6 @@ export function FinalMatrixView(props: {
                       ...current,
                       [finding.source_quote]: event.target.value as "obligation" | "prohibition" | "permission",
                     }))}
-                    disabled={addedCoverageKeys.has(finding.source_quote)}
                   >
                     <option value="">Choose type</option>
                     <option value="obligation">Obligation</option>
@@ -792,7 +791,7 @@ export function FinalMatrixView(props: {
                   </select>
                 </label>
                 {finding.pages.map((page) => {
-                  const key = finding.source_quote;
+                  const key = coverageReviewKey(page, finding.source_quote);
                   const added = addedCoverageKeys.has(key);
                   return (
                     <button
@@ -800,7 +799,7 @@ export function FinalMatrixView(props: {
                       type="button"
                       className="button button-secondary button-small"
                       style={{ margin: "8px 8px 0 0" }}
-                      disabled={added || !coverageTypes[key] || busy === `coverage-${key}`}
+                      disabled={added || !coverageTypes[finding.source_quote] || busy === `coverage-${key}`}
                       onClick={() => void addCoverageFinding(finding, page)}
                     >
                       {added ? "Added for review" : busy === `coverage-${key}` ? "Adding…" : "Add excerpt as unreviewed requirement"}

@@ -723,6 +723,54 @@ async def add_requirement_from_source(
                     "before adding this finding"
                 ),
             )
+        same_page_source = next(
+            (
+                source
+                for source in existing.sources
+                if source.page_number == body.page_number
+                and source.source_text == body.source_quote
+            ),
+            None,
+        )
+        if same_page_source is not None:
+            return RequirementDetail.model_validate(existing)
+
+        exact_match = len(matches) == 1 and matches[0].group(0) == body.source_quote
+        source = RequirementSource(
+            document_version_id=version.id,
+            page_number=body.page_number,
+            clause_number=None,
+            char_start=matches[0].start() if exact_match else None,
+            char_end=matches[0].end() if exact_match else None,
+            location_type="exact" if exact_match else "approximate",
+            source_text=body.source_quote,
+            ocr_confidence=page.ocr_confidence,
+        )
+        existing.sources.append(source)
+        if ocr_derived:
+            existing.ocr_warning = True
+            existing.uncertainty = "uncertain"
+            existing.review_state = RequirementReviewState.OCR_WARNING
+        await session.flush()
+        await write_audit_event(
+            session,
+            auth,
+            "requirement.add_coverage_source",
+            entity_type="requirement",
+            entity_id=existing.id,
+            project_id=project_id,
+            metadata={
+                "document_version_id": str(version.id),
+                "page_number": body.page_number,
+                **(
+                    {"visual_source_validation": image_validation}
+                    if image_validation is not None
+                    else {}
+                ),
+            },
+        )
+        await session.commit()
+        await session.refresh(existing)
         return RequirementDetail.model_validate(existing)
 
     exact_match = len(matches) == 1 and matches[0].group(0) == body.source_quote
