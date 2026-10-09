@@ -123,6 +123,7 @@ class TrustedSourceContext(BaseModel):
     location_type: LocationType = LocationType.APPROXIMATE
     source_text: str | None = None
     page_source_text: str | None = None
+    page_source_char_start: int = 0
 
     @classmethod
     def from_page(

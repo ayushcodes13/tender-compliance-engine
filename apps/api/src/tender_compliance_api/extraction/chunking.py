@@ -310,7 +310,10 @@ def _build_contexts(
                 # Trusted window text the candidate citation is checked
                 # against — the full multi-page window text, not a fragment.
                 source_text=window_text,
-                page_source_text=page.cleaned_text,
+                # Persist only this window's page span, not the full page for
+                # every candidate. The base offset preserves page coordinates.
+                page_source_text=(page.cleaned_text or "")[start:end],
+                page_source_char_start=start,
             )
         )
     return tuple(contexts)

@@ -233,6 +233,41 @@ def test_multi_page_window_quote_resolves_to_page_local_fragments() -> None:
     assert all(source.location_type == "exact" for source in resolved)
 
 
+def test_multi_page_resolution_uses_trusted_page_span_for_repeated_quote() -> None:
+    page_one = "Repeated header. Trusted clause starts here."
+    page_two = "Repeated header. Continued clause ends here."
+    window = "Trusted clause starts here.\nContinued clause ends here."
+    raw = "Trusted clause starts here.\nContinued clause ends here."
+    sources = [
+        {
+            "page_number": 4,
+            "source_text": window,
+            "window_char_start": 0,
+            "window_char_end": len("Trusted clause starts here."),
+            "page_source_text": page_one,
+            "char_start": page_one.index("Trusted"),
+            "char_end": len(page_one),
+        },
+        {
+            "page_number": 5,
+            "source_text": window,
+            "window_char_start": len("Trusted clause starts here.\n"),
+            "window_char_end": len(window),
+            "page_source_text": page_two,
+            "char_start": page_two.index("Continued"),
+            "char_end": len(page_two),
+        },
+    ]
+
+    resolved = resolve_sources(raw, sources)
+
+    assert [(source.char_start, source.char_end) for source in resolved] == [
+        (page_one.index("Trusted"), len(page_one)),
+        (page_two.index("Continued"), len(page_two)),
+    ]
+    assert all(source.location_type == "exact" for source in resolved)
+
+
 def test_fragment_without_page_number_is_skipped() -> None:
     resolved = resolve_sources(
         "raw",

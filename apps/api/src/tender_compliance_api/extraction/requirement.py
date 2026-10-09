@@ -40,8 +40,13 @@ def _normalize_ws(text: str | None) -> str:
     return _WS.sub(" ", text).strip()
 
 
-def _unique_normalized_span(text: str, quote: str) -> tuple[int, int] | None:
-    """Return original text offsets for one unique whitespace-normalized quote."""
+def _unique_normalized_span(
+    text: str, quote: str, *, char_start: int = 0, char_end: int | None = None
+) -> tuple[int, int] | None:
+    """Return offsets for a unique whitespace-normalized quote in a trusted span."""
+    end_bound = len(text) if char_end is None else min(char_end, len(text))
+    start_bound = min(max(char_start, 0), end_bound)
+    text = text[start_bound:end_bound]
     chars: list[str] = []
     offsets: list[tuple[int, int]] = []
     index = 0
@@ -67,7 +72,7 @@ def _unique_normalized_span(text: str, quote: str) -> tuple[int, int] | None:
         return None
     start = occurrences[0]
     end = start + len(target)
-    return offsets[start][0], offsets[end - 1][1]
+    return start_bound + offsets[start][0], start_bound + offsets[end - 1][1]
 
 
 @dataclass(frozen=True)
@@ -194,6 +199,7 @@ def resolve_sources(
         window_start = frag.get("window_char_start")
         window_end = frag.get("window_char_end")
         page_text = frag.get("page_source_text")
+        page_text_base = frag.get("page_source_char_start", 0)
         if (
             isinstance(src_text, str)
             and isinstance(page_text, str)
@@ -211,15 +217,34 @@ def resolve_sources(
                 page_quote = raw_source[
                     overlap_start - window_quote_start : overlap_end - window_quote_start
                 ]
-                page_span = _unique_normalized_span(page_text, page_quote)
+                span_start = (
+                    char_start - page_text_base
+                    if isinstance(char_start, int) and isinstance(page_text_base, int)
+                    else 0
+                )
+                span_end = (
+                    char_end - page_text_base
+                    if isinstance(char_end, int) and isinstance(page_text_base, int)
+                    else None
+                )
+                page_span = _unique_normalized_span(
+                    page_text,
+                    page_quote,
+                    char_start=span_start,
+                    char_end=span_end,
+                )
                 if page_span is not None:
+                    absolute_span = (
+                        page_span[0] + (page_text_base if isinstance(page_text_base, int) else 0),
+                        page_span[1] + (page_text_base if isinstance(page_text_base, int) else 0),
+                    )
                     is_multi_page_context = len(_iter_sources(sources_json)) > 1
                     resolved.append(
                         ResolvedSource(
                             page_number=page,
                             clause_number=frag.get("clause_number"),
-                            char_start=page_span[0],
-                            char_end=page_span[1],
+                            char_start=absolute_span[0],
+                            char_end=absolute_span[1],
                             bbox=frag.get("bbox"),
                             ocr_confidence=frag.get("ocr_confidence"),
                             location_type=(
