@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0036_unbounded_clause_labels"
+_HEAD_REV = "0037_coverage_finding_reviews"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -35,6 +35,7 @@ _APP_TABLES = {
     "requirement_relations", "requirement_notes", "categories",
     "requirement_categories", "export_artifacts",
     "extraction_window_audits",
+    "coverage_finding_reviews",
     "oem_documents", "oem_document_versions",
     "oem_text_segments", "evidence", "evidence_locations",
     "vendor_specs", "compliance_assessments",

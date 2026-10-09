@@ -384,6 +384,21 @@ export type ExportArtifactResponse = {
         window_index: number;
         pages: number[];
         source_quote: string;
+        coverage_candidates?: {
+          requirement_id: string;
+          page_number: number;
+          label: string;
+        }[];
+      }[];
+      resolved_omissions?: {
+        window_index: number;
+        page_number: number;
+        source_quote: string;
+        decision: "covered_by_requirement" | "not_in_scope";
+        rationale: string | null;
+        requirement_id: string | null;
+        actor_id: string;
+        reviewed_at: string;
       }[];
       expected_windows?: number;
       audited_windows?: number;
@@ -440,6 +455,26 @@ export type FinalMatrixRowResponse = {
   has_unresolved_conflict: boolean;
   clarification_statuses: string[];
   deviation_statuses: string[];
+};
+
+export type CoverageFindingReviewRequest = {
+  page_number: number;
+  source_quote: string;
+  decision: "covered_by_requirement" | "not_in_scope";
+  requirement_id?: string;
+  rationale?: string;
+};
+
+export type CoverageFindingReviewResponse = {
+  id: string;
+  page_number: number;
+  source_quote: string;
+  source_quote_sha256: string;
+  decision: "covered_by_requirement" | "not_in_scope";
+  rationale: string | null;
+  requirement_id: string | null;
+  actor_id: string;
+  created_at: string;
 };
 
 export type SubmissionResponse = {
@@ -833,6 +868,26 @@ export const api = {
       `/projects/${projectId}/documents/${documentId}/versions/${version}/requirements/from-source`,
       { method: "POST", body: JSON.stringify(body) }
     ).then((r) => expectJson<RequirementDetail>(r)),
+
+  reviewCoverageFinding: (
+    projectId: string,
+    documentId: string,
+    version: number,
+    body: CoverageFindingReviewRequest
+  ): Promise<CoverageFindingReviewResponse> =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/coverage-reviews`,
+      { method: "POST", body: JSON.stringify(body) }
+    ).then((r) => expectJson<CoverageFindingReviewResponse>(r)),
+
+  fetchCoverageReviews: (
+    projectId: string,
+    documentId: string,
+    version: number
+  ): Promise<CoverageFindingReviewResponse[]> =>
+    apiFetch(
+      `/projects/${projectId}/documents/${documentId}/versions/${version}/coverage-reviews`
+    ).then((r) => expectJson<CoverageFindingReviewResponse[]>(r)),
 
   fetchRequirement: (
     projectId: string,

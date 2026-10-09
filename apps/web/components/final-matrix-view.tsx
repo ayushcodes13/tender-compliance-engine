@@ -13,7 +13,24 @@ import {
 } from "@/lib/api/client";
 
 type ExportFormat = "xlsx" | "docx" | "pdf";
-type PotentialOmission = { pages: number[]; source_quote: string };
+type PotentialOmission = {
+  window_index: number;
+  pages: number[];
+  source_quote: string;
+  coverage_candidates?: { requirement_id: string; page_number: number; label: string }[];
+};
+type CoverageReviewDisplay = {
+  page_number: number;
+  source_quote: string;
+  decision: "covered_by_requirement" | "not_in_scope";
+  rationale: string | null;
+  requirement_id: string | null;
+  reviewed_at: string;
+};
+
+function coverageReviewKey(page: number, quote: string): string {
+  return `${page}:${quote}`;
+}
 
 const statusLabel = (value: string | null) =>
   value ? value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Unassessed";
@@ -232,6 +249,8 @@ export function FinalMatrixView(props: {
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [coverageFindings, setCoverageFindings] = useState<PotentialOmission[]>([]);
+  const [coverageReviews, setCoverageReviews] = useState<Record<string, CoverageReviewDisplay>>({});
+  const [coverageReviewDrafts, setCoverageReviewDrafts] = useState<Record<string, { requirementId: string; rationale: string }>>({});
   const [addedCoverageKeys, setAddedCoverageKeys] = useState<Set<string>>(new Set());
   const [coverageTypes, setCoverageTypes] = useState<Record<string, "obligation" | "prohibition" | "permission">>({});
 
@@ -247,6 +266,28 @@ export function FinalMatrixView(props: {
       ]);
       setRows(nextRows);
       setSubmissions(nextSubmissions);
+      try {
+        const savedCoverageReviews = await api.fetchCoverageReviews(
+          projectId,
+          documentId,
+          version
+        );
+        setCoverageReviews(Object.fromEntries(
+          savedCoverageReviews.map((review) => [
+            coverageReviewKey(review.page_number, review.source_quote),
+            {
+              page_number: review.page_number,
+              source_quote: review.source_quote,
+              decision: review.decision,
+              rationale: review.rationale,
+              requirement_id: review.requirement_id,
+              reviewed_at: review.created_at,
+            },
+          ])
+        ));
+      } catch {
+        // The matrix remains readable if review-history retrieval is unavailable.
+      }
       setExportHistoryError(null);
       try {
         setExportArtifacts(await api.fetchExports(projectId, documentId, version));
@@ -372,6 +413,50 @@ export function FinalMatrixView(props: {
     }
   };
 
+  const recordCoverageReview = async (
+    finding: PotentialOmission,
+    page: number,
+    decision: "covered_by_requirement" | "not_in_scope"
+  ) => {
+    const key = coverageReviewKey(page, finding.source_quote);
+    const draft = coverageReviewDrafts[key];
+    if (decision === "covered_by_requirement" && !draft?.requirementId) {
+      setError("Select an active same-page requirement that covers this excerpt.");
+      return;
+    }
+    if (decision === "not_in_scope" && !draft?.rationale.trim()) {
+      setError("Explain why this excerpt is not a supplier requirement.");
+      return;
+    }
+    setBusy(`review-${key}`);
+    setError(null);
+    try {
+      const review = await api.reviewCoverageFinding(projectId, documentId, version, {
+        page_number: page,
+        source_quote: finding.source_quote,
+        decision,
+        ...(decision === "covered_by_requirement"
+          ? { requirement_id: draft.requirementId }
+          : { rationale: draft.rationale.trim() }),
+      });
+      setCoverageReviews((current) => ({
+        ...current,
+        [key]: {
+          page_number: review.page_number,
+          source_quote: review.source_quote,
+          decision: review.decision,
+          rationale: review.rationale,
+          requirement_id: review.requirement_id,
+          reviewed_at: review.created_at,
+        },
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the coverage review");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const exportFile = async (format: ExportFormat) => {
     setBusy(`export-${format}`);
     setError(null);
@@ -400,6 +485,22 @@ export function FinalMatrixView(props: {
         }
         if (artifact.validation_status === "needs_review") {
           const coverage = artifact.validation_report?.window_processing;
+          if (coverage) {
+            setCoverageFindings(coverage.potential_omissions ?? []);
+            setCoverageReviews(Object.fromEntries(
+              (coverage.resolved_omissions ?? []).map((review) => [
+                coverageReviewKey(review.page_number, review.source_quote),
+                {
+                  page_number: review.page_number,
+                  source_quote: review.source_quote,
+                  decision: review.decision,
+                  rationale: review.rationale,
+                  requirement_id: review.requirement_id,
+                  reviewed_at: review.reviewed_at,
+                },
+              ])
+            ));
+          }
           if (coverage?.potential_omissions?.length) {
             setCoverageFindings(coverage.potential_omissions);
           }
@@ -491,6 +592,22 @@ export function FinalMatrixView(props: {
         }
         if (artifact.validation_status === "needs_review") {
           const coverage = artifact.validation_report?.window_processing;
+          if (coverage) {
+            setCoverageFindings(coverage.potential_omissions ?? []);
+            setCoverageReviews(Object.fromEntries(
+              (coverage.resolved_omissions ?? []).map((review) => [
+                coverageReviewKey(review.page_number, review.source_quote),
+                {
+                  page_number: review.page_number,
+                  source_quote: review.source_quote,
+                  decision: review.decision,
+                  rationale: review.rationale,
+                  requirement_id: review.requirement_id,
+                  reviewed_at: review.reviewed_at,
+                },
+              ])
+            ));
+          }
           if (coverage?.potential_omissions?.length) {
             setCoverageFindings(coverage.potential_omissions);
           }
@@ -574,22 +691,90 @@ export function FinalMatrixView(props: {
       </div>
 
       {error ? <div className="upload-error-banner" role="alert"><AlertCircle size={14} />{error}</div> : null}
-      {coverageFindings.length ? (
+      {coverageFindings.length || Object.keys(coverageReviews).length ? (
         <div className="source-highlight-unavailable" role="alert" style={{ marginTop: 12 }}>
-          <strong>Potentially omitted tender requirements</strong>
+          <strong>Coverage review</strong>
           <ul>
             {coverageFindings.map((finding, index) => (
               <li key={`${finding.pages.join("-")}-${index}`} style={{ marginTop: 10 }}>
                 <p><mark>{finding.source_quote}</mark></p>
-                {finding.pages.map((page) => (
-                  <Link
-                    key={page}
-                    className="text-action"
-                    href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}&sourceQuote=${encodeURIComponent(finding.source_quote)}`}
-                  >
-                    Open tender page {page} and inspect excerpt
-                  </Link>
-                ))}
+                {finding.pages.map((page) => {
+                  const key = coverageReviewKey(page, finding.source_quote);
+                  const review = coverageReviews[key];
+                  const candidates = (finding.coverage_candidates ?? []).filter(
+                    (candidate) => candidate.page_number === page
+                  );
+                  const draft = coverageReviewDrafts[key] ?? {
+                    requirementId: "",
+                    rationale: "",
+                  };
+                  return (
+                    <div key={page} style={{ marginTop: 10, paddingLeft: 12, borderLeft: "2px solid var(--border-subtle)" }}>
+                      <Link
+                        className="text-action"
+                        href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}&sourceQuote=${encodeURIComponent(finding.source_quote)}`}
+                      >
+                        Open tender page {page} and inspect excerpt
+                      </Link>
+                      {review ? (
+                        <p role="status" style={{ margin: "8px 0 0" }}>
+                          Review recorded: {review.decision === "not_in_scope" ? "not a supplier requirement" : "covered by an existing requirement"} · {new Date(review.reviewed_at).toLocaleString()}
+                          {review.rationale ? ` · ${review.rationale}` : ""}
+                          <span> Run an export again to confirm this finding is resolved.</span>
+                        </p>
+                      ) : (
+                        <>
+                          <label className="form-field" style={{ marginTop: 8, maxWidth: 420 }}>
+                            Existing requirement that covers this excerpt
+                            <select
+                              value={draft.requirementId}
+                              onChange={(event) => setCoverageReviewDrafts((current) => ({
+                                ...current,
+                                [key]: { ...draft, requirementId: event.target.value },
+                              }))}
+                            >
+                              <option value="">Choose same-page requirement</option>
+                              {candidates.map((row) => (
+                                <option key={row.requirement_id} value={row.requirement_id}>
+                                  {row.label.slice(0, 180)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="button button-secondary button-small"
+                            style={{ margin: "8px 8px 0 0" }}
+                            disabled={!draft.requirementId || busy === `review-${key}`}
+                            onClick={() => void recordCoverageReview(finding, page, "covered_by_requirement")}
+                          >
+                            {busy === `review-${key}` ? "Saving…" : "Mark as already covered"}
+                          </button>
+                          <label className="form-field" style={{ marginTop: 12, maxWidth: 520 }}>
+                            Why this is not a supplier requirement
+                            <textarea
+                              value={draft.rationale}
+                              maxLength={2000}
+                              rows={2}
+                              onChange={(event) => setCoverageReviewDrafts((current) => ({
+                                ...current,
+                                [key]: { ...draft, rationale: event.target.value },
+                              }))}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="button button-secondary button-small"
+                            disabled={!draft.rationale.trim() || busy === `review-${key}`}
+                            onClick={() => void recordCoverageReview(finding, page, "not_in_scope")}
+                          >
+                            {busy === `review-${key}` ? "Saving…" : "Mark not a supplier requirement"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
                 <label className="form-field" style={{ marginTop: 8, maxWidth: 320 }}>
                   Requirement type
                   <select
@@ -624,6 +809,19 @@ export function FinalMatrixView(props: {
                 })}
               </li>
             ))}
+            {Object.values(coverageReviews)
+              .filter((review) => !coverageFindings.some(
+                (finding) => finding.source_quote === review.source_quote && finding.pages.includes(review.page_number)
+              ))
+              .map((review) => (
+                <li key={coverageReviewKey(review.page_number, review.source_quote)} style={{ marginTop: 10 }}>
+                  <p><mark>{review.source_quote}</mark></p>
+                  <p role="status">
+                    Page {review.page_number}: {review.decision === "not_in_scope" ? "not a supplier requirement" : "covered by an existing requirement"} · {new Date(review.reviewed_at).toLocaleString()}
+                    {review.rationale ? ` · ${review.rationale}` : ""}
+                  </p>
+                </li>
+              ))}
           </ul>
         </div>
       ) : null}

@@ -447,6 +447,29 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
       }
       if (
         path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/coverage-reviews` &&
+        method === "POST"
+      ) {
+        const body = request.postDataJSON();
+        expect(body).toMatchObject({
+          page_number: 9,
+          source_quote: coverageQuote,
+          decision: "not_in_scope",
+          rationale: "This sentence is buyer procedure, not a supplier obligation.",
+        });
+        return json({
+          id: "coverage-review-1",
+          page_number: 9,
+          source_quote_sha256: "a".repeat(64),
+          decision: "not_in_scope",
+          rationale: body.rationale,
+          requirement_id: null,
+          actor_id: "user-1",
+          created_at: createdAt,
+        }, 201);
+      }
+      if (
+        path ===
           `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix/exports` &&
         method === "POST" &&
         url.searchParams.get("fmt") === "xlsx"
@@ -514,6 +537,13 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
         method === "GET"
       ) {
         return json(exportArtifacts);
+      }
+      if (
+        path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/coverage-reviews` &&
+        method === "GET"
+      ) {
+        return json([]);
       }
       if (path === "/projects/project-1/submissions/" && method === "GET") {
         return json([]);
@@ -667,6 +697,11 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await page.getByRole("button", { name: "Add excerpt as unreviewed requirement" }).click();
   await expect(page.getByRole("button", { name: "Added for review" })).toBeVisible();
   await expect(page.getByText(/Run an export again to recheck coverage/)).toBeVisible();
+  await page.getByLabel("Why this is not a supplier requirement").fill(
+    "This sentence is buyer procedure, not a supplier obligation."
+  );
+  await page.getByRole("button", { name: "Mark not a supplier requirement" }).click();
+  await expect(page.getByText(/Review recorded: not a supplier requirement/)).toBeVisible();
   await findingLink.click();
   await expect(page).toHaveURL(/page=9&sourceQuote=/);
   await expect(page.getByText("Page 9 · No rendered image", { exact: true })).toBeVisible();

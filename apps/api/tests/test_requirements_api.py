@@ -19,15 +19,22 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from tender_compliance_api.db.models import (
+    CoverageFindingReview,
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
+    ExtractionDiagnostics,
+    ExtractionWindowAudit,
     Membership,
     Organization,
+    ProcessingRun,
+    ProcessingStage,
     Project,
     ProjectStatus,
     Requirement,
     RequirementReviewState,
+    RequirementSource,
+    RunStatus,
     TenderDocument,
     User,
 )
@@ -205,6 +212,54 @@ class TestAddRequirementFromCoverageFinding:
                 return doc.id
         return asyncio.run(_create())
 
+    def _add_coverage_finding(self, doc_id, page_number, quote):
+        async def _add():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id,
+                            DocumentVersion.version_number == 1,
+                        )
+                    )
+                ).scalar_one()
+                run = ProcessingRun(
+                    document_version_id=version.id,
+                    run_id=uuid.uuid4(),
+                    attempt=1,
+                    stage=ProcessingStage.EXTRACT,
+                    status=RunStatus.COMPLETED,
+                )
+                session.add(run)
+                await session.flush()
+                session.add(
+                    ExtractionDiagnostics(
+                        document_version_id=version.id,
+                        processing_run_id=run.id,
+                        total_windows=1,
+                        rejection_breakdown={},
+                    )
+                )
+                session.add(
+                    ExtractionWindowAudit(
+                        document_version_id=version.id,
+                        processing_run_id=run.id,
+                        chunk_id=f"review-{uuid.uuid4().hex[:8]}",
+                        window_index=1,
+                        call_status="completed",
+                        candidate_count=0,
+                        ocr_warning=False,
+                        source_spans=[{"page_number": page_number}],
+                        coverage_status="completed",
+                        potential_omissions=[
+                            {"page_number": page_number, "source_quote": quote}
+                        ],
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_add())
+
     def test_adds_exact_source_quote_and_is_idempotent(self):
         user_id, org_id, project_id = _build_org_project()
         quote = "The instrument shall include installation and operator training."
@@ -370,6 +425,233 @@ class TestAddRequirementFromCoverageFinding:
         assert response.json()["review_state"] == "ocr_warning"
         source = response.json()["sources"][0]
         assert source["location_type"] == "approximate"
+
+    def test_not_in_scope_requires_rationale_and_appends_actor_attributed_reviews(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The tender committee will open bids at 11:00."
+        doc_id = self._setup_source_page(project_id, text=quote)
+        self._add_coverage_finding(doc_id, 3, quote)
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/1/coverage-reviews"
+        headers = _headers(user_id, org_id)
+
+        missing_rationale = client.post(
+            url,
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+            },
+            headers=headers,
+        )
+        assert missing_rationale.status_code == 422
+
+        first = client.post(
+            url,
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+                "rationale": "This describes buyer bid-opening procedure.",
+            },
+            headers=headers,
+        )
+        second = client.post(
+            url,
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+                "rationale": "Confirmed as buyer procedure after review.",
+            },
+            headers=headers,
+        )
+        assert first.status_code == second.status_code == 201
+        assert first.json()["actor_id"] == str(user_id)
+        assert first.json()["source_quote_sha256"] != quote
+
+        async def _reviews():
+            async with _session_cm() as session:
+                return list(
+                    (
+                        await session.execute(
+                            select(CoverageFindingReview).where(
+                                CoverageFindingReview.actor_id == user_id
+                            )
+                        )
+                    ).scalars().all()
+                )
+
+        saved = asyncio.run(_reviews())
+        assert len(saved) == 2
+        assert [row.rationale for row in saved] == [
+            "This describes buyer bid-opening procedure.",
+            "Confirmed as buyer procedure after review.",
+        ]
+        latest = client.get(url, headers=headers)
+        assert latest.status_code == 200
+        assert len(latest.json()) == 1
+        assert latest.json()[0]["source_quote"] == quote
+        assert latest.json()[0]["rationale"] == "Confirmed as buyer procedure after review."
+
+    def test_covered_by_requirement_must_be_active_and_cited_on_same_page(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The pump shall deliver 12 L/min."
+        other_quote = "The motor shall use 230 V."
+        doc_id = self._setup_source_page(
+            project_id, text=f"{quote} {other_quote}", page_number=3
+        )
+        self._add_coverage_finding(doc_id, 3, quote)
+        root = f"/projects/{project_id}/documents/{doc_id}/versions/1"
+        headers = _headers(user_id, org_id)
+        other = client.post(
+            f"{root}/requirements/from-source",
+            json={
+                "page_number": 3,
+                "source_quote": other_quote,
+                "requirement_type": "obligation",
+            },
+            headers=headers,
+        )
+        assert other.status_code == 201, other.text
+
+        async def _add_wrong_page_requirement():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == doc_id,
+                            DocumentVersion.version_number == 1,
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=4,
+                        extracted_text=quote,
+                        cleaned_text=quote,
+                        ocr_needed=False,
+                        ocr_confidence=None,
+                    )
+                )
+                wrong_page = Requirement(
+                    document_version_id=version.id,
+                    promotion_key=f"wrong-page-{uuid.uuid4().hex}",
+                    requirement_type="obligation",
+                    normalized_text=quote,
+                    raw_source=quote,
+                    uncertainty="confirmed",
+                )
+                session.add(wrong_page)
+                await session.flush()
+                session.add(
+                    RequirementSource(
+                        requirement_id=wrong_page.id,
+                        document_version_id=version.id,
+                        page_number=4,
+                        source_text=quote,
+                    )
+                )
+                await session.commit()
+                return str(wrong_page.id)
+
+        wrong_page_id = asyncio.run(_add_wrong_page_requirement())
+        wrong_source = client.post(
+            f"{root}/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "covered_by_requirement",
+                "requirement_id": other.json()["id"],
+            },
+            headers=headers,
+        )
+        wrong_page = client.post(
+            f"{root}/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "covered_by_requirement",
+                "requirement_id": wrong_page_id,
+            },
+            headers=headers,
+        )
+        assert wrong_source.status_code == 422
+        assert wrong_page.status_code == 422
+
+        covered = client.post(
+            f"{root}/requirements/from-source",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "requirement_type": "obligation",
+            },
+            headers=headers,
+        )
+        assert covered.status_code == 201
+        valid = client.post(
+            f"{root}/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "covered_by_requirement",
+                "requirement_id": covered.json()["id"],
+            },
+            headers=headers,
+        )
+        assert valid.status_code == 201, valid.text
+
+    def test_ocr_excerpt_review_uses_strict_page_image_fallback(self, monkeypatch):
+        from tender_compliance_api.routes import requirements as requirements_route
+
+        user_id, org_id, project_id = _build_org_project()
+        quote = "Only suppliers with current certification may bid."
+        doc_id = self._setup_source_page(
+            project_id,
+            text="Only suppliers with current certiflcation may bid.",
+            ocr_confidence=0.9,
+            rendered_image_object_key="rendered/page-3.png",
+        )
+        self._add_coverage_finding(doc_id, 3, quote)
+        calls = []
+
+        async def _verify(page, source_quote):
+            calls.append((page.page_number, source_quote))
+            return {"status": "exact", "provider": "fake", "call_status": "completed"}
+
+        monkeypatch.setattr(
+            requirements_route, "validate_ocr_page_quote_from_image", _verify
+        )
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+                "rationale": "The clause applies to the buyer's bid process.",
+            },
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 201, response.text
+        assert calls == [(3, quote)]
+
+    def test_other_organization_cannot_review_coverage_finding(self):
+        user_id, org_id, project_id = _build_org_project()
+        foreign_id, foreign_org_id, _ = _build_org_project()
+        quote = "The tender committee will open bids at 11:00."
+        doc_id = self._setup_source_page(project_id, text=quote)
+        self._add_coverage_finding(doc_id, 3, quote)
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+                "rationale": "Buyer procedure.",
+            },
+            headers=_headers(foreign_id, foreign_org_id),
+        )
+        assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
