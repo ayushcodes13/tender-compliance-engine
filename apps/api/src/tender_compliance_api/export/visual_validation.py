@@ -13,6 +13,7 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
+from tender_compliance_api.logs import error_category as categorize_error
 
 PROMPT_VERSION = "1.0.0"
 SCHEMA_VERSION = "1.0.0"
@@ -96,7 +97,7 @@ async def validate_quote_on_page_image(
         if _layout_key(response.visible_quote) != _layout_key(proposed_quote):
             return response.model_copy(update={"verdict": "not_exact"}), result.call
         return response, result.call
-    except Exception:
+    except Exception as exc:
         return None, LlmCallResult(
             provider=adapter.provider,
             model=adapter.model,
@@ -111,6 +112,11 @@ async def validate_quote_on_page_image(
             status="failed",
             error_message="page image validation failed",
             call_site=CALL_SITE,
+            error_category=(
+                exc.error_category
+                if isinstance(exc, LlmCallError) and exc.error_category
+                else categorize_error(exc)
+            ),
         )
 
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle, Download, LockKeyhole, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { CitationEvidenceDrawer, CitationTarget } from "@/components/citation-evidence-drawer";
 
 import {
   api,
@@ -28,11 +29,25 @@ function exportFieldSummary(issues: { field?: string }[] | undefined): string {
   return fields.length ? ` Fields checked: ${fields.join(", ")}.` : "";
 }
 
+function safeDiagnosticCategories(values: (string | null | undefined)[]): string[] {
+  return Array.from(
+    new Set(
+      values.filter(
+        (value): value is string =>
+          typeof value === "string" && /^[a-z0-9_]{1,64}$/i.test(value)
+      )
+    )
+  );
+}
+
 function obligationCoverageMessage(
   coverage:
     | {
         obligation_audit_status?: string;
         potential_omissions?: { pages: number[]; source_quote: string }[];
+        obligation_audit_failed_windows?: {
+          coverage_error_category?: string | null;
+        }[];
       }
     | undefined
 ): string | null {
@@ -49,6 +64,14 @@ function obligationCoverageMessage(
     return `The independent obligation scan found ${count} possible omission${count === 1 ? "" : "s"}${excerpts.length ? `: ${excerpts.join("; ")}` : ""}${remaining > 0 ? `; and ${remaining} more` : ""}. Review the source and add any missing requirement before exporting.`;
   }
   if (coverage.obligation_audit_status === "audit_failed") {
+    const categories = safeDiagnosticCategories(
+      (coverage.obligation_audit_failed_windows ?? []).map(
+        (window) => window.coverage_error_category
+      )
+    );
+    const categoryText = categories.length
+      ? ` Diagnostic category${categories.length === 1 ? "" : "ies"}: ${categories.join(", ")}.`
+      : "";
     const knownFindings = coverage.potential_omissions ?? [];
     const knownPages = Array.from(
       new Set(knownFindings.flatMap((finding) => finding.pages))
@@ -56,7 +79,7 @@ function obligationCoverageMessage(
     const pageText = knownPages.length
       ? ` It also found possible omissions on page${knownPages.length === 1 ? "" : "s"} ${knownPages.join(", ")}.`
       : "";
-    return `The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.${pageText}`;
+    return `The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.${pageText}${categoryText}`;
   }
   if (coverage.obligation_audit_status === "not_available") {
     return "No independent obligation scan is available for this extraction. Completeness was not checked.";
@@ -77,6 +100,38 @@ function obligationCoverageSummary(
     return " The independent scan did not complete, so whole-tender completeness needs human review.";
   }
   return " Whole-tender completeness was not verified because no independent obligation scan is available.";
+}
+
+function sourceValidationDiagnostic(
+  validation:
+    | {
+        llm_fallback_results?: {
+          status: string;
+          call_status?: string;
+          error_category?: string | null;
+        }[];
+      }
+    | undefined
+): string {
+  const results = validation?.llm_fallback_results ?? [];
+  const categories = safeDiagnosticCategories(
+    results
+      .filter((result) => result.call_status === "failed")
+      .map((result) => result.error_category)
+  );
+  const unavailableCount = results.filter(
+    (result) => result.status === "image_unavailable"
+  ).length;
+  const details: string[] = [];
+  if (categories.length) {
+    details.push(`Image validation error category: ${categories.join(", ")}.`);
+  }
+  if (unavailableCount) {
+    details.push(
+      `The source page image could not be retrieved for ${unavailableCount} validation check${unavailableCount === 1 ? "" : "s"}.`
+    );
+  }
+  return details.length ? ` ${details.join(" ")}` : "";
 }
 
 const statusTone = (value: string | null) => {
@@ -160,8 +215,10 @@ export function FinalMatrixView(props: {
   projectId: string;
   documentId: string;
   version: number;
+  documentName: string;
 }) {
-  const { projectId, documentId, version } = props;
+  const { projectId, documentId, version, documentName } = props;
+  const [citationDrawer, setCitationDrawer] = useState<CitationTarget | null>(null);
   const [rows, setRows] = useState<FinalMatrixRowResponse[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionResponse[]>([]);
   const [exportArtifacts, setExportArtifacts] = useState<ExportArtifactResponse[]>([]);
@@ -366,7 +423,7 @@ export function FinalMatrixView(props: {
           }
           const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
           throw new Error(
-            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before this file can be issued. Open each row's source citation and verify the exact wording.`
+            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before this file can be issued. Open each row's source citation and verify the exact wording.${sourceValidationDiagnostic(artifact.validation_report?.source_validation)}`
           );
         }
         throw new Error(artifact.error_message ?? "Export generation failed");
@@ -457,7 +514,7 @@ export function FinalMatrixView(props: {
           }
           const issueCount = artifact.validation_report?.source_validation?.issues.length ?? 0;
           throw new Error(
-            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before the response sheet can be issued.`
+            `${issueCount} tender row${issueCount === 1 ? " needs" : "s need"} source review before the response sheet can be issued.${sourceValidationDiagnostic(artifact.validation_report?.source_validation)}`
           );
         }
         throw new Error(artifact.error_message ?? "Export generation failed");
@@ -504,6 +561,7 @@ export function FinalMatrixView(props: {
   }
 
   return (
+    <>
     <section style={{ marginTop: 28 }}>
       <div className="section-title-row">
         <div>
@@ -657,13 +715,17 @@ export function FinalMatrixView(props: {
                   <td>{row.tender_requirement}</td>
                   <td>
                     {sourcePage !== null ? (
-                      <Link
+                      <a
                         className="button button-secondary button-small"
                         href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&requirementId=${encodeURIComponent(row.requirement_id)}&page=${sourcePage}${row.source_anchor_id ? `&sourceId=${encodeURIComponent(row.source_anchor_id)}` : ""}`}
                         aria-label={`Open tender source for requirement ${row.serial}, page ${sourcePage}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setCitationDrawer({ projectId, documentId, documentName, version, pageNumber: sourcePage, requirementId: row.requirement_id, sourceId: row.source_anchor_id ?? null, quoteText: row.raw_source, clause: row.clause });
+                        }}
                       >
                         Page {sourcePage} · Open source
-                      </Link>
+                      </a>
                     ) : (
                       <span>Location unavailable</span>
                     )}
@@ -855,5 +917,7 @@ export function FinalMatrixView(props: {
         )}
       </div>
     </section>
+    <CitationEvidenceDrawer citation={citationDrawer} onClose={() => setCitationDrawer(null)} />
+    </>
   );
 }

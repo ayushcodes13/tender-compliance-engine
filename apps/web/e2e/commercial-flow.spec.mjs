@@ -470,6 +470,42 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
       }
       if (
         path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix/exports` &&
+        method === "POST" &&
+        url.searchParams.get("fmt") === "pdf"
+      ) {
+        return json({
+          id: "image-validation-failed-export-1",
+          status: "failed",
+          export_format: "pdf",
+          generated_at: createdAt,
+          requirement_count: 2,
+          validation_status: "needs_review",
+          validation_report: {
+            issues: [],
+            source_validation: {
+              status: "needs_review",
+              checked_rows: 1,
+              issues: [{ row_id: requirementId, code: "ocr_visual_verification_required" }],
+              llm_fallback_results: [{
+                row_id: requirementId,
+                page_number: 12,
+                status: "needs_review",
+                call_status: "failed",
+                error_category: "image_parse_error",
+              }],
+            },
+            window_processing: {
+              status: "complete",
+              completeness_proven: false,
+              obligation_audit_status: "no_potential_omissions",
+              potential_omissions: [],
+            },
+          },
+        });
+      }
+      if (
+        path ===
           `/projects/project-1/documents/${tenderDocumentId}/versions/1/exports` &&
         method === "GET"
       ) {
@@ -632,6 +668,8 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByText(/This export is unavailable for download until it has a passing result\./)).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Export PDF" }).click();
+  await expect(page.getByText(/Image validation error category: image_parse_error\./)).toBeVisible();
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
@@ -662,11 +700,12 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}`
   );
   await sourceLink.click();
-  await expect(page).toHaveURL(
-    new RegExp(`/projects/project-1/review\\?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}$`)
-  );
-  await expect(page.getByText("Page 12 · Clause 4.2", { exact: true })).toBeVisible();
-  await expect(page.getByText(finalMatrixRow().raw_source, { exact: true }).first()).toBeVisible();
+  const matrixEvidence = page.getByRole("dialog", { name: "Evidence" });
+  await expect(matrixEvidence).toBeVisible();
+  await expect(matrixEvidence).toContainText("Page 12");
+  await expect(matrixEvidence).toContainText(finalMatrixRow().raw_source);
+  await expect(matrixEvidence).toContainText("Exact source anchor");
+  await matrixEvidence.getByRole("button", { name: "Close evidence panel" }).click();
 
   await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=13`);
   await expect(
@@ -688,17 +727,24 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   const citationPreview = page.locator(".citation-glance").first();
   await expect(citationPreview).toContainText(finalMatrixRow().raw_source);
   await expect(citationPreview).toContainText("Exact anchor");
+  await citationChip.click();
+  const reviewEvidence = page.getByRole("dialog", { name: "Evidence" });
+  await expect(reviewEvidence).toBeVisible();
+  await expect(reviewEvidence).toContainText("Exact source anchor");
+  await expect(reviewEvidence).toContainText(finalMatrixRow().raw_source);
+  await reviewEvidence.getByRole("button", { name: "Close evidence panel" }).click();
 
   await page.getByRole("button", { name: "Open source on page 14, clause 4.3" }).click();
   await expect(page).toHaveURL(new RegExp(`page=14&sourceId=${secondSourceId}$`));
   await expect(page.getByAltText("Page 14 of Technical Tender v1")).toBeVisible();
-  const selectedCitation = page.locator(".source-highlight.approximate.selected");
+  const selectedCitation = page.getByRole("dialog", { name: "Evidence" }).locator(".source-highlight.approximate.selected");
   await expect(selectedCitation).toHaveCount(1);
   await expect(selectedCitation).toHaveAttribute("title", `Approximate source: ${secondSourceQuote}`);
+  await page.getByRole("dialog", { name: "Evidence" }).getByRole("button", { name: "Close evidence panel" }).click();
 
   await page.getByRole("button", { name: "Open source on page 14, clause 4.4" }).click();
   await expect(page).toHaveURL(new RegExp(`page=14&sourceId=${thirdSourceId}$`));
-  const secondSelectedCitation = page.locator(".source-highlight.approximate.selected");
+  const secondSelectedCitation = page.getByRole("dialog", { name: "Evidence" }).locator(".source-highlight.approximate.selected");
   await expect(secondSelectedCitation).toHaveCount(1);
   await expect(secondSelectedCitation).toHaveAttribute("title", `Approximate source: ${thirdSourceQuote}`);
   await expect(secondSelectedCitation.getByText("4.4Approx", { exact: true })).toBeVisible();

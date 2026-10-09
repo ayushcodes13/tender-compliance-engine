@@ -7,6 +7,7 @@ import { api, PageResponse, SourceAnchor } from "@/lib/api/client";
 export interface SourceViewerProps {
   projectId: string;
   documentId: string;
+  documentName?: string;
   version: number;
   pageNumber: number;
   /** Called when the user navigates to a different page. */
@@ -39,6 +40,7 @@ function normalizeQuoteForSelection(value: string | null | undefined): string {
 export function SourceViewer({
   projectId,
   documentId,
+  documentName,
   version,
   pageNumber,
   onPageChange,
@@ -217,7 +219,7 @@ export function SourceViewer({
           <div className="source-file">
             <span className="pdf-glyph">PDF</span>
             <div>
-              <strong>Technical Tender v{version}</strong>
+              <strong>{documentName ?? `Technical Tender v${version}`}</strong>
               <span>
                 Page {pageNumber}
                 {totalPages ? ` of ${totalPages}` : ""} · No rendered image
@@ -283,7 +285,7 @@ export function SourceViewer({
             </div>
 
             <div className="source-page-footer">
-              <span>Technical Tender v{version}</span>
+              <span>{documentName ?? `Technical Tender v${version}`}</span>
               <span>Page {pageNumber}</span>
             </div>
           </article>
@@ -299,7 +301,7 @@ export function SourceViewer({
         <div className="source-file">
           <span className="pdf-glyph">PDF</span>
           <div>
-            <strong>Technical Tender v{version}</strong>
+            <strong>{documentName ?? `Technical Tender v${version}`}</strong>
             <span>
               Page {pageNumber}
               {totalPages ? ` of ${totalPages}` : ""}
@@ -404,7 +406,7 @@ export function SourceViewer({
             <img
               ref={imgRef}
               src={imageUrl}
-              alt={`Page ${pageNumber} of Technical Tender v${version}`}
+              alt={`Page ${pageNumber} of ${documentName ?? `Technical Tender v${version}`}`}
               className="source-page-image"
               onLoad={handleImageLoad}
               draggable={false}

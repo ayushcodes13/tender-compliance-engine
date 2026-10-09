@@ -361,6 +361,7 @@ export type ExportArtifactResponse = {
         provider?: string;
         model?: string;
         call_status?: string;
+        error_category?: string | null;
       }[];
     };
     window_processing?: {
@@ -377,6 +378,7 @@ export type ExportArtifactResponse = {
         window_index: number;
         chunk_id: string;
         pages: number[];
+        coverage_error_category?: string | null;
       }[];
       potential_omissions?: {
         window_index: number;
@@ -386,7 +388,12 @@ export type ExportArtifactResponse = {
       expected_windows?: number;
       audited_windows?: number;
       missing_window_count?: number;
-      failed_windows?: { window_index: number; chunk_id: string; pages: number[] }[];
+      failed_windows?: {
+        window_index: number;
+        chunk_id: string;
+        pages: number[];
+        coverage_error_category?: string | null;
+      }[];
       zero_candidate_windows?: { window_index: number; chunk_id: string; pages: number[] }[];
       ocr_warning_windows?: { window_index: number; chunk_id: string; pages: number[] }[];
       message: string;

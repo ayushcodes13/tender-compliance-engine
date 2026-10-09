@@ -22,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { SourceViewer } from "@/components/source-viewer";
+import { CitationEvidenceDrawer, CitationTarget } from "@/components/citation-evidence-drawer";
 import { EvidencePanel } from "@/components/evidence-panel";
 import { ComplianceReviewPanel } from "@/components/compliance-review-panel";
 import { ProjectFlowNav } from "@/components/project-flow-nav";
@@ -138,6 +139,7 @@ export function TenderReviewWorkspace(props: {
   const [sourcePageOverride, setSourcePageOverride] = useState<number | undefined>(
     initialSourcePage
   );
+  const [citationDrawer, setCitationDrawer] = useState<CitationTarget | null>(null);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(false);
@@ -310,6 +312,17 @@ export function TenderReviewWorkspace(props: {
     requirementId: string,
     source: RequirementSourceSummary
   ) => {
+    setCitationDrawer({
+      projectId,
+      documentId,
+      documentName: document?.display_name ?? "Tender source",
+      version,
+      pageNumber: source.page_number,
+      requirementId,
+      sourceId: source.id,
+      quoteText: source.quote_text ?? source.source_text,
+      clause: source.clause_number,
+    });
     setSelectedId(requirementId);
     setActiveSourceId(source.id);
     setSourcePageOverride(source.page_number);
@@ -464,6 +477,7 @@ export function TenderReviewWorkspace(props: {
   const refreshEvidence = () => setEvidenceRevision((n) => n + 1);
 
   return (
+    <>
     <div className="project-workspace">
       <header className="project-topbar">
         <div className="project-breadcrumbs">
@@ -1042,6 +1056,11 @@ export function TenderReviewWorkspace(props: {
         </aside>
       </div>
     </div>
+    <CitationEvidenceDrawer
+      citation={citationDrawer}
+      onClose={() => setCitationDrawer(null)}
+    />
+    </>
   );
 }
 
