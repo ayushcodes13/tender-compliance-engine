@@ -61,7 +61,11 @@ class FakeAdapter(LlmAdapter):
 
 
 def _response(
-    *, verdict: str = "exact", confidence: float = 0.99, visible_quote: str
+    *,
+    verdict: str = "exact",
+    confidence: float = 0.99,
+    visible_quote: str,
+    reason: str = "Checked against the supplied page image.",
 ) -> PageImageBatchResponse:
     return PageImageBatchResponse(
         decisions=[
@@ -70,7 +74,7 @@ def _response(
                 verdict=verdict,
                 confidence=confidence,
                 visible_quote=visible_quote,
-                reason="Checked against the supplied page image.",
+                reason=reason,
             )
         ]
     )
@@ -246,6 +250,84 @@ def test_visual_validation_ignores_only_standalone_list_bullet_markers():
     assert "Standalone bullet glyphs" in adapter.call_args["system_prompt"]
 
 
+def test_visual_validation_accepts_visually_confirmed_ocr_open_circle_marker():
+    quote = (
+        "Digital setting with auto switch-off at set pressure\n"
+        "o Secondary back-up pressure setting"
+    )
+    adapter = FakeAdapter(
+        _response(
+            visible_quote=(
+                "Digital setting with auto switch-off at set pressure\n"
+                "Secondary back-up pressure setting"
+            ),
+            reason="The leading o is a hollow-circle bullet marker.",
+        )
+    )
+
+    response, _call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote=quote,
+            page_number=18,
+            image_bytes=b"page-eighteen",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "exact"
+    assert adapter.call_args is not None
+    assert 'standalone lowercase "o"' in adapter.call_args["system_prompt"]
+
+
+def test_visual_validation_requires_reason_for_ocr_open_circle_normalization():
+    quote = (
+        "Digital setting with auto switch-off at set pressure\n"
+        "o Secondary back-up pressure setting"
+    )
+    adapter = FakeAdapter(
+        _response(
+            visible_quote=(
+                "Digital setting with auto switch-off at set pressure\n"
+                "Secondary back-up pressure setting"
+            ),
+            reason="The words appear to match.",
+        )
+    )
+
+    response, _call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote=quote,
+            page_number=18,
+            image_bytes=b"page-eighteen",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "not_exact"
+
+
+def test_visual_validation_keeps_visible_leading_letter_o_literal():
+    quote = "o Secondary pressure input must be provided."
+    adapter = FakeAdapter(_response(visible_quote=quote))
+
+    response, _call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote=quote,
+            page_number=18,
+            image_bytes=b"page-eighteen",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "exact"
+
+
 def test_visual_validation_does_not_ignore_bullet_glyph_inside_requirement_text():
     adapter = FakeAdapter(_response(visible_quote="Accuracy 0.5%"))
 
@@ -278,7 +360,7 @@ def test_visual_validation_preserves_single_line_legend_symbol():
 
     assert response is not None
     assert response.verdict == "not_exact"
-    assert call.prompt_version == PROMPT_VERSION == "1.2.0"
+    assert call.prompt_version == PROMPT_VERSION == "1.3.0"
 
 
 @pytest.mark.parametrize(
