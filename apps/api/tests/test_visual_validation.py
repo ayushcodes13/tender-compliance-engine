@@ -8,8 +8,12 @@ from pydantic import BaseModel, ValidationError
 from tender_compliance_api.export.visual_validation import (
     CALL_SITE,
     PROMPT_VERSION,
+    PageImageBatchResponse,
+    PageImageQuote,
+    PageImageQuoteDecision,
     PageImageValidationResponse,
     validate_quote_on_page_image,
+    validate_quotes_on_page_image,
 )
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
@@ -58,12 +62,17 @@ class FakeAdapter(LlmAdapter):
 
 def _response(
     *, verdict: str = "exact", confidence: float = 0.99, visible_quote: str
-) -> PageImageValidationResponse:
-    return PageImageValidationResponse(
-        verdict=verdict,
-        confidence=confidence,
-        visible_quote=visible_quote,
-        reason="Checked against the supplied page image.",
+) -> PageImageBatchResponse:
+    return PageImageBatchResponse(
+        decisions=[
+            PageImageQuoteDecision(
+                item_id="0",
+                verdict=verdict,
+                confidence=confidence,
+                visible_quote=visible_quote,
+                reason="Checked against the supplied page image.",
+            )
+        ]
     )
 
 
@@ -87,8 +96,118 @@ def test_visual_validation_accepts_only_exact_quote_from_supplied_page():
     assert adapter.call_args["image_bytes"] == b"page-seven"
     assert adapter.call_args["image_mime_type"] == "image/png"
     assert adapter.call_args["user_text"] == (
-        '{"page_number":7,"proposed_quote":"Minimum accuracy: ±2 mm"}'
+        '{"page_number":7,"items":[{"item_id":"0",'
+        '"proposed_quote":"Minimum accuracy: ±2 mm"}]}'
     )
+
+
+def test_visual_batch_validates_each_quote_against_the_same_page():
+    adapter = FakeAdapter(
+        PageImageBatchResponse(
+            decisions=[
+                PageImageQuoteDecision(
+                    item_id="a",
+                    verdict="exact",
+                    confidence=0.99,
+                    visible_quote="First requirement.",
+                    reason="Visible on page.",
+                ),
+                PageImageQuoteDecision(
+                    item_id="b",
+                    verdict="exact",
+                    confidence=1.0,
+                    visible_quote="Second requirement.",
+                    reason="Visible on page.",
+                ),
+            ]
+        )
+    )
+
+    decisions, call = asyncio.run(
+        validate_quotes_on_page_image(
+            items=[
+                PageImageQuote(item_id="a", proposed_quote="First requirement."),
+                PageImageQuote(item_id="b", proposed_quote="Second requirement."),
+            ],
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert set(decisions) == {"a", "b"}
+    assert all(decision.verdict == "exact" for decision in decisions.values())
+    assert call.status == "completed"
+    assert adapter.call_args is not None
+    assert adapter.call_args["image_bytes"] == b"page-seven"
+
+
+@pytest.mark.parametrize(
+    "decisions",
+    [
+        [
+            PageImageQuoteDecision(
+                item_id="a", verdict="exact", confidence=1.0,
+                visible_quote="First requirement.", reason="Visible."
+            )
+        ],
+        [
+            PageImageQuoteDecision(
+                item_id="a", verdict="exact", confidence=1.0,
+                visible_quote="First requirement.", reason="Visible."
+            ),
+            PageImageQuoteDecision(
+                item_id="a", verdict="exact", confidence=1.0,
+                visible_quote="First requirement.", reason="Duplicate."
+            ),
+        ],
+        [
+            PageImageQuoteDecision(
+                item_id="a", verdict="exact", confidence=1.0,
+                visible_quote="First requirement.", reason="Visible."
+            ),
+            PageImageQuoteDecision(
+                item_id="extra", verdict="exact", confidence=1.0,
+                visible_quote="Unexpected.", reason="Extra."
+            ),
+        ],
+    ],
+)
+def test_visual_batch_requires_exactly_one_decision_per_requested_item(decisions):
+    adapter = FakeAdapter(PageImageBatchResponse(decisions=decisions))
+
+    outcomes, call = asyncio.run(
+        validate_quotes_on_page_image(
+            items=[
+                PageImageQuote(item_id="a", proposed_quote="First requirement."),
+                PageImageQuote(item_id="b", proposed_quote="Second requirement."),
+            ],
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert outcomes == {}
+    assert call.status == "failed"
+
+
+def test_visual_batch_rejects_more_than_three_items():
+    with pytest.raises(ValueError, match="one to 6 unique items"):
+        asyncio.run(
+            validate_quotes_on_page_image(
+                items=[
+                    PageImageQuote(item_id=str(index), proposed_quote=f"Quote {index}")
+                    for index in range(7)
+                ],
+                page_number=7,
+                image_bytes=b"page-seven",
+                image_mime_type="image/png",
+                adapter=FakeAdapter(object()),
+            )
+        )
 
 
 def test_visual_validation_ignores_only_standalone_list_bullet_markers():
@@ -144,7 +263,7 @@ def test_visual_validation_preserves_single_line_legend_symbol():
 
     assert response is not None
     assert response.verdict == "not_exact"
-    assert call.prompt_version == PROMPT_VERSION == "1.1.0"
+    assert call.prompt_version == PROMPT_VERSION == "1.2.0"
 
 
 @pytest.mark.parametrize(

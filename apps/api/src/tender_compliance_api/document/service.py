@@ -206,7 +206,9 @@ async def _source_quote_validation_report(
     from tender_compliance_api.export.visual_validation import (  # noqa: PLC0415
         MAX_CALLS_PER_PAGE,
         MAX_CONCURRENT_VALIDATIONS,
-        validate_quote_on_page_image,
+        MAX_QUOTES_PER_CALL,
+        PageImageQuote,
+        validate_quotes_on_page_image,
     )
 
     requirement_ids = [row.requirement_id for row in rows]
@@ -315,7 +317,6 @@ async def _source_quote_validation_report(
         adapter = OpenAiLlmAdapter()
 
     row_by_id = {str(row.requirement_id): row for row in rows}
-    page_calls: dict[tuple[int, str | None], int] = {}
     fallback_results: list[dict[str, object]] = []
     resolved_ids: set[str] = set()
 
@@ -408,13 +409,11 @@ async def _source_quote_validation_report(
                 "ocr_visual_verification_required",
             }
         ]
-        planned_parts: dict[
-            str,
-            list[tuple[_SourcePageForValidation, str, bool]],
+        planned_parts: dict[str, list[tuple[_SourcePageForValidation, str]]] = {}
+        targets_by_page: dict[
+            tuple[int, str | None],
+            list[tuple[str, int, _SourcePageForValidation, str]],
         ] = {}
-        # Reserve the per-page call budget in stable row/page order before
-        # running independent row checks concurrently. This keeps the cap
-        # deterministic even when provider responses complete out of order.
         for issue in eligible_issues:
             row = row_by_id.get(issue.row_id)
             if row is None:
@@ -424,110 +423,138 @@ async def _source_quote_validation_report(
                 pages_by_requirement.get(issue.row_id, []),
                 selected_page_by_requirement.get(issue.row_id),
             )
-            reservations: list[tuple[_SourcePageForValidation, str, bool]] = []
-            for page_source, proposed_quote in parts:
+            planned_parts[issue.row_id] = parts
+            for part_index, (page_source, proposed_quote) in enumerate(parts):
                 key = (page_source.page_number, page_source.image_key)
-                allowed = (
-                    page_source.image_key is None
-                    or page_calls.get(key, 0) < MAX_CALLS_PER_PAGE
+                targets_by_page.setdefault(key, []).append(
+                    (issue.row_id, part_index, page_source, proposed_quote)
                 )
-                if allowed and page_source.image_key is not None:
-                    page_calls[key] = page_calls.get(key, 0) + 1
-                reservations.append((page_source, proposed_quote, allowed))
-            planned_parts[issue.row_id] = reservations
 
         fallback_semaphore = asyncio.Semaphore(MAX_CONCURRENT_VALIDATIONS)
-
-        async def validate_issue(
-            issue: SourceQuoteIssue,
-        ) -> tuple[str, list[dict[str, object]], bool]:
-            reservations = planned_parts.get(issue.row_id, [])
-            if not reservations:
-                return issue.row_id, [
+        outcomes_by_row: dict[str, list[bool]] = {
+            issue.row_id: [] for issue in eligible_issues
+        }
+        results_by_row: dict[str, list[dict[str, object]]] = {
+            issue.row_id: [] for issue in eligible_issues
+        }
+        for issue in eligible_issues:
+            if not planned_parts.get(issue.row_id):
+                results_by_row[issue.row_id].append(
                     {
                         "row_id": issue.row_id,
                         "status": "source_page_unavailable",
                         "call_status": "not_run",
                     }
-                ], False
+                )
+                outcomes_by_row[issue.row_id].append(False)
 
-            row_results: list[dict[str, object]] = []
-            all_parts_exact = True
-            for page_source, proposed_quote, allowed in reservations:
-                page_number = page_source.page_number
-                image_key = page_source.image_key
-                if not allowed:
-                    row_results.append(
+        async def validate_page_group(
+            key: tuple[int, str | None],
+            targets: list[tuple[str, int, _SourcePageForValidation, str]],
+        ) -> list[tuple[str, bool, dict[str, object]]]:
+            page_number, image_key = key
+            if image_key is None:
+                return [
+                    (
+                        row_id,
+                        False,
                         {
-                            "row_id": issue.row_id,
+                            "row_id": row_id,
                             "page_number": page_number,
-                            "status": "call_limit_reached",
+                            "status": "image_unavailable",
                             "call_status": "not_run",
-                        }
+                        },
                     )
-                    all_parts_exact = False
+                    for row_id, _part, _source, _quote in targets
+                ]
+            try:
+                image_bytes = await storage.get(image_key)
+            except Exception:  # noqa: BLE001 — fail closed on image retrieval
+                return [
+                    (
+                        row_id,
+                        False,
+                        {
+                            "row_id": row_id,
+                            "page_number": page_number,
+                            "status": "image_unavailable",
+                            "call_status": "not_run",
+                        },
+                    )
+                    for row_id, _part, _source, _quote in targets
+                ]
+
+            page_results: list[tuple[str, bool, dict[str, object]]] = []
+            call_budget = 0
+            for chunk_start in range(0, len(targets), MAX_QUOTES_PER_CALL):
+                chunk = targets[chunk_start : chunk_start + MAX_QUOTES_PER_CALL]
+                if call_budget >= MAX_CALLS_PER_PAGE:
+                    page_results.extend(
+                        (
+                            row_id,
+                            False,
+                            {
+                                "row_id": row_id,
+                                "page_number": page_number,
+                                "status": "call_limit_reached",
+                                "call_status": "not_run",
+                            },
+                        )
+                        for row_id, _part, _source, _quote in chunk
+                    )
                     continue
-                if image_key is None:
-                    row_results.append(
-                        {
-                            "row_id": issue.row_id,
-                            "page_number": page_number,
-                            "status": "image_unavailable",
-                            "call_status": "not_run",
-                        }
-                    )
-                    all_parts_exact = False
-                    break
-                try:
-                    image_bytes = await storage.get(image_key)
-                except Exception:  # noqa: BLE001 — fail closed on image retrieval
-                    row_results.append(
-                        {
-                            "row_id": issue.row_id,
-                            "page_number": page_number,
-                            "status": "image_unavailable",
-                            "call_status": "not_run",
-                        }
-                    )
-                    all_parts_exact = False
-                    break
+                call_budget += 1
+                request_items = [
+                    PageImageQuote(item_id=str(index), proposed_quote=quote)
+                    for index, (_row_id, _part, _source, quote) in enumerate(chunk)
+                ]
                 async with fallback_semaphore:
-                    response, call = await validate_quote_on_page_image(
-                        proposed_quote=proposed_quote,
+                    decisions, call = await validate_quotes_on_page_image(
+                        items=request_items,
                         page_number=page_number,
                         image_bytes=image_bytes,
                         image_mime_type="image/png",
                         adapter=adapter,
                     )
-                accepted = response is not None and response.verdict == "exact"
-                row_results.append(
-                    {
-                        "row_id": issue.row_id,
-                        "page_number": page_number,
-                        "status": "exact" if accepted else "needs_review",
-                        "provider": call.provider,
-                        "model": call.model,
-                        "prompt_version": call.prompt_version,
-                        "schema_version": call.schema_version,
-                        "call_status": call.status,
-                        "latency_ms": call.latency_ms,
-                        "prompt_tokens": call.prompt_tokens,
-                        "completion_tokens": call.completion_tokens,
-                        "total_tokens": call.total_tokens,
-                        "error_category": call.error_category,
-                    }
-                )
-                if not accepted:
-                    all_parts_exact = False
-                    break
-            return issue.row_id, row_results, all_parts_exact
+                for index, (row_id, _part, _source, _quote) in enumerate(chunk):
+                    decision = decisions.get(str(index))
+                    accepted = decision is not None and decision.verdict == "exact"
+                    page_results.append(
+                        (
+                            row_id,
+                            accepted,
+                            {
+                                "row_id": row_id,
+                                "page_number": page_number,
+                                "status": "exact" if accepted else "needs_review",
+                                "provider": call.provider,
+                                "model": call.model,
+                                "prompt_version": call.prompt_version,
+                                "schema_version": call.schema_version,
+                                "call_status": call.status,
+                                "latency_ms": call.latency_ms,
+                                "prompt_tokens": call.prompt_tokens,
+                                "completion_tokens": call.completion_tokens,
+                                "total_tokens": call.total_tokens,
+                                "error_category": call.error_category,
+                            },
+                        )
+                    )
+            return page_results
 
-        validation_results = await asyncio.gather(
-            *(validate_issue(issue) for issue in eligible_issues)
+        page_results = await asyncio.gather(
+            *(
+                validate_page_group(key, targets)
+                for key, targets in targets_by_page.items()
+            )
         )
-        for row_id, row_results, all_parts_exact in validation_results:
+        for page_group_result in page_results:
+            for row_id, accepted, metadata in page_group_result:
+                outcomes_by_row.setdefault(row_id, []).append(accepted)
+                results_by_row.setdefault(row_id, []).append(metadata)
+        for row_id, row_results in results_by_row.items():
             fallback_results.extend(row_results)
-            if all_parts_exact and row_results:
+            if outcomes_by_row.get(row_id) and all(outcomes_by_row[row_id]):
                 resolved_ids.add(row_id)
 
     unresolved_issues = [issue for issue in issues if issue.row_id not in resolved_ids]

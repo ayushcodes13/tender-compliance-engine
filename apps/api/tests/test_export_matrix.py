@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import uuid
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -53,7 +54,7 @@ from tender_compliance_api.export.validation import (
     RequirementCell,
     validate_source_quote_presence,
 )
-from tender_compliance_api.export.visual_validation import PageImageValidationResponse
+from tender_compliance_api.export.visual_validation import PageImageQuoteDecision
 from tender_compliance_api.extraction import openai_adapter
 from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.main import app
@@ -66,6 +67,42 @@ _session_cm = contextlib.asynccontextmanager(get_session)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _fake_page_batch(
+    kwargs: dict[str, Any],
+    verdict_for,
+    *,
+    failed: bool = False,
+) -> tuple[dict[str, PageImageQuoteDecision], LlmCallResult]:
+    decisions: dict[str, PageImageQuoteDecision] = {}
+    for item in kwargs["items"]:
+        verdict, confidence = verdict_for(kwargs["page_number"], item.proposed_quote)
+        decisions[item.item_id] = PageImageQuoteDecision(
+            item_id=item.item_id,
+            verdict=verdict,
+            confidence=confidence,
+            visible_quote=item.proposed_quote if verdict == "exact" else "",
+            reason="Fake page image check.",
+        )
+    return (
+        decisions,
+        LlmCallResult(
+            provider="fake",
+            model="fake-vision",
+            prompt_version="test",
+            schema_version="test",
+            latency_ms=1,
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+            cost_usd=None,
+            finish_reason=None if failed else "stop",
+            status="failed" if failed else "completed",
+            call_site="test_page_image_validation",
+            error_category="image_parse_error" if failed else None,
+        ),
+    )
 
 
 def _headers(user_id: uuid.UUID, org_id: uuid.UUID) -> dict[str, str]:
@@ -337,28 +374,9 @@ class TestExportGeneration:
 
         async def fake_visual_check(**kwargs):
             checked.append(kwargs)
-            exact = image_verdict == "exact"
-            return (
-                PageImageValidationResponse(
-                    verdict=image_verdict,
-                    confidence=0.99,
-                    visible_quote=kwargs["proposed_quote"] if exact else "",
-                    reason="Checked the complete proposed wording against page 3.",
-                ),
-                LlmCallResult(
-                    provider="fake",
-                    model="fake-vision",
-                    prompt_version="test",
-                    schema_version="test",
-                    latency_ms=1,
-                    prompt_tokens=None,
-                    completion_tokens=None,
-                    total_tokens=None,
-                    cost_usd=None,
-                    finish_reason="stop",
-                    status="completed",
-                    call_site="test_page_image_validation",
-                ),
+            return _fake_page_batch(
+                kwargs,
+                lambda _page, _quote: (image_verdict, 0.99),
             )
 
         monkeypatch.setattr(document_service, "_resolve_storage", lambda: storage)
@@ -373,7 +391,7 @@ class TestExportGeneration:
         )
         monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
         monkeypatch.setattr(
-            visual_validation, "validate_quote_on_page_image", fake_visual_check
+            visual_validation, "validate_quotes_on_page_image", fake_visual_check
         )
 
         response = client.post(
@@ -388,7 +406,7 @@ class TestExportGeneration:
         assert body["validation_status"] == expected_validation
         source_validation = body["validation_report"]["source_validation"]
         assert len(checked) == 1
-        assert checked[0]["proposed_quote"] == quote
+        assert checked[0]["items"][0].proposed_quote == quote
         assert checked[0]["page_number"] == 3
         assert checked[0]["image_bytes"] == b"rendered-source-page"
         assert checked[0]["image_mime_type"] == "image/png"
@@ -1018,35 +1036,15 @@ class TestExportGeneration:
         checked: list[tuple[int, str]] = []
 
         async def fake_visual_check(**kwargs):
-            checked.append((kwargs["page_number"], kwargs["proposed_quote"]))
-            quote_part = kwargs["proposed_quote"]
-            verdict = (
-                second_page_verdict if kwargs["page_number"] == 18 else "exact"
+            checked.extend(
+                (kwargs["page_number"], item.proposed_quote)
+                for item in kwargs["items"]
             )
-            return (
-                PageImageValidationResponse(
-                    verdict=verdict,
-                    confidence=0.99 if verdict == "exact" else 0.5,
-                    visible_quote=quote_part if verdict == "exact" else "",
-                    reason=(
-                        "The page-local excerpt is visibly present."
-                        if verdict == "exact"
-                        else "The page-local excerpt is unclear."
-                    ),
-                ),
-                LlmCallResult(
-                    provider="fake",
-                    model="fake-vision",
-                    prompt_version="test",
-                    schema_version="test",
-                    latency_ms=1,
-                    prompt_tokens=None,
-                    completion_tokens=None,
-                    total_tokens=None,
-                    cost_usd=None,
-                    finish_reason="stop",
-                    status="completed",
-                    call_site="test_page_image_validation",
+            return _fake_page_batch(
+                kwargs,
+                lambda page, _quote: (
+                    second_page_verdict if page == 18 else "exact",
+                    0.99 if page != 18 or second_page_verdict == "exact" else 0.5,
                 ),
             )
 
@@ -1060,7 +1058,7 @@ class TestExportGeneration:
         )
         monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
         monkeypatch.setattr(
-            visual_validation, "validate_quote_on_page_image", fake_visual_check
+            visual_validation, "validate_quotes_on_page_image", fake_visual_check
         )
 
         async def _validate():
@@ -1112,9 +1110,9 @@ class TestExportGeneration:
                     True,
                     "4.1",
                     False,
-                    3 if index <= 5 else index - 2,
+                    3 if index <= 20 else index - 17,
                 )
-                for index in range(1, 9)
+                for index in range(1, 25)
             ],
         )
 
@@ -1155,7 +1153,7 @@ class TestExportGeneration:
                         ocr_needed=True,
                         rendered_image_object_key=f"rendered/page-{page_number}.png",
                     )
-                    for page_number in (4, 5, 6)
+                    for page_number in (4, 5, 6, 7)
                 )
                 await session.commit()
 
@@ -1179,28 +1177,8 @@ class TestExportGeneration:
             checked_pages.append(kwargs["page_number"])
             await asyncio.sleep(0.01)
             active_calls -= 1
-            quote = kwargs["proposed_quote"]
-            return (
-                PageImageValidationResponse(
-                    verdict="exact",
-                    confidence=0.99,
-                    visible_quote=quote,
-                    reason="Exact page wording.",
-                ),
-                LlmCallResult(
-                    provider="fake",
-                    model="fake-vision",
-                    prompt_version="test",
-                    schema_version="test",
-                    latency_ms=1,
-                    prompt_tokens=None,
-                    completion_tokens=None,
-                    total_tokens=None,
-                    cost_usd=None,
-                    finish_reason="stop",
-                    status="completed",
-                    call_site="test_page_image_validation",
-                ),
+            return _fake_page_batch(
+                kwargs, lambda _page, _quote: ("exact", 0.99)
             )
 
         monkeypatch.setattr(
@@ -1213,7 +1191,7 @@ class TestExportGeneration:
         )
         monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
         monkeypatch.setattr(
-            visual_validation, "validate_quote_on_page_image", fake_visual_check
+            visual_validation, "validate_quotes_on_page_image", fake_visual_check
         )
 
         async def _validate():
@@ -1233,9 +1211,9 @@ class TestExportGeneration:
 
         report = asyncio.run(_validate())
         statuses = [item["status"] for item in report["llm_fallback_results"]]
-        assert len(checked_pages) == 6
+        assert len(checked_pages) == 7
         assert peak_calls == 4
-        assert statuses.count("exact") == 6
+        assert statuses.count("exact") == 22
         assert statuses.count("call_limit_reached") == 2
         assert report["status"] == "needs_review"
 
@@ -1438,7 +1416,7 @@ class TestExportGeneration:
             checked.append(kwargs)
             if fallback_outcome == "provider_failed":
                 return (
-                    None,
+                    {},
                     LlmCallResult(
                         provider="fake",
                         model="fake-vision",
@@ -1456,33 +1434,10 @@ class TestExportGeneration:
                         error_category="image_parse_error",
                     ),
                 )
-            return (
-                PageImageValidationResponse(
-                    verdict="exact" if fallback_outcome == "exact" else "cannot_tell",
-                    confidence=0.99 if fallback_outcome == "exact" else 0.2,
-                    visible_quote=(
-                        kwargs["proposed_quote"] if fallback_outcome == "exact" else ""
-                    ),
-                    reason=(
-                        "The full quote is visibly present."
-                        if fallback_outcome == "exact"
-                        else "The page image is unclear."
-                    ),
-                ),
-                LlmCallResult(
-                    provider="fake",
-                    model="fake-vision",
-                    prompt_version="test",
-                    schema_version="test",
-                    latency_ms=1,
-                    prompt_tokens=None,
-                    completion_tokens=None,
-                    total_tokens=None,
-                    cost_usd=None,
-                    finish_reason="stop",
-                    status="completed",
-                    call_site="test_page_image_validation",
-                ),
+            verdict = "exact" if fallback_outcome == "exact" else "cannot_tell"
+            confidence = 0.99 if fallback_outcome == "exact" else 0.2
+            return _fake_page_batch(
+                kwargs, lambda _page, _quote: (verdict, confidence)
             )
 
         expected_requirement_ids: list[str] = []
@@ -1499,7 +1454,7 @@ class TestExportGeneration:
             openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter()
         )
         monkeypatch.setattr(
-            visual_validation, "validate_quote_on_page_image", fake_visual_check
+            visual_validation, "validate_quotes_on_page_image", fake_visual_check
         )
 
         async def _validate():
@@ -1633,26 +1588,11 @@ class TestExportGeneration:
             page_number = kwargs["page_number"]
             checked_pages.append(page_number)
             exact = page_number == 7
-            return (
-                PageImageValidationResponse(
-                    verdict="exact" if exact else "cannot_tell",
-                    confidence=0.99 if exact else 0.2,
-                    visible_quote=kwargs["proposed_quote"] if exact else "",
-                    reason="Visible on page." if exact else "Not visible on cited page.",
-                ),
-                LlmCallResult(
-                    provider="fake",
-                    model="fake-vision",
-                    prompt_version="test",
-                    schema_version="test",
-                    latency_ms=1,
-                    prompt_tokens=None,
-                    completion_tokens=None,
-                    total_tokens=None,
-                    cost_usd=None,
-                    finish_reason="stop",
-                    status="completed",
-                    call_site="test_page_image_validation",
+            return _fake_page_batch(
+                kwargs,
+                lambda _page, _quote: (
+                    "exact" if exact else "cannot_tell",
+                    0.99 if exact else 0.2,
                 ),
             )
 
@@ -1668,7 +1608,7 @@ class TestExportGeneration:
             openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter()
         )
         monkeypatch.setattr(
-            visual_validation, "validate_quote_on_page_image", fake_visual_check
+            visual_validation, "validate_quotes_on_page_image", fake_visual_check
         )
 
         async def _validate():
@@ -1783,26 +1723,11 @@ class TestExportGeneration:
         async def fake_visual_check(**kwargs):
             checked.append(kwargs)
             exact = kwargs["page_number"] == 17 or second_page_exact
-            return (
-                PageImageValidationResponse(
-                    verdict="exact" if exact else "not_exact",
-                    confidence=0.99 if exact else 1.0,
-                    visible_quote=kwargs["proposed_quote"] if exact else "",
-                    reason="Checked this page fragment.",
-                ),
-                LlmCallResult(
-                    provider="fake",
-                    model="fake-vision",
-                    prompt_version="test",
-                    schema_version="test",
-                    latency_ms=1,
-                    prompt_tokens=None,
-                    completion_tokens=None,
-                    total_tokens=None,
-                    cost_usd=None,
-                    finish_reason="stop",
-                    status="completed",
-                    call_site="test_multi_page_validation",
+            return _fake_page_batch(
+                kwargs,
+                lambda _page, _quote: (
+                    "exact" if exact else "not_exact",
+                    0.99 if exact else 1.0,
                 ),
             )
 
@@ -1816,7 +1741,7 @@ class TestExportGeneration:
         )
         monkeypatch.setattr(openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter())
         monkeypatch.setattr(
-            visual_validation, "validate_quote_on_page_image", fake_visual_check
+            visual_validation, "validate_quotes_on_page_image", fake_visual_check
         )
 
         expected_row_ids: list[str] = []
@@ -1840,7 +1765,7 @@ class TestExportGeneration:
         report = asyncio.run(_validate())
 
         assert [item["page_number"] for item in checked] == [17, 18]
-        assert [item["proposed_quote"] for item in checked] == [
+        assert [item["items"][0].proposed_quote for item in checked] == [
             first_fragment,
             second_fragment,
         ]
