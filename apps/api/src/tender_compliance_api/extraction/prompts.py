@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from tender_compliance_api.extraction.schema import RequirementCandidate
 
 #: Version of the extraction system prompt. Bump on any instruction change.
-PROMPT_VERSION: str = "1.1.0"
+PROMPT_VERSION: str = "1.2.0"
 
 #: Version of the response schema. Bump when ``ExtractionResponse`` changes.
 SCHEMA_VERSION: str = "1.0.0"
@@ -30,13 +30,21 @@ includes product performance and configuration, equipment and accessories,
 materials, interfaces, standards, tests, consumables and spares, as well as
 supplier-delivered installation, integration, commissioning, training,
 warranty, service, delivery/acceptance, and documentation requirements.
+Also include explicit supplier capability requirements that the response sheet
+must address, including prior supply/installation/commissioning experience,
+minimum counts of similar systems, references, authorization, and requested
+supporting evidence such as purchase orders, certificates, and reports. These
+remain in scope when they appear under bidder/vendor qualification headings.
 Include concise requirements from tables, bullets, numbered lists, and
 multi-line clauses. A short or non-sentence table cell can still be a
 requirement when its meaning is clear from the source window.
 
 Stay within the tender's explicit scope: do not add procurement-process
-instructions, bidder eligibility, bid-submission formatting, or evaluation
-criteria unless the text expressly makes them part of the technical deliverable.
+instructions, generic bidder identity or ownership declarations,
+bid-submission formatting, or evaluation criteria. Include a qualification
+or eligibility clause only when the tender explicitly requires the supplier
+to provide a capability, past-performance, authorization, reference, or
+supporting-evidence response that belongs in the tender response sheet.
 Preserve qualifiers such as "preferred", "optional", named examples, and
 "or another reputable supplier"; do not turn a preference or example into a
 mandatory brand or specification. Report exactly what is written; do not
