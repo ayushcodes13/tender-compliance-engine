@@ -116,10 +116,14 @@ class TrustedSourceContext(BaseModel):
     clause_number: str | None = None
     char_start: int | None = None
     char_end: int | None = None
+    window_char_start: int | None = None
+    window_char_end: int | None = None
     bbox: tuple[float, float, float, float] | None = None
     ocr_confidence: float | None = None
     location_type: LocationType = LocationType.APPROXIMATE
     source_text: str | None = None
+    page_source_text: str | None = None
+    page_source_char_start: int = 0
 
     @classmethod
     def from_page(
