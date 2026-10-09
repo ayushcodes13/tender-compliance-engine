@@ -388,24 +388,24 @@ class TestPromptVersioning:
         assert "fabricate" in EXTRACTION_SYSTEM_PROMPT
         assert "verbatim" in EXTRACTION_SYSTEM_PROMPT
 
-    def test_system_prompt_covers_supplier_deliverables_and_qualifiers(self) -> None:
+    def test_system_prompt_limits_rows_to_product_technical_specifications(self) -> None:
         prompt = EXTRACTION_SYSTEM_PROMPT.lower()
         for phrase in (
-            "installation",
-            "commissioning",
-            "training",
-            "warranty",
-            "consumables and spares",
-            "preferred",
-            "or another reputable supplier",
-            "do not turn a preference or example into a",
-            "prior supply/installation/commissioning experience",
-            "minimum counts of similar systems",
-            "supporting evidence such as purchase orders",
-            "bidder/vendor qualification headings",
+            "only product/equipment technical specifications",
+            "dedicated technical-specifications section",
+            "performance limits",
+            "accuracy/resolution",
+            "included accessories/consumables/spares",
+            "exclude content outside that scope",
+            "eligibility and past-performance criteria",
+            "warranty, maintenance, after-sales service",
+            "if a passage cannot be reliably identified",
         ):
             assert phrase in prompt
-        assert "1.2.0" == PROMPT_VERSION
+        assert "preferred" in prompt
+        assert "optional" in prompt
+        assert "do not turn a preference or example into a" in prompt
+        assert "1.3.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
         # The LLM response schema is bounded by the CP25 RequirementCandidate.

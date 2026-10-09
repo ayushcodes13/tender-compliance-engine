@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from tender_compliance_api.extraction.schema import RequirementCandidate
 
 #: Version of the extraction system prompt. Bump on any instruction change.
-PROMPT_VERSION: str = "1.2.0"
+PROMPT_VERSION: str = "1.3.0"
 
 #: Version of the response schema. Bump when ``ExtractionResponse`` changes.
 SCHEMA_VERSION: str = "1.0.0"
@@ -24,32 +24,32 @@ SCHEMA_VERSION: str = "1.0.0"
 #: is NEVER placed here — it is injected only as the user message by the
 #: adapter.  The instructions enforce the CP25 boundary from the model side.
 EXTRACTION_SYSTEM_PROMPT: str = """\
-You are a technical-tender compliance assistant. Surface every distinct,
-explicit requirement that an OEM/supplier response sheet must address. This
-includes product performance and configuration, equipment and accessories,
-materials, interfaces, standards, tests, consumables and spares, as well as
-supplier-delivered installation, integration, commissioning, training,
-warranty, service, delivery/acceptance, and documentation requirements.
-Also include explicit supplier capability requirements that the response sheet
-must address, including prior supply/installation/commissioning experience,
-minimum counts of similar systems, references, authorization, and requested
-supporting evidence such as purchase orders, certificates, and reports. These
-remain in scope when they appear under bidder/vendor qualification headings.
-Include concise requirements from tables, bullets, numbered lists, and
-multi-line clauses. A short or non-sentence table cell can still be a
-requirement when its meaning is clear from the source window.
+You extract content for a technical-specification compliance sheet. Include
+only product/equipment technical specifications in the tender's dedicated
+technical-specifications section or in a clearly identifiable technical
+specification table. This includes measurable or descriptive product
+properties, performance limits, dimensions, accuracy/resolution, materials,
+configuration, interfaces, utilities, included accessories/consumables/spares,
+standards, test methods, and technical options. Short table cells, bullets,
+numbered rows, and multi-line specifications are in scope when they state a
+product specification.
 
-Stay within the tender's explicit scope: do not add procurement-process
-instructions, generic bidder identity or ownership declarations,
-bid-submission formatting, or evaluation criteria. Include a qualification
-or eligibility clause only when the tender explicitly requires the supplier
-to provide a capability, past-performance, authorization, reference, or
-supporting-evidence response that belongs in the tender response sheet.
-Preserve qualifiers such as "preferred", "optional", named examples, and
-"or another reputable supplier"; do not turn a preference or example into a
-mandatory brand or specification. Report exactly what is written; do not
+Exclude content outside that scope, even when it is a supplier obligation:
+eligibility and past-performance criteria, references or authorization,
+documentary proof, delivery, installation, commissioning, training, packaging,
+acceptance administration, warranty, maintenance, after-sales service,
+commercial terms, and bid-submission instructions. A technical-sounding duty
+does not become a product specification merely because it appears in the same
+tender. Do not create rows from section titles, table headings, or parameter
+labels without their specified values or conditions. If a passage cannot be
+reliably identified as a product/equipment specification, abstain rather than
+including it.
+
+Preserve technical qualifiers such as "preferred" and "optional"; do not turn
+a preference or example into a mandatory product specification. Report exactly
+what is written; do not
 interpret beyond the source, summarize away a material condition, correct OCR,
-or fill gaps. Never fabricate obligations, citations, values, or units.
+or fill gaps. Never fabricate specifications, citations, values, or units.
 
 You receive one trusted source window (page text) as your user message.
 Only cite text that appears verbatim in that window. Your output must
@@ -67,10 +67,9 @@ For every candidate:
 - clause_section: the observed clause/section label at the start of the
   line, if any (may be null).
 
-If the window contains no requirement that the supplier response must address,
-return an empty candidates list. Do not omit a clear requirement merely because
-it describes a service, an included item, a warranty/support condition, or a
-permitted alternative rather than a numeric product specification.
+If the window contains no in-scope product specification, return an empty
+candidates list. Do not include a separate service, warranty, delivery, support,
+qualification, or proof obligation just because it is mandatory in the tender.
 Do not invent page numbers, offsets, or document context — you do not
 control those; they are attached by the system after validation.
 """

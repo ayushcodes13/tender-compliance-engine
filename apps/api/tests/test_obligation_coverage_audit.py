@@ -29,88 +29,50 @@ from tender_compliance_api.extraction.coverage_audit import (
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
 
 
-def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
-    assert PROMPT_VERSION == "1.5.0"
+def test_text_and_image_prompts_share_technical_spec_only_scope() -> None:
+    assert PROMPT_VERSION == "1.6.0"
     for prompt in (SYSTEM_PROMPT, IMAGE_SYSTEM_PROMPT):
         assert OBLIGATION_SCOPE in prompt
         normalized_prompt = " ".join(prompt.split())
-        assert "technical specifications" in normalized_prompt
-        assert "installation" in normalized_prompt
-        assert "warranty" in normalized_prompt
-        assert "tables of contents" in normalized_prompt
-        assert "supplier capability evidence required for technical" in normalized_prompt
-        assert "documentary proof that substantiates technical claims" in normalized_prompt
-        assert "this exception covers the evidence obligation" in normalized_prompt
-        assert "prior system supply, installation or commissioning" in normalized_prompt
-        assert "vendor qualification" in normalized_prompt
-        assert "bidder identity or beneficial-ownership declarations" in normalized_prompt
-        assert "country-based limits on subcontracting" in normalized_prompt
-        assert "Incoterms" in normalized_prompt
-        assert "tender fees, taxes" in normalized_prompt
-        assert "incidental labor or transport charges, transit insurance" in normalized_prompt
-        assert "liquidated damages" in normalized_prompt
-        assert "Do not exclude technical delivery, packaging safety" in normalized_prompt
-        assert "Bare equipment" in normalized_prompt
-        assert "table parameter labels" in normalized_prompt
-        assert "Delivery timing" in normalized_prompt
-        assert "installation duties remain in scope" in normalized_prompt
-        assert (
-            "Do not report an excerpt solely because it states a right, remedy"
-            in normalized_prompt
-        )
-        assert (
-            "buyer discretion to cancel, reject, ban, or take remedial action"
-            in normalized_prompt
-        )
-        assert "committee decisions to invite bidders or seek feedback" in normalized_prompt
-        assert "explicit supplier cure deadlines" in normalized_prompt
-        assert "instructions about how to prepare or" in normalized_prompt
-        assert "A title or heading is not an obligation by itself." in normalized_prompt
+        assert "product/equipment technical specifications" in normalized_prompt
+        assert "dedicated technical-specifications section" in normalized_prompt
+        assert "performance limits" in normalized_prompt
+        assert "accuracy/resolution" in normalized_prompt
+        assert "included accessories/consumables/spares" in normalized_prompt
+        assert "exclude every separate supplier/process duty" in normalized_prompt
+        assert "eligibility, experience, references, authorization" in normalized_prompt
+        assert "delivery, installation, commissioning, training" in normalized_prompt
+        assert "warranty, maintenance, after-sales service" in normalized_prompt
+        assert "bid-submission instructions" in normalized_prompt
+        assert "omit it rather than infer it" in normalized_prompt
 
 
-def test_coverage_audit_retains_supplier_cure_duty_alongside_buyer_remedies() -> None:
-    source = (
-        "The purchaser may reject the equipment. "
-        "The supplier shall remedy defects within two days. "
-        "The purchaser may ban a supplier that fails to comply."
-    )
-    supplier_duty = "The supplier shall remedy defects within two days."
+def test_coverage_audit_retains_verbatim_product_specification() -> None:
+    source = "The microscope shall provide an optical zoom range of 10x to 50x."
+    spec = source
     adapter = FakeLlmAdapter(
-        [ObligationCoverageResponse(quotes=[supplier_duty])]
+        [ObligationCoverageResponse(quotes=[spec])]
     )
 
     result = asyncio.run(audit_window_coverage(source, [], adapter))
 
     assert result.status == "completed"
-    assert result.potential_omissions == (supplier_duty,)
+    assert result.potential_omissions == (spec,)
 
 
-def test_example3_inspection_clause_surfaces_supplier_replacement_duty() -> None:
-    source = (
-        "Should any inspected or tested Goods fail to conform to the specifications, "
-        "the Purchaser may reject the goods and the Supplier shall either replace "
-        "the rejected Goods or make alterations necessary to meet specification "
-        "requirements free of cost to the Purchaser."
-    )
-    supplier_duty = (
-        "the Supplier shall either replace the rejected Goods or make alterations "
-        "necessary to meet specification requirements free of cost to the Purchaser."
-    )
-    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[supplier_duty])])
+def test_coverage_audit_surfaces_technical_table_specification() -> None:
+    source = "Maximum operating temperature: 85 °C during normal operation."
+    specification = source
+    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[specification])])
 
     result = asyncio.run(audit_window_coverage(source, [], adapter))
 
     assert result.status == "completed"
-    assert result.potential_omissions == (supplier_duty,)
+    assert result.potential_omissions == (specification,)
 
 
-def test_example3_technical_claim_proof_note_is_a_potential_omission() -> None:
-    # Tender page 21 asks for proof supporting claims. The supplied response
-    # DOCX page 21 contains only a test graph, so this note is absent from it.
-    source_quote = (
-        "Valid proof of the document in support of the claim to be enclosed "
-        "with the technical bid."
-    )
+def test_technical_option_is_a_potential_omission() -> None:
+    source_quote = "The instrument shall support an optional dual-channel input."
     adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[source_quote])])
 
     result = asyncio.run(audit_window_coverage(source_quote, [], adapter))
@@ -228,56 +190,40 @@ def test_detects_exact_auditor_quote_not_emitted_by_primary_pass() -> None:
     assert omissions == ("The motor shall be IP55 rated.",)
 
 
-def test_example2_utility_row_audit_surfaces_missing_required_details() -> None:
-    source_quote = (
-        "Vendor shall provide a detailed utility requirement document covering "
-        "electrical power including the UPS with backup time and total load, "
-        "cooling water, compressed gas, exhaust, vibration limits, floor loading, "
-        "and LN₂ infrastructure requirements prior to shipment."
-    )
-    sampled_output_row = (
-        "Vendor shall provide a detailed utility requirement document covering "
-        "electrical power including the UPS with backup time and total load, "
-        "cooling water, compressed gas, shipment."
-    )
-    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[source_quote])])
-
-    result = asyncio.run(
-        audit_window_coverage(source_quote, [sampled_output_row], adapter)
-    )
-
-    assert result.status == "completed"
-    assert result.potential_omissions == (source_quote,)
+def test_coverage_prompt_excludes_non_spec_supplier_and_bid_clauses() -> None:
+    prompt = " ".join(SYSTEM_PROMPT.split()).lower()
+    for phrase in (
+        "exclude every separate supplier/process duty",
+        "eligibility, experience, references, authorization, supporting proof",
+        "delivery, installation, commissioning, training",
+        "warranty, maintenance, after-sales service",
+        "bid-submission instructions",
+    ):
+        assert phrase in prompt
 
 
 @pytest.mark.parametrize(
     "source_quote",
     [
         pytest.param(
-            "Brochure detailing technical specifications and performance, list of "
-            "industrial and educational establishments where the items enquired "
-            "have been supplied must be provided.",
-            id="example2-page20-capability-evidence",
+            "The instrument shall provide a wavelength range of 190–900 nm.",
+            id="wavelength-range",
         ),
         pytest.param(
-            "BIDDER shall be responsible for installation / demonstration wherever "
-            "applicable and for after sales service during the warranty period and "
-            "thereafter as mentioned in the contract.",
-            id="example3-page8-after-sales-service",
+            "The chamber shall maintain a temperature uniformity of ±0.5 °C.",
+            id="temperature-uniformity",
         ),
         pytest.param(
-            "The Supplier shall provide such packing of the Goods as is required "
-            "to prevent their damage or deterioration during transit to their "
-            "final destination.",
-            id="example3-page8-packaging-safety",
+            "The controller shall support Ethernet and RS-485 interfaces.",
+            id="technical-interfaces",
         ),
     ],
 )
-def test_sample_source_obligation_absent_from_rows_is_surfaced_for_review(
+def test_missing_product_specification_is_surfaced_for_review(
     source_quote: str,
 ) -> None:
-    # These source-verified clauses were absent from the generated sample rows.
-    # The audit only surfaces a potential omission; a reviewer must verify it.
+    # Source-bounded technical specifications absent from rows are candidates
+    # for review; the scope prompt excludes surrounding non-spec clauses.
     adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[source_quote])])
 
     result = asyncio.run(audit_window_coverage(source_quote, [], adapter))
