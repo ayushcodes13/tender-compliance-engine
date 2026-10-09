@@ -243,11 +243,101 @@ def test_failed_text_coverage_audit_preserves_bounded_error_category() -> None:
             llm,
             log_call=lambda _call: asyncio.sleep(0),
             enable_obligation_coverage_audit=True,
+            coverage_page_images={1: _fake_png()},
         )
 
         assert outcome.window_results[0].coverage_status == "failed"
         assert outcome.window_results[0].coverage_error_category == "rate_limited"
         assert outcome.llm_calls[-1].error_message == "obligation coverage audit failed"
+        assert len(outcome.llm_calls) == 2
+
+    asyncio.run(_run())
+
+
+def test_invalid_text_coverage_uses_only_its_authorized_page_image() -> None:
+    class VisionFake(FakeLlmAdapter):
+        def __init__(self, responses: list[BaseModel]) -> None:
+            super().__init__(responses)
+            self.images: list[bytes] = []
+            self.image_page_payloads: list[str] = []
+
+        async def extract_with_image(self, **kwargs: Any) -> ExtractResult:
+            self.images.append(kwargs["image_bytes"])
+            self.image_page_payloads.append(kwargs["user_text"])
+            return await self.extract(
+                system_prompt=kwargs["system_prompt"],
+                user_text=kwargs["user_text"],
+                response_model=kwargs["response_model"],
+                config=kwargs["config"],
+            )
+
+    async def _run() -> None:
+        quote = "The pump shall deliver 12 L/min."
+        window = _window(_page(quote), quote)
+        llm = VisionFake(
+            [
+                _response([_cand("Pump delivery", quote)]),
+                ObligationCoverageResponse(
+                    quotes=["A model-invented quote outside the source window."]
+                ),
+                ImageObligationCoverageResponse(
+                    quotes=[ImageCoverageQuote(source_quote=quote, confidence=0.999)],
+                    confidence=0.999,
+                    uncertain=False,
+                ),
+            ]
+        )
+        logged, log_call = _make_log()
+
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_obligation_coverage_audit=True,
+            coverage_page_images={1: _fake_png(), 2: _fake_png()},
+            coverage_page_texts={1: quote},
+        )
+
+        assert len(llm.images) == 1
+        assert llm.images[0] == _fake_png()
+        assert '"page_number":1' in llm.image_page_payloads[0]
+        assert [call.call_site for call in logged] == [
+            "extract_candidates",
+            "audit_obligation_coverage",
+            "audit_obligation_coverage_page_image",
+        ]
+        assert outcome.window_results[0].coverage_status == "completed"
+        assert outcome.window_results[0].coverage_error_category is None
+        assert outcome.window_results[0].potential_omissions == []
+
+    asyncio.run(_run())
+
+
+def test_unavailable_page_image_keeps_invalid_text_audit_review_state() -> None:
+    async def _run() -> None:
+        quote = "The pump shall deliver 12 L/min."
+        window = _window(_page(quote), quote)
+        llm = FakeLlmAdapter(
+            [
+                _response([_cand("Pump delivery", quote)]),
+                ObligationCoverageResponse(
+                    quotes=["A model-invented quote outside the source window."]
+                ),
+            ]
+        )
+
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=lambda _call: asyncio.sleep(0),
+            enable_obligation_coverage_audit=True,
+            coverage_page_images={},
+            coverage_page_texts={1: quote},
+        )
+
+        assert outcome.window_results[0].coverage_status == "failed"
+        assert outcome.window_results[0].coverage_error_category == "image_unavailable"
+        assert outcome.window_results[0].potential_omissions == []
 
     asyncio.run(_run())
 

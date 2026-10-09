@@ -445,9 +445,15 @@ async def extract_from_windows(
         await log_call(call)
 
     if enable_obligation_coverage_audit:
+        image_fallback_window_indexes = {
+            index
+            for index, result in enumerate(window_results)
+            if result.coverage_status == "invalid"
+            and result.coverage_error_category == "source_quote_not_found"
+        }
         page_to_windows: dict[int, list[int]] = {}
         for index, window in enumerate(windows):
-            if not window.ocr_warning:
+            if not window.ocr_warning and index not in image_fallback_window_indexes:
                 continue
             for source in window.sources:
                 if source.page_number is not None:
@@ -491,7 +497,7 @@ async def extract_from_windows(
             )
 
         for index, window in enumerate(windows):
-            if not window.ocr_warning:
+            if not window.ocr_warning and index not in image_fallback_window_indexes:
                 continue
             pages = sorted(
                 {source.page_number for source in window.sources if source.page_number is not None}
@@ -515,6 +521,8 @@ async def extract_from_windows(
                 (category for _status, _findings, category in results if category),
                 None,
             )
+            if error_category is None and status != "completed":
+                error_category = window_results[index].coverage_error_category
             window_results[index] = replace(
                 window_results[index],
                 coverage_status=status,
