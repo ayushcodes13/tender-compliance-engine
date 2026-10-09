@@ -36,7 +36,7 @@ from tender_compliance_api.extraction.adapter import (
 )
 from tender_compliance_api.logs import error_category as categorize_error
 
-PROMPT_VERSION = "1.4.0"
+PROMPT_VERSION = "1.5.0"
 SCHEMA_VERSION = "1.0.0"
 CALL_SITE = "audit_obligation_coverage"
 IMAGE_CALL_SITE = "audit_obligation_coverage_page_image"
@@ -53,8 +53,12 @@ testing, commissioning, training, warranty, maintenance, and service/support
 requirements. Include supplier capability evidence required for technical
 evaluation, such as prior system supply, installation or commissioning
 experience, user references, technical certifications, and acceptance
-demonstrations. These remain in scope when listed under vendor qualification
-or "other important requirements" headings. Exclude tender titles and cover
+demonstrations. Include explicit supplier duties to provide documentary proof
+that substantiates technical claims, even when phrased as a bid-submission
+instruction; this exception covers the evidence obligation, not formatting,
+deadline, or channel instructions. These remain in scope when listed under
+vendor qualification or "other important requirements" headings. Exclude
+tender titles and cover
 metadata, tables of contents, section headings, background descriptions,
 bidder identity or beneficial-ownership declarations, bid security, bid
 deadlines, submission formats, and instructions about how to prepare or submit

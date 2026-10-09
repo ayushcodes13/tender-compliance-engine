@@ -30,7 +30,7 @@ from tender_compliance_api.extraction.fake import FakeLlmAdapter
 
 
 def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
-    assert PROMPT_VERSION == "1.4.0"
+    assert PROMPT_VERSION == "1.5.0"
     for prompt in (SYSTEM_PROMPT, IMAGE_SYSTEM_PROMPT):
         assert OBLIGATION_SCOPE in prompt
         normalized_prompt = " ".join(prompt.split())
@@ -39,6 +39,8 @@ def test_text_and_image_prompts_share_the_response_obligation_scope() -> None:
         assert "warranty" in normalized_prompt
         assert "tables of contents" in normalized_prompt
         assert "supplier capability evidence required for technical" in normalized_prompt
+        assert "documentary proof that substantiates technical claims" in normalized_prompt
+        assert "this exception covers the evidence obligation" in normalized_prompt
         assert "prior system supply, installation or commissioning" in normalized_prompt
         assert "vendor qualification" in normalized_prompt
         assert "bidder identity or beneficial-ownership declarations" in normalized_prompt
@@ -100,6 +102,21 @@ def test_example3_inspection_clause_surfaces_supplier_replacement_duty() -> None
 
     assert result.status == "completed"
     assert result.potential_omissions == (supplier_duty,)
+
+
+def test_example3_technical_claim_proof_note_is_a_potential_omission() -> None:
+    # Tender page 21 asks for proof supporting claims. The supplied response
+    # DOCX page 21 contains only a test graph, so this note is absent from it.
+    source_quote = (
+        "Valid proof of the document in support of the claim to be enclosed "
+        "with the technical bid."
+    )
+    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[source_quote])])
+
+    result = asyncio.run(audit_window_coverage(source_quote, [], adapter))
+
+    assert result.status == "completed"
+    assert result.potential_omissions == (source_quote,)
 
 
 class _ConfigCapturingAdapter(FakeLlmAdapter):
