@@ -79,6 +79,25 @@ def test_coverage_audit_retains_supplier_cure_duty_alongside_buyer_remedies() ->
     assert result.potential_omissions == (supplier_duty,)
 
 
+def test_example3_inspection_clause_surfaces_supplier_replacement_duty() -> None:
+    source = (
+        "Should any inspected or tested Goods fail to conform to the specifications, "
+        "the Purchaser may reject the goods and the Supplier shall either replace "
+        "the rejected Goods or make alterations necessary to meet specification "
+        "requirements free of cost to the Purchaser."
+    )
+    supplier_duty = (
+        "the Supplier shall either replace the rejected Goods or make alterations "
+        "necessary to meet specification requirements free of cost to the Purchaser."
+    )
+    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[supplier_duty])])
+
+    result = asyncio.run(audit_window_coverage(source, [], adapter))
+
+    assert result.status == "completed"
+    assert result.potential_omissions == (supplier_duty,)
+
+
 class _ConfigCapturingAdapter(FakeLlmAdapter):
     def __init__(self, responses=()) -> None:
         super().__init__(responses)
