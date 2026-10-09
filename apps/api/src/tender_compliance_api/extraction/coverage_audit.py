@@ -268,7 +268,12 @@ async def audit_window_coverage(
             raise LlmCallError("coverage audit call did not complete")
         if not isinstance(result.response, ObligationCoverageResponse):
             raise LlmCallError("coverage audit response type mismatch")
-    except Exception:  # fail closed; provider messages can contain sensitive data
+    except Exception as exc:  # fail closed; provider messages can contain sensitive data
+        category = (
+            exc.error_category
+            if isinstance(exc, LlmCallError) and exc.error_category
+            else categorize_error(exc)
+        )
         failed = LlmCallResult(
             provider=adapter.provider,
             model=adapter.model,
@@ -283,6 +288,7 @@ async def audit_window_coverage(
             status="failed",
             error_message="obligation coverage audit failed",
             call_site=CALL_SITE,
+            error_category=category,
         )
         return CoverageAuditResult("failed", (), failed)
 

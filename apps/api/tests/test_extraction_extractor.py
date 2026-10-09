@@ -212,6 +212,46 @@ def test_independent_coverage_audit_flags_unemitted_source_obligation() -> None:
     asyncio.run(_run())
 
 
+def test_failed_text_coverage_audit_preserves_bounded_error_category() -> None:
+    class FailingCoverageFake(FakeLlmAdapter):
+        async def extract(
+            self,
+            *,
+            system_prompt: str,
+            user_text: str,
+            response_model: type[BaseModel],
+            config: LlmCallConfig,
+        ) -> ExtractResult:
+            if response_model is ObligationCoverageResponse:
+                raise LlmCallError(
+                    "provider error details are intentionally hidden",
+                    error_category="rate_limited",
+                )
+            return await super().extract(
+                system_prompt=system_prompt,
+                user_text=user_text,
+                response_model=response_model,
+                config=config,
+            )
+
+    async def _run() -> None:
+        quote = "The pump shall deliver 12 L/min."
+        window = _window(_page(quote), quote)
+        llm = FailingCoverageFake([_response([_cand("Pump flow", quote)])])
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=lambda _call: asyncio.sleep(0),
+            enable_obligation_coverage_audit=True,
+        )
+
+        assert outcome.window_results[0].coverage_status == "failed"
+        assert outcome.window_results[0].coverage_error_category == "rate_limited"
+        assert outcome.llm_calls[-1].error_message == "obligation coverage audit failed"
+
+    asyncio.run(_run())
+
+
 def test_ocr_coverage_uses_app_selected_page_image_and_keeps_page_finding() -> None:
     class VisionFake(FakeLlmAdapter):
         def __init__(self, responses: list[BaseModel]) -> None:
