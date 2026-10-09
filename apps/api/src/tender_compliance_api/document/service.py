@@ -463,6 +463,8 @@ async def _source_quote_validation_report(
                     {
                         "row_id": issue.row_id,
                         "status": "source_page_unavailable",
+                        "verdict": "not_run",
+                        "reason_code": "source_page_unavailable",
                         "call_status": "not_run",
                     }
                 )
@@ -482,6 +484,8 @@ async def _source_quote_validation_report(
                             "row_id": row_id,
                             "page_number": page_number,
                             "status": "image_unavailable",
+                            "verdict": "unavailable",
+                            "reason_code": "page_image_unavailable",
                             "call_status": "not_run",
                         },
                     )
@@ -498,6 +502,8 @@ async def _source_quote_validation_report(
                             "row_id": row_id,
                             "page_number": page_number,
                             "status": "image_unavailable",
+                            "verdict": "unavailable",
+                            "reason_code": "page_image_unavailable",
                             "call_status": "not_run",
                         },
                     )
@@ -517,6 +523,8 @@ async def _source_quote_validation_report(
                                 "row_id": row_id,
                                 "page_number": page_number,
                                 "status": "call_limit_reached",
+                                "verdict": "not_run",
+                                "reason_code": "visual_call_limit_reached",
                                 "call_status": "not_run",
                             },
                         )
@@ -539,6 +547,18 @@ async def _source_quote_validation_report(
                 for index, (row_id, _part, _source, _quote) in enumerate(chunk):
                     decision = decisions.get(str(index))
                     accepted = decision is not None and decision.verdict == "exact"
+                    if accepted:
+                        verdict = "exact"
+                        reason_code = "visual_exact_match"
+                    elif call.status != "completed" or decision is None:
+                        verdict = "unavailable"
+                        reason_code = "visual_validation_unavailable"
+                    elif decision.verdict == "not_exact":
+                        verdict = "not_exact"
+                        reason_code = "visual_wording_mismatch"
+                    else:
+                        verdict = "cannot_tell"
+                        reason_code = "visual_result_uncertain"
                     page_results.append(
                         (
                             row_id,
@@ -547,6 +567,8 @@ async def _source_quote_validation_report(
                                 "row_id": row_id,
                                 "page_number": page_number,
                                 "status": "exact" if accepted else "needs_review",
+                                "verdict": verdict,
+                                "reason_code": reason_code,
                                 "provider": call.provider,
                                 "model": call.model,
                                 "prompt_version": call.prompt_version,
