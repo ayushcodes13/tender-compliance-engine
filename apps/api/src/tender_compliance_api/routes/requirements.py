@@ -186,6 +186,7 @@ class AddRequirementFromSourceRequest(BaseModel):
 
     page_number: int = Field(..., ge=1)
     source_quote: str = Field(..., min_length=1, max_length=2048)
+    requirement_type: Literal["obligation", "prohibition", "permission"]
 
     @field_validator("source_quote")
     @classmethod
@@ -500,7 +501,7 @@ async def add_requirement_from_source(
 
     quote_digest = hashlib.sha256(body.source_quote.encode("utf-8")).hexdigest()
     promotion_key = hashlib.sha256(
-        f"coverage-source:v1:{version.id}:{body.page_number}:{quote_digest}".encode()
+        f"coverage-source:v2:{version.id}:{quote_digest}".encode()
     ).hexdigest()
     existing = (
         await session.execute(
@@ -512,15 +513,26 @@ async def add_requirement_from_source(
         )
     ).scalar_one_or_none()
     if existing is not None:
+        if existing.superseded:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "A matching requirement was superseded; restore or replace it "
+                    "before adding this finding"
+                ),
+            )
         return RequirementDetail.model_validate(existing)
 
     exact_match = len(matches) == 1 and matches[0].group(0) == body.source_quote
-    ocr_warning = bool(page.ocr_needed)
+    # ocr_needed is cleared when OCR completes. Persisted OCR confidence or
+    # OCR word geometry still identifies OCR-derived text and must retain its
+    # uncertainty after successful recognition.
+    ocr_warning = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
     req = Requirement(
         document_version_id=version.id,
         processing_run_id=None,
         promotion_key=promotion_key,
-        requirement_type="obligation",
+        requirement_type=body.requirement_type,
         normalized_text=body.source_quote,
         raw_source=body.source_quote,
         uncertainty="uncertain" if ocr_warning else "confirmed",

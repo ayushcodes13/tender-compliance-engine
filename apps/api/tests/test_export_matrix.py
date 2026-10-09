@@ -449,7 +449,7 @@ class TestExportGeneration:
                     extracted_text=quote,
                     cleaned_text=quote,
                     ocr_needed=False,
-                    ocr_confidence=0.99,
+                    ocr_confidence=None,
                 ))
                 await session.commit()
 
@@ -471,7 +471,7 @@ class TestExportGeneration:
 
         added = client.post(
             f"{url}/requirements/from-source",
-            json={"page_number": 3, "source_quote": quote},
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "obligation"},
             headers=_headers(user_id, org_id),
         )
         assert added.status_code == 201, added.text

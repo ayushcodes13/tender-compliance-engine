@@ -167,7 +167,9 @@ def _get_first_req_id_str(doc_id: uuid.UUID, ver: int) -> str:
 
 
 class TestAddRequirementFromCoverageFinding:
-    def _setup_source_page(self, project_id, *, text, ocr_needed=False):
+    def _setup_source_page(
+        self, project_id, *, text, ocr_needed=False, ocr_confidence=None, page_number=3
+    ):
         async def _create():
             async with _session_cm() as session:
                 doc = TenderDocument(
@@ -183,9 +185,13 @@ class TestAddRequirementFromCoverageFinding:
                 session.add(version)
                 await session.flush()
                 session.add(DocumentPage(
-                    document_version_id=version.id, page_number=3,
+                    document_version_id=version.id, page_number=page_number,
                     extracted_text=text, cleaned_text=text, ocr_needed=ocr_needed,
-                    ocr_confidence=0.91,
+                    ocr_confidence=(
+                        ocr_confidence
+                        if ocr_confidence is not None
+                        else (0.91 if ocr_needed else None)
+                    ),
                 ))
                 await session.commit()
                 return doc.id
@@ -196,7 +202,7 @@ class TestAddRequirementFromCoverageFinding:
         quote = "The instrument shall include installation and operator training."
         doc_id = self._setup_source_page(project_id, text=f"Clause 4. {quote}")
         url = f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source"
-        payload = {"page_number": 3, "source_quote": quote}
+        payload = {"page_number": 3, "source_quote": quote, "requirement_type": "obligation"}
         first = client.post(url, json=payload, headers=_headers(user_id, org_id))
         second = client.post(url, json=payload, headers=_headers(user_id, org_id))
         assert first.status_code == 201, first.text
@@ -208,12 +214,74 @@ class TestAddRequirementFromCoverageFinding:
         assert source["page_number"] == 3
         assert source["location_type"] == "exact"
 
+    def test_same_finding_is_idempotent_when_reviewed_from_another_page(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The instrument shall include operator training."
+        doc_id = self._setup_source_page(project_id, text=quote, page_number=3)
+
+        async def _add_second_page():
+            async with _session_cm() as session:
+                version = (await session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.document_id == doc_id,
+                        DocumentVersion.version_number == 1,
+                    )
+                )).scalar_one()
+                session.add(DocumentPage(
+                    document_version_id=version.id,
+                    page_number=4,
+                    extracted_text=quote,
+                    cleaned_text=quote,
+                    ocr_needed=False,
+                    ocr_confidence=None,
+                ))
+                await session.commit()
+
+        asyncio.run(_add_second_page())
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source"
+        first = client.post(
+            url,
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "obligation"},
+            headers=_headers(user_id, org_id),
+        )
+        second = client.post(
+            url,
+            json={"page_number": 4, "source_quote": quote, "requirement_type": "obligation"},
+            headers=_headers(user_id, org_id),
+        )
+        assert first.status_code == second.status_code == 201
+        assert first.json()["id"] == second.json()["id"]
+        assert second.json()["sources"][0]["page_number"] == 3
+
+    def test_superseded_matching_finding_returns_conflict(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The instrument shall include operator training."
+        doc_id = self._setup_source_page(project_id, text=quote)
+        root = f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements"
+        payload = {"page_number": 3, "source_quote": quote, "requirement_type": "obligation"}
+        added = client.post(f"{root}/from-source", json=payload, headers=_headers(user_id, org_id))
+        assert added.status_code == 201, added.text
+        superseded = client.post(
+            f"{root}/{added.json()['id']}/supersede", headers=_headers(user_id, org_id)
+        )
+        assert superseded.status_code == 200, superseded.text
+        retried = client.post(
+            f"{root}/from-source",
+            json=payload,
+            headers=_headers(user_id, org_id),
+        )
+        assert retried.status_code == 409
+
     def test_rejects_quote_from_another_page(self):
         user_id, org_id, project_id = _build_org_project()
         doc_id = self._setup_source_page(project_id, text="A different source clause.")
         response = client.post(
             f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
-            json={"page_number": 3, "source_quote": "Unsupported wording."},
+            json={
+                "page_number": 3,
+                "source_quote": "Unsupported wording.",
+                "requirement_type": "obligation",
+            },
             headers=_headers(user_id, org_id),
         )
         assert response.status_code == 422
@@ -225,7 +293,7 @@ class TestAddRequirementFromCoverageFinding:
         doc_id = self._setup_source_page(project_id, text=quote)
         response = client.post(
             f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
-            json={"page_number": 3, "source_quote": quote},
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "obligation"},
             headers=_headers(foreign_id, foreign_org_id),
         )
         assert response.status_code == 404
@@ -236,12 +304,27 @@ class TestAddRequirementFromCoverageFinding:
         doc_id = self._setup_source_page(project_id, text=quote, ocr_needed=True)
         response = client.post(
             f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
-            json={"page_number": 3, "source_quote": quote},
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "prohibition"},
             headers=_headers(user_id, org_id),
         )
         assert response.status_code == 201, response.text
         assert response.json()["review_state"] == "ocr_warning"
         assert response.json()["sources"][0]["location_type"] == "exact"
+
+    def test_completed_ocr_keeps_ocr_warning_and_selected_deontic_type(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The supplier shall not use a substitute method."
+        doc_id = self._setup_source_page(
+            project_id, text=quote, ocr_needed=False, ocr_confidence=0.91
+        )
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "prohibition"},
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["review_state"] == "ocr_warning"
+        assert response.json()["requirement_type"] == "prohibition"
 
 
 # ---------------------------------------------------------------------------

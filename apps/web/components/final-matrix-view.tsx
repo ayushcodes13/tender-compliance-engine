@@ -173,8 +173,10 @@ export function FinalMatrixView(props: {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [coverageFindings, setCoverageFindings] = useState<PotentialOmission[]>([]);
   const [addedCoverageKeys, setAddedCoverageKeys] = useState<Set<string>>(new Set());
+  const [coverageTypes, setCoverageTypes] = useState<Record<string, "obligation" | "prohibition" | "permission">>({});
 
   const reload = async () => {
     setLoading(true);
@@ -288,16 +290,23 @@ export function FinalMatrixView(props: {
   };
 
   const addCoverageFinding = async (finding: PotentialOmission, page: number) => {
-    const key = `${page}:${finding.source_quote}`;
+    const key = finding.source_quote;
+    setValidationNotice(null);
+    const requirementType = coverageTypes[key];
+    if (!requirementType) {
+      setError("Choose whether the excerpt is an obligation, prohibition, or permission before adding it.");
+      return;
+    }
     setBusy(`coverage-${key}`);
     setError(null);
     try {
       await api.addRequirementFromSource(projectId, documentId, version, {
         page_number: page,
         source_quote: finding.source_quote,
+        requirement_type: requirementType,
       });
       setAddedCoverageKeys((current) => new Set(current).add(key));
-      setValidationNotice("The excerpt was added as a source-linked, unreviewed requirement. Run an export again to recheck coverage.");
+      setActionNotice("The excerpt was added as a source-linked, unreviewed requirement. Run an export again to recheck coverage.");
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not add the source excerpt");
@@ -310,6 +319,7 @@ export function FinalMatrixView(props: {
     setBusy(`export-${format}`);
     setError(null);
     setValidationNotice(null);
+    setActionNotice(null);
     setCoverageFindings([]);
     try {
       const artifact = await api.createFinalMatrixExport(
@@ -522,8 +532,24 @@ export function FinalMatrixView(props: {
                     Open tender page {page} and inspect excerpt
                   </Link>
                 ))}
+                <label className="form-field" style={{ marginTop: 8, maxWidth: 320 }}>
+                  Requirement type
+                  <select
+                    value={coverageTypes[finding.source_quote] ?? ""}
+                    onChange={(event) => setCoverageTypes((current) => ({
+                      ...current,
+                      [finding.source_quote]: event.target.value as "obligation" | "prohibition" | "permission",
+                    }))}
+                    disabled={addedCoverageKeys.has(finding.source_quote)}
+                  >
+                    <option value="">Choose type</option>
+                    <option value="obligation">Obligation</option>
+                    <option value="prohibition">Prohibition</option>
+                    <option value="permission">Permission</option>
+                  </select>
+                </label>
                 {finding.pages.map((page) => {
-                  const key = `${page}:${finding.source_quote}`;
+                  const key = finding.source_quote;
                   const added = addedCoverageKeys.has(key);
                   return (
                     <button
@@ -531,7 +557,7 @@ export function FinalMatrixView(props: {
                       type="button"
                       className="button button-secondary button-small"
                       style={{ margin: "8px 8px 0 0" }}
-                      disabled={added || busy === `coverage-${key}`}
+                      disabled={added || !coverageTypes[key] || busy === `coverage-${key}`}
                       onClick={() => void addCoverageFinding(finding, page)}
                     >
                       {added ? "Added for review" : busy === `coverage-${key}` ? "Adding…" : "Add excerpt as unreviewed requirement"}
@@ -547,6 +573,12 @@ export function FinalMatrixView(props: {
         <div className="compliance-ready-banner" role="status">
           <CheckCircle size={15} aria-hidden="true" />
           <div><strong>Export content check passed.</strong><span>{validationNotice}</span></div>
+        </div>
+      ) : null}
+      {actionNotice ? (
+        <div className="compliance-attention-banner" role="status">
+          <AlertCircle size={15} aria-hidden="true" />
+          <div><strong>Requirement added for review.</strong><span>{actionNotice}</span></div>
         </div>
       ) : null}
 

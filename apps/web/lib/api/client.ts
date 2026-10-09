@@ -97,7 +97,11 @@ export type ProcessingRun = {
 };
 
 /** Requirement review state (Phase 1). */
-export type AddRequirementFromSourceRequest = { page_number: number; source_quote: string };
+export type AddRequirementFromSourceRequest = {
+  page_number: number;
+  source_quote: string;
+  requirement_type: "obligation" | "prohibition" | "permission";
+};
 
 export type RequirementReviewState =
   | "unreviewed"
