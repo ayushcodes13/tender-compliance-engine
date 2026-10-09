@@ -557,9 +557,10 @@ class TestExportGeneration:
             ("ln2-functioning", "source_quote_not_found")
         ]
 
-    def test_example3_delivery_period_rejects_sampled_ten_month_substitution(self):
-        # Example 3 page 22 states "Within 8 Weeks"; its supplied response
-        # sheet says "within 10 months", which is absent from the tender.
+    def test_delivery_period_rejects_ten_month_substitution(self):
+        # Example 3 tender page 22 states "Within 8 Weeks". This synthetic
+        # altered row verifies that a 10-month substitution is rejected; the
+        # supplied Example 3 DOCX does not contain a delivery-period row.
         source_page = AuthorizedSourceFragment(
             page_number=22,
             text=("Delivery- Period Within 8 Weeks from the date of Purchase order."),
