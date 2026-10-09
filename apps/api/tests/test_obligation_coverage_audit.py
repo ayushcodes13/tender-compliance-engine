@@ -188,6 +188,28 @@ def test_detects_exact_auditor_quote_not_emitted_by_primary_pass() -> None:
     assert omissions == ("The motor shall be IP55 rated.",)
 
 
+def test_example2_utility_row_audit_surfaces_missing_required_details() -> None:
+    source_quote = (
+        "Vendor shall provide a detailed utility requirement document covering "
+        "electrical power including the UPS with backup time and total load, "
+        "cooling water, compressed gas, exhaust, vibration limits, floor loading, "
+        "and LN₂ infrastructure requirements prior to shipment."
+    )
+    sampled_output_row = (
+        "Vendor shall provide a detailed utility requirement document covering "
+        "electrical power including the UPS with backup time and total load, "
+        "cooling water, compressed gas, shipment."
+    )
+    adapter = FakeLlmAdapter([ObligationCoverageResponse(quotes=[source_quote])])
+
+    result = asyncio.run(
+        audit_window_coverage(source_quote, [sampled_output_row], adapter)
+    )
+
+    assert result.status == "completed"
+    assert result.potential_omissions == (source_quote,)
+
+
 def test_accepts_split_rows_that_cover_every_non_whitespace_source_character() -> None:
     quote = "The pump shall deliver 12 L/min under continuous operation."
     assert _find_potential_omissions(

@@ -3597,6 +3597,8 @@ If the product direction changes, update this file through a focused PR, explain
 
 **Example 2 LN2 punctuation regression (2026-10-09):** Tender page 27 contains `pumping well (if applicable) – so that smooth functioning ...`; the supplied response DOCX omits the en dash. Rendered page and DOCX XML/PDF text were cross-checked. A regression confirms that punctuation-stripped text may look equivalent while the strict source validator rejects the supplied wording as `source_quote_not_found`. Other response-sheet rows and full tender coverage remain under review.
 
+**Example 2 utility-document coverage regression (2026-10-09):** Tender page 13 requires the utility document to cover exhaust, vibration limits, floor loading, and LN₂ infrastructure before shipment. The supplied response row ends after compressed gas and “shipment,” omitting those details and the deadline wording. A fake-auditor test verifies the independent coverage scan reports the full source quote as a potential omission when given that row. The test exercises deterministic quote-versus-emitted coverage handling; it does not claim live model detection or resolve the example's remaining findings.
+
 ### Guardrail
 
 - “Verbatim validated” means the tender-derived cell's non-whitespace wording matches the cited source quote. Standalone list-bullet glyphs at line starts, including Word's private-use `U+F0B7` marker, are treated as presentation markers in deterministic and visual matching; layout wrapping may alter whitespace. Paraphrases, omitted wording, changed values/units/operators, and unverified LLM visual readings do not pass.
