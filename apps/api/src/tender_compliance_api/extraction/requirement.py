@@ -179,11 +179,12 @@ def resolve_sources(
 ) -> list[ResolvedSource]:
     """Resolve the strongest known anchor per contributing source fragment.
 
-    ``EXACT`` only when ``raw_source`` is a *literal* substring of the trusted
-    page ``source_text`` (deterministic offset, no fuzzy mapping).  Otherwise
-    ``APPROXIMATE`` (page/clause only) — precision is never upgraded on a
-    plausible-but-non-literal match. ``allow_exact=False`` is used when an LLM
-    selected a literal quote but did not establish its precise offsets.
+    ``EXACT`` only when ``raw_source`` has a unique, whitespace-normalized
+    span in the trusted page ``source_text`` (deterministic offset, no fuzzy
+    mapping). Otherwise ``APPROXIMATE`` (page/clause only) — precision is
+    never upgraded on a plausible-but-non-literal match. ``allow_exact=False``
+    is used when an LLM selected a literal quote but did not establish its
+    precise offsets.
     """
 
     resolved: list[ResolvedSource] = []
@@ -207,16 +208,18 @@ def resolve_sources(
             and isinstance(window_end, int)
             and raw_source
         ):
-            window_quote_start = src_text.find(raw_source)
-            if window_quote_start >= 0:
-                window_quote_end = window_quote_start + len(raw_source)
+            window_span = _unique_normalized_span(src_text, raw_source)
+            if window_span is not None:
+                window_quote_start, window_quote_end = window_span
                 overlap_start = max(window_quote_start, window_start)
                 overlap_end = min(window_quote_end, window_end)
                 if overlap_start >= overlap_end:
                     continue
-                page_quote = raw_source[
-                    overlap_start - window_quote_start : overlap_end - window_quote_start
-                ]
+                # Slice the trusted extraction window, not the candidate's
+                # normalized wording. This preserves its page-local text while
+                # allowing layout whitespace (such as a line-wrap newline) to
+                # differ from the candidate.
+                page_quote = src_text[overlap_start:overlap_end]
                 span_start = (
                     char_start - page_text_base
                     if isinstance(char_start, int) and isinstance(page_text_base, int)
@@ -272,6 +275,23 @@ def resolve_sources(
                     )
                 )
                 continue
+
+            # Page/window metadata is available, but the quote either is
+            # absent or occurs more than once in the combined window. Do not
+            # choose an arbitrary occurrence and claim page-level precision.
+            resolved.append(
+                ResolvedSource(
+                    page_number=page,
+                    clause_number=frag.get("clause_number"),
+                    char_start=char_start,
+                    char_end=char_end,
+                    bbox=frag.get("bbox"),
+                    ocr_confidence=frag.get("ocr_confidence"),
+                    location_type=LocationType.APPROXIMATE.value,
+                    source_text=src_text,
+                )
+            )
+            continue
 
         exact_start: int | None = None
         if allow_exact and src_text is not None and raw_source:

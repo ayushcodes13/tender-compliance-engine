@@ -233,6 +233,72 @@ def test_multi_page_window_quote_resolves_to_page_local_fragments() -> None:
     assert all(source.location_type == "exact" for source in resolved)
 
 
+def test_multi_page_quote_with_line_wrap_resolves_to_page_with_text() -> None:
+    page_one = "Earlier requirement text."
+    page_two = "The source shall be fully \nintegrated with the MBE control software."
+    window = f"{page_one}\n{page_two}"
+    raw = "The source shall be fully integrated with the MBE control software."
+    page_two_start = len(page_one) + 1
+    sources = [
+        {
+            "page_number": 9,
+            "source_text": window,
+            "window_char_start": 0,
+            "window_char_end": len(page_one),
+            "page_source_text": page_one,
+            "page_source_char_start": 0,
+            "char_start": 0,
+            "char_end": len(page_one),
+        },
+        {
+            "page_number": 10,
+            "source_text": window,
+            "window_char_start": page_two_start,
+            "window_char_end": len(window),
+            "page_source_text": page_two,
+            "page_source_char_start": 0,
+            "char_start": 0,
+            "char_end": len(page_two),
+        },
+    ]
+
+    resolved = resolve_sources(raw, sources)
+
+    assert len(resolved) == 1
+    assert resolved[0].page_number == 10
+    assert resolved[0].location_type == "exact"
+    assert resolved[0].source_text == page_two
+    assert resolved[0].char_start == page_two.index("The source")
+    assert resolved[0].char_end == len(page_two)
+
+
+def test_multi_page_duplicate_quote_does_not_claim_exact_page() -> None:
+    page_one = "Required text appears here."
+    page_two = "Required text appears here too."
+    window = f"{page_one}\n{page_two}"
+    raw = "Required text"
+    sources = [
+        {
+            "page_number": page_number,
+            "source_text": window,
+            "window_char_start": start,
+            "window_char_end": end,
+            "page_source_text": page_text,
+            "char_start": 0,
+            "char_end": len(page_text),
+        }
+        for page_number, page_text, start, end in (
+            (1, page_one, 0, len(page_one)),
+            (2, page_two, len(page_one) + 1, len(window)),
+        )
+    ]
+
+    resolved = resolve_sources(raw, sources)
+
+    assert [source.page_number for source in resolved] == [1, 2]
+    assert all(source.location_type == "approximate" for source in resolved)
+
+
 def test_multi_page_resolution_uses_trusted_page_span_for_repeated_quote() -> None:
     page_one = "Repeated header. Trusted clause starts here."
     page_two = "Repeated header. Continued clause ends here."
