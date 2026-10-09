@@ -58,7 +58,7 @@ Tender upload
   → compliance matrix and export
 ```
 
-The system preserves the original document and the source location it actually knows. OCR uncertainty stays visible for review. Numerical values and units are evaluated deterministically where supported; a model response or successful export is not proof that a tender is complete.
+The generated compliance sheet is limited to product/equipment specifications from the tender's technical-specification section or clearly identifiable specification tables. Separate eligibility, past-performance, supporting-proof, delivery, installation, warranty, maintenance, service, and bid-process clauses are excluded. The system preserves the original document and the source location it actually knows. OCR uncertainty stays visible for review. Numerical values and units are evaluated deterministically where supported; a model response or successful export is not proof that a tender is complete.
 
 Supported file inputs include PDF and DOCX. The app can export the compliance sheet as XLSX, DOCX, and PDF. See [the architecture guide](docs/ARCHITECTURE.md) for system boundaries and [the checkpoint plan](docs/checkpoint.md) for implementation status.
 
