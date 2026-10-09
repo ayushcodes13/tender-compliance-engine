@@ -3599,6 +3599,8 @@ If the product direction changes, update this file through a focused PR, explain
 
 **Example 2 utility-document coverage regression (2026-10-09):** Tender page 13 requires the utility document to cover exhaust, vibration limits, floor loading, and LN₂ infrastructure before shipment. The supplied response row ends after compressed gas and “shipment,” omitting those details and the deadline wording. A fake-auditor test verifies the independent coverage scan reports the full source quote as a potential omission when given that row. The test exercises deterministic quote-versus-emitted coverage handling; it does not claim live model detection or resolve the example's remaining findings.
 
+**Example 3 inspection replacement coverage (2026-10-09):** A bounded live text audit of tender page 9 completed and returned four potential omissions, including the explicit supplier duty to replace rejected goods or make specification corrections free of cost. That duty is absent from the supplied DOCX. A fake-auditor regression now verifies this exact source clause is retained as a potential omission; this confirms source matching and review surfacing, not live audit recall or completeness for the whole tender.
+
 ### Guardrail
 
 - “Verbatim validated” means the tender-derived cell's non-whitespace wording matches the cited source quote. Standalone list-bullet glyphs at line starts, including Word's private-use `U+F0B7` marker, are treated as presentation markers in deterministic and visual matching; layout wrapping may alter whitespace. Paraphrases, omitted wording, changed values/units/operators, and unverified LLM visual readings do not pass.
