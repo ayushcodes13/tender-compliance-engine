@@ -1,15 +1,14 @@
 <p align="center">
-  <img src="apps/web/public/tce-mark.svg" width="88" alt="Tender Compliance Engine logo" />
+  <img src="apps/web/public/tce-mark.svg" width="76" alt="Tender Compliance Engine logo" />
 </p>
 
 <h1 align="center">Tender Compliance Engine</h1>
 
 <p align="center">
-  <strong>Turn technical tender documents and OEM evidence into a source-linked, reviewable compliance sheet.</strong>
+  <strong>Turn technical tenders into source-linked requirements that people can review and export.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/ayushcodes13/tender-compliance-engine/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ayushcodes13/tender-compliance-engine/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <img alt="Python 3.12+" src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs">
@@ -17,274 +16,125 @@
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-001742">
 </p>
 
+![Tender Compliance Engine landing page](docs/screenshots/screenshot-landing.png)
+
 ---
 
-## Product interface
+## See the workflow
 
-The product UI is intentionally light and technical rather than AI-themed:
-warm neutral canvas, white review surfaces, deep ink typography, restrained
-cobalt actions, and semantic status colours only where they carry meaning.
+The screenshots below use synthetic test data. They show the current interface and do not represent a completed client tender or a compliance decision.
 
-The interface is optimized for the actual buyer workflow: **Tender → Vendor/OEM
-→ Review → Compliance sheet**. Source text, evidence, review state, and the
-final matrix get visual priority over decorative effects.
+![Tender workspace with project status and review progress](docs/screenshots/screenshot-dashboard.png)
 
-Typography is self-hosted so customer deployments do not depend on external
-font requests. See `apps/web/DESIGN.md` for the visual-system rules.
+### 1. Upload and organize the tender
 
-## What the product does
+The project workspace keeps tender source versions and vendor/OEM material together, with processing state and the next review action visible.
 
-Tender Compliance Engine is built for engineering, procurement, technical sales, and bid teams that need to answer one practical question:
+![Tender project workspace with source documents and workflow steps](docs/screenshots/project-workspace.png)
 
-> **Given a tender requirement and the OEM/vendor documentation we have, what can we safely claim in the compliance sheet — and where is the evidence?**
+### 2. Review requirements against the cited source
 
-The product keeps the workflow simple for the user while preserving the source trail underneath:
+Reviewers can inspect extracted requirements alongside the rendered tender page. Source wording and location remain visible so uncertain extraction can be checked against the document.
+
+![Requirement review with tender source and highlighted citation](docs/screenshots/source-linked-review.png)
+
+### 3. Inspect the compliance sheet
+
+The matrix brings tender requirements, source links, available vendor facts, evidence, assessment state, and human review into one view. Missing evidence remains a review state; it is not presented as non-compliance.
+
+![Compliance matrix with unresolved items clearly marked](docs/screenshots/compliance-matrix.png)
+
+## Product scope
+
+The current product flow is:
 
 ```text
-Tender document
-    ↓
-Extract technical requirements
-    ↓
-Human review + source verification
-    ↓
-OEM / vendor source documents
-    ↓
-Evidence retrieval + vendor facts
-    ↓
-Deterministic numeric / unit comparison
-    ↓
-Evidence-backed compliance review
-    ↓
-Final compliance sheet
-    ↓
-XLSX / DOCX / PDF submission
+Tender upload
+  → parsing and OCR
+  → source-linked requirement extraction
+  → human review and correction
+  → vendor/OEM evidence review
+  → evidence-backed assessment
+  → compliance matrix and export
 ```
 
-No agent framework is required for this workflow. No vector database is required for the current product. The system deliberately keeps deterministic logic in code and uses an LLM only where language interpretation is useful.
+The system preserves the original document and the source location it actually knows. OCR uncertainty stays visible for review. Numerical values and units are evaluated deterministically where supported; a model response or successful export is not proof that a tender is complete.
 
-## Fastest pilot start
+Supported file inputs include PDF and DOCX. The app can export the compliance sheet as XLSX, DOCX, and PDF. See [the architecture guide](docs/ARCHITECTURE.md) for system boundaries and [the checkpoint plan](docs/checkpoint.md) for implementation status.
 
-For a private pilot, Docker Compose starts PostgreSQL, Redis, ClamAV, migrations,
-the API, OCR worker, and web app together. Original documents, rendered pages, and
-exports persist in one shared Docker volume, so there is no separate object-
-storage service to configure. Browser requests stay same-origin through the
-Next.js backend proxy.
+## Current readiness
+
+**The product workflow is implemented, but the example set and client acceptance are not signed off.** Checkpoint 70 remains in progress. Its open work includes human classification of sample findings, tender-wide completeness decisions, and a full acceptance run in the intended client environment. See [Checkpoint 70](docs/checkpoint.md#L3533) and the [release review checklist](docs/POST61_RELEASE_REVIEW.md).
+
+Known sample-review work includes exact-wording differences, possible omitted requirements, blank response-sheet decisions, and unresolved coverage findings. These require review against the original pages and the supplied response sheets. The app must not infer a supplier decision from an empty cell or treat an unconfirmed possible omission as a fact.
+
+The private pilot has no user sign-in and is intended for local or trusted private-network use. Do not expose it directly to the public internet. Production use still needs client-specific identity, storage, malware-scanning, backup, and service-health configuration.
+
+GitHub Actions verification is temporarily unavailable because the repository account has a billing/spending restriction. This README does not treat blocked jobs as passing checks. Restore billing and rerun the required workflows before release sign-off.
+
+## Start a private pilot
+
+Prerequisites: Docker with Compose support, and an OpenAI-compatible API credential configured for the selected model endpoint.
 
 ```bash
-OPENAI_API_KEY=sk-... make pilot-start
+cp .env.example .env
+# Add the required AI endpoint/key/model settings to .env
+make pilot-start
 ```
 
-That one command validates the runtime configuration, builds and starts the
-complete stack, waits for the browser-facing readiness endpoint, and prints the
-product URL. It never writes or prints the API key.
+The startup command validates configuration, starts the database, queue, scanner, API, processing worker, and web app, and waits for the readiness endpoint. Open [http://localhost:3000](http://localhost:3000). Keep `.env` private; never commit credentials.
 
-If you prefer a local environment file, copy `.env.example` to `.env`, set
-`OPENAI_API_KEY`, and run `make pilot-start`.
+For direct local development, see the Makefile targets and [the development notes](docs/ARCHITECTURE.md). The bundled pilot creates one workspace and is not a multi-tenant SaaS deployment.
 
-For this bundled single-workspace pilot, the OpenAI key is the only external
-secret you must provide. Public multi-customer SaaS should later replace the
-single-workspace identity and bundled credentials with managed production
-services and a real identity provider.
+## How source and review states work
 
-## End-to-end user journey
+- A requirement keeps its tender source wording, document version, page or clause when known, and approximate/exact location status.
+- Reviewers can edit, split, merge, reorder, confirm, or flag extracted requirements while retaining the audit trail.
+- Accepted vendor evidence links to its source document and version.
+- Missing evidence is not the same as contradictory evidence or non-compliance.
+- OCR ambiguities and unverified coverage findings require human review.
+- Export and submission controls reflect unresolved validation findings; a generated file alone does not certify completeness.
 
-| Step | User action | Product output |
-| --- | --- | --- |
-| 1 | Create a tender project | Persisted project workspace |
-| 2 | Upload the tender | Immutable source version + processing status |
-| 3 | Review extracted requirements | Source-linked technical requirements |
-| 4 | Correct/split/merge/reorder requirements | Auditable reviewed requirement set |
-| 5 | Upload OEM/vendor material or an existing vendor compliance sheet | Searchable source-preserving OEM evidence |
-| 6 | Review proposed evidence | Accepted/rejected evidence per requirement |
-| 7 | Run comparison | Deterministic numeric/unit result + bounded qualitative assessment |
-| 8 | Resolve conflicts/gaps | Conflict, clarification, deviation, or review state |
-| 9 | Confirm compliance decision | Human-reviewed assessment |
-| 10 | Export | Final compliance matrix in XLSX, DOCX, or PDF |
-| 11 | Lock/approve | Immutable submission version |
-
-## What is supported today
-
-### Inputs
-
-| Input | Status | Notes |
-| --- | --- | --- |
-| Tender PDF | ✅ Supported | Digital and scanned/mixed PDFs; OCR is applied when required |
-| OEM/vendor PDF | ✅ Supported | Datasheets, manuals, brochures, test reports, certificates, proposals, quotations, and existing vendor compliance sheets |
-| Tender DOCX | ✅ Supported | Paragraphs and tables are preserved in source order; page numbers are not fabricated because DOCX has no stable physical pagination |
-| OEM/vendor DOCX | ✅ Supported | Uses the same immutable source and evidence pipeline as OEM/vendor PDFs, including existing vendor compliance sheets |
-| Images / PPT / arbitrary office files | — Not supported | Convert to PDF before upload for now |
-
-### Outputs
-
-- final compliance sheet in the browser;
-- XLSX;
-- DOCX;
-- PDF;
-- immutable submission versions with lock/approve/revoke lifecycle.
-
-## Trust model
-
-The product is intentionally conservative.
-
-- **Missing evidence is not non-compliance.**
-- **Same number is not the same technical claim.**
-- Accuracy, resolution, precision, repeatability, sensitivity, range, entity, model, scope, and operating conditions remain distinct.
-- Numerical thresholds and unit conversion are deterministic.
-- OCR ambiguity remains visible.
-- Every normal requirement and accepted evidence item is tied back to an immutable source version.
-- Human review can confirm, override, reopen, comment, and resolve conflicts without erasing the original system output.
-
-The highest-severity failure is **false compliance**: saying a product complies when the evidence does not establish it.
-
-## Product architecture
+## Architecture
 
 ```text
 Next.js web app
       │
       ▼
-FastAPI API
+FastAPI API ─── PostgreSQL
       │
-      ├── PostgreSQL      projects / requirements / evidence / audit / submissions
-      ├── local volume    originals / rendered pages / exports (pilot)
-      ├── S3 adapter       optional cloud object storage
-      ├── Redis worker    document processing jobs
-      ├── ClamAV          upload malware scanning
-      ├── Tesseract       OCR
-      └── OpenAI adapter  structured language extraction / bounded reasoning
+      ├── shared pilot volume for originals, page renders, and exports
+      ├── Redis-backed processing worker
+      ├── ClamAV upload scanning
+      ├── Tesseract OCR
+      └── OpenAI-compatible extraction and bounded language interpretation
 ```
 
-The private-pilot runtime is one web app, one API, one worker, PostgreSQL,
-Redis, ClamAV, and a shared durable filesystem volume. The same storage abstraction can
-use S3-compatible object storage for a later cloud deployment. It is not a
-microservice mesh.
+The pilot is a compact application stack, not a microservice mesh. Storage and provider integrations sit behind adapters so a later deployment can use managed services without changing the product's source-traceability rules.
 
-## Repository structure
+## Repository map
 
 ```text
-.
-├── apps/
-│   ├── api/              FastAPI API + background worker
-│   └── web/              Next.js product UI
-├── docs/                 architecture, evaluation, security, runbooks
-├── infra/                local infrastructure
-├── docker-compose.yml    complete local stack
-├── docs/checkpoint.md    completed canonical build plan
-├── AGENTS.md             engineering rules
-└── README.md
+apps/api/              API, application services, persistence, and worker
+apps/web/              Project, upload, review, source viewer, matrix, and export UX
+docs/                  Architecture, security, evaluation, release review, and checkpoint plan
+infra/                 Local infrastructure configuration
+docker-compose.yml      Bundled private-pilot stack
+AGENTS.md               Contribution and product guardrails
 ```
 
-## Local development
+## Development checks
 
-### Prerequisites
+The repository's GitHub Actions workflows run backend checks, extraction/citation and security gates, frontend type-check/build, container builds, and bundled-stack smoke checks. Run the focused checks for the area you change; the required GitHub workflows must also pass before normal release sign-off.
 
-- Docker / Docker Compose
-- Python 3.12+ for direct backend development
-- Node.js 20+ for direct frontend development
+Current local verification for this branch will be recorded in its pull request. CI remains pending until the billing restriction is resolved.
 
-### Infrastructure
+## Design and product principles
 
-```bash
-make infra-up
-make api-install
-make api-migrate
-make web-install
-```
+- Never invent a technical requirement, citation, page, source quote, or supplier status.
+- Preserve source wording and distinguish exact from approximate locations.
+- Keep OCR uncertainty visible instead of silently correcting it.
+- Prefer conservative human review over unsupported certainty.
+- Treat uploaded files as untrusted input and document text as data, never as application instructions.
 
-Run the API:
-
-```bash
-make api-dev
-```
-
-Run the frontend:
-
-```bash
-make web-dev
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-For the bundled private-beta deployment, the backend bootstraps one owner/workspace automatically. No manual membership seed is required. Development-header auth remains available for tests and direct local development.
-
-## AI configuration
-
-The bundled stack needs one external AI credential:
-
-```bash
-OPENAI_API_KEY=sk-... make pilot-start
-```
-
-A local `.env` file is optional; use one only if you prefer not to pass the
-key through the shell environment.
-
-Migrations run before the API starts, the shared document volume is verified on
-startup, and the same OpenAI configuration is supplied to the processing
-worker. Then open `http://localhost:3000`.
-
-This **single-workspace mode is designed for private pilots and one-customer deployments**. It is not a substitute for a real identity provider when the product is exposed as a public multi-user SaaS.
-The bundled web UI and API bind to localhost by default. For remote client
-access, use a trusted private reverse proxy or VPN; the pilot has no user
-sign-in and must not be exposed directly to the internet.
-
-## Quality gates
-
-CI checks the parts that matter most for this product:
-
-- Python linting;
-- backend unit/integration/acceptance tests;
-- extraction/citation evaluation gates;
-- zero-false-compliance adversarial gates;
-- cross-tenant security tests;
-- frontend TypeScript and production build;
-- API, worker, and web Docker builds;
-- a full bundled Docker Compose startup + same-origin readiness smoke;
-- a real ClamAV clean/infected scan in the bundled production stack;
-- unsafe raw-HTML rendering guard.
-
-The final manual product-owner acceptance checklist is in [docs/POST61_RELEASE_REVIEW.md](docs/POST61_RELEASE_REVIEW.md).
-
-## Current status
-
-**CP00–CP61 are complete.** Post-build hardening PRs have also completed the browser compliance-review flow, final matrix/export/submission UI, real OEM upload → worker integration, and adversarial security review.
-
-The buyer-facing pilot flow is now explicit in the UI: **Tender → Vendor/OEM → Review → Compliance sheet**.
-
-The remaining focus is deliberately commercial and practical:
-
-1. run representative real tender + OEM documents through the deployed product;
-2. complete the manual acceptance checklist on those documents;
-3. fix only the issues those real runs expose.
-
-We are **not** adding agent orchestration, a vector database, or a new RAG platform unless real customer usage proves one is necessary.
-
-## Reference implementations studied
-
-Production patterns were reviewed from:
-
-- `Bynd-ai/chat@prod-trunk` — document upload UX, error boundaries, request correlation, deployment/environment discipline, sidebar/product navigation;
-- `Bynd-ai/metric-search` — environment selection, PDF review UX, structured logging, failure visibility, job isolation, LLM usage/cost discipline.
-
-These are references only. This repository does not copy private/unlicensed Bynd implementation code.
-
-## Documentation
-
-Work should follow [Canonical checkpoint plan](docs/checkpoint.md) from the first unchecked checkpoint. Completed checkpoints are crossed out there, and the plan is updated through PRs whenever product requirements or architecture change.
-
-- [Canonical checkpoint plan](docs/checkpoint.md)
-- [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
-- [Post-CP61 hardening plan](docs/POST61_HARDENING_PLAN.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Product requirements](docs/PRD.md)
-- [Data model](docs/DATA_MODEL.md)
-- [Evaluation strategy](docs/EVALUATION.md)
-- [Security model](docs/SECURITY.md)
-- [Post-CP61 release review](docs/POST61_RELEASE_REVIEW.md)
-- [Bynd reuse audit](docs/BYND-REUSE-AUDIT.md)
-
-## License
-
-No open-source license has been selected. Treat this repository as proprietary unless a license is added explicitly.
+See [the design notes](apps/web/DESIGN.md), [security guidance](docs/SECURITY.md), and [the canonical checkpoint plan](docs/checkpoint.md).

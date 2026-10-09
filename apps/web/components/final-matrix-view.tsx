@@ -1020,9 +1020,9 @@ export function FinalMatrixView(props: {
                     )}
                   </td>
                   <td>
-                    {row.vendor_spec_value !== null
-                      ? `${row.vendor_spec_parameter ?? "Value"}: ${row.vendor_spec_value} ${row.vendor_spec_unit ?? ""}`
-                      : row.vendor_spec_source_text ?? "—"}
+                    {typeof row.vendor_spec_value === "number"
+                      ? `${row.vendor_spec_parameter ?? "Value"}: ${row.vendor_spec_value}${row.vendor_spec_unit ? ` ${row.vendor_spec_unit}` : ""}`
+                      : row.vendor_spec_source_text || "—"}
                   </td>
                   <td>{row.evidence_oem_document ? `${row.evidence_oem_document} · v${row.evidence_oem_version ?? "?"}` : "—"}</td>
                   <td>

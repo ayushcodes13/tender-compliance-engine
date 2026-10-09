@@ -209,6 +209,10 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
             requirement_id: otherRequirementId,
             source_page: null,
             tender_requirement: "Page location has not been established.",
+            vendor_spec_parameter: null,
+            vendor_spec_value: undefined,
+            vendor_spec_unit: null,
+            vendor_spec_source_text: null,
           },
         ]);
       }
@@ -684,6 +688,8 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(summary.getByText("Compliant", { exact: true })).toBeVisible();
   await expect(summary.getByText("Needs attention")).toBeVisible();
   await expect(page.getByText("The positioning resolution shall be 1 µm or better.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Page location has not been established/ })).toContainText("—");
+  await expect(page.getByText("Value: undefined", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Location unavailable")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Open tender source for requirement 2/ })
