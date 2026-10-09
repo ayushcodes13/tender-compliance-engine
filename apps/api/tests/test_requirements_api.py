@@ -277,7 +277,7 @@ class TestAddRequirementFromCoverageFinding:
         assert source["page_number"] == 3
         assert source["location_type"] == "exact"
 
-    def test_same_finding_is_idempotent_when_reviewed_from_another_page(self):
+    def test_same_finding_keeps_a_source_for_each_reviewed_page(self):
         user_id, org_id, project_id = _build_org_project()
         quote = "The instrument shall include operator training."
         doc_id = self._setup_source_page(project_id, text=quote, page_number=3)
@@ -314,7 +314,54 @@ class TestAddRequirementFromCoverageFinding:
         )
         assert first.status_code == second.status_code == 201
         assert first.json()["id"] == second.json()["id"]
-        assert second.json()["sources"][0]["page_number"] == 3
+        assert {source["page_number"] for source in second.json()["sources"]} == {3, 4}
+        repeated = client.post(
+            url,
+            json={"page_number": 4, "source_quote": quote, "requirement_type": "obligation"},
+            headers=_headers(user_id, org_id),
+        )
+        assert repeated.status_code == 201
+        assert repeated.json()["id"] == first.json()["id"]
+        assert [source["page_number"] for source in repeated.json()["sources"]].count(4) == 1
+
+    def test_second_ocr_page_preserves_warning_on_existing_requirement(self):
+        user_id, org_id, project_id = _build_org_project()
+        quote = "The instrument shall include operator training."
+        doc_id = self._setup_source_page(project_id, text=quote, page_number=3)
+
+        async def _add_ocr_page():
+            async with _session_cm() as session:
+                version = (await session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.document_id == doc_id,
+                        DocumentVersion.version_number == 1,
+                    )
+                )).scalar_one()
+                session.add(DocumentPage(
+                    document_version_id=version.id,
+                    page_number=4,
+                    extracted_text=quote,
+                    cleaned_text=quote,
+                    ocr_needed=False,
+                    ocr_confidence=0.72,
+                ))
+                await session.commit()
+
+        asyncio.run(_add_ocr_page())
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source"
+        headers = _headers(user_id, org_id)
+        first = client.post(url, json={
+            "page_number": 3, "source_quote": quote, "requirement_type": "obligation"
+        }, headers=headers)
+        second = client.post(url, json={
+            "page_number": 4, "source_quote": quote, "requirement_type": "obligation"
+        }, headers=headers)
+        assert first.status_code == second.status_code == 201
+        assert second.json()["id"] == first.json()["id"]
+        assert second.json()["ocr_warning"] is True
+        assert second.json()["uncertainty"] == "uncertain"
+        assert second.json()["review_state"] == "ocr_warning"
+        assert {source["page_number"] for source in second.json()["sources"]} == {3, 4}
 
     def test_superseded_matching_finding_returns_conflict(self):
         user_id, org_id, project_id = _build_org_project()
