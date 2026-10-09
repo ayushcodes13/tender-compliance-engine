@@ -147,6 +147,12 @@ async def _source_quote_validation_report(
     )
 
     requirement_ids = [row.requirement_id for row in rows]
+    # Validate and visually inspect only the page the generated sheet will
+    # cite. A quote found on a different contributing page must not validate
+    # a cell whose exported citation points elsewhere.
+    selected_page_by_requirement = {
+        str(row.requirement_id): row.source_page for row in rows
+    }
     sources_by_requirement: dict[str, list[str]] = {}
     pages_by_requirement: dict[str, list[tuple[int, str | None, bool]]] = {}
     if requirement_ids:
@@ -175,12 +181,15 @@ async def _source_quote_validation_report(
             structural_metadata,
         ) in result:
             requirement_key = str(requirement_id)
+            if (
+                not isinstance(page_number, int)
+                or selected_page_by_requirement.get(requirement_key) != page_number
+            ):
+                continue
             if isinstance(source_text, str) and source_text:
                 sources_by_requirement.setdefault(requirement_key, []).append(
                     source_text
                 )
-            if not isinstance(page_number, int):
-                continue
             page_metadata = (
                 structural_metadata if isinstance(structural_metadata, dict) else {}
             )

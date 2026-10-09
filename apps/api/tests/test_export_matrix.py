@@ -749,6 +749,144 @@ class TestExportGeneration:
                     == "image_parse_error"
                 )
 
+    def test_fallback_cannot_validate_a_quote_on_a_different_page(self, monkeypatch):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _add_later_source_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                first_source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                first_source.source_text = "unrelated OCR text"
+                session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=version.id,
+                        page_number=7,
+                        clause_number="5.1",
+                        location_type="approximate",
+                        source_text=requirement.raw_source,
+                    )
+                )
+                session.add_all(
+                    [
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=3,
+                            cleaned_text="unrelated OCR text",
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-3.png",
+                        ),
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=7,
+                            cleaned_text=requirement.raw_source,
+                            ocr_needed=False,
+                            rendered_image_object_key="rendered/page-7.png",
+                        ),
+                    ]
+                )
+                await session.commit()
+
+        asyncio.run(_add_later_source_page())
+
+        class FakeAdapter:
+            pass
+
+        class FakeStorage:
+            async def get(self, key: str) -> bytes:
+                return key.encode("utf-8")
+
+        checked_pages: list[int] = []
+
+        async def fake_visual_check(**kwargs):
+            page_number = kwargs["page_number"]
+            checked_pages.append(page_number)
+            exact = page_number == 7
+            return (
+                PageImageValidationResponse(
+                    verdict="exact" if exact else "cannot_tell",
+                    confidence=0.99 if exact else 0.2,
+                    visible_quote=kwargs["proposed_quote"] if exact else "",
+                    reason="Visible on page." if exact else "Not visible on cited page.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+            ),
+        )
+        monkeypatch.setattr(
+            openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter()
+        )
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                assert rows[0].source_page == 3
+                return await document_service._source_quote_validation_report(
+                    session, rows, FakeStorage(), version.id
+                )
+
+        report = asyncio.run(_validate())
+        assert report["status"] == "needs_review"
+        assert report["llm_assisted_rows"] == []
+        assert checked_pages == [3]
+        assert report["llm_fallback_results"][0]["page_number"] == 3
+
     def test_completed_windows_are_not_reported_as_proof_of_completeness(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(

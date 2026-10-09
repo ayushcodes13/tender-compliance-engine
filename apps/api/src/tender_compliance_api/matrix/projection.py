@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tender_compliance_api.db.models import (
@@ -147,18 +147,28 @@ async def project_matrix_rows(
         if req_id not in first_cat_by_req:
             first_cat_by_req[req_id] = cat_row.name
 
-    # 4. Fetch the lowest page number per requirement (batch).
+    # 4. Select an exact text anchor before an approximate page-only anchor.
+    # This keeps the matrix citation on the page that contains the literal
+    # requirement wording when extraction windows span multiple pages.
     page_result = await session.execute(
         select(
             RequirementSource.requirement_id,
-            func.min(RequirementSource.page_number).label("min_page"),
+            RequirementSource.page_number,
         )
-        .where(RequirementSource.requirement_id.in_(req_ids))
-        .group_by(RequirementSource.requirement_id)
+        .where(
+            RequirementSource.requirement_id.in_(req_ids),
+            RequirementSource.document_version_id == document_version_id,
+        )
+        .order_by(
+            RequirementSource.requirement_id,
+            case((RequirementSource.location_type == "exact", 0), else_=1),
+            RequirementSource.page_number,
+            RequirementSource.id,
+        )
     )
-    first_page_by_req: dict[UUID, int | None] = {}
+    first_page_by_req: dict[UUID, int] = {}
     for page_row in page_result:
-        first_page_by_req[page_row.requirement_id] = page_row.min_page
+        first_page_by_req.setdefault(page_row.requirement_id, page_row.page_number)
 
     # 5. Assemble MatrixRow objects in canonical order.
     rows: list[MatrixRow] = []
@@ -348,6 +358,7 @@ async def project_final_matrix_rows(
         )
         .order_by(
             RequirementSource.requirement_id,
+            case((RequirementSource.location_type == "exact", 0), else_=1),
             RequirementSource.page_number,
             RequirementSource.id,
         )
