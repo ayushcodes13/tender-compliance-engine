@@ -648,6 +648,7 @@ class TestExportGeneration:
                 "window_index": 1,
                 "pages": [3],
                 "source_quote": "The pump shall deliver 12 L/min.",
+                "coverage_candidates": [],
             }
         ]
 
@@ -706,6 +707,221 @@ class TestExportGeneration:
         coverage = rechecked.json()["validation_report"]["window_processing"]
         assert coverage["obligation_audit_status"] == "no_potential_omissions"
         assert coverage["potential_omissions"] == []
+
+    def test_reviewed_coverage_finding_is_suppressed_and_latest_decision_is_visible(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Baseline requirement", 1, True, "1.0", False, 1)],
+        )
+        quote = "The pump shall deliver 12 L/min."
+
+        async def _add_page_and_audit():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        extracted_text=f"{quote} {quote}",
+                        cleaned_text=f"{quote} {quote}",
+                        ocr_needed=False,
+                        ocr_confidence=None,
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_add_page_and_audit())
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="completed",
+            potential_omissions=[{"page_number": 3, "source_quote": quote}],
+        )
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/{ver}"
+        first = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        assert first.status_code == 200
+        assert first.json()["validation_report"]["window_processing"][
+            "potential_omissions"
+        ]
+
+        added = client.post(
+            f"{url}/requirements/from-source",
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "obligation"},
+            headers=_headers(user_id, org_id),
+        )
+        assert added.status_code == 201, added.text
+        review_url = f"{url}/coverage-reviews"
+        covered = client.post(
+            review_url,
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "covered_by_requirement",
+                "requirement_id": added.json()["id"],
+            },
+            headers=_headers(user_id, org_id),
+        )
+        assert covered.status_code == 201, covered.text
+
+        after_covered = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        assert after_covered.status_code == 200
+        covered_report = after_covered.json()["validation_report"]["window_processing"]
+        assert covered_report["obligation_audit_status"] == "no_potential_omissions"
+        assert covered_report["potential_omissions"] == []
+        assert covered_report["resolved_omissions"][0]["decision"] == "covered_by_requirement"
+        assert covered_report["resolved_omissions"][0]["actor_id"] == str(user_id)
+
+        dismissed = client.post(
+            review_url,
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+                "rationale": "The repeated mention is an administrative note, not a supplier duty.",
+            },
+            headers=_headers(user_id, org_id),
+        )
+        assert dismissed.status_code == 201, dismissed.text
+        after_dismissal = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        assert after_dismissal.status_code == 200
+        latest_report = after_dismissal.json()["validation_report"]["window_processing"]
+        assert latest_report["obligation_audit_status"] == "no_potential_omissions"
+        assert latest_report["resolved_omissions"][0]["decision"] == "not_in_scope"
+        assert latest_report["resolved_omissions"][0]["rationale"].startswith(
+            "The repeated mention"
+        )
+
+    def test_covered_review_expires_when_linked_requirement_is_superseded(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        quote = "The pump shall deliver 12 L/min."
+
+        async def _add_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        extracted_text=f"{quote} {quote}",
+                        cleaned_text=f"{quote} {quote}",
+                        ocr_needed=False,
+                        ocr_confidence=None,
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_add_page())
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="completed",
+            potential_omissions=[{"page_number": 3, "source_quote": quote}],
+        )
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/{ver}"
+        added = client.post(
+            f"{url}/requirements/from-source",
+            json={"page_number": 3, "source_quote": quote, "requirement_type": "obligation"},
+            headers=_headers(user_id, org_id),
+        )
+        assert added.status_code == 201, added.text
+        reviewed = client.post(
+            f"{url}/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "covered_by_requirement",
+                "requirement_id": added.json()["id"],
+            },
+            headers=_headers(user_id, org_id),
+        )
+        assert reviewed.status_code == 201, reviewed.text
+
+        superseded = client.post(
+            f"{url}/requirements/{added.json()['id']}/supersede",
+            headers=_headers(user_id, org_id),
+        )
+        assert superseded.status_code == 200, superseded.text
+        rechecked = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        coverage = rechecked.json()["validation_report"]["window_processing"]
+        assert coverage["obligation_audit_status"] == "potential_omissions"
+        assert coverage["potential_omissions"][0]["source_quote"] == quote
+
+    def test_not_in_scope_review_does_not_clear_failed_coverage_audit(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Baseline requirement", 1, True, "1.0", False, 1)],
+        )
+        quote = "The buyer will open bids at 11:00."
+
+        async def _add_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        extracted_text=quote,
+                        cleaned_text=quote,
+                        ocr_needed=False,
+                        ocr_confidence=None,
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_add_page())
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="failed",
+            potential_omissions=[{"page_number": 3, "source_quote": quote}],
+        )
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/{ver}"
+        reviewed = client.post(
+            f"{url}/coverage-reviews",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "decision": "not_in_scope",
+                "rationale": "This is a buyer bid-opening procedure.",
+            },
+            headers=_headers(user_id, org_id),
+        )
+        assert reviewed.status_code == 201, reviewed.text
+        rechecked = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        coverage = rechecked.json()["validation_report"]["window_processing"]
+        assert rechecked.json()["validation_status"] == "needs_review"
+        assert coverage["obligation_audit_status"] == "audit_failed"
+        assert coverage["potential_omissions"] == []
+        assert len(coverage["obligation_audit_failed_windows"]) == 1
 
     @pytest.mark.parametrize(
         ("second_page_verdict", "expected_status"),
@@ -1058,6 +1274,7 @@ class TestExportGeneration:
                 "window_index": 1,
                 "pages": [3],
                 "source_quote": "The motor shall be IP55 rated.",
+                "coverage_candidates": [],
             }
         ]
 

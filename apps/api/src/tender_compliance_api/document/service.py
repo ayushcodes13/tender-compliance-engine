@@ -33,6 +33,7 @@ from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.models import (
     Category,
     ConstraintNormalizationState,
+    CoverageFindingReview,
     DocumentPage,
     DocumentProcessingStatus,
     DocumentVersion,
@@ -591,7 +592,11 @@ async def _extraction_window_coverage_report(
     emitted_source_rows = list(
         (
             await session.execute(
-                select(Requirement.raw_source, RequirementSource.page_number)
+                select(
+                    Requirement.id,
+                    Requirement.raw_source,
+                    RequirementSource.page_number,
+                )
                 .join(RequirementSource, RequirementSource.requirement_id == Requirement.id)
                 .where(
                     Requirement.document_version_id == document_version_id,
@@ -609,6 +614,30 @@ async def _extraction_window_coverage_report(
             )
         ).all()
     )
+    emitted_quotes_by_requirement: dict[uuid.UUID, list[tuple[str, int]]] = {}
+    for requirement_id, raw_source, page_number in emitted_source_rows:
+        if isinstance(raw_source, str):
+            emitted_quotes_by_requirement.setdefault(requirement_id, []).append(
+                (raw_source, page_number)
+            )
+
+    review_rows = list(
+        (
+            await session.execute(
+                select(CoverageFindingReview)
+                .where(
+                    CoverageFindingReview.document_version_id == document_version_id
+                )
+                .order_by(
+                    CoverageFindingReview.created_at.asc(),
+                    CoverageFindingReview.id.asc(),
+                )
+            )
+        ).scalars().all()
+    )
+    latest_reviews: dict[tuple[int, str], CoverageFindingReview] = {}
+    for review in review_rows:
+        latest_reviews[(review.page_number, review.source_quote_sha256)] = review
 
     def window_record(audit: ExtractionWindowAudit) -> dict[str, object]:
         spans = audit.source_spans if isinstance(audit.source_spans, list) else []
@@ -643,7 +672,9 @@ async def _extraction_window_coverage_report(
         if audit.coverage_status not in {"completed", "not_run"}
     ]
     potential_omissions: list[dict[str, object]] = []
+    resolved_omissions: list[dict[str, object]] = []
     seen_omissions: set[tuple[tuple[int, ...], str]] = set()
+    seen_resolved_omissions: set[tuple[int, str]] = set()
     # Keep page-image findings from pages that were audited successfully even
     # when another page in the same OCR window was unreadable. The window
     # remains failed closed, but known findings should still reach reviewers.
@@ -696,7 +727,7 @@ async def _extraction_window_coverage_report(
             finding_pages = quote_pages if len(quote_pages) == 1 else pages
             same_window_quotes = [
                 raw_source
-                for raw_source, page_number in emitted_source_rows
+                for _requirement_id, raw_source, page_number in emitted_source_rows
                 if isinstance(raw_source, str)
                 and len(quote_pages) == 1
                 and page_number in finding_pages
@@ -706,16 +737,76 @@ async def _extraction_window_coverage_report(
             resolved_on_same_page = (
                 len(pages) == 1 or len(quote_pages) == 1
             )
-            if not resolved_on_same_page or not quote_is_covered(quote, same_window_quotes):
-                key = (tuple(finding_pages), quote)
+            unresolved_pages: list[int] = []
+            quote_digest = hashlib.sha256(quote.encode("utf-8")).hexdigest()
+            for page_number in finding_pages:
+                finding_review = latest_reviews.get((page_number, quote_digest))
+                is_valid_review = False
+                if finding_review is not None and finding_review.decision == "not_in_scope":
+                    is_valid_review = True
+                elif (
+                    finding_review is not None
+                    and finding_review.decision == "covered_by_requirement"
+                    and finding_review.requirement_id is not None
+                ):
+                    is_valid_review = any(
+                        source_page == page_number
+                        and quote_is_covered(quote, [raw_source])
+                        for raw_source, source_page in emitted_quotes_by_requirement.get(
+                            finding_review.requirement_id, []
+                        )
+                    )
+                if is_valid_review and finding_review is not None:
+                    resolved_key = (page_number, quote)
+                    if resolved_key not in seen_resolved_omissions:
+                        seen_resolved_omissions.add(resolved_key)
+                        resolved_omissions.append(
+                            {
+                                "window_index": audit.window_index,
+                                "page_number": page_number,
+                                "source_quote": quote,
+                                "decision": finding_review.decision,
+                                "rationale": finding_review.rationale,
+                                "requirement_id": (
+                                    str(finding_review.requirement_id)
+                                    if finding_review.requirement_id is not None
+                                    else None
+                                ),
+                                "actor_id": (
+                                    str(finding_review.actor_id)
+                                    if finding_review.actor_id is not None
+                                    else None
+                                ),
+                                "reviewed_at": finding_review.created_at.isoformat(),
+                            }
+                        )
+                else:
+                    unresolved_pages.append(page_number)
+
+            if unresolved_pages and (
+                not resolved_on_same_page
+                or not quote_is_covered(quote, same_window_quotes)
+            ):
+                key = (tuple(unresolved_pages), quote)
                 if key in seen_omissions:
                     continue
                 seen_omissions.add(key)
                 potential_omissions.append(
                     {
                         "window_index": audit.window_index,
-                        "pages": finding_pages,
+                        "pages": unresolved_pages,
                         "source_quote": quote,
+                        "coverage_candidates": [
+                            {
+                                "requirement_id": str(requirement_id),
+                                "page_number": source_page,
+                                "label": raw_source,
+                            }
+                            for requirement_id, raw_source, source_page in emitted_source_rows
+                            if isinstance(raw_source, str)
+                            and source_page in unresolved_pages
+                            and quote_is_covered(quote, [raw_source])
+                        ],
                     }
                 )
 
@@ -741,6 +832,7 @@ async def _extraction_window_coverage_report(
             window_record(audit) for audit in coverage_failed
         ],
         "potential_omissions": potential_omissions,
+        "resolved_omissions": resolved_omissions,
         "expected_windows": expected,
         "audited_windows": len(audits),
         "missing_window_count": missing_count,

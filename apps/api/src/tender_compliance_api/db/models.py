@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -1149,6 +1149,55 @@ class ExtractionWindowAudit(Base):
         return (
             f"ExtractionWindowAudit(run={self.processing_run_id!r}, "
             f"chunk={self.chunk_id!r}, status={self.call_status!r})"
+        )
+
+
+class CoverageFindingReview(Base):
+    """Append-only reviewer decisions for source-backed coverage findings."""
+
+    __tablename__ = "coverage_finding_reviews"
+    __table_args__ = (
+        Index(
+            "ix_coverage_finding_reviews_version_finding",
+            "document_version_id",
+            "page_number",
+            "source_quote_sha256",
+            "created_at",
+        ),
+        Index("ix_coverage_finding_reviews_actor", "actor_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_version_id: Mapped[uuid.UUID] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("document_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    source_quote_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    rationale: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    requirement_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True),
+        ForeignKey("requirements.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(
+        SaUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - convenience
+        return (
+            f"CoverageFindingReview(version={self.document_version_id!r}, "
+            f"page={self.page_number!r}, decision={self.decision!r})"
         )
 
 

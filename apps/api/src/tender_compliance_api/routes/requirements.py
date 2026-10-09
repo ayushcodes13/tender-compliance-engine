@@ -27,11 +27,13 @@ from tender_compliance_api.audit.service import write_audit_event
 from tender_compliance_api.auth.context import AuthContext
 from tender_compliance_api.auth.deps import get_auth_context
 from tender_compliance_api.db.models import (
+    CoverageFindingReview,
     DocumentPage,
     DocumentVersion,
     ExportArtifact,
     ExportFormat,
     ExportStatus,
+    ExtractionWindowAudit,
     Project,
     Requirement,
     RequirementReviewState,
@@ -47,6 +49,10 @@ from tender_compliance_api.document.service import (
     validate_ocr_page_quote_from_image,
 )
 from tender_compliance_api.errors import EXPORT_FAILURE
+from tender_compliance_api.extraction.coverage_audit import (
+    quote_is_covered,
+    quote_is_present_in_source,
+)
 from tender_compliance_api.logs import (
     error_category,
     get_correlation_id,
@@ -195,6 +201,185 @@ class AddRequirementFromSourceRequest(BaseModel):
         if not value.strip():
             raise ValueError("source_quote must contain non-whitespace text")
         return value
+
+
+class ReviewCoverageFindingRequest(BaseModel):
+    """A reviewer decision tied to one source quote on one page."""
+
+    page_number: int = Field(..., ge=1)
+    source_quote: str = Field(..., min_length=1, max_length=2048)
+    decision: Literal["covered_by_requirement", "not_in_scope"]
+    requirement_id: UUID | None = None
+    rationale: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("source_quote")
+    @classmethod
+    def quote_must_contain_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("source_quote must contain non-whitespace text")
+        return value
+
+    @model_validator(mode="after")
+    def decision_fields_are_consistent(self) -> ReviewCoverageFindingRequest:
+        if self.decision == "covered_by_requirement" and self.requirement_id is None:
+            raise ValueError("requirement_id is required for covered_by_requirement")
+        if self.decision == "not_in_scope" and not (self.rationale or "").strip():
+            raise ValueError("A rationale is required for not_in_scope")
+        if self.decision == "not_in_scope" and self.requirement_id is not None:
+            raise ValueError("requirement_id is only valid for covered_by_requirement")
+        return self
+
+
+class CoverageFindingReviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    page_number: int
+    source_quote: str
+    source_quote_sha256: str
+    decision: str
+    rationale: str | None
+    requirement_id: UUID | None
+    actor_id: UUID | None
+    created_at: datetime
+
+
+async def _coverage_finding_exists(
+    session: AsyncSession,
+    document_version_id: UUID,
+    page_number: int,
+    source_quote: str,
+) -> bool:
+    audits = list(
+        (
+            await session.execute(
+                select(ExtractionWindowAudit).where(
+                    ExtractionWindowAudit.document_version_id == document_version_id
+                )
+            )
+        ).scalars().all()
+    )
+    for audit in audits:
+        spans = audit.source_spans if isinstance(audit.source_spans, list) else []
+        span_pages = {
+            span.get("page_number")
+            for span in spans
+            if isinstance(span, dict) and isinstance(span.get("page_number"), int)
+        }
+        omissions = audit.potential_omissions
+        if not isinstance(omissions, list):
+            continue
+        for item in omissions:
+            if isinstance(item, dict):
+                quote = item.get("source_quote")
+                item_page = item.get("page_number")
+                candidate_pages = (
+                    {item_page} if isinstance(item_page, int) else span_pages
+                )
+            else:
+                quote = item
+                candidate_pages = span_pages
+            if quote == source_quote and page_number in candidate_pages:
+                return True
+    return False
+
+
+@router.get(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/coverage-reviews",
+    response_model=list[CoverageFindingReviewResponse],
+)
+async def list_coverage_finding_reviews(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> list[CoverageFindingReviewResponse]:
+    """Return latest decisions for findings retained in this version's audit."""
+    scoped = await session.execute(
+        select(DocumentVersion.id)
+        .join(TenderDocument, TenderDocument.id == DocumentVersion.document_id)
+        .join(Project, Project.id == TenderDocument.project_id)
+        .where(
+            Project.id == project_id,
+            Project.organization_id == auth.organization_id,
+            TenderDocument.id == document_id,
+            DocumentVersion.version_number == version_number,
+        )
+    )
+    version_id = scoped.scalar_one_or_none()
+    if version_id is None:
+        raise HTTPException(status_code=404, detail="Document version not found")
+
+    source_quotes: dict[tuple[int, str], str] = {}
+    audits = list(
+        (
+            await session.execute(
+                select(ExtractionWindowAudit).where(
+                    ExtractionWindowAudit.document_version_id == version_id
+                )
+            )
+        ).scalars().all()
+    )
+    for audit in audits:
+        spans = audit.source_spans if isinstance(audit.source_spans, list) else []
+        span_pages = {
+            span.get("page_number")
+            for span in spans
+            if isinstance(span, dict) and isinstance(span.get("page_number"), int)
+        }
+        omissions = audit.potential_omissions
+        if not isinstance(omissions, list):
+            continue
+        for item in omissions:
+            if isinstance(item, dict):
+                quote = item.get("source_quote")
+                item_page = item.get("page_number")
+                candidate_pages = (
+                    {item_page} if isinstance(item_page, int) else span_pages
+                )
+            else:
+                quote = item
+                candidate_pages = span_pages
+            if isinstance(quote, str):
+                digest = hashlib.sha256(quote.encode("utf-8")).hexdigest()
+                for page_number in candidate_pages:
+                    if isinstance(page_number, int):
+                        source_quotes[(page_number, digest)] = quote
+
+    reviews = list(
+        (
+            await session.execute(
+                select(CoverageFindingReview)
+                .where(CoverageFindingReview.document_version_id == version_id)
+                .order_by(
+                    CoverageFindingReview.created_at.asc(),
+                    CoverageFindingReview.id.asc(),
+                )
+            )
+        ).scalars().all()
+    )
+    latest: dict[tuple[int, str], CoverageFindingReview] = {}
+    for review in reviews:
+        identity = (review.page_number, review.source_quote_sha256)
+        if identity in source_quotes:
+            latest[identity] = review
+    return [
+        CoverageFindingReviewResponse.model_validate(
+            {
+                "id": review.id,
+                "page_number": review.page_number,
+                "source_quote": source_quotes[identity],
+                "source_quote_sha256": review.source_quote_sha256,
+                "decision": review.decision,
+                "rationale": review.rationale,
+                "requirement_id": review.requirement_id,
+                "actor_id": review.actor_id,
+                "created_at": review.created_at,
+            }
+        )
+        for identity, review in sorted(latest.items())
+    ]
 
 
 class CategorySummary(BaseModel):
@@ -589,6 +774,157 @@ async def add_requirement_from_source(
     await session.commit()
     await session.refresh(req)
     return RequirementDetail.model_validate(req)
+
+
+@router.post(
+    "/{project_id}/documents/{document_id}/versions/{version_number}/coverage-reviews",
+    response_model=CoverageFindingReviewResponse,
+    status_code=201,
+)
+async def review_coverage_finding(
+    project_id: UUID,
+    document_id: UUID,
+    version_number: int,
+    body: ReviewCoverageFindingRequest = Body(...),  # noqa: B008
+    auth: AuthContext = Depends(get_auth_context),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> CoverageFindingReviewResponse:
+    """Append a source-verified reviewer decision; prior decisions remain intact."""
+    scoped = await session.execute(
+        select(DocumentVersion)
+        .join(TenderDocument, TenderDocument.id == DocumentVersion.document_id)
+        .join(Project, Project.id == TenderDocument.project_id)
+        .where(
+            Project.id == project_id,
+            Project.organization_id == auth.organization_id,
+            TenderDocument.id == document_id,
+            DocumentVersion.version_number == version_number,
+        )
+    )
+    version = scoped.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status_code=404, detail="Document version not found")
+
+    if not await _coverage_finding_exists(
+        session,
+        version.id,
+        body.page_number,
+        body.source_quote,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="The excerpt is not a current coverage finding on the selected page",
+        )
+
+    page = (
+        await session.execute(
+            select(DocumentPage).where(
+                DocumentPage.document_version_id == version.id,
+                DocumentPage.page_number == body.page_number,
+            )
+        )
+    ).scalar_one_or_none()
+    if page is None:
+        raise HTTPException(status_code=404, detail="Source page not found")
+
+    page_text = page.cleaned_text or ""
+    source_matches = quote_is_present_in_source(page_text, body.source_quote)
+    ocr_derived = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
+    image_validation: dict[str, object] | None = None
+    if not source_matches:
+        if not ocr_derived:
+            raise HTTPException(
+                status_code=422,
+                detail="The excerpt does not match text on the selected page",
+            )
+        image_validation = await validate_ocr_page_quote_from_image(page, body.source_quote)
+        if image_validation.get("status") != "exact":
+            raise HTTPException(
+                status_code=422,
+                detail="The excerpt could not be verified against the rendered OCR page",
+            )
+
+    if body.decision == "covered_by_requirement":
+        assert body.requirement_id is not None
+        covered_rows = list(
+            (
+                await session.execute(
+                    select(Requirement, RequirementSource)
+                    .join(
+                        RequirementSource,
+                        RequirementSource.requirement_id == Requirement.id,
+                    )
+                    .where(
+                        Requirement.id == body.requirement_id,
+                        Requirement.document_version_id == version.id,
+                        Requirement.superseded.is_(False),
+                        RequirementSource.document_version_id == version.id,
+                        RequirementSource.page_number == body.page_number,
+                    )
+                )
+            ).all()
+        )
+        if not any(
+            quote_is_covered(body.source_quote, [requirement.raw_source])
+            for requirement, _source in covered_rows
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "The selected active requirement does not cover this excerpt "
+                    "on the selected page"
+                ),
+            )
+
+    quote_hash = hashlib.sha256(body.source_quote.encode("utf-8")).hexdigest()
+    review = CoverageFindingReview(
+        document_version_id=version.id,
+        page_number=body.page_number,
+        source_quote_sha256=quote_hash,
+        decision=body.decision,
+        rationale=body.rationale.strip() if body.rationale else None,
+        requirement_id=body.requirement_id,
+        actor_id=auth.actor_id,
+    )
+    session.add(review)
+    await session.flush()
+    await write_audit_event(
+        session,
+        auth,
+        "coverage_finding.review",
+        entity_type="coverage_finding_review",
+        entity_id=review.id,
+        project_id=project_id,
+        metadata={
+            "document_version_id": str(version.id),
+            "page_number": body.page_number,
+            "source_quote_sha256": quote_hash,
+            "decision": body.decision,
+            "requirement_id": (
+                str(body.requirement_id) if body.requirement_id is not None else None
+            ),
+            **(
+                {"visual_source_validation": image_validation}
+                if image_validation is not None
+                else {}
+            ),
+        },
+    )
+    await session.commit()
+    await session.refresh(review)
+    return CoverageFindingReviewResponse.model_validate(
+        {
+            "id": review.id,
+            "page_number": review.page_number,
+            "source_quote": body.source_quote,
+            "source_quote_sha256": review.source_quote_sha256,
+            "decision": review.decision,
+            "rationale": review.rationale,
+            "requirement_id": review.requirement_id,
+            "actor_id": review.actor_id,
+            "created_at": review.created_at,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
