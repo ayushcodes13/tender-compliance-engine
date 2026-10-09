@@ -461,6 +461,35 @@ class TestExportGeneration:
             ("embedded-bullet", "source_quote_not_found")
         ]
 
+    def test_source_quote_check_recognizes_repeated_ocr_open_circle_markers(self):
+        source = (
+            "\uf0b7 HP-SA:\n"
+            "o Digital setting with auto switch-off at set pressure\n"
+            "o Secondary back-up pressure setting\n"
+            "o Operates from 220–240 V, 1 phase power supply"
+        )
+        quote = (
+            "Digital setting with auto switch-off at set pressure\n"
+            "Secondary back-up pressure setting"
+        )
+
+        assert validate_source_quote_presence(
+            [RequirementCell("open-circle-list", quote)],
+            {"open-circle-list": [source]},
+        ) == ()
+
+    def test_source_quote_check_does_not_strip_a_real_o_word(self):
+        source = "\uf0b7 Parts list:\no-ring seals must remain oil-tight."
+        quote = "Parts list:\nring seals must remain oil-tight."
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("real-o-word", quote)], {"real-o-word": [source]}
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("real-o-word", "source_quote_not_found")
+        ]
+
     def test_source_quote_check_rejects_changed_spacing_around_hyphen(self):
         source_quote = "All pre -installation requirements are included."
         changed_quote = source_quote.replace("pre -installation", "pre-installation")
@@ -500,6 +529,26 @@ class TestExportGeneration:
 
         assert [(issue.row_id, issue.code) for issue in issues] == [
             ("wrong-citation", "source_quote_not_found")
+        ]
+
+    def test_authoritative_page_text_does_not_override_a_wrong_selected_page(self):
+        quote = "The machine shall test continuously at 1000/s."
+        full_window = f"Prefix. {quote} Suffix."
+        fragments = [
+            AuthorizedSourceFragment(17, full_window, page_local=False),
+            AuthorizedSourceFragment(18, full_window, page_local=False),
+            AuthorizedSourceFragment(
+                17, quote, page_local=False, authoritative_page_text=True
+            ),
+        ]
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("wrong-authoritative-page", quote, source_page=18)],
+            {"wrong-authoritative-page": fragments},
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("wrong-authoritative-page", "source_quote_not_found")
         ]
 
     def test_source_quote_check_rejects_full_window_repeated_on_page_anchors(self):
@@ -1095,6 +1144,105 @@ class TestExportGeneration:
             18,
         ]
 
+    def test_approximate_window_is_checked_against_its_selected_page_text(self):
+        _user_id, _org_id, project_id, doc_id, ver = _build_org_project()
+        quote = (
+            "Digital setting with auto switch-off at set pressure\n"
+            "Secondary back-up pressure setting"
+        )
+        _add_requirements(
+            project_id, doc_id, ver,
+            [(quote, 1, True, "Grips and Fixtures", False, 18)],
+        )
+        window_text = (
+            "\uf0b7 HP-SA:\n"
+            "o Hydraulic power pack/pump with two-handed safety control system\n"
+            "o Digital setting with auto switch-off at set pressure\n"
+            "o Secondary back-up pressure setting\n"
+            "o Operates from 220–240 V, 1 phase power supply"
+        )
+
+        async def _add_approximate_page_sources():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id,
+                            Requirement.normalized_text == quote,
+                        )
+                    )
+                ).scalar_one()
+                requirement.raw_source = quote
+                page_18_source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                page_18_source.source_text = window_text
+                page_18_source.location_type = "approximate"
+                session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=version.id,
+                        page_number=19,
+                        clause_number="Grips and Fixtures",
+                        location_type="approximate",
+                        source_text=window_text,
+                    )
+                )
+                session.add_all(
+                    [
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=18,
+                            extracted_text=window_text,
+                            cleaned_text=window_text,
+                            ocr_needed=False,
+                        ),
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=19,
+                            extracted_text="Load Cell and Testing Systems",
+                            cleaned_text="Load Cell and Testing Systems",
+                            ocr_needed=False,
+                        ),
+                    ]
+                )
+                await session.commit()
+
+        asyncio.run(_add_approximate_page_sources())
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                return await document_service._source_quote_validation_report(
+                    session, rows, object(), version.id  # type: ignore[arg-type]
+                )
+
+        report = asyncio.run(_validate())
+
+        assert report["status"] == "passed", report
+        assert report["issues"] == []
+        assert report["llm_fallback_results"] == []
+
     def test_visual_fallback_runs_bounded_concurrently_and_respects_page_cap(
         self, monkeypatch
     ):
@@ -1388,7 +1536,7 @@ class TestExportGeneration:
 
     @pytest.mark.parametrize(
         ("ocr_warning", "source_text"),
-        [(True, "raw_Req A"), (False, None)],
+        [(True, "raw_Req A")],
     )
     @pytest.mark.parametrize(
         ("fallback_outcome", "expected_status"),

@@ -73,6 +73,7 @@ class AuthorizedSourceFragment:
     text: str
     page_local: bool = True
     char_start: int | None = None
+    authoritative_page_text: bool = False
 
 
 def _content_key(value: str) -> str:
@@ -80,19 +81,53 @@ def _content_key(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _source_quote_key(value: str) -> str:
+def _has_ocr_open_circle_markers(value: str) -> bool:
+    has_list_glyph = bool(
+        re.search(
+            r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7\uf0b7][ \t]+",
+            value,
+        )
+    )
+    open_circle_markers = re.findall(r"(?m)^[ \t]*o[ \t]+(?=[A-Z0-9])", value)
+    return has_list_glyph and len(open_circle_markers) >= 2
+
+
+def _source_quote_key(
+    value: str, *, remove_open_circle_markers: bool = False
+) -> str:
     """Normalize layout and standalone list markers for source quote checks.
 
     Some PDF text extractors expose Word's private-use bullet glyph even when
     the generated DOCX stores that marker as list formatting. Only a marker at
     the start of a line is presentation; bullets inside wording stay literal.
+
+    Hollow-circle bullets in scanned tables are sometimes exposed as a literal
+    lowercase ``o``. Treat those as markers only when they recur as line
+    prefixes in a block that also contains a recognized list marker. This
+    keeps a real word beginning with ``o`` from being silently removed.
     """
+    if remove_open_circle_markers or _has_ocr_open_circle_markers(value):
+        value = re.sub(r"(?m)^[ \t]*o[ \t]+(?=[A-Z0-9])", "", value)
     without_list_markers = re.sub(
         r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7\uf0b7][ \t]+",
         "",
         value,
     )
     return _content_key(without_list_markers)
+
+
+def _source_contains_quote(source_text: str, quote_text: str) -> bool:
+    source_key = _source_quote_key(source_text)
+    quote_key = _source_quote_key(quote_text)
+    if quote_key and quote_key in source_key:
+        return True
+    return bool(
+        _has_ocr_open_circle_markers(source_text)
+        and (markerless_quote := _source_quote_key(
+            quote_text, remove_open_circle_markers=True
+        ))
+        and markerless_quote in source_key
+    )
 
 
 def _docx_table(
@@ -384,12 +419,11 @@ def validate_source_quote_presence(
         if not sources:
             issues.append(SourceQuoteIssue(row.row_id, "source_text_unavailable"))
             continue
-        quote = _source_quote_key(row.text)
         exact_sources = sources
         all_full_matches = [
             source
             for source in exact_sources
-            if quote in _source_quote_key(source.text)
+            if _source_contains_quote(source.text, row.text)
         ]
         full_matches = [
             source
@@ -403,14 +437,26 @@ def validate_source_quote_presence(
         full_match_texts = {
             _content_key(source.text) for source in all_full_matches
         }
-        full_match_is_page_specific = (
-            any(source.page_number is None for source in full_matches)
-            or len(full_match_pages) <= 1
-            or len(full_match_texts) > 1
-        )
-        found = bool(quote and full_matches and full_match_is_page_specific)
+        authoritative_matches = [
+            source for source in all_full_matches if source.authoritative_page_text
+        ]
+        if authoritative_matches:
+            full_match_is_page_specific = (
+                row.source_page is None
+                or any(
+                    source.page_number == row.source_page
+                    for source in authoritative_matches
+                )
+            )
+        else:
+            full_match_is_page_specific = (
+                any(source.page_number is None for source in full_matches)
+                or len(full_match_pages) <= 1
+                or len(full_match_texts) > 1
+            )
+        found = bool(full_matches and full_match_is_page_specific)
 
-        if not found and quote:
+        if not found and row.text.strip():
             page_fragments = [
                 source
                 for source in exact_sources
@@ -430,7 +476,21 @@ def validate_source_quote_presence(
                 else:
                     runs[-1].append(source)
             found = any(
-                quote == _source_quote_key("\n".join(source.text for source in run))
+                (
+                    _source_quote_key("\n".join(source.text for source in run))
+                    == _source_quote_key(row.text)
+                    or (
+                        _has_ocr_open_circle_markers(
+                            "\n".join(source.text for source in run)
+                        )
+                        and _source_quote_key(
+                            "\n".join(source.text for source in run)
+                        )
+                        == _source_quote_key(
+                            row.text, remove_open_circle_markers=True
+                        )
+                    )
+                )
                 and (row.source_page is None or run[0].page_number == row.source_page)
                 for run in runs
             )

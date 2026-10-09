@@ -218,6 +218,7 @@ async def _source_quote_validation_report(
         str(row.requirement_id): row.source_page for row in rows
     }
     sources_by_requirement: dict[str, list[AuthorizedSourceFragment]] = {}
+    page_texts_added: set[tuple[str, int]] = set()
     pages_by_requirement: dict[str, list[_SourcePageForValidation]] = {}
     if requirement_ids:
         result = await session.execute(
@@ -230,6 +231,7 @@ async def _source_quote_validation_report(
                 DocumentPage.rendered_image_object_key,
                 DocumentPage.ocr_needed,
                 DocumentPage.structural_metadata,
+                DocumentPage.cleaned_text,
             ).where(RequirementSource.requirement_id.in_(requirement_ids))
             .where(RequirementSource.document_version_id == document_version_id)
             .outerjoin(
@@ -247,6 +249,7 @@ async def _source_quote_validation_report(
             image_key,
             page_ocr_needed,
             structural_metadata,
+            page_text,
         ) in result:
             requirement_key = str(requirement_id)
             if not isinstance(page_number, int):
@@ -263,6 +266,22 @@ async def _source_quote_validation_report(
                         char_start=(char_start if isinstance(char_start, int) else None),
                     )
                 )
+            # Approximate anchors can retain a whole extraction window on
+            # several pages. Check the selected page's own parsed text as
+            # page-scoped wording evidence, without upgrading the anchor's
+            # location precision or using page text to stitch multi-page
+            # quotes together.
+            page_text_key = (requirement_key, page_number)
+            if isinstance(page_text, str) and page_text and page_text_key not in page_texts_added:
+                sources_by_requirement.setdefault(requirement_key, []).append(
+                    AuthorizedSourceFragment(
+                        page_number=page_number,
+                        text=page_text,
+                        page_local=False,
+                        authoritative_page_text=True,
+                    )
+                )
+                page_texts_added.add(page_text_key)
             page_metadata = (
                 structural_metadata if isinstance(structural_metadata, dict) else {}
             )
