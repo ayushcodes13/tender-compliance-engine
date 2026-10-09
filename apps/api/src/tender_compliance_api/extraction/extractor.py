@@ -35,6 +35,7 @@ Behaviour mapped to CP28:
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, cast
@@ -73,6 +74,7 @@ from tender_compliance_api.extraction.verbatim_validation import (
 
 #: Marker on LlmCallConfig identifying the extraction entry point (CP28).
 _EXTRACT_CALL_SITE = "extract_candidates"
+MAX_CONCURRENT_EXTRACTION_WINDOWS = 4
 
 
 @dataclass(frozen=True)
@@ -253,24 +255,20 @@ async def extract_from_windows(
         call_site=_EXTRACT_CALL_SITE,
     )
 
-    candidates: list[CandidateRecord] = []
-    llm_calls: list[LlmCallResult] = []
-    window_results: list[WindowExtractionResult] = []
+    @dataclass(frozen=True)
+    class _WindowOutcome:
+        candidates: list[CandidateRecord]
+        calls: list[LlmCallResult]
+        result: WindowExtractionResult
 
     async def audit_text_coverage(
         window: SourceWindow, emitted_quotes: list[str]
-    ) -> tuple[str, list[dict[str, Any]]]:
+    ) -> tuple[str, list[dict[str, Any]], LlmCallResult]:
         """Audit one source-bounded text window and retain its page if unique."""
         result = await audit_window_coverage(window.text, emitted_quotes, llm)
-        await log_call(result.call)
-        llm_calls.append(result.call)
         page_texts = coverage_page_texts or {}
         page_numbers = sorted(
-            {
-                source.page_number
-                for source in window.sources
-                if source.page_number is not None
-            }
+            {source.page_number for source in window.sources if source.page_number is not None}
         )
         text_omissions: list[dict[str, Any]] = []
         for quote in result.potential_omissions:
@@ -286,156 +284,161 @@ async def extract_from_windows(
                     "source_quote": quote,
                 }
             )
-        return result.status, text_omissions
+        return result.status, text_omissions, result.call
 
-    for window_index, window in enumerate(windows, start=1):
-        candidate_start = len(candidates)
-        source_spans = [
-            {
-                "page_number": source.page_number,
-                "clause_number": source.clause_number,
-                "char_start": source.char_start,
-                "char_end": source.char_end,
-            }
-            for source in window.sources
-        ]
-        user_text = _compose_input(window)
-        try:
-            result = await llm.extract(
-                system_prompt=EXTRACTION_SYSTEM_PROMPT,
-                user_text=user_text,
-                response_model=ExtractionResponse,
-                config=config,
-            )
-        except LlmCallError:
-            # Log the failed call (audit) and move on rather than failing the
-            # whole stage — candidates from other windows may still be valid.
-            failed = LlmCallResult(
-                provider=config.provider,
-                model=config.model,
-                prompt_version=config.prompt_version,
-                schema_version=config.schema_version,
-                latency_ms=0,
-                prompt_tokens=None,
-                completion_tokens=None,
-                total_tokens=None,
-                cost_usd=None,
-                finish_reason=None,
-                status="failed",
-                error_message=PROCESSING_STAGE_FAILURE,
-                call_site=config.call_site,
-            )
-            await log_call(failed)
-            llm_calls.append(failed)
-            coverage_status = "not_run"
-            failed_omissions: list[dict[str, Any]] = []
-            if enable_obligation_coverage_audit and not window.ocr_warning:
-                coverage_status, failed_omissions = await audit_text_coverage(
-                    window, []
+    async def process_window(
+        window_index: int, window: SourceWindow, semaphore: asyncio.Semaphore
+    ) -> _WindowOutcome:
+        async with semaphore:
+            calls: list[LlmCallResult] = []
+            window_candidates: list[CandidateRecord] = []
+            source_spans = [
+                {
+                    "page_number": source.page_number,
+                    "clause_number": source.clause_number,
+                    "char_start": source.char_start,
+                    "char_end": source.char_end,
+                }
+                for source in window.sources
+            ]
+            try:
+                result = await llm.extract(
+                    system_prompt=EXTRACTION_SYSTEM_PROMPT,
+                    user_text=_compose_input(window),
+                    response_model=ExtractionResponse,
+                    config=config,
                 )
-            window_results.append(
-                WindowExtractionResult(
+            except LlmCallError:
+                failed = LlmCallResult(
+                    provider=config.provider,
+                    model=config.model,
+                    prompt_version=config.prompt_version,
+                    schema_version=config.schema_version,
+                    latency_ms=0,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason=None,
+                    status="failed",
+                    error_message=PROCESSING_STAGE_FAILURE,
+                    call_site=config.call_site,
+                )
+                calls.append(failed)
+                coverage_status = "not_run"
+                failed_omissions: list[dict[str, Any]] = []
+                if enable_obligation_coverage_audit and not window.ocr_warning:
+                    coverage_status, failed_omissions, coverage_call = await audit_text_coverage(
+                        window, []
+                    )
+                    calls.append(coverage_call)
+                return _WindowOutcome(
+                    candidates=[],
+                    calls=calls,
+                    result=WindowExtractionResult(
+                        chunk_id=window.chunk_id,
+                        window_index=window_index,
+                        call_status="failed",
+                        candidate_count=0,
+                        ocr_warning=window.ocr_warning,
+                        source_spans=source_spans,
+                        coverage_status=coverage_status,
+                        potential_omissions=failed_omissions,
+                    ),
+                )
+
+            calls.append(result.call)
+            fallback_calls = 0
+            for cand in _iter_candidates(result):
+                record = _to_record(window, cand)
+                if not record.is_valid and enable_verbatim_fallback:
+                    trusted_text = window.sources[0].source_text if window.sources else None
+                    if trusted_text and len(window.sources) == 1:
+                        if fallback_calls >= MAX_FALLBACKS_PER_WINDOW:
+                            record = replace(
+                                record, verbatim_validation={"status": "fallback_budget_exhausted"}
+                            )
+                        else:
+                            fallback_calls += 1
+                            validation, fallback_call = await validate_candidate(
+                                cand, trusted_text, llm
+                            )
+                            calls.append(fallback_call)
+                            if validation is not None and _valid_positive(
+                                cand, validation, trusted_text
+                            ):
+                                recovered = cand.model_copy(
+                                    update={
+                                        "raw_source": validation.matched_source,
+                                        "uncertainty": UncertaintyLevel.UNCERTAIN,
+                                    }
+                                )
+                                recovered_record = _to_record(window, recovered)
+                                if recovered_record.is_valid:
+                                    record = replace(
+                                        recovered_record,
+                                        persistable=True,
+                                        rejection_reason=None,
+                                        verbatim_validation={
+                                            "status": "recovered_for_human_review",
+                                            "confidence": float(validation.confidence),
+                                            "original_quote": cand.raw_source,
+                                        },
+                                    )
+                            else:
+                                record = replace(
+                                    record,
+                                    verbatim_validation={
+                                        "status": "rejected"
+                                        if validation is not None
+                                        else "provider_failure",
+                                        "verdict": validation.verdict
+                                        if validation is not None
+                                        else None,
+                                        "confidence": float(validation.confidence)
+                                        if validation is not None
+                                        else None,
+                                    },
+                                )
+                window_candidates.append(record)
+
+            coverage_status = "not_run"
+            window_omissions: list[dict[str, Any]] = []
+            if enable_obligation_coverage_audit and not window.ocr_warning:
+                emitted_quotes = [
+                    record.raw_source for record in window_candidates if record.is_valid
+                ]
+                coverage_status, window_omissions, coverage_call = await audit_text_coverage(
+                    window, emitted_quotes
+                )
+                calls.append(coverage_call)
+
+            return _WindowOutcome(
+                candidates=window_candidates,
+                calls=calls,
+                result=WindowExtractionResult(
                     chunk_id=window.chunk_id,
                     window_index=window_index,
-                    call_status="failed",
-                    candidate_count=0,
+                    call_status="completed" if result.call.status == "completed" else "failed",
+                    candidate_count=len(window_candidates),
                     ocr_warning=window.ocr_warning,
                     source_spans=source_spans,
                     coverage_status=coverage_status,
-                    potential_omissions=failed_omissions,
-                )
-            )
-            continue
-
-        await log_call(result.call)
-        llm_calls.append(result.call)
-
-        fallback_calls = 0
-        for cand in _iter_candidates(result):
-            record = _to_record(window, cand)
-            if not record.is_valid and enable_verbatim_fallback:
-                trusted_text = window.sources[0].source_text if window.sources else None
-                if trusted_text and len(window.sources) == 1:
-                    if fallback_calls >= MAX_FALLBACKS_PER_WINDOW:
-                        record = replace(
-                            record,
-                            verbatim_validation={"status": "fallback_budget_exhausted"},
-                        )
-                    else:
-                        fallback_calls += 1
-                        validation, fallback_call = await validate_candidate(
-                            cand, trusted_text, llm
-                        )
-                        await log_call(fallback_call)
-                        llm_calls.append(fallback_call)
-                        if validation is not None and _valid_positive(
-                            cand, validation, trusted_text
-                        ):
-                            recovered = cand.model_copy(
-                                update={
-                                    "raw_source": validation.matched_source,
-                                    "uncertainty": UncertaintyLevel.UNCERTAIN,
-                                }
-                            )
-                            recovered_record = _to_record(window, recovered)
-                            if recovered_record.is_valid:
-                                record = replace(
-                                    recovered_record,
-                                    persistable=True,
-                                    rejection_reason=None,
-                                    verbatim_validation={
-                                        "status": "recovered_for_human_review",
-                                        "confidence": float(validation.confidence),
-                                        "original_quote": cand.raw_source,
-                                    },
-                                )
-                        else:
-                            record = replace(
-                                record,
-                                verbatim_validation={
-                                    "status": (
-                                        "rejected"
-                                        if validation is not None
-                                        else "provider_failure"
-                                    ),
-                                    "verdict": (
-                                        validation.verdict if validation is not None else None
-                                    ),
-                                    "confidence": (
-                                        float(validation.confidence)
-                                        if validation is not None
-                                        else None
-                                    ),
-                                },
-                            )
-            candidates.append(record)
-
-        coverage_status = "not_run"
-        window_omissions: list[dict[str, Any]] = []
-        if enable_obligation_coverage_audit and not window.ocr_warning:
-            emitted_quotes = [
-                record.raw_source
-                for record in candidates[candidate_start:]
-                if record.is_valid
-            ]
-            coverage_status, window_omissions = await audit_text_coverage(
-                window, emitted_quotes
-            )
-
-        window_results.append(
-            WindowExtractionResult(
-                chunk_id=window.chunk_id,
-                window_index=window_index,
-                call_status=(
-                    "completed" if result.call.status == "completed" else "failed"
+                    potential_omissions=window_omissions,
                 ),
-                candidate_count=len(candidates) - candidate_start,
-                ocr_warning=window.ocr_warning,
-                source_spans=source_spans,
-                coverage_status=coverage_status,
-                potential_omissions=window_omissions,
             )
-        )
+
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_EXTRACTION_WINDOWS)
+    outcomes = await asyncio.gather(
+        *(process_window(index, window, semaphore) for index, window in enumerate(windows, start=1))
+    )
+    candidates = [candidate for outcome in outcomes for candidate in outcome.candidates]
+    llm_calls = [call for outcome in outcomes for call in outcome.calls]
+    window_results = [outcome.result for outcome in outcomes]
+    # AsyncSession-backed callbacks are not safe to invoke concurrently. Persist
+    # model-call audit rows in deterministic window/call order after inference.
+    for call in llm_calls:
+        await log_call(call)
 
     if enable_obligation_coverage_audit:
         page_to_windows: dict[int, list[int]] = {}
@@ -456,8 +459,7 @@ async def extract_from_windows(
                 and page_text
                 and quote_is_present_in_source(page_text, record.raw_source)
                 and any(
-                    isinstance(source, dict)
-                    and source.get("page_number") == page_number
+                    isinstance(source, dict) and source.get("page_number") == page_number
                     for source in record.sources_json
                 )
             ]
@@ -474,11 +476,7 @@ async def extract_from_windows(
                 {
                     "page_number": page_number,
                     "source_quote": quote,
-                    **(
-                        {"bbox": page_bboxes[quote]}
-                        if quote in page_bboxes
-                        else {}
-                    ),
+                    **({"bbox": page_bboxes[quote]} if quote in page_bboxes else {}),
                 }
                 for quote in audit.potential_omissions
             ]
@@ -492,11 +490,7 @@ async def extract_from_windows(
             if not window.ocr_warning:
                 continue
             pages = sorted(
-                {
-                    source.page_number
-                    for source in window.sources
-                    if source.page_number is not None
-                }
+                {source.page_number for source in window.sources if source.page_number is not None}
             )
             results = [page_results[page] for page in pages if page in page_results]
             statuses = [status for status, _findings, _category in results]
