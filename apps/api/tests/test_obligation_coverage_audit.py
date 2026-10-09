@@ -105,6 +105,20 @@ def test_rejects_auditor_quote_outside_its_authorized_window() -> None:
     ) is None
 
 
+def test_unmatched_text_quote_has_a_stable_reason_for_page_image_fallback() -> None:
+    adapter = FakeLlmAdapter(
+        [ObligationCoverageResponse(quotes=["A quote outside the source window."])]
+    )
+
+    result = asyncio.run(
+        audit_window_coverage("The pump shall deliver 12 L/min.", [], adapter)
+    )
+
+    assert result.status == "invalid"
+    assert result.call.status == "failed"
+    assert result.call.error_category == "source_quote_not_found"
+
+
 def test_audit_call_is_logged_and_unmatched_quote_is_returned() -> None:
     from tender_compliance_api.extraction.coverage_audit import ObligationCoverageResponse
 

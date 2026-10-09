@@ -312,6 +312,7 @@ async def audit_window_coverage(
             status="failed",
             error_message="coverage quote did not match the authorized source window",
             call_site=CALL_SITE,
+            error_category="source_quote_not_found",
         )
         return CoverageAuditResult("invalid", (), invalid)
     return CoverageAuditResult("completed", omissions, result.call)
@@ -357,6 +358,7 @@ async def audit_page_image_coverage(
                 status="failed",
                 error_message="rendered page image unavailable for coverage audit",
                 call_site=IMAGE_CALL_SITE,
+                error_category="image_unavailable",
             ),
         )
     image_width, image_height = struct.unpack(">II", image_bytes[16:24])
@@ -378,6 +380,7 @@ async def audit_page_image_coverage(
                 status="failed",
                 error_message="rendered page image dimensions unavailable",
                 call_site=IMAGE_CALL_SITE,
+                error_category="invalid_page_image",
             ),
         )
     try:
