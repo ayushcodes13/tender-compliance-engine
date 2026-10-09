@@ -27,6 +27,12 @@ class LlmCallError(RuntimeError):
     failed call from a valid (possibly empty) response.
     """
 
+    def __init__(self, message: str, *, error_category: str | None = None) -> None:
+        super().__init__(message)
+        # Stable, non-sensitive provider category only; never store the raw
+        # provider response or its message on this exception.
+        self.error_category = error_category
+
 
 @dataclass(frozen=True)
 class LlmCallConfig:
@@ -64,6 +70,7 @@ class LlmCallResult:
     status: str  # "completed" | "failed"
     error_message: str | None = None
     call_site: str | None = None
+    error_category: str | None = None
 
 
 @dataclass

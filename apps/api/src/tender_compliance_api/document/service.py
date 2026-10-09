@@ -285,6 +285,7 @@ async def _source_quote_validation_report(
                         "prompt_tokens": call.prompt_tokens,
                         "completion_tokens": call.completion_tokens,
                         "total_tokens": call.total_tokens,
+                        "error_category": call.error_category,
                     }
                 )
                 if accepted:
@@ -377,6 +378,7 @@ async def _extraction_window_coverage_report(
         return {
             "window_index": audit.window_index,
             "chunk_id": audit.chunk_id,
+            "coverage_error_category": audit.coverage_error_category,
             "pages": sorted(
                 {
                     int(span["page_number"])
@@ -3119,6 +3121,7 @@ class DocumentService:
                     ocr_warning=window.ocr_warning,
                     source_spans=window.source_spans,
                     coverage_status=window.coverage_status,
+                    coverage_error_category=window.coverage_error_category,
                     potential_omissions=window.potential_omissions,
                 )
             )

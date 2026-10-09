@@ -34,6 +34,7 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
+from tender_compliance_api.logs import error_category as categorize_error
 
 PROMPT_VERSION = "1.0.0"
 SCHEMA_VERSION = "1.0.0"
@@ -359,7 +360,12 @@ async def audit_page_image_coverage(
             raise LlmCallError("page image obligation audit did not complete")
         if not isinstance(result.response, ImageObligationCoverageResponse):
             raise LlmCallError("page image obligation audit response type mismatch")
-    except Exception:
+    except Exception as exc:
+        category = (
+            exc.error_category
+            if isinstance(exc, LlmCallError) and exc.error_category
+            else categorize_error(exc)
+        )
         return CoverageAuditResult(
             "failed",
             (),
@@ -377,6 +383,7 @@ async def audit_page_image_coverage(
                 status="failed",
                 error_message="page image obligation audit failed",
                 call_site=IMAGE_CALL_SITE,
+                error_category=category,
             ),
         )
 
