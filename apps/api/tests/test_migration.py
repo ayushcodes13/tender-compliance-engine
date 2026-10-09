@@ -22,7 +22,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0035_worker_audit_actor"
+_HEAD_REV = "0036_unbounded_clause_labels"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -87,6 +87,18 @@ def test_upgrade_head_creates_app_tables(tmp_path):
         "coverage_error_category",
         "potential_omissions",
     }.issubset(window_audit_columns)
+    for table_name, column_name in (
+        ("extraction_candidates", "clause_number"),
+        ("extraction_candidates", "group_hint"),
+        ("requirements", "clause_number"),
+        ("requirement_sources", "clause_number"),
+    ):
+        column = next(
+            item
+            for item in inspector.get_columns(table_name)
+            if item["name"] == column_name
+        )
+        assert column["type"].__class__.__name__.lower() == "text"
     engine.dispose()
 
 

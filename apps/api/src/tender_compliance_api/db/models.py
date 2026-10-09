@@ -26,6 +26,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Table,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -913,8 +914,8 @@ class ExtractionCandidate(Base):
     raw_source: Mapped[str] = mapped_column(String(2048), nullable=False)
     requirement_type: Mapped[str] = mapped_column(String(32), nullable=False)
     uncertainty: Mapped[str] = mapped_column(String(16), nullable=False)
-    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    group_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    clause_number: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    group_hint: Mapped[str | None] = mapped_column(Text(), nullable=True)
     ocr_warning: Mapped[bool] = mapped_column(
         Boolean(), nullable=False, default=False, server_default="0"
     )
@@ -1217,7 +1218,7 @@ class Requirement(Base):
     normalized_text: Mapped[str] = mapped_column(String(2048), nullable=False)
     raw_source: Mapped[str] = mapped_column(String(2048), nullable=False)
     uncertainty: Mapped[str] = mapped_column(String(16), nullable=False)
-    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    clause_number: Mapped[str | None] = mapped_column(Text(), nullable=True)
     ocr_warning: Mapped[bool] = mapped_column(
         Boolean(), nullable=False, default=False, server_default="0"
     )
@@ -1397,7 +1398,7 @@ class RequirementSource(Base):
         index=True,
     )
     page_number: Mapped[int] = mapped_column(Integer(), nullable=False)
-    clause_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    clause_number: Mapped[str | None] = mapped_column(Text(), nullable=True)
     char_start: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     char_end: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     # JSON-encoded bounding box of the raw_source on the page, when the
