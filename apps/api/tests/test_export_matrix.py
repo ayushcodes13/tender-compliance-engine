@@ -428,6 +428,40 @@ class TestExportGeneration:
             ("temperature-range", "source_quote_not_found")
         ]
 
+    def test_example3_delivery_period_rejects_sampled_ten_month_substitution(self):
+        # Example 3 page 22 states "Within 8 Weeks"; its supplied response
+        # sheet says "within 10 months", which is absent from the tender.
+        source_page = AuthorizedSourceFragment(
+            page_number=22,
+            text=("Delivery- Period Within 8 Weeks from the date of Purchase order."),
+            page_local=True,
+            authoritative_page_text=True,
+        )
+
+        exact_source_wording = RequirementCell(
+            "delivery-period",
+            "Within 8 Weeks from the date of Purchase order.",
+            source_page=22,
+        )
+        sampled_substitution = RequirementCell(
+            "delivery-period",
+            "within 10 months of acceptance of PO by the vendor.",
+            source_page=22,
+        )
+
+        assert (
+            validate_source_quote_presence(
+                [exact_source_wording], {"delivery-period": [source_page]}
+            )
+            == ()
+        )
+        issues = validate_source_quote_presence(
+            [sampled_substitution], {"delivery-period": [source_page]}
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("delivery-period", "source_quote_not_found")
+        ]
+
     def test_source_quote_check_allows_wrap_whitespace_but_not_quote_glyph_change(self):
         exact_quote = "The chuck supports a wafer diameter of 4”."
         wrapped_source = "The chuck supports a wafer diameter\nof 4”."
