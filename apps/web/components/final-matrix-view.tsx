@@ -138,6 +138,7 @@ function sourceValidationDiagnostic(
     | {
         llm_fallback_results?: {
           status: string;
+          verdict?: "exact" | "not_exact" | "cannot_tell" | "unavailable" | "not_run";
           call_status?: string;
           error_category?: string | null;
         }[];
@@ -160,6 +161,22 @@ function sourceValidationDiagnostic(
   if (unavailableCount) {
     details.push(
       `The source page image could not be retrieved for ${unavailableCount} validation check${unavailableCount === 1 ? "" : "s"}.`
+    );
+  }
+  const mismatchCount = results.filter(
+    (result) => result.verdict === "not_exact"
+  ).length;
+  const uncertainCount = results.filter(
+    (result) => result.verdict === "cannot_tell"
+  ).length;
+  if (mismatchCount) {
+    details.push(
+      `The page-image check found wording differences in ${mismatchCount} row${mismatchCount === 1 ? "" : "s"}.`
+    );
+  }
+  if (uncertainCount) {
+    details.push(
+      `The page-image check could not determine the wording for ${uncertainCount} row${uncertainCount === 1 ? "" : "s"}.`
     );
   }
   return details.length ? ` ${details.join(" ")}` : "";

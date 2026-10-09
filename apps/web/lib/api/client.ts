@@ -358,6 +358,8 @@ export type ExportArtifactResponse = {
         row_id: string;
         page_number: number;
         status: string;
+        verdict?: "exact" | "not_exact" | "cannot_tell" | "unavailable" | "not_run";
+        reason_code?: string;
         provider?: string;
         model?: string;
         call_status?: string;

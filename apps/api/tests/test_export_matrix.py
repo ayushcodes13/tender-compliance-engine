@@ -1542,6 +1542,7 @@ class TestExportGeneration:
         ("fallback_outcome", "expected_status"),
         [
             ("exact", "passed"),
+            ("not_exact", "needs_review"),
             ("uncertain", "needs_review"),
             ("provider_failed", "needs_review"),
             ("image_unavailable", "needs_review"),
@@ -1629,7 +1630,13 @@ class TestExportGeneration:
                         error_category="image_parse_error",
                     ),
                 )
-            verdict = "exact" if fallback_outcome == "exact" else "cannot_tell"
+            verdict = (
+                "exact"
+                if fallback_outcome == "exact"
+                else "not_exact"
+                if fallback_outcome == "not_exact"
+                else "cannot_tell"
+            )
             confidence = 0.99 if fallback_outcome == "exact" else 0.2
             return _fake_page_batch(
                 kwargs, lambda _page, _quote: (verdict, confidence)
@@ -1688,6 +1695,11 @@ class TestExportGeneration:
         if fallback_outcome == "image_unavailable":
             assert checked == []
             assert report["llm_fallback_results"][0]["status"] == "image_unavailable"
+            assert report["llm_fallback_results"][0]["verdict"] == "unavailable"
+            assert (
+                report["llm_fallback_results"][0]["reason_code"]
+                == "page_image_unavailable"
+            )
         else:
             assert len(checked) == 1
             assert checked[0]["page_number"] == 3
@@ -1698,6 +1710,23 @@ class TestExportGeneration:
             assert report["llm_fallback_results"][0]["status"] == expected_fallback_status
             assert report["llm_fallback_results"][0]["call_status"] == (
                 "failed" if fallback_outcome == "provider_failed" else "completed"
+            )
+            expected_verdict = {
+                "exact": "exact",
+                "not_exact": "not_exact",
+                "uncertain": "cannot_tell",
+                "provider_failed": "unavailable",
+            }[fallback_outcome]
+            assert report["llm_fallback_results"][0]["verdict"] == expected_verdict
+            expected_reason = {
+                "exact": "visual_exact_match",
+                "not_exact": "visual_wording_mismatch",
+                "uncertain": "visual_result_uncertain",
+                "provider_failed": "visual_validation_unavailable",
+            }[fallback_outcome]
+            assert (
+                report["llm_fallback_results"][0]["reason_code"]
+                == expected_reason
             )
             if fallback_outcome == "provider_failed":
                 assert (

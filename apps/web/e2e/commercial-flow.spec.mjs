@@ -518,8 +518,17 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
                 row_id: requirementId,
                 page_number: 12,
                 status: "needs_review",
+                verdict: "unavailable",
+                reason_code: "visual_validation_unavailable",
                 call_status: "failed",
                 error_category: "image_parse_error",
+              }, {
+                row_id: requirementId,
+                page_number: 13,
+                status: "needs_review",
+                verdict: "not_exact",
+                reason_code: "visual_wording_mismatch",
+                call_status: "completed",
               }],
             },
             window_processing: {
@@ -718,6 +727,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
   await page.getByRole("button", { name: "Export PDF" }).click();
   await expect(page.getByText(/Image validation error category: image_parse_error\./)).toBeVisible();
+  await expect(
+    page.getByText(/page-image check found wording differences in 1 row/)
+  ).toBeVisible();
   const sourceFindings = page.locator('[aria-labelledby="source-validation-heading"]');
   await expect(sourceFindings).toContainText("Source wording findings");
   await expect(sourceFindings).toContainText("Generated wording does not match the cited tender excerpt exactly.");
