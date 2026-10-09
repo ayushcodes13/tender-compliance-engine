@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import struct
 
 import pytest
 from pydantic import ValidationError
 
+from tender_compliance_api.extraction.adapter import (
+    ExtractResult,
+    LlmCallConfig,
+    LlmCallResult,
+)
 from tender_compliance_api.extraction.coverage_audit import (
     CALL_SITE,
+    IMAGE_CALL_SITE,
     IMAGE_SYSTEM_PROMPT,
     OBLIGATION_SCOPE,
     PROMPT_VERSION,
@@ -16,6 +23,7 @@ from tender_compliance_api.extraction.coverage_audit import (
     ImageObligationCoverageResponse,
     ObligationCoverageResponse,
     _find_potential_omissions,
+    audit_page_image_coverage,
     audit_window_coverage,
 )
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
@@ -69,6 +77,71 @@ def test_coverage_audit_retains_supplier_cure_duty_alongside_buyer_remedies() ->
 
     assert result.status == "completed"
     assert result.potential_omissions == (supplier_duty,)
+
+
+class _ConfigCapturingAdapter(FakeLlmAdapter):
+    def __init__(self, responses=()) -> None:
+        super().__init__(responses)
+        self.configs: list[LlmCallConfig] = []
+
+    async def extract(self, *, system_prompt, user_text, response_model, config):
+        self.configs.append(config)
+        return await super().extract(
+            system_prompt=system_prompt,
+            user_text=user_text,
+            response_model=response_model,
+            config=config,
+        )
+
+    async def extract_with_image(
+        self,
+        *,
+        system_prompt,
+        user_text,
+        image_bytes,
+        image_mime_type,
+        response_model,
+        config,
+    ):
+        del system_prompt, user_text, image_bytes, image_mime_type
+        self.configs.append(config)
+        response = response_model(quotes=[], confidence=1.0, uncertain=False)
+        call = LlmCallResult(
+            provider=self.provider,
+            model=self.model,
+            prompt_version=config.prompt_version,
+            schema_version=config.schema_version,
+            latency_ms=0,
+            prompt_tokens=None,
+            completion_tokens=None,
+            total_tokens=None,
+            cost_usd=None,
+            finish_reason="stop",
+            status="completed",
+            call_site=config.call_site,
+        )
+        return ExtractResult(response=response, call=call)
+
+
+def test_text_coverage_uses_two_bounded_provider_attempts() -> None:
+    adapter = _ConfigCapturingAdapter([ObligationCoverageResponse(quotes=[])])
+
+    result = asyncio.run(audit_window_coverage("No obligations here.", [], adapter))
+
+    assert result.status == "completed"
+    assert adapter.configs[0].call_site == CALL_SITE
+    assert adapter.configs[0].max_retries == 2
+
+
+def test_image_coverage_uses_two_bounded_provider_attempts() -> None:
+    adapter = _ConfigCapturingAdapter()
+    image = b"\x89PNG\r\n\x1a\n" + bytes(8) + struct.pack(">II", 100, 100) + b"x"
+
+    result = asyncio.run(audit_page_image_coverage(3, image, [], adapter))
+
+    assert result.status == "completed"
+    assert adapter.configs[0].call_site == IMAGE_CALL_SITE
+    assert adapter.configs[0].max_retries == 2
 
 
 def test_cover_and_contents_window_can_complete_with_no_obligations() -> None:

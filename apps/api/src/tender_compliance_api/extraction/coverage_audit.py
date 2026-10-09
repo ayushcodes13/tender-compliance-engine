@@ -43,6 +43,7 @@ IMAGE_CALL_SITE = "audit_obligation_coverage_page_image"
 MAX_AUDIT_QUOTES = 100
 MAX_QUOTE_CHARS = 2048
 MIN_IMAGE_CONFIDENCE = 0.99
+MAX_COVERAGE_AUDIT_ATTEMPTS = 2
 
 OBLIGATION_SCOPE = """\
 Scope the audit to obligations the supplier or OEM must meet in the offered
@@ -264,7 +265,7 @@ async def audit_window_coverage(
         schema_version=SCHEMA_VERSION,
         call_site=CALL_SITE,
         temperature=0,
-        max_retries=1,
+        max_retries=MAX_COVERAGE_AUDIT_ATTEMPTS,
     )
     try:
         result = await adapter.extract(
@@ -343,7 +344,7 @@ async def audit_page_image_coverage(
         schema_version=SCHEMA_VERSION,
         call_site=IMAGE_CALL_SITE,
         temperature=0,
-        max_retries=1,
+        max_retries=MAX_COVERAGE_AUDIT_ATTEMPTS,
     )
     if (
         not image_bytes
