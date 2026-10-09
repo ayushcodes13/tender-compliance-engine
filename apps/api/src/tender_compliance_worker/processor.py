@@ -52,7 +52,8 @@ from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 
 logger = logging.getLogger(__name__)
 
-#: The system worker's actor ID — a fixed UUID for audit trails.
+#: The system worker's actor ID — seeded by Alembic migration 0035 because
+#: audit_logs.actor_id is a foreign key to users.id.
 WORKER_ACTOR_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
 
 #: Stages the worker processes, in order.

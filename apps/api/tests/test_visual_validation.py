@@ -7,12 +7,14 @@ from pydantic import BaseModel, ValidationError
 
 from tender_compliance_api.export.visual_validation import (
     CALL_SITE,
+    PROMPT_VERSION,
     PageImageValidationResponse,
     validate_quote_on_page_image,
 )
 from tender_compliance_api.extraction.adapter import (
     ExtractResult,
     LlmAdapter,
+    LlmCallError,
     LlmCallResult,
 )
 
@@ -89,6 +91,62 @@ def test_visual_validation_accepts_only_exact_quote_from_supplied_page():
     )
 
 
+def test_visual_validation_ignores_only_standalone_list_bullet_markers():
+    adapter = FakeAdapter(
+        _response(visible_quote="• Accuracy: ±0.5%\n\uf0a7 Force: 25 kN\n\uf0b7 Power: 220 V")
+    )
+
+    response, _ = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="Accuracy: ±0.5%\nForce: 25 kN\nPower: 220 V",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "exact"
+    assert adapter.call_args is not None
+    assert "Standalone bullet glyphs" in adapter.call_args["system_prompt"]
+
+
+def test_visual_validation_does_not_ignore_bullet_glyph_inside_requirement_text():
+    adapter = FakeAdapter(_response(visible_quote="Accuracy 0.5%"))
+
+    response, _ = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="Accuracy • 0.5%",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "not_exact"
+
+
+def test_visual_validation_preserves_single_line_legend_symbol():
+    adapter = FakeAdapter(_response(visible_quote="= active"))
+
+    response, call = asyncio.run(
+        validate_quote_on_page_image(
+            proposed_quote="● = active",
+            page_number=7,
+            image_bytes=b"page-seven",
+            image_mime_type="image/png",
+            adapter=adapter,
+        )
+    )
+
+    assert response is not None
+    assert response.verdict == "not_exact"
+    assert call.prompt_version == PROMPT_VERSION == "1.1.0"
+
+
 @pytest.mark.parametrize(
     ("verdict", "confidence", "visible_quote", "expected_verdict"),
     [
@@ -147,7 +205,10 @@ def test_visual_validation_malformed_response_fails_closed():
 def test_visual_validation_provider_error_fails_closed():
     class FailingAdapter(FakeAdapter):
         async def extract_with_image(self, **kwargs) -> ExtractResult:
-            raise RuntimeError("provider unavailable")
+            raise LlmCallError(
+                "provider call failed",
+                error_category="image_parse_error",
+            )
 
     response, call = asyncio.run(
         validate_quote_on_page_image(
@@ -162,6 +223,7 @@ def test_visual_validation_provider_error_fails_closed():
     assert response is None
     assert call.status == "failed"
     assert call.error_message == "page image validation failed"
+    assert call.error_category == "image_parse_error"
     assert call.call_site == CALL_SITE
 
 

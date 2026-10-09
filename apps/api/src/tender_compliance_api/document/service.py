@@ -159,6 +159,11 @@ async def _source_quote_validation_report(
     )
 
     requirement_ids = [row.requirement_id for row in rows]
+    # The exported page is authoritative. Keep that page and any later
+    # page-local fragments needed to verify a quote that continues forward.
+    selected_page_by_requirement = {
+        str(row.requirement_id): row.source_page for row in rows
+    }
     sources_by_requirement: dict[str, list[AuthorizedSourceFragment]] = {}
     pages_by_requirement: dict[str, list[_SourcePageForValidation]] = {}
     if requirement_ids:
@@ -191,6 +196,11 @@ async def _source_quote_validation_report(
             structural_metadata,
         ) in result:
             requirement_key = str(requirement_id)
+            if not isinstance(page_number, int):
+                continue
+            selected_page = selected_page_by_requirement.get(requirement_key)
+            if selected_page is not None and page_number < selected_page:
+                continue
             if isinstance(source_text, str) and source_text:
                 sources_by_requirement.setdefault(requirement_key, []).append(
                     AuthorizedSourceFragment(
@@ -200,8 +210,6 @@ async def _source_quote_validation_report(
                         char_start=(char_start if isinstance(char_start, int) else None),
                     )
                 )
-            if not isinstance(page_number, int):
-                continue
             page_metadata = (
                 structural_metadata if isinstance(structural_metadata, dict) else {}
             )
@@ -218,7 +226,10 @@ async def _source_quote_validation_report(
             )
 
     expected = [
-        RequirementCell(str(row.requirement_id), row.raw_source) for row in rows
+        RequirementCell(
+            str(row.requirement_id), row.raw_source, source_page=row.source_page
+        )
+        for row in rows
     ]
     issues = list(validate_source_quote_presence(expected, sources_by_requirement))
     visual_required_ids = {
@@ -258,23 +269,46 @@ async def _source_quote_validation_report(
     resolved_ids: set[str] = set()
 
     def validation_parts(
-        quote: str, page_sources: Sequence[_SourcePageForValidation]
+        quote: str,
+        page_sources: Sequence[_SourcePageForValidation],
+        selected_page: int | None,
     ) -> list[tuple[_SourcePageForValidation, str]]:
         normalized_quote = re.sub(r"\s+", " ", quote).strip()
         exact_sources = [
             page
             for page in page_sources
             if page.location_type == "exact" and page.source_text
+            and (selected_page is None or page.page_number >= selected_page)
         ]
-        for page in sorted(exact_sources, key=lambda item: item.page_number):
+        pages_to_check = (
+            [page for page in exact_sources if page.page_number == selected_page]
+            if selected_page is not None
+            else exact_sources
+        )
+        text_pages: dict[str, set[int]] = {}
+        for page in exact_sources:
+            page_text = re.sub(r"\s+", " ", page.source_text or "").strip()
+            text_pages.setdefault(page_text, set()).add(page.page_number)
+        duplicated_window_texts = {
+            page_text for page_text, numbers in text_pages.items() if len(numbers) > 1
+        }
+        for page in sorted(pages_to_check, key=lambda item: item.page_number):
             normalized_source = re.sub(r"\s+", " ", page.source_text or "").strip()
-            if normalized_quote and normalized_quote in normalized_source:
+            if (
+                normalized_quote
+                and normalized_quote in normalized_source
+                and normalized_source not in duplicated_window_texts
+            ):
                 return [(page, quote)]
 
         by_page: dict[int, list[_SourcePageForValidation]] = {}
         for page in exact_sources:
             by_page.setdefault(page.page_number, []).append(page)
         ordered_pages = sorted(by_page)
+        if selected_page is not None:
+            ordered_pages = [page for page in ordered_pages if page >= selected_page]
+            if selected_page not in ordered_pages:
+                ordered_pages = []
         if ordered_pages and all(
             current == previous + 1
             for previous, current in zip(ordered_pages, ordered_pages[1:], strict=False)
@@ -308,6 +342,9 @@ async def _source_quote_validation_report(
                 ]
 
         unique_pages = {page.page_number: page for page in page_sources}
+        if selected_page is not None:
+            selected = unique_pages.get(selected_page)
+            return [(selected, quote)] if selected is not None else []
         return [(page, quote) for page in unique_pages.values()]
 
     if adapter is not None:
@@ -322,7 +359,11 @@ async def _source_quote_validation_report(
             if row is None:
                 continue
             page_sources = pages_by_requirement.get(issue.row_id, [])
-            parts = validation_parts(row.raw_source, page_sources)
+            parts = validation_parts(
+                row.raw_source,
+                page_sources,
+                selected_page_by_requirement.get(issue.row_id),
+            )
             if not parts:
                 fallback_results.append(
                     {
@@ -395,6 +436,7 @@ async def _source_quote_validation_report(
                         "prompt_tokens": call.prompt_tokens,
                         "completion_tokens": call.completion_tokens,
                         "total_tokens": call.total_tokens,
+                        "error_category": call.error_category,
                     }
                 )
                 if not accepted:
@@ -489,6 +531,7 @@ async def _extraction_window_coverage_report(
         return {
             "window_index": audit.window_index,
             "chunk_id": audit.chunk_id,
+            "coverage_error_category": audit.coverage_error_category,
             "pages": sorted(
                 {
                     int(span["page_number"])
@@ -3231,6 +3274,7 @@ class DocumentService:
                     ocr_warning=window.ocr_warning,
                     source_spans=window.source_spans,
                     coverage_status=window.coverage_status,
+                    coverage_error_category=window.coverage_error_category,
                     potential_omissions=window.potential_omissions,
                 )
             )

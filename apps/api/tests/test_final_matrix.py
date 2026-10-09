@@ -712,6 +712,17 @@ class TestFinalMatrixEndpoint:
                     await _add_evidence_and_vendor_spec(session, project_id, r.id)
                 session.add(
                     RequirementSource(
+                        id=uuid.uuid4(),
+                        requirement_id=reqs[0].id,
+                        document_version_id=version.id,
+                        page_number=5,
+                        clause_number="3.9",
+                        location_type="approximate",
+                        source_text="different text on an earlier page",
+                    )
+                )
+                session.add(
+                    RequirementSource(
                         id=source_anchor_id,
                         requirement_id=reqs[0].id,
                         document_version_id=version.id,

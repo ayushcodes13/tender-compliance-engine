@@ -13,8 +13,9 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
+from tender_compliance_api.logs import error_category as categorize_error
 
-PROMPT_VERSION = "1.0.0"
+PROMPT_VERSION = "1.1.0"
 SCHEMA_VERSION = "1.0.0"
 CALL_SITE = "validate_generated_sheet_page_image"
 MIN_CONFIDENCE = 0.99
@@ -28,6 +29,10 @@ on the page. Do not use outside knowledge, another page, OCR assumptions, or
 semantic equivalence. Return exact only when every visible word, letter,
 number, unit, operator, and punctuation mark in the proposed wording appears
 in the page in the same order. Layout line breaks and spacing may differ.
+Standalone bullet glyphs at the start of list items are presentation markers
+and may be omitted or differ; do not treat them as wording. Compare all text
+within the requirement exactly. A bullet glyph inside a technical expression
+or sentence is not a list marker.
 For exact, return the complete visible matching wording in visible_quote.
 If any character is unclear, omitted, added, or changed, return cannot_tell
 or not_exact and an empty visible_quote. Never correct OCR or infer text.
@@ -44,7 +49,15 @@ class PageImageValidationResponse(BaseModel):
 
 
 def _layout_key(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    marker_pattern = re.compile(
+        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\uf0a7\uf0b7][ \t]+"
+    )
+    # A single line-leading glyph can be a meaningful legend or expression
+    # symbol (for example, "● = active"). Treat glyphs as layout only when
+    # repeated list structure provides evidence that they are list markers.
+    markers = list(marker_pattern.finditer(text))
+    without_list_markers = marker_pattern.sub("", text) if len(markers) >= 2 else text
+    return re.sub(r"\s+", " ", without_list_markers).strip()
 
 
 async def validate_quote_on_page_image(
@@ -96,7 +109,7 @@ async def validate_quote_on_page_image(
         if _layout_key(response.visible_quote) != _layout_key(proposed_quote):
             return response.model_copy(update={"verdict": "not_exact"}), result.call
         return response, result.call
-    except Exception:
+    except Exception as exc:
         return None, LlmCallResult(
             provider=adapter.provider,
             model=adapter.model,
@@ -111,6 +124,11 @@ async def validate_quote_on_page_image(
             status="failed",
             error_message="page image validation failed",
             call_site=CALL_SITE,
+            error_category=(
+                exc.error_category
+                if isinstance(exc, LlmCallError) and exc.error_category
+                else categorize_error(exc)
+            ),
         )
 
 

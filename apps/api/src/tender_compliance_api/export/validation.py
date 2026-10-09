@@ -27,6 +27,7 @@ class RequirementCell:
     row_id: str
     text: str
     fields: Mapping[str, str] | None = None
+    source_page: int | None = None
 
 
 @dataclass(frozen=True)
@@ -79,10 +80,28 @@ def _content_key(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _source_quote_key(value: str) -> str:
+    """Normalize layout and standalone list markers for source quote checks.
+
+    Some PDF text extractors expose Word's private-use bullet glyph even when
+    the generated DOCX stores that marker as list formatting. Only a marker at
+    the start of a line is presentation; bullets inside wording stay literal.
+    """
+    without_list_markers = re.sub(
+        r"(?m)^[ \t]*[•\u2022\u2023\u25e6\u25aa\u25cf\uf0a7\uf0b7][ \t]+",
+        "",
+        value,
+    )
+    return _content_key(without_list_markers)
+
+
 def _docx_table(
     data: bytes,
 ) -> tuple[list[str], list[dict[str, str]], list[CellIssue]]:
     document: Any = Document(BytesIO(data))
+    output_headers: list[str] = []
+    rows: list[dict[str, str]] = []
+    docx_issues: list[CellIssue] = []
     for table in document.tables:
         if not table.rows:
             continue
@@ -92,13 +111,24 @@ def _docx_table(
         if "tender requirement" not in headers:
             continue
         original_headers = [_content_key(cell.text) for cell in table.rows[0].cells]
+        if not output_headers:
+            output_headers = original_headers
+        else:
+            known = {header.casefold() for header in output_headers}
+            current = {header.casefold() for header in original_headers}
+            docx_issues.extend(
+                CellIssue("", "missing_column", header)
+                for header in sorted(known - current)
+            )
+            docx_issues.extend(
+                CellIssue("", "unexpected_column", header)
+                for header in sorted(current - known)
+            )
         id_index = (
             headers.index("requirement id")
             if "requirement id" in headers
             else headers.index("s.no.")
         )
-        rows: list[dict[str, str]] = []
-        visual_issues: list[CellIssue] = []
         for row in table.rows[1:]:
             row_id = _content_key(row.cells[id_index].text)
             rows.append(
@@ -112,15 +142,14 @@ def _docx_table(
                 if index >= len(original_headers):
                     continue
                 if cell._tc.xpath(".//w:drawing | .//w:pict"):
-                    visual_issues.append(
+                    docx_issues.append(
                         CellIssue(
                             row_id=row_id,
                             code="unverified_visual_content",
                             field=original_headers[index],
                         )
                     )
-        return original_headers, rows, visual_issues
-    return [], [], []
+    return output_headers, rows, docx_issues
 
 
 def _xlsx_table(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
@@ -355,16 +384,25 @@ def validate_source_quote_presence(
         if not sources:
             issues.append(SourceQuoteIssue(row.row_id, "source_text_unavailable"))
             continue
-        quote = _content_key(row.text)
+        quote = _source_quote_key(row.text)
         exact_sources = sources
+        all_full_matches = [
+            source
+            for source in exact_sources
+            if quote in _source_quote_key(source.text)
+        ]
         full_matches = [
-            source for source in exact_sources if quote in _content_key(source.text)
+            source
+            for source in all_full_matches
+            if row.source_page is None or source.page_number == row.source_page
         ]
         # A full window copied onto several page anchors is not page-specific
         # evidence for a cross-page quote. New anchors carry the exact page
         # fragments instead; legacy single-page records remain compatible.
-        full_match_pages = {source.page_number for source in full_matches}
-        full_match_texts = {_content_key(source.text) for source in full_matches}
+        full_match_pages = {source.page_number for source in all_full_matches}
+        full_match_texts = {
+            _content_key(source.text) for source in all_full_matches
+        }
         full_match_is_page_specific = (
             any(source.page_number is None for source in full_matches)
             or len(full_match_pages) <= 1
@@ -392,7 +430,8 @@ def validate_source_quote_presence(
                 else:
                     runs[-1].append(source)
             found = any(
-                quote == _content_key("\n".join(source.text for source in run))
+                quote == _source_quote_key("\n".join(source.text for source in run))
+                and (row.source_page is None or run[0].page_number == row.source_page)
                 for run in runs
             )
 

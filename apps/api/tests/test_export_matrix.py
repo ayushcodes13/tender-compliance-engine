@@ -186,6 +186,7 @@ def _add_window_audit(
     call_status: str,
     candidate_count: int,
     coverage_status: str = "not_run",
+    coverage_error_category: str | None = None,
     potential_omissions: list[str | dict[str, object]] | None = None,
 ):
     """Attach one extraction-window result to a parsed test version."""
@@ -235,6 +236,7 @@ def _add_window_audit(
                         }
                     ],
                     coverage_status=coverage_status,
+                    coverage_error_category=coverage_error_category,
                     potential_omissions=potential_omissions or [],
                 )
             )
@@ -423,6 +425,24 @@ class TestExportGeneration:
             ("quote", "source_quote_not_found")
         ]
 
+    def test_source_quote_check_ignores_only_standalone_list_bullet_markers(self):
+        source = "\uf0b7 Accuracy: ±0.5%\n\uf0b7 Power supply: 380V / 400V"
+        quote = "Accuracy: ±0.5%\nPower supply: 380V / 400V"
+
+        assert validate_source_quote_presence(
+            [RequirementCell("list-quote", quote)], {"list-quote": [source]}
+        ) == ()
+
+        embedded_bullet_source = "Accuracy • 0.5%"
+        embedded_bullet_quote = "Accuracy 0.5%"
+        issues = validate_source_quote_presence(
+            [RequirementCell("embedded-bullet", embedded_bullet_quote)],
+            {"embedded-bullet": [embedded_bullet_source]},
+        )
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("embedded-bullet", "source_quote_not_found")
+        ]
+
     def test_source_quote_check_rejects_changed_spacing_around_hyphen(self):
         source_quote = "All pre -installation requirements are included."
         changed_quote = source_quote.replace("pre -installation", "pre-installation")
@@ -444,9 +464,42 @@ class TestExportGeneration:
         ]
 
         assert validate_source_quote_presence(
-            [RequirementCell("spanning-quote", quote)],
+            [RequirementCell("spanning-quote", quote, source_page=17)],
             {"spanning-quote": fragments},
         ) == ()
+
+    def test_source_quote_check_does_not_validate_from_a_different_page(self):
+        quote = "The machine shall test continuously at 1000/s."
+        fragments = [
+            AuthorizedSourceFragment(17, quote, page_local=True, char_start=120),
+            AuthorizedSourceFragment(18, "A different clause.", page_local=True, char_start=4),
+        ]
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("wrong-citation", quote, source_page=18)],
+            {"wrong-citation": fragments},
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("wrong-citation", "source_quote_not_found")
+        ]
+
+    def test_source_quote_check_rejects_full_window_repeated_on_page_anchors(self):
+        quote = "The machine shall test continuously at 1000/s."
+        full_window = f"Prefix. {quote} Suffix."
+        fragments = [
+            AuthorizedSourceFragment(17, full_window, page_local=False, char_start=8),
+            AuthorizedSourceFragment(18, full_window, page_local=False, char_start=8),
+        ]
+
+        issues = validate_source_quote_presence(
+            [RequirementCell("repeated-window", quote, source_page=17)],
+            {"repeated-window": fragments},
+        )
+
+        assert [(issue.row_id, issue.code) for issue in issues] == [
+            ("repeated-window", "source_quote_not_found")
+        ]
 
     @pytest.mark.parametrize(
         "fragments",
@@ -553,7 +606,12 @@ class TestExportGeneration:
         assert body["validation_status"] == "needs_review"
         assert body["validation_report"]["window_processing"]["status"] == "incomplete"
         assert body["validation_report"]["window_processing"]["failed_windows"] == [
-            {"window_index": 1, "chunk_id": "window-1", "pages": [3]}
+            {
+                "window_index": 1,
+                "chunk_id": "window-1",
+                "coverage_error_category": None,
+                "pages": [3],
+            }
         ]
 
     def test_export_is_held_for_unmatched_obligation_coverage_quote(self):
@@ -630,6 +688,41 @@ class TestExportGeneration:
                 "source_quote": "The motor shall be IP55 rated.",
             }
         ]
+
+    def test_failed_page_image_audit_category_is_reported_without_raw_error(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="failed",
+            coverage_error_category="image_parse_error",
+        )
+
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+
+        body = response.json()
+        coverage = body["validation_report"]["window_processing"]
+        assert body["status"] == "failed"
+        assert body["validation_status"] == "needs_review"
+        assert coverage["obligation_audit_status"] == "audit_failed"
+        assert coverage["obligation_audit_failed_windows"] == [
+            {
+                "window_index": 1,
+                "chunk_id": "window-1",
+                "coverage_error_category": "image_parse_error",
+                "pages": [3],
+            }
+        ]
+        assert "raw_error" not in coverage["obligation_audit_failed_windows"][0]
 
     def test_ocr_quote_requires_page_image_check_even_when_text_matches(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
@@ -771,6 +864,7 @@ class TestExportGeneration:
                         status="failed",
                         error_message="page image validation failed",
                         call_site="test_page_image_validation",
+                        error_category="image_parse_error",
                     ),
                 )
             return (
@@ -866,6 +960,149 @@ class TestExportGeneration:
             assert report["llm_fallback_results"][0]["call_status"] == (
                 "failed" if fallback_outcome == "provider_failed" else "completed"
             )
+            if fallback_outcome == "provider_failed":
+                assert (
+                    report["llm_fallback_results"][0]["error_category"]
+                    == "image_parse_error"
+                )
+
+    def test_fallback_cannot_validate_a_quote_on_a_different_page(self, monkeypatch):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Req A", 1, True, "5.1", False, 3)],
+        )
+
+        async def _add_later_source_page():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                requirement.ocr_warning = True
+                first_source = (
+                    await session.execute(
+                        select(RequirementSource).where(
+                            RequirementSource.requirement_id == requirement.id
+                        )
+                    )
+                ).scalar_one()
+                first_source.source_text = "unrelated OCR text"
+                session.add(
+                    RequirementSource(
+                        requirement_id=requirement.id,
+                        document_version_id=version.id,
+                        page_number=7,
+                        clause_number="5.1",
+                        location_type="approximate",
+                        source_text=requirement.raw_source,
+                    )
+                )
+                session.add_all(
+                    [
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=3,
+                            cleaned_text="unrelated OCR text",
+                            ocr_needed=True,
+                            rendered_image_object_key="rendered/page-3.png",
+                        ),
+                        DocumentPage(
+                            document_version_id=version.id,
+                            page_number=7,
+                            cleaned_text=requirement.raw_source,
+                            ocr_needed=False,
+                            rendered_image_object_key="rendered/page-7.png",
+                        ),
+                    ]
+                )
+                await session.commit()
+
+        asyncio.run(_add_later_source_page())
+
+        class FakeAdapter:
+            pass
+
+        class FakeStorage:
+            async def get(self, key: str) -> bytes:
+                return key.encode("utf-8")
+
+        checked_pages: list[int] = []
+
+        async def fake_visual_check(**kwargs):
+            page_number = kwargs["page_number"]
+            checked_pages.append(page_number)
+            exact = page_number == 7
+            return (
+                PageImageValidationResponse(
+                    verdict="exact" if exact else "cannot_tell",
+                    confidence=0.99 if exact else 0.2,
+                    visible_quote=kwargs["proposed_quote"] if exact else "",
+                    reason="Visible on page." if exact else "Not visible on cited page.",
+                ),
+                LlmCallResult(
+                    provider="fake",
+                    model="fake-vision",
+                    prompt_version="test",
+                    schema_version="test",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="test_page_image_validation",
+                ),
+            )
+
+        monkeypatch.setattr(
+            document_service,
+            "get_settings",
+            lambda: SimpleNamespace(
+                verbatim_validation_fallback_enabled=True,
+                openai_api_key="configured-for-test",
+            ),
+        )
+        monkeypatch.setattr(
+            openai_adapter, "OpenAiLlmAdapter", lambda: FakeAdapter()
+        )
+        monkeypatch.setattr(
+            visual_validation, "validate_quote_on_page_image", fake_visual_check
+        )
+
+        async def _validate():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                rows = await project_matrix_rows(session, version.id)
+                assert rows[0].source_page == 3
+                return await document_service._source_quote_validation_report(
+                    session, rows, FakeStorage(), version.id
+                )
+
+        report = asyncio.run(_validate())
+        assert report["status"] == "needs_review"
+        assert report["llm_assisted_rows"] == []
+        assert checked_pages == [3]
+        assert report["llm_fallback_results"][0]["page_number"] == 3
 
     @pytest.mark.parametrize(
         ("second_page_exact", "expected_status"),
