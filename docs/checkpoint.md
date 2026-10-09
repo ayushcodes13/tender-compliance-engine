@@ -3575,6 +3575,8 @@ If the product direction changes, update this file through a focused PR, explain
 
 **Live provider smoke evidence (synthetic page only):** Using the Azure OpenAI adapter route (`/openai/v1/`), the configured deployment returned `exact` at 1.000 confidence for a readable matching page, `not_exact` at 1.000 after changing one requirement term, and `cannot_tell` at 0.990 for a deliberately unreadable page. This verifies the visual fallback request path and conservative response handling on synthetic input; it does not qualify the supplied tender examples or prove tender-wide completeness.
 
+**Live Example 1 pipeline check (2026-10-09):** The current API/worker processed all 20 extraction windows and promoted 76 requirements. The generated XLSX passed post-render artifact integrity (76/76 rows; 2,128 expected cells) and source validation (76/76 rows matched deterministically; no visual fallback was needed). The export was correctly withheld as `needs_review`: the independent obligation audit had one failed window on page 7 and flagged a possible omission on page 8. This demonstrates that per-row source validation can pass while tender-wide coverage remains unresolved. The finding has not been manually adjudicated; this is not a completed example audit.
+
 ### Guardrail
 
 - “Verbatim validated” means the tender-derived cell's non-whitespace wording matches the cited source quote. Standalone list-bullet glyphs at line starts, including Word's private-use `U+F0B7` marker, are treated as presentation markers in deterministic and visual matching; layout wrapping may alter whitespace. Paraphrases, omitted wording, changed values/units/operators, and unverified LLM visual readings do not pass.

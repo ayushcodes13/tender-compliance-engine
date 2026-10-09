@@ -301,6 +301,8 @@ async def extract_from_windows(
                 }
                 for source in window.sources
             ]
+            coverage_status = "not_run"
+            coverage_error_category: str | None = None
             try:
                 result = await llm.extract(
                     system_prompt=EXTRACTION_SYSTEM_PROMPT,
@@ -325,13 +327,13 @@ async def extract_from_windows(
                     call_site=config.call_site,
                 )
                 calls.append(failed)
-                coverage_status = "not_run"
                 failed_omissions: list[dict[str, Any]] = []
                 if enable_obligation_coverage_audit and not window.ocr_warning:
                     coverage_status, failed_omissions, coverage_call = await audit_text_coverage(
                         window, []
                     )
                     calls.append(coverage_call)
+                    coverage_error_category = coverage_call.error_category
                 return _WindowOutcome(
                     candidates=[],
                     calls=calls,
@@ -343,6 +345,7 @@ async def extract_from_windows(
                         ocr_warning=window.ocr_warning,
                         source_spans=source_spans,
                         coverage_status=coverage_status,
+                        coverage_error_category=coverage_error_category,
                         potential_omissions=failed_omissions,
                     ),
                 )
@@ -402,7 +405,6 @@ async def extract_from_windows(
                                 )
                 window_candidates.append(record)
 
-            coverage_status = "not_run"
             window_omissions: list[dict[str, Any]] = []
             if enable_obligation_coverage_audit and not window.ocr_warning:
                 emitted_quotes = [
@@ -412,6 +414,7 @@ async def extract_from_windows(
                     window, emitted_quotes
                 )
                 calls.append(coverage_call)
+                coverage_error_category = coverage_call.error_category
 
             return _WindowOutcome(
                 candidates=window_candidates,
@@ -424,6 +427,7 @@ async def extract_from_windows(
                     ocr_warning=window.ocr_warning,
                     source_spans=source_spans,
                     coverage_status=coverage_status,
+                    coverage_error_category=coverage_error_category,
                     potential_omissions=window_omissions,
                 ),
             )

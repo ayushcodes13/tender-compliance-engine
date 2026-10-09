@@ -21,6 +21,7 @@ depends_on: str | None = None
 _WORKER_ACTOR_ID = uuid.UUID("00000000-0000-0000-0000-000000000100")
 _WORKER_PROVIDER = "system"
 _WORKER_PROVIDER_ID = "tender-compliance-document-worker"
+_LEGACY_WORKER_PROVIDER_IDS = {"system-worker"}
 
 
 def upgrade() -> None:
@@ -39,15 +40,24 @@ def upgrade() -> None:
         )
     ).one_or_none()
     if existing is not None:
-        if (
-            existing.auth_provider != _WORKER_PROVIDER
-            or existing.auth_provider_user_id != _WORKER_PROVIDER_ID
+        if existing.auth_provider == _WORKER_PROVIDER and (
+            existing.auth_provider_user_id == _WORKER_PROVIDER_ID
         ):
-            raise RuntimeError(
-                "The reserved document-worker actor ID is already assigned to "
-                "a different identity"
+            return
+        if (
+            existing.auth_provider == _WORKER_PROVIDER
+            and existing.auth_provider_user_id in _LEGACY_WORKER_PROVIDER_IDS
+        ):
+            bind.execute(
+                sa.update(users)
+                .where(users.c.id == _WORKER_ACTOR_ID)
+                .values(auth_provider_user_id=_WORKER_PROVIDER_ID)
             )
-        return
+            return
+        raise RuntimeError(
+            "The reserved document-worker actor ID is already assigned to "
+            "a different identity"
+        )
 
     op.bulk_insert(
         users,

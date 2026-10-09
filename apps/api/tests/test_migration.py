@@ -11,6 +11,7 @@ no application tables), and subsequent schema migrations.
 
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
@@ -139,6 +140,69 @@ def test_upgrade_head_seeds_reserved_worker_audit_actor(tmp_path) -> None:
         "Tender Compliance document worker",
     )
     engine.dispose()
+
+
+def test_upgrade_head_normalizes_legacy_reserved_worker_actor(tmp_path) -> None:
+    """Known pre-migration worker identity upgrades without losing its actor id."""
+    from tender_compliance_worker.processor import WORKER_ACTOR_ID
+
+    db_path = tmp_path / "migrate.db"
+    config = _make_config(f"sqlite+aiosqlite:///{db_path}")
+    command.upgrade(config, "0034_obligation_coverage_audit")
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users "
+                "(id, auth_provider, auth_provider_user_id, full_name, created_at) "
+                "VALUES (:id, 'system', 'system-worker', 'Legacy worker', CURRENT_TIMESTAMP)"
+            ),
+            {"id": WORKER_ACTOR_ID.hex},
+        )
+    engine.dispose()
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        worker = conn.execute(
+            text(
+                "SELECT auth_provider, auth_provider_user_id, full_name "
+                "FROM users WHERE id = :worker_id"
+            ),
+            {"worker_id": WORKER_ACTOR_ID.hex},
+        ).one()
+    assert worker == (
+        "system",
+        "tender-compliance-document-worker",
+        "Legacy worker",
+    )
+    engine.dispose()
+
+
+def test_upgrade_head_rejects_unrelated_reserved_worker_actor(tmp_path) -> None:
+    """The legacy compatibility path must not claim a different identity."""
+    from tender_compliance_worker.processor import WORKER_ACTOR_ID
+
+    db_path = tmp_path / "migrate.db"
+    config = _make_config(f"sqlite+aiosqlite:///{db_path}")
+    command.upgrade(config, "0034_obligation_coverage_audit")
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users "
+                "(id, auth_provider, auth_provider_user_id, full_name, created_at) "
+                "VALUES (:id, 'oidc', 'unrelated-user', 'Unrelated User', CURRENT_TIMESTAMP)"
+            ),
+            {"id": WORKER_ACTOR_ID.hex},
+        )
+    engine.dispose()
+
+    with pytest.raises(RuntimeError, match="different identity"):
+        command.upgrade(config, "head")
 
 
 def test_worker_actor_migration_downgrade_removes_its_reserved_identity(
