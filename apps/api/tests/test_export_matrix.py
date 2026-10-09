@@ -427,6 +427,62 @@ class TestExportGeneration:
             }
         ]
 
+    def test_export_coverage_clears_after_source_verified_requirement_is_added(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Existing requirement", 1, True, "5.1", False, 3)],
+        )
+        quote = "The pump shall deliver 12 L/min."
+
+        async def _add_page_text():
+            async with _session_cm() as session:
+                version = (await session.execute(
+                    select(DocumentVersion).where(
+                        DocumentVersion.document_id == uuid.UUID(doc_id),
+                        DocumentVersion.version_number == ver,
+                    )
+                )).scalar_one()
+                session.add(DocumentPage(
+                    document_version_id=version.id,
+                    page_number=3,
+                    extracted_text=quote,
+                    cleaned_text=quote,
+                    ocr_needed=False,
+                    ocr_confidence=0.99,
+                ))
+                await session.commit()
+
+        asyncio.run(_add_page_text())
+        _add_window_audit(
+            doc_id,
+            ver,
+            call_status="completed",
+            candidate_count=1,
+            coverage_status="completed",
+            potential_omissions=[{"page_number": 3, "source_quote": quote}],
+        )
+        url = f"/projects/{project_id}/documents/{doc_id}/versions/{ver}"
+        first = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        assert first.status_code == 200
+        assert first.json()["validation_report"]["window_processing"][
+            "obligation_audit_status"
+        ] == "potential_omissions"
+
+        added = client.post(
+            f"{url}/requirements/from-source",
+            json={"page_number": 3, "source_quote": quote},
+            headers=_headers(user_id, org_id),
+        )
+        assert added.status_code == 201, added.text
+        assert added.json()["review_state"] == "unreviewed"
+
+        rechecked = client.post(f"{url}/exports", headers=_headers(user_id, org_id))
+        assert rechecked.status_code == 200
+        coverage = rechecked.json()["validation_report"]["window_processing"]
+        assert coverage["obligation_audit_status"] == "no_potential_omissions"
+        assert coverage["potential_omissions"] == []
+
     def test_partial_ocr_coverage_finding_survives_other_page_uncertainty(self):
         user_id, org_id, project_id, doc_id, ver = _build_org_project()
         _add_requirements(

@@ -3559,6 +3559,8 @@ If the product direction changes, update this file through a focused PR, explain
 - [ ] A reviewer can add a surfaced omission only after the exact excerpt is verified against the selected immutable page; OCR uncertainty stays in `OCR_WARNING`, duplicate submissions are idempotent, and re-export recomputes whether coverage is resolved.
 - [ ] Relevant API/web checks pass and the implementation is reviewed against the supplied tender/response-sheet examples.
 
+**Live provider smoke evidence (synthetic page only):** Using the current PR #166 Azure OpenAI adapter route (`/openai/v1/`), the configured deployment returned `exact` at 1.000 confidence for a readable matching page, `not_exact` at 1.000 after changing one requirement term, and `cannot_tell` at 0.990 for a deliberately unreadable page. This verifies the visual fallback request path and conservative response handling on synthetic input; it does not qualify the supplied tender examples or prove tender-wide completeness.
+
 ### Guardrail
 
 - “Verbatim validated” means the tender-derived cell's non-whitespace characters match the cited source quote. Layout wrapping may alter whitespace only; paraphrases, omitted characters, changed values/units/operators, and unverified LLM visual readings do not pass.
