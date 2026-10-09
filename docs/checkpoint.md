@@ -3538,7 +3538,7 @@ If the product direction changes, update this file through a focused PR, explain
 
 ### Scope
 
-1. Preserve the literal tender quote in generated tender-requirement cells. Validate the generated file contents after rendering so exporter truncation or row loss is detected.
+1. Preserve the literal tender quote in generated tender-requirement cells, including explicit supplier qualifications, prior-performance requirements, references, and supporting evidence requested by the tender for the response sheet. Validate the generated file contents after rendering so exporter truncation or row loss is detected.
 2. Validate source-derived cells against only their authorized document version/page. Check row completeness against the canonical requirement set and report missing or changed cells.
 3. Use deterministic exact source matching first. When native/OCR text cannot establish a match, or the source page carries an OCR warning, require a bounded, strict LLM check over the exact rendered cited page; never use it to move the citation, infer missing wording, or silently rewrite a requirement.
 4. Persist a typed validation result with export metadata and expose clear pass/review/fail states. A candidate inferred from page imagery remains reviewable unless its exact returned text can be independently verified; provider failures fail closed.

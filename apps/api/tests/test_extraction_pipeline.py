@@ -328,9 +328,13 @@ class TestPromptVersioning:
             "preferred",
             "or another reputable supplier",
             "do not turn a preference or example into a",
+            "prior supply/installation/commissioning experience",
+            "minimum counts of similar systems",
+            "supporting evidence such as purchase orders",
+            "bidder/vendor qualification headings",
         ):
             assert phrase in prompt
-        assert "1.1.0" == PROMPT_VERSION
+        assert "1.2.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
         # The LLM response schema is bounded by the CP25 RequirementCandidate.
