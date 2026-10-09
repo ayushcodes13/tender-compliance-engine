@@ -44,6 +44,7 @@ from tender_compliance_api.document.service import (
     DocumentNotFoundError,
     DocumentService,
     TransitionError,
+    validate_ocr_page_quote_from_image,
 )
 from tender_compliance_api.errors import EXPORT_FAILURE
 from tender_compliance_api.logs import (
@@ -494,10 +495,20 @@ async def add_requirement_from_source(
     tokens = re.split(r"\s+", body.source_quote.strip())
     quote_pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
     matches = list(quote_pattern.finditer(page_text))
+    ocr_derived = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
+    image_validation: dict[str, object] | None = None
     if not matches:
-        raise HTTPException(
-            status_code=422, detail="The excerpt does not match text on the selected page"
-        )
+        if not ocr_derived:
+            raise HTTPException(
+                status_code=422,
+                detail="The excerpt does not match text on the selected page",
+            )
+        image_validation = await validate_ocr_page_quote_from_image(page, body.source_quote)
+        if image_validation.get("status") != "exact":
+            raise HTTPException(
+                status_code=422,
+                detail="The excerpt could not be verified against the rendered OCR page",
+            )
 
     quote_digest = hashlib.sha256(body.source_quote.encode("utf-8")).hexdigest()
     promotion_key = hashlib.sha256(
@@ -527,7 +538,7 @@ async def add_requirement_from_source(
     # ocr_needed is cleared when OCR completes. Persisted OCR confidence or
     # OCR word geometry still identifies OCR-derived text and must retain its
     # uncertainty after successful recognition.
-    ocr_warning = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
+    ocr_warning = ocr_derived
     req = Requirement(
         document_version_id=version.id,
         processing_run_id=None,
@@ -565,7 +576,15 @@ async def add_requirement_from_source(
         entity_type="requirement",
         entity_id=req.id,
         project_id=project_id,
-        metadata={"document_version_id": str(version.id), "page_number": body.page_number},
+        metadata={
+            "document_version_id": str(version.id),
+            "page_number": body.page_number,
+            **(
+                {"visual_source_validation": image_validation}
+                if image_validation is not None
+                else {}
+            ),
+        },
     )
     await session.commit()
     await session.refresh(req)

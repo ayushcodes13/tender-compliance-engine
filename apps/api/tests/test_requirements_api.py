@@ -168,7 +168,14 @@ def _get_first_req_id_str(doc_id: uuid.UUID, ver: int) -> str:
 
 class TestAddRequirementFromCoverageFinding:
     def _setup_source_page(
-        self, project_id, *, text, ocr_needed=False, ocr_confidence=None, page_number=3
+        self,
+        project_id,
+        *,
+        text,
+        ocr_needed=False,
+        ocr_confidence=None,
+        page_number=3,
+        rendered_image_object_key=None,
     ):
         async def _create():
             async with _session_cm() as session:
@@ -192,6 +199,7 @@ class TestAddRequirementFromCoverageFinding:
                         if ocr_confidence is not None
                         else (0.91 if ocr_needed else None)
                     ),
+                    rendered_image_object_key=rendered_image_object_key,
                 ))
                 await session.commit()
                 return doc.id
@@ -325,6 +333,43 @@ class TestAddRequirementFromCoverageFinding:
         assert response.status_code == 201, response.text
         assert response.json()["review_state"] == "ocr_warning"
         assert response.json()["requirement_type"] == "prohibition"
+
+    def test_ocr_mismatch_is_added_only_after_strict_image_validation(self, monkeypatch):
+        from tender_compliance_api.routes import requirements as requirements_route
+
+        user_id, org_id, project_id = _build_org_project()
+        quote = "Ingress protection shall be IP65."
+        doc_id = self._setup_source_page(
+            project_id,
+            text="Ingress protection shall be IP6S.",
+            ocr_confidence=0.91,
+            rendered_image_object_key="rendered/page-3.png",
+        )
+        calls = []
+
+        async def _verify(page, source_quote):
+            calls.append((page.page_number, source_quote))
+            return {"status": "exact", "provider": "fake", "call_status": "completed"}
+
+        monkeypatch.setattr(
+            requirements_route,
+            "validate_ocr_page_quote_from_image",
+            _verify,
+        )
+        response = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/1/requirements/from-source",
+            json={
+                "page_number": 3,
+                "source_quote": quote,
+                "requirement_type": "obligation",
+            },
+            headers=_headers(user_id, org_id),
+        )
+        assert response.status_code == 201, response.text
+        assert calls == [(3, quote)]
+        assert response.json()["review_state"] == "ocr_warning"
+        source = response.json()["sources"][0]
+        assert source["location_type"] == "approximate"
 
 
 # ---------------------------------------------------------------------------

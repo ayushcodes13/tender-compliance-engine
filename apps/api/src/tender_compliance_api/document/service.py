@@ -129,6 +129,54 @@ def _resolve_storage() -> ObjectStorageAdapter:
     return create_storage_adapter()
 
 
+async def validate_ocr_page_quote_from_image(
+    page: DocumentPage, source_quote: str
+) -> dict[str, object]:
+    """Strictly verify a reviewer-supplied quote against its rendered OCR page.
+
+    Returns only audit-safe provider metadata. Missing image/configuration and
+    provider failures remain non-success results so callers can fail closed.
+    """
+    if not page.rendered_image_object_key:
+        return {"status": "image_unavailable"}
+    settings = get_settings()
+    if not settings.verbatim_validation_fallback_enabled or not settings.openai_api_key.strip():
+        return {"status": "validator_unavailable"}
+
+    try:
+        image_bytes = await _resolve_storage().get(page.rendered_image_object_key)
+    except Exception:  # noqa: BLE001 — inaccessible source image is not proof
+        return {"status": "image_unavailable"}
+
+    try:
+        from tender_compliance_api.export.visual_validation import (
+            validate_quote_on_page_image,
+        )
+        from tender_compliance_api.extraction.openai_adapter import OpenAiLlmAdapter
+
+        response, call = await validate_quote_on_page_image(
+            proposed_quote=source_quote,
+            page_number=page.page_number,
+            image_bytes=image_bytes,
+            image_mime_type="image/png",
+            adapter=OpenAiLlmAdapter(),
+        )
+        return {
+            "status": (
+                "exact"
+                if response is not None and response.verdict == "exact"
+                else "needs_review"
+            ),
+            "provider": call.provider,
+            "model": call.model,
+            "prompt_version": call.prompt_version,
+            "schema_version": call.schema_version,
+            "call_status": call.status,
+        }
+    except Exception:  # noqa: BLE001 — errors cannot authorize a quote
+        return {"status": "needs_review"}
+
+
 async def _source_quote_validation_report(
     session: AsyncSession,
     rows: Sequence[FinalMatrixRow | MatrixRow],
