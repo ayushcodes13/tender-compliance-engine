@@ -122,7 +122,7 @@ export function SourceViewer({
   // the selected highlight centered once both the anchor and image geometry
   // are ready, including after a zoom change.
   useEffect(() => {
-    if (!selectedRequirementId && !highlightQuote) return;
+    if (!selectedAnchorId && !selectedRequirementId && !highlightQuote) return;
     const selectedAnchor = anchors.find(isSelected);
     if (!selectedAnchor) return;
     selectedAnchorRef.current?.scrollIntoView({
@@ -130,7 +130,7 @@ export function SourceViewer({
       block: "center",
       inline: "center",
     });
-  }, [anchors, imageUrl, imageScale, isSelected, zoom]);
+  }, [anchors, imageUrl, imageScale, isSelected, selectedAnchorId, zoom]);
 
   const handleZoomIn = () => setZoom((z) => Math.min(200, z + 8));
   const handleZoomOut = () => setZoom((z) => Math.max(50, z - 8));
