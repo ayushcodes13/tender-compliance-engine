@@ -132,7 +132,13 @@ def _pdf_quote_bbox(
     quote: str,
     rendered_png: bytes,
 ) -> dict[str, float] | None:
-    """Map one unique literal PDF text quote to rendered-page pixel coordinates."""
+    """Map one unique PDF quote to rendered-page pixel coordinates.
+
+    Prefer PyMuPDF's literal text search. If extraction changed whitespace
+    around otherwise identical tokens, fall back to a unique full token
+    sequence. Punctuation remains a token so a changed quote, operator, or
+    hyphen cannot be highlighted as though it were the cited text.
+    """
     if (
         len(rendered_png) < 24
         or rendered_png[:8] != b"\x89PNG\r\n\x1a\n"
@@ -145,21 +151,55 @@ def _pdf_quote_bbox(
             return None
         normalized_quote = re.sub(r"\s+", " ", quote).strip()
         page_text = re.sub(r"\s+", " ", page.get_text(sort=True)).strip()
-        if not normalized_quote or page_text.count(normalized_quote) != 1:
+        if not normalized_quote:
             return None
-        rectangles = page.search_for(normalized_quote)
-        if not rectangles:
-            return None
+
+        rectangles = (
+            page.search_for(normalized_quote)
+            if page_text.count(normalized_quote) == 1
+            else []
+        )
+        if rectangles:
+            x0 = min(rect.x0 for rect in rectangles)
+            y0 = min(rect.y0 for rect in rectangles)
+            x1 = max(rect.x1 for rect in rectangles)
+            y1 = max(rect.y1 for rect in rectangles)
+        else:
+            quote_tokens = re.findall(r"\w+|[^\w\s]", normalized_quote)
+            pdf_words = page.get_text("words", sort=True)
+            word_tokens: list[str] = []
+            token_word_indexes: list[int] = []
+            for word_index, word in enumerate(pdf_words):
+                tokens = re.findall(r"\w+|[^\w\s]", str(word[4]))
+                word_tokens.extend(tokens)
+                token_word_indexes.extend([word_index] * len(tokens))
+
+            if not quote_tokens or len(quote_tokens) > len(word_tokens):
+                return None
+            starts = [
+                index
+                for index in range(len(word_tokens) - len(quote_tokens) + 1)
+                if word_tokens[index:index + len(quote_tokens)] == quote_tokens
+            ]
+            if len(starts) != 1:
+                return None
+
+            start = starts[0]
+            matched_indexes = sorted(
+                set(token_word_indexes[start:start + len(quote_tokens)])
+            )
+            matched_words = [pdf_words[index] for index in matched_indexes]
+            x0 = min(float(word[0]) for word in matched_words)
+            y0 = min(float(word[1]) for word in matched_words)
+            x1 = max(float(word[2]) for word in matched_words)
+            y1 = max(float(word[3]) for word in matched_words)
+
         image_width, image_height = struct.unpack(">II", rendered_png[16:24])
         page_rect = page.rect
         if image_width <= 0 or image_height <= 0 or page_rect.width <= 0 or page_rect.height <= 0:
             return None
         scale_x = image_width / page_rect.width
         scale_y = image_height / page_rect.height
-        x0 = min(rect.x0 for rect in rectangles)
-        y0 = min(rect.y0 for rect in rectangles)
-        x1 = max(rect.x1 for rect in rectangles)
-        y1 = max(rect.y1 for rect in rectangles)
         return {
             "x": x0 * scale_x,
             "y": y0 * scale_y,

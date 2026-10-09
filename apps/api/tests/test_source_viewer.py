@@ -428,6 +428,47 @@ class TestSourceAnchors:
         ) is None
         pdf.close()
 
+    def test_pdf_quote_bbox_matches_unique_full_tokens_across_whitespace_changes(self):
+        pdf = pymupdf.open()
+        page = pdf.new_page(width=500, height=200)
+        fontfile = (
+            Path(__file__).parent.parent
+            / "src/tender_compliance_api/export/fonts/DejaVuSans.ttf"
+        )
+        page.insert_text(
+            (30, 60),
+            "16. PREDISPATCH- The firm  should arrange the inspection.",
+            fontname="dejavu",
+            fontfile=str(fontfile),
+        )
+        rendered_png = page.get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png")
+
+        bbox = _pdf_quote_bbox(
+            pdf,
+            1,
+            "16. PREDISPATCH - The firm should arrange the inspection.",
+            rendered_png,
+        )
+
+        assert bbox is not None
+        assert bbox["x"] > 0
+        assert bbox["y"] > 0
+        assert bbox["width"] > 0
+        assert bbox["height"] > 0
+        assert _pdf_quote_bbox(
+            pdf,
+            1,
+            "16. PREDISPATCH - The firm shall arrange the inspection.",
+            rendered_png,
+        ) is None
+        assert _pdf_quote_bbox(
+            pdf,
+            1,
+            "16. PREDISPATCH – The firm should arrange the inspection.",
+            rendered_png,
+        ) is None
+        pdf.close()
+
     def test_pdf_quote_bbox_does_not_guess_rotated_page_geometry(self):
         pdf = pymupdf.open()
         page = pdf.new_page(width=300, height=200)
