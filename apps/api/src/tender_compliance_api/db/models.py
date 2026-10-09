@@ -836,7 +836,11 @@ class ExtractionRun(Base):
         String(32), nullable=True
     )
     status: Mapped[ExtractionRunStatus] = mapped_column(
-        Enum(ExtractionRunStatus, name="extraction_run_status"),
+        Enum(
+            ExtractionRunStatus,
+            name="extraction_run_status",
+            native_enum=False,
+        ),
         nullable=False,
         default=ExtractionRunStatus.COMPLETED,
         server_default=ExtractionRunStatus.COMPLETED.value,
@@ -1130,6 +1134,9 @@ class ExtractionWindowAudit(Base):
     coverage_status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="not_run", server_default="not_run"
     )
+    coverage_error_category: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
     potential_omissions: Mapped[list[Any]] = mapped_column(
         JSON, nullable=False, default=list, server_default="[]"
     )
@@ -1215,7 +1222,11 @@ class Requirement(Base):
         Boolean(), nullable=False, default=False, server_default="0"
     )
     review_state: Mapped[RequirementReviewState] = mapped_column(
-        Enum(RequirementReviewState, name="requirement_review_state"),
+        Enum(
+            RequirementReviewState,
+            name="requirement_review_state",
+            native_enum=False,
+        ),
         nullable=False,
         default=RequirementReviewState.UNREVIEWED,
         server_default=RequirementReviewState.UNREVIEWED.value,
@@ -1503,6 +1514,7 @@ class RequirementConstraint(Base):
         Enum(
             ConstraintNormalizationState,
             name="constraint_normalization_state",
+            native_enum=False,
         ),
         nullable=False,
         default=ConstraintNormalizationState.UNNORMALIZED,
@@ -2150,6 +2162,7 @@ class VendorSpec(Base):
         Enum(
             VendorSpecExtractionMethod,
             name="vendor_spec_extraction_method",
+            native_enum=False,
         ),
         nullable=False,
         default=VendorSpecExtractionMethod.DETERMINISTIC,
@@ -2162,6 +2175,7 @@ class VendorSpec(Base):
         Enum(
             ConstraintNormalizationState,
             name="constraint_normalization_state",
+            native_enum=False,
         ),
         nullable=False,
         default=ConstraintNormalizationState.UNNORMALIZED,
@@ -2258,12 +2272,12 @@ class ComplianceAssessment(Base):
     )
     # System suggestion (before human confirmation).
     suggested_status: Mapped[ComplianceStatus] = mapped_column(
-        Enum(ComplianceStatus, name="compliance_status"),
+        Enum(ComplianceStatus, name="compliance_status", native_enum=False),
         nullable=False,
     )
     # Final status — equals suggested_status until a human confirms/overrides.
     status: Mapped[ComplianceStatus] = mapped_column(
-        Enum(ComplianceStatus, name="compliance_status"),
+        Enum(ComplianceStatus, name="compliance_status", native_enum=False),
         nullable=False,
     )
     # Machine-readable reason for the status (e.g. "range_containment",
@@ -2364,7 +2378,11 @@ class AssessmentComment(Base):
         nullable=True,
     )
     comment_type: Mapped[AssessmentCommentType] = mapped_column(
-        Enum(AssessmentCommentType, name="assessment_comment_type"),
+        Enum(
+            AssessmentCommentType,
+            name="assessment_comment_type",
+            native_enum=False,
+        ),
         nullable=False,
         server_default=AssessmentCommentType.COMMENT.value,
     )
@@ -2478,7 +2496,7 @@ class QualitativeAssessment(Base):
         index=True,
     )
     verdict: Mapped[QualitativeVerdict] = mapped_column(
-        Enum(QualitativeVerdict, name="qualitative_verdict"),
+        Enum(QualitativeVerdict, name="qualitative_verdict", native_enum=False),
         nullable=False,
     )
     reason_code: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -2609,7 +2627,7 @@ class Conflict(Base):
         nullable=True,
     )
     resolution: Mapped[ConflictResolution] = mapped_column(
-        Enum(ConflictResolution, name="conflict_resolution"),
+        Enum(ConflictResolution, name="conflict_resolution", native_enum=False),
         nullable=False,
         default=ConflictResolution.UNRESOLVED,
         server_default=ConflictResolution.UNRESOLVED.value,
@@ -2729,7 +2747,7 @@ class ClarificationRequest(Base):
     # Structured metadata about why the question is being asked.
     context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     status: Mapped[ClarificationStatus] = mapped_column(
-        Enum(ClarificationStatus, name="clarification_status"),
+        Enum(ClarificationStatus, name="clarification_status", native_enum=False),
         nullable=False,
         default=ClarificationStatus.PENDING,
         server_default=ClarificationStatus.PENDING.value,
@@ -2815,7 +2833,7 @@ class Deviation(Base):
         index=True,
     )
     deviation_type: Mapped[DeviationType] = mapped_column(
-        Enum(DeviationType, name="deviation_type"),
+        Enum(DeviationType, name="deviation_type", native_enum=False),
         nullable=False,
     )
     # Verbatim text of the original requirement — preserved for review.
@@ -2831,7 +2849,7 @@ class Deviation(Base):
         String(2048), nullable=True
     )
     status: Mapped[DeviationStatus] = mapped_column(
-        Enum(DeviationStatus, name="deviation_status"),
+        Enum(DeviationStatus, name="deviation_status", native_enum=False),
         nullable=False,
         default=DeviationStatus.PROPOSED,
         server_default=DeviationStatus.PROPOSED.value,
