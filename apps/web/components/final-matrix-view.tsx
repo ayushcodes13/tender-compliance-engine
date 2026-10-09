@@ -27,6 +27,20 @@ type CoverageReviewDisplay = {
   requirement_id: string | null;
   reviewed_at: string;
 };
+type SourceValidationFinding = { row_id: string; code: string };
+
+function sourceValidationMessage(code: string): string {
+  switch (code) {
+    case "source_quote_not_found":
+      return "Generated wording does not match the cited tender excerpt exactly.";
+    case "ocr_visual_verification_required":
+      return "OCR could not establish the exact wording; verify it on the cited page.";
+    case "source_text_unavailable":
+      return "Source text is unavailable for deterministic verification.";
+    default:
+      return "The cited source needs review before this export can be issued.";
+  }
+}
 
 function coverageReviewKey(page: number, quote: string): string {
   return `${page}:${quote}`;
@@ -248,6 +262,9 @@ export function FinalMatrixView(props: {
   const [error, setError] = useState<string | null>(null);
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [sourceValidationFindings, setSourceValidationFindings] = useState<
+    SourceValidationFinding[]
+  >([]);
   const [coverageFindings, setCoverageFindings] = useState<PotentialOmission[]>([]);
   const [coverageReviews, setCoverageReviews] = useState<Record<string, CoverageReviewDisplay>>({});
   const [coverageReviewDrafts, setCoverageReviewDrafts] = useState<Record<string, { requirementId: string; rationale: string }>>({});
@@ -462,6 +479,7 @@ export function FinalMatrixView(props: {
     setError(null);
     setValidationNotice(null);
     setActionNotice(null);
+    setSourceValidationFindings([]);
     setCoverageFindings([]);
     try {
       const artifact = await api.createFinalMatrixExport(
@@ -474,6 +492,9 @@ export function FinalMatrixView(props: {
         artifact,
         ...current.filter((saved) => saved.id !== artifact.id),
       ]);
+      setSourceValidationFindings(
+        artifact.validation_report?.source_validation?.issues ?? []
+      );
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "failed") {
           const issueCount =
@@ -570,6 +591,7 @@ export function FinalMatrixView(props: {
     setBusy("export-vendor-response");
     setError(null);
     setValidationNotice(null);
+    setSourceValidationFindings([]);
     setCoverageFindings([]);
     try {
       const artifact = await api.createVendorResponseSheetExport(
@@ -581,6 +603,9 @@ export function FinalMatrixView(props: {
         artifact,
         ...current.filter((saved) => saved.id !== artifact.id),
       ]);
+      setSourceValidationFindings(
+        artifact.validation_report?.source_validation?.issues ?? []
+      );
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "failed") {
           const issueCount =
@@ -691,6 +716,56 @@ export function FinalMatrixView(props: {
       </div>
 
       {error ? <div className="upload-error-banner" role="alert"><AlertCircle size={14} />{error}</div> : null}
+      {sourceValidationFindings.length ? (
+        <section className="source-highlight-unavailable" aria-labelledby="source-validation-heading" style={{ marginTop: 12 }}>
+          <strong id="source-validation-heading">Source wording findings</strong>
+          <p>These rows did not pass the exact source check. Compare the generated wording with the immutable tender excerpt before trying the export again.</p>
+          <ul>
+            {sourceValidationFindings.map((finding) => {
+              const row = rows.find((item) => item.requirement_id === finding.row_id);
+              const pageNumber = row?.source_page;
+              return (
+                <li key={`${finding.row_id}-${finding.code}`} style={{ marginTop: 12 }}>
+                  <strong>
+                    {row
+                      ? `Requirement ${row.serial}`
+                      : `Requirement ${finding.row_id.slice(0, 8)}`} · {sourceValidationMessage(finding.code)}
+                  </strong>
+                  {row ? (
+                    <>
+                      <p><span>Generated wording:</span> {row.tender_requirement}</p>
+                      <p><span>Saved source excerpt:</span> <mark>{row.raw_source || "Source excerpt unavailable"}</mark></p>
+                      {pageNumber ? (
+                        <button
+                          type="button"
+                          className="button button-secondary button-small"
+                          onClick={() => setCitationDrawer({
+                            projectId,
+                            documentId,
+                            documentName,
+                            version,
+                            pageNumber,
+                            requirementId: row.requirement_id,
+                            sourceId: row.source_anchor_id ?? null,
+                            quoteText: row.raw_source,
+                            clause: row.clause,
+                          })}
+                        >
+                          Open cited page {pageNumber}
+                        </button>
+                      ) : (
+                        <p>Source location unavailable; no page was inferred.</p>
+                      )}
+                    </>
+                  ) : (
+                    <p>The requirement is no longer in the current matrix. Refresh the sheet before reviewing this finding.</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
       {coverageFindings.length || Object.keys(coverageReviews).length ? (
         <div className="source-highlight-unavailable" role="alert" style={{ marginTop: 12 }}>
           <strong>Coverage review</strong>

@@ -67,7 +67,7 @@ function finalMatrixRow() {
   return {
     serial: 1,
     requirement_id: requirementId,
-    tender_requirement: "Positioning resolution shall be 1 µm or better.",
+    tender_requirement: "The positioning resolution shall be 1 µm or better.",
     category: "Motion",
     clause: "4.2",
     source_page: 12,
@@ -513,7 +513,7 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
             source_validation: {
               status: "needs_review",
               checked_rows: 1,
-              issues: [{ row_id: requirementId, code: "ocr_visual_verification_required" }],
+              issues: [{ row_id: requirementId, code: "source_quote_not_found" }],
               llm_fallback_results: [{
                 row_id: requirementId,
                 page_number: 12,
@@ -670,7 +670,7 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(summary.getByText("Total requirements")).toBeVisible();
   await expect(summary.getByText("Compliant", { exact: true })).toBeVisible();
   await expect(summary.getByText("Needs attention")).toBeVisible();
-  await expect(page.getByText("Positioning resolution shall be 1 µm or better.")).toBeVisible();
+  await expect(page.getByText("The positioning resolution shall be 1 µm or better.")).toBeVisible();
   await expect(page.getByText("Location unavailable")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Open tender source for requirement 2/ })
@@ -718,6 +718,17 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
   await page.getByRole("button", { name: "Export PDF" }).click();
   await expect(page.getByText(/Image validation error category: image_parse_error\./)).toBeVisible();
+  const sourceFindings = page.locator('[aria-labelledby="source-validation-heading"]');
+  await expect(sourceFindings).toContainText("Source wording findings");
+  await expect(sourceFindings).toContainText("Generated wording does not match the cited tender excerpt exactly.");
+  await expect(sourceFindings).toContainText(finalMatrixRow().tender_requirement);
+  await expect(sourceFindings).toContainText(finalMatrixRow().raw_source);
+  await page.getByRole("button", { name: "Open cited page 12" }).click();
+  const validationEvidence = page.getByRole("dialog", { name: "Evidence" });
+  await expect(validationEvidence).toBeVisible();
+  await expect(validationEvidence).toContainText("Page 12");
+  await expect(validationEvidence).toContainText(finalMatrixRow().raw_source);
+  await validationEvidence.getByRole("button", { name: "Close evidence panel" }).click();
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
