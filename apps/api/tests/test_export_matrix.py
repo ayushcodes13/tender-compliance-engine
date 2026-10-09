@@ -1339,6 +1339,53 @@ class TestExportGeneration:
         assert len(issues) == 1
         assert issues[0]["code"] == "ocr_visual_verification_required"
 
+    def test_native_text_trust_warning_requires_page_image_check(self):
+        user_id, org_id, project_id, doc_id, ver = _build_org_project()
+        _add_requirements(
+            project_id, doc_id, ver,
+            [("Chuck model III -V", 1, True, "5.1", False, 3)],
+        )
+
+        async def _mark_text_layer_warning():
+            async with _session_cm() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.document_id == uuid.UUID(doc_id),
+                            DocumentVersion.version_number == ver,
+                        )
+                    )
+                ).scalar_one()
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == version.id
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=version.id,
+                        page_number=3,
+                        cleaned_text=requirement.raw_source,
+                        structural_metadata={"visual_verification_required": True},
+                    )
+                )
+                await session.commit()
+
+        asyncio.run(_mark_text_layer_warning())
+        resp = client.post(
+            f"/projects/{project_id}/documents/{doc_id}/versions/{ver}/exports",
+            headers=_headers(user_id, org_id),
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["validation_status"] == "needs_review"
+        issues = body["validation_report"]["source_validation"]["issues"]
+        assert len(issues) == 1
+        assert issues[0]["code"] == "ocr_visual_verification_required"
+
     @pytest.mark.parametrize(
         ("ocr_warning", "source_text"),
         [(True, "raw_Req A"), (False, None)],

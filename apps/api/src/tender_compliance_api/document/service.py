@@ -271,7 +271,8 @@ async def _source_quote_validation_report(
                     page_number=page_number,
                     image_key=image_key if isinstance(image_key, str) else None,
                     ocr_warning=bool(page_ocr_needed)
-                    or bool(page_metadata.get("error")),
+                    or bool(page_metadata.get("error"))
+                    or bool(page_metadata.get("visual_verification_required")),
                     source_text=(source_text if isinstance(source_text, str) else None),
                     location_type=str(location_type),
                     char_start=(char_start if isinstance(char_start, int) else None),
@@ -3679,6 +3680,8 @@ class DocumentService:
             all_warnings = list(page_result.warnings or []) + list(cleanup.warnings)
             if all_warnings:
                 meta["warnings"] = all_warnings
+            if page_result.visual_verification_required:
+                meta["visual_verification_required"] = True
             if cleanup.headers:
                 meta["headers"] = list(cleanup.headers)
             if cleanup.footers:

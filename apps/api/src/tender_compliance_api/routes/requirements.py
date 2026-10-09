@@ -680,7 +680,13 @@ async def add_requirement_from_source(
     tokens = re.split(r"\s+", body.source_quote.strip())
     quote_pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
     matches = list(quote_pattern.finditer(page_text))
-    ocr_derived = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
+    page_metadata = page.structural_metadata or {}
+    ocr_derived = bool(
+        page.ocr_needed
+        or page.ocr_confidence is not None
+        or page.ocr_words
+        or page_metadata.get("visual_verification_required")
+    )
     image_validation: dict[str, object] | None = None
     if not matches:
         if not ocr_derived:
@@ -829,7 +835,13 @@ async def review_coverage_finding(
 
     page_text = page.cleaned_text or ""
     source_matches = quote_is_present_in_source(page_text, body.source_quote)
-    ocr_derived = bool(page.ocr_needed or page.ocr_confidence is not None or page.ocr_words)
+    page_metadata = page.structural_metadata or {}
+    ocr_derived = bool(
+        page.ocr_needed
+        or page.ocr_confidence is not None
+        or page.ocr_words
+        or page_metadata.get("visual_verification_required")
+    )
     image_validation: dict[str, object] | None = None
     if not source_matches:
         if not ocr_derived:

@@ -89,6 +89,17 @@ class TestBasicWindowing:
             == []
         )
 
+    def test_visual_verification_marker_propagates_as_uncertainty(self) -> None:
+        page = _page(1, "Chuck model III -V for vacuum table")
+        page.structural_metadata = {"visual_verification_required": True}
+
+        windows = build_source_windows(
+            [page], organization_id=_ORG, document_id=_DOC
+        )
+
+        assert len(windows) == 1
+        assert windows[0].ocr_warning is True
+
     def test_invalid_args_raise(self) -> None:
         pages = [_page(1, "x")]
         with pytest.raises(ValueError, match="max_chars must be positive"):
