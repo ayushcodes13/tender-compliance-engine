@@ -62,11 +62,9 @@ logger = logging.getLogger(__name__)
 # bullets together when possible so the extractor can retain the source's row
 # grouping rather than emitting only isolated fragments.
 _TECHNICAL_SOURCE_WINDOW_CHARS = 3000
-_LETTERED_SPEC_ROW_RE = re.compile(r"^\s*[a-z]\)\s+\S", re.I | re.M)
-_LETTERED_ROW_START_RE = re.compile(r"(?m)^[ \t]*[a-z]\)[ \t]+\S", re.I)
-_CONTINUATION_TAIL_RE = re.compile(
-    r"(?:\b(?:a|an|and|as|at|by|for|from|in|including|of|on|or|the|to|under|with)|[-–—])\s*$",
-    re.I,
+_LETTERED_SPEC_ROW_RE = re.compile(r"^[ \t]*[a-z]\)[ \t]+\S", re.I | re.M)
+_SOURCE_ROW_START_RE = re.compile(
+    r"(?m)^[ \t]*(?:[a-z]\)|\d+(?:\.\d+)*(?:[.)])?)[ \t]+\S", re.I
 )
 
 
@@ -93,14 +91,16 @@ def _boundary_continuation_ranges(
 ) -> tuple[SourceTextRange, SourceTextRange] | None:
     """Find a labeled source row split across adjacent pages.
 
-    The previous fragment must be in scope, letter-labeled, and end with a
-    word that requires continuation. The next in-scope paragraph must be
-    unlabeled prose. This avoids joining ordinary neighboring specifications.
+    The previous fragment must be in scope and end in a letter-labeled row.
+    The next page's leading in-scope text is joined until its next explicit
+    row label or numbered heading. The sample response sheets treat unlabeled
+    continuation paragraphs as part of the preceding row, including when a
+    continuation starts a new sentence.
     """
     previous_text = previous_page.cleaned_text or ""
     next_text = next_page.cleaned_text or ""
-    previous_labels = list(_LETTERED_ROW_START_RE.finditer(previous_text))
-    next_labels = list(_LETTERED_ROW_START_RE.finditer(next_text))
+    previous_labels = list(_LETTERED_SPEC_ROW_RE.finditer(previous_text))
+    next_labels = list(_SOURCE_ROW_START_RE.finditer(next_text))
     if not previous_labels:
         return None
     prev_start = previous_labels[-1].start()
@@ -110,19 +110,22 @@ def _boundary_continuation_ranges(
         # Keep the preceding row's terminating newline, which is part of the
         # parser's exact segment span; exclude the standalone footer number.
         prev_end = footer.start() + 1
-    prev_value = previous_text[prev_start:prev_end].strip()
     next_start = 0
     next_end = next_labels[0].start() if next_labels else len(next_text)
+    next_content_end = next_end
+    while next_content_end > next_start and next_text[next_content_end - 1].isspace():
+        next_content_end -= 1
     next_value = next_text[next_start:next_end].strip()
     if not _span_is_in_scope(prev_start, prev_end, previous_scope):
         return None
-    if not _span_is_in_scope(next_start, next_end, next_scope):
-        return None
-    if not _CONTINUATION_TAIL_RE.search(prev_value):
+    if not _span_is_in_scope(next_start, next_content_end, next_scope):
         return None
     if not next_value or re.match(r"^\s*(?:[a-z]\)|\d+[.)])\s+", next_value, re.I):
         return None
-    if not next_value[:1].islower():
+    # A short standalone heading (for example, "Optional Items:") is a new
+    # section boundary rather than continuation prose.
+    first_line = next_value.splitlines()[0].strip()
+    if first_line.endswith(":") and len(first_line.split()) <= 6:
         return None
     return SourceTextRange(prev_start, prev_end), SourceTextRange(next_start, next_end)
 
