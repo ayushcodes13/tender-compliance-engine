@@ -79,6 +79,10 @@ _OTHER_MAJOR_RE = re.compile(
     re.I,
 )
 _NOTE_RE = re.compile(r"^\s*notes?\s*[:.)-]", re.I)
+_TENDER_DOWNLOAD_NOTICE_RE = re.compile(
+    r"^\s*(?:a\s+)?complete\s+set\s+of\s+tender\s+documents\b",
+    re.I,
+)
 _TOC_PAGE_RE = re.compile(r"\b(?:pg\.?|page\s*#?)\s*\d+\b", re.I)
 _NUMBERED_ITEM_RE = re.compile(r"^\s*(\d{1,3})\s*[.)]\s+\S")
 
@@ -196,6 +200,7 @@ def _is_boundary(line: str) -> bool:
         or _PART_RE.match(line)
         or _OTHER_MAJOR_RE.match(line)
         or _NOTE_RE.match(line)
+        or _TENDER_DOWNLOAD_NOTICE_RE.match(line)
     )
 
 
