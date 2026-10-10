@@ -18,7 +18,13 @@ from tender_compliance_api.extraction.openai_adapter import (
 )
 
 
-def _config(model: str, *, max_tokens: int | None, temperature: float | None) -> LlmCallConfig:
+def _config(
+    model: str,
+    *,
+    max_tokens: int | None,
+    temperature: float | None,
+    seed: int | None = None,
+) -> LlmCallConfig:
     return LlmCallConfig(
         provider="openai",
         model=model,
@@ -27,6 +33,7 @@ def _config(model: str, *, max_tokens: int | None, temperature: float | None) ->
         call_site="test",
         max_tokens=max_tokens,
         temperature=temperature,
+        seed=seed,
     )
 
 
@@ -35,6 +42,12 @@ def test_initial_options_preserve_existing_contract_for_all_deployments() -> Non
         "max_tokens": 1200,
         "temperature": 0,
     }
+
+
+def test_seed_is_forwarded_when_configured() -> None:
+    assert _completion_options(
+        _config("gpt-6-luna", max_tokens=None, temperature=0, seed=42)
+    ) == {"temperature": 0, "seed": 42}
 
 
 def test_other_models_keep_legacy_completion_options() -> None:
@@ -171,6 +184,17 @@ def test_unsupported_temperature_uses_model_default() -> None:
     options: dict[str, object] = {"max_completion_tokens": 1200, "temperature": 0}
     assert _adapt_unsupported_option(ProviderError(), options)
     assert options == {"max_completion_tokens": 1200}
+
+
+def test_unsupported_seed_uses_provider_default() -> None:
+    class ProviderError(Exception):
+        status_code = 400
+        code = "unsupported_parameter"
+        param = "seed"
+
+    options: dict[str, object] = {"temperature": 0, "seed": 42}
+    assert _adapt_unsupported_option(ProviderError(), options)
+    assert options == {"temperature": 0}
 
 
 def test_unrelated_provider_error_does_not_change_request_options() -> None:

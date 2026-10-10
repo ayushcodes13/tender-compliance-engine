@@ -48,6 +48,8 @@ from tender_compliance_api.extraction.technical_scope import SourceTextRange
 #: Same numbered-clause convention as ``parser.cleanup`` (e.g. "1.2.3 Scope").
 _CLAUSE_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s")
 _LETTERED_ROW_RE = re.compile(r"^\s*[a-z]\)\s+\S", re.I)
+_LETTERED_ROW_START_RE = re.compile(r"(?m)^[ \t]*[a-z]\)[ \t]+\S", re.I)
+_NUMBERED_HEADING_START_RE = re.compile(r"(?m)^[ \t]*\d+(?:\.\d+)*\.?[ \t]+\S")
 
 #: A line containing a table-cell delimiter.
 _TABLE_RE = re.compile(r"\|")
@@ -505,4 +507,74 @@ def build_source_windows(
     return windows
 
 
-__all__ = ["SourceWindow", "build_source_windows"]
+def build_lettered_row_windows(
+    page: DocumentPage,
+    *,
+    organization_id: uuid.UUID,
+    document_id: uuid.UUID,
+    included_ranges: Sequence[SourceTextRange],
+) -> list[SourceWindow]:
+    """Build one source window per explicit lettered row within selected ranges.
+
+    Dense equipment schedules were being sent to the model in multi-row
+    windows, where later sibling requirements could be omitted. This helper
+    narrows only that explicit source structure: each window contains one
+    lettered row and its wrapped continuation, with exact page-local offsets.
+    Numbered headings terminate the final row in a section.
+    """
+    windows: list[SourceWindow] = []
+    for row_range in lettered_row_ranges(page.cleaned_text or "", included_ranges):
+        windows.extend(
+            build_source_windows(
+                [page],
+                organization_id=organization_id,
+                document_id=document_id,
+                max_chars=max(1, row_range.end - row_range.start),
+                overlap_chars=0,
+                included_ranges_by_page={
+                    page.page_number: (row_range,)
+                },
+            )
+        )
+    return windows
+
+
+def lettered_row_ranges(
+    text: str,
+    included_ranges: Sequence[SourceTextRange],
+) -> tuple[SourceTextRange, ...]:
+    """Return source ranges for each lettered row inside authorized ranges."""
+    if not text or not included_ranges:
+        return ()
+    lettered_starts = {match.start() for match in _LETTERED_ROW_START_RE.finditer(text)}
+    boundaries = sorted(
+        lettered_starts
+        | {match.start() for match in _NUMBERED_HEADING_START_RE.finditer(text)}
+    )
+    ranges: list[SourceTextRange] = []
+    for row_start in sorted(lettered_starts):
+        scope = next(
+            (
+                source_range
+                for source_range in included_ranges
+                if source_range.start <= row_start < source_range.end
+            ),
+            None,
+        )
+        if scope is None:
+            continue
+        next_boundary = next(
+            (start for start in boundaries if start > row_start), scope.end
+        )
+        row_end = min(next_boundary, scope.end)
+        if row_end > row_start:
+            ranges.append(SourceTextRange(row_start, row_end))
+    return tuple(ranges)
+
+
+__all__ = [
+    "SourceWindow",
+    "build_lettered_row_windows",
+    "build_source_windows",
+    "lettered_row_ranges",
+]

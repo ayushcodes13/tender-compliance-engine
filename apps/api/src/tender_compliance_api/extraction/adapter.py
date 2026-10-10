@@ -46,6 +46,7 @@ class LlmCallConfig:
     max_retries: int = 2
     max_tokens: int | None = None
     temperature: float | None = None
+    seed: int | None = None
     call_site: str | None = None
 
 
