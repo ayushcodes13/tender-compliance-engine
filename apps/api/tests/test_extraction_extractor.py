@@ -1372,6 +1372,32 @@ def test_overlap_context_is_non_citable_and_candidate_is_rejected() -> None:
     asyncio.run(_run())
 
 
+def test_extraction_uses_zero_temperature_when_provider_supports_it() -> None:
+    class ConfigCapturingAdapter(FakeLlmAdapter):
+        def __init__(self) -> None:
+            super().__init__()
+            self.config: LlmCallConfig | None = None
+
+        async def extract(self, *, system_prompt, user_text, response_model, config):
+            self.config = config
+            return await super().extract(
+                system_prompt=system_prompt,
+                user_text=user_text,
+                response_model=response_model,
+                config=config,
+            )
+
+    async def _run() -> None:
+        text = "The voltage shall not exceed 230 V."
+        llm = ConfigCapturingAdapter()
+        calls, log_call = _make_log()
+        await extract_from_windows([_window(_page(text), text)], llm, log_call=log_call)
+        assert llm.config is not None
+        assert llm.config.temperature == 0.0
+
+    asyncio.run(_run())
+
+
 # ---------------------------------------------------------------------------
 # 9. CandidateRecord is JSON-serializable (sources_json must be JSON-safe).
 # ---------------------------------------------------------------------------

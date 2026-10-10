@@ -281,6 +281,9 @@ async def extract_from_windows(
         model=llm.model,
         prompt_version=prompt_version,
         schema_version=schema_version,
+        # Keep structured extraction focused and reduce run-to-run variation
+        # in candidate grouping where the provider supports temperature.
+        temperature=0.0,
         call_site=_EXTRACT_CALL_SITE,
     )
 
