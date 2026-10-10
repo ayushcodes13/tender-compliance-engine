@@ -66,6 +66,24 @@ def test_toc_and_other_tender_sections_are_excluded_but_full_spec_section_is_kep
     assert "Pg. 10" not in selected
 
 
+def test_tender_download_notice_does_not_leak_into_last_technical_row() -> None:
+    page = _page(
+        13,
+        "TECHNICAL SPECIFICATION:\n"
+        "Optional Items\n"
+        "a) High purity evaporation materials: 500 grams each.\n"
+        "d) Provision for adding one more Cryo pump in near future.\n"
+        "A complete set of tender documents may be Download by prospective bidder free of cost.\n"
+        "Bidder has to make payment of requisite fees and EMD online.\n",
+    )
+
+    selected = _window_text([page])
+
+    assert "Provision for adding one more Cryo pump" in selected
+    assert "complete set of tender documents" not in selected
+    assert "requisite fees" not in selected
+
+
 def test_existing_compliance_sheet_is_preferred_over_repeated_spec_narrative() -> None:
     pages = [
         _page(
