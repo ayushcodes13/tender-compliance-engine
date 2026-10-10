@@ -15,7 +15,9 @@ import asyncio
 import io
 import time
 import uuid
+from io import BytesIO
 
+from docx import Document as DocxDocument
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 from sqlalchemy import select
@@ -38,7 +40,16 @@ from tender_compliance_api.db.models import (
     TenderDocument,
     User,
 )
+from tender_compliance_api.export.vendor_response_docx import build_vendor_response_docx
+from tender_compliance_api.extraction.fake import FakeLlmAdapter
+from tender_compliance_api.extraction.prompts import ExtractionResponse
+from tender_compliance_api.extraction.schema import (
+    RequirementCandidate,
+    RequirementType,
+    UncertaintyLevel,
+)
 from tender_compliance_api.main import app
+from tender_compliance_api.matrix.projection import project_matrix_rows
 from tender_compliance_api.parser import FakeParserAdapter
 from tender_compliance_api.parser.adapter import PageResult
 from tender_compliance_api.queue import (
@@ -642,6 +653,132 @@ class TestFullProcessingFlow:
 
             asyncio.run(_check_parsed())
 
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_upload_extracts_only_technical_section_and_exports_blank_sheet(
+        self, session_cm
+    ) -> None:
+        """Exercise upload -> worker extraction -> source-bounded sheet export."""
+
+        class CapturingFake(FakeLlmAdapter):
+            def __init__(self) -> None:
+                super().__init__(
+                    [
+                        ExtractionResponse(
+                            candidates=[
+                                RequirementCandidate(
+                                    normalized_text="Hydraulic test capacity: 300 kN.",
+                                    raw_source="Hydraulic test capacity: 300 kN.",
+                                    requirement_type=RequirementType.OBLIGATION,
+                                    uncertainty=UncertaintyLevel.CONFIRMED,
+                                    clause_section=None,
+                                    group_hint=None,
+                                )
+                            ]
+                        )
+                    ]
+                )
+                self.windows: list[str] = []
+
+            async def extract(self, **kwargs):  # type: ignore[no-untyped-def]
+                self.windows.append(kwargs["user_text"])
+                return await super().extract(**kwargs)
+
+        fake_queue = FakeQueueAdapter()
+        shared_storage = FakeStorageAdapter()
+        app.dependency_overrides[get_storage_dep] = lambda: shared_storage
+        app.dependency_overrides[get_scanner_dep] = lambda: FakeScanner()
+        app.dependency_overrides[get_queue_adapter_dep] = lambda: fake_queue
+        try:
+            async def _setup_and_upload():
+                info = await _create_org_project(session_cm)
+                response = TestClient(app).post(
+                    f"/projects/{info['project_id']}/upload",
+                    files={"file": ("tender.pdf", _make_pdf(), "application/pdf")},
+                    headers=_headers(info["user_id"], info["org_id"]),
+                )
+                assert response.status_code == 201, response.text
+                return info
+
+            info = asyncio.run(_setup_and_upload())
+            technical_text = (
+                "SECTION V / Technical Specification\n"
+                "S.No. | Technical Specification\n"
+                "Hydraulic test capacity: 300 kN.\n"
+                "SECTION VI / General Terms and Conditions\n"
+                "The bidder shall submit audited financial statements."
+            )
+            llm = CapturingFake()
+
+            async def _run_worker() -> None:
+                sf = _get_session_factory()
+                worker = Worker(
+                    queue=fake_queue,
+                    session_factory=sf,  # type: ignore[arg-type]
+                    processor=JobProcessor(
+                        sf,
+                        parser=FakeParserAdapter(
+                            pages=[
+                                PageResult(
+                                    page_number=1,
+                                    text=technical_text,
+                                    text_length=len(technical_text),
+                                    ocr_needed=False,
+                                    warnings=[],
+                                    error=None,
+                                )
+                            ]
+                        ),
+                        storage=shared_storage,
+                        llm=llm,
+                    ),
+                    max_concurrency=1,
+                )
+                assert await worker.run_once() >= 1
+
+            asyncio.run(_run_worker())
+            assert len(llm.windows) == 1
+            assert "Hydraulic test capacity: 300 kN." in llm.windows[0]
+            assert "audited financial statements" not in llm.windows[0]
+
+            async def _export_and_assert() -> None:
+                sf = _get_session_factory()
+                async with sf() as session:
+                    version = (
+                        await session.execute(
+                            select(DocumentVersion).where(
+                                DocumentVersion.document_id.in_(
+                                    select(TenderDocument.id).where(
+                                        TenderDocument.project_id == info["project_id"]
+                                    )
+                                )
+                            )
+                        )
+                    ).scalar_one()
+                    rows = await project_matrix_rows(session, version.id)
+                    assert len(rows) == 1
+                    assert rows[0].tender_requirement == "Hydraulic test capacity: 300 kN."
+                    document = build_vendor_response_docx(rows)
+                    exported = DocxDocument(BytesIO(document))
+                    assert len(exported.tables) == 1
+                    table = exported.tables[0]
+                    assert [cell.text for cell in table.rows[0].cells] == [
+                        "S.No.",
+                        "Technical Specification",
+                        "Compliance (Yes / No)",
+                        "Any Deviation",
+                    ]
+                    assert [cell.text for cell in table.rows[1].cells] == [
+                        "1",
+                        "Hydraulic test capacity: 300 kN.",
+                        "",
+                        "",
+                    ]
+                    assert len(exported.paragraphs) == 1
+                    assert exported.paragraphs[0].text == "Technical Specification Sheet"
+
+            asyncio.run(_export_and_assert())
         finally:
             app.dependency_overrides.clear()
 

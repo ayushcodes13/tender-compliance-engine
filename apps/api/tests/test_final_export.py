@@ -318,8 +318,8 @@ class TestDocxExport:
         )
         assert response.status_code == 200
         artifact = response.json()
-        assert artifact["validation_report"]["checked_columns"] == 7
-        assert artifact["validation_report"]["checked_cells"] == 7
+        assert artifact["validation_report"]["checked_columns"] == 4
+        assert artifact["validation_report"]["checked_cells"] == 4
         download = client.get(
             f"/projects/{proj_id}/documents/{doc_id}/versions/{ver}/exports/{artifact['id']}",
             headers=_headers(user_id, org_id),
@@ -330,13 +330,13 @@ class TestDocxExport:
 
         exported = Document(BytesIO(download.content))
         rows = exported.tables[0].rows
-        assert rows[0].cells[1].text == "Tender requirement"
+        assert rows[0].cells[1].text == "Technical Specification"
         assert rows[1].cells[1].text == full_text
-        assert rows[1].cells[2].text == "4.2.1"
-        assert rows[1].cells[3].text == "12"
-        assert rows[1].cells[4].text == "Unreviewed"
-        assert rows[1].cells[5].text == ""
-        assert rows[1].cells[6].text == ""
+        assert rows[1].cells[2].text == ""
+        assert rows[1].cells[3].text == ""
+        assert len(rows[0].cells) == 4
+        assert len(exported.paragraphs) == 1
+        assert exported.paragraphs[0].text == "Technical Specification Sheet"
 
     def test_vendor_response_template_rejects_non_docx(self):
         (user_id, org_id, proj_id, doc_id, ver, _ver_id, _req_id) = (

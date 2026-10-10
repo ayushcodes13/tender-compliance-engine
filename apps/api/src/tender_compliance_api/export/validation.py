@@ -143,7 +143,10 @@ def _docx_table(
         headers = [_content_key(cell.text).casefold() for cell in table.rows[0].cells]
         if not any(h in headers for h in ("requirement id", "s.no.")):
             continue
-        if "tender requirement" not in headers:
+        if not any(
+            header in headers
+            for header in ("tender requirement", "technical specification")
+        ):
             continue
         original_headers = [_content_key(cell.text) for cell in table.rows[0].cells]
         if not output_headers:
@@ -347,12 +350,28 @@ def validate_generated_requirement_cells(
         for extra_header in sorted(actual_header_set - expected_header_keys):
             issues.append(CellIssue("", "unexpected_column", extra_header))
 
-    identity_header = "requirement id" if "requirement id" in actual_header_set else "s.no."
+    identity_header = next(
+        (
+            candidate
+            for candidate in ("requirement id", "s.no.", "s. no.")
+            if candidate in actual_header_set
+        ),
+        "s. no.",
+    )
+    text_header = next(
+        (
+            candidate
+            for candidate in ("tender requirement", "technical specification")
+            if candidate in actual_header_set
+        ),
+        "tender requirement",
+    )
+    text_field_headers = {"tender requirement", "technical specification"}
     actual: list[RequirementCell] = []
     for field_row in actual_fields:
         normalized = {header_key(key): value for key, value in field_row.items()}
         row_id = _content_key(normalized.get(identity_header, ""))
-        text = normalized.get("tender requirement", "")
+        text = normalized.get(text_header, "")
         actual.append(
             RequirementCell(
                 row_id=row_id,
@@ -372,7 +391,7 @@ def validate_generated_requirement_cells(
         if emitted is not None and expected_row.fields:
             emitted_fields = emitted.fields or {}
             for field, expected_value in expected_row.fields.items():
-                if header_key(field) == "tender requirement":
+                if header_key(field) in text_field_headers:
                     continue
                 actual_value = emitted_fields.get(header_key(field))
                 if actual_value is None or _content_key(actual_value) != _content_key(

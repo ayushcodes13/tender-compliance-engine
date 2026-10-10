@@ -13,6 +13,7 @@ from tender_compliance_api.parser.cleanup import PageCleanup, cleanup_pages
 from tender_compliance_api.parser.composite import CompositeParserAdapter
 from tender_compliance_api.parser.docx import DocxParserAdapter
 from tender_compliance_api.parser.fake import FakeParserAdapter
+from tender_compliance_api.parser.pymupdf import PyMuPDFParserAdapter
 from tender_compliance_api.parser.pypdf import PypdfParserAdapter
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "PageResult",
     "ParseResult",
     "ParserAdapter",
+    "PyMuPDFParserAdapter",
     "PypdfParserAdapter",
     "cleanup_pages",
 ]

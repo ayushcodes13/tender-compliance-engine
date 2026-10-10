@@ -136,23 +136,17 @@ def final_matrix_docx(rows: Sequence[FinalMatrixRow]) -> tuple[list[str], list[R
 def vendor_response_docx(rows: Sequence[MatrixRow]) -> tuple[list[str], list[RequirementCell]]:
     headers = [
         "S.No.",
-        "Tender requirement",
-        "Clause",
-        "Source page",
-        "Review status",
-        "OEM compliance (Yes / No / Partial)",
-        "Deviation / remarks",
+        "Technical Specification",
+        "Compliance (Yes / No)",
+        "Any Deviation",
     ]
     expected: list[RequirementCell] = []
     for row in rows:
         fields = {
             "S.No.": _plain(row.serial),
-            "Tender requirement": row.tender_requirement,
-            "Clause": row.clause or "",
-            "Source page": _plain(row.source_page),
-            "Review status": row.review_status.replace("_", " ").title(),
-            "OEM compliance (Yes / No / Partial)": "",
-            "Deviation / remarks": "",
+            "Technical Specification": row.tender_requirement,
+            "Compliance (Yes / No)": "",
+            "Any Deviation": "",
         }
         expected.append(RequirementCell(str(row.serial), row.tender_requirement, fields))
     return headers, expected

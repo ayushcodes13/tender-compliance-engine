@@ -35,6 +35,7 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from tender_compliance_api.db.models import DocumentPage
@@ -42,9 +43,11 @@ from tender_compliance_api.extraction.schema import (
     LocationType,
     TrustedSourceContext,
 )
+from tender_compliance_api.extraction.technical_scope import SourceTextRange
 
 #: Same numbered-clause convention as ``parser.cleanup`` (e.g. "1.2.3 Scope").
 _CLAUSE_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s")
+_LETTERED_ROW_RE = re.compile(r"^\s*[a-z]\)\s+\S", re.I)
 
 #: A line containing a table-cell delimiter.
 _TABLE_RE = re.compile(r"\|")
@@ -108,7 +111,7 @@ def _line_kind(line: str) -> str:
 
     if _BLANK_RE.match(line):
         return "blank"
-    if _CLAUSE_RE.match(line):
+    if _CLAUSE_RE.match(line) or _LETTERED_ROW_RE.match(line):
         return "clause"
     if _TABLE_RE.search(line):
         return "table"
@@ -135,7 +138,11 @@ def _hierarchy_for(clause: str) -> list[str]:
     return [".".join(parts[: i + 1]) for i in range(len(parts))]
 
 
-def _segment_page(page: DocumentPage) -> list[_Segment]:
+def _segment_page(
+    page: DocumentPage,
+    *,
+    scope_ranges: Sequence[SourceTextRange] | None = None,
+) -> list[_Segment]:
     """Split a page's :attr:`cleaned_text` into atomic structural segments.
 
     Segments never cross a clause header or a table boundary, and a clause
@@ -170,6 +177,7 @@ def _segment_page(page: DocumentPage) -> list[_Segment]:
     cur_kind: str | None = None
     cur_lines: list[tuple[str, int, int]] = []
     cur_table_label: str | None = None
+    previous_line_in_scope: bool | None = None
 
     def flush() -> None:
         if not cur_lines:
@@ -189,6 +197,20 @@ def _segment_page(page: DocumentPage) -> list[_Segment]:
         )
 
     for line, kind, start, end in records:
+        line_in_scope = scope_ranges is None or any(
+            start >= source_range.start and end <= source_range.end
+            for source_range in scope_ranges
+        )
+        if (
+            previous_line_in_scope is not None
+            and line_in_scope != previous_line_in_scope
+        ):
+            flush()
+            cur_kind = None
+            cur_lines = []
+            cur_table_label = None
+        previous_line_in_scope = line_in_scope
+
         if kind == "blank":
             flush()  # blank line breaks the current paragraph/table segment
             cur_kind = None
@@ -381,6 +403,7 @@ def build_source_windows(
     document_id: uuid.UUID,
     max_chars: int = 1500,
     overlap_chars: int = 150,
+    included_ranges_by_page: Mapping[int, Sequence[SourceTextRange]] | None = None,
 ) -> list[SourceWindow]:
     """Chunk parsed :class:`DocumentPage` rows into source-anchored windows.
 
@@ -392,6 +415,10 @@ def build_source_windows(
             than this is still emitted whole (never split) to avoid data loss.
         overlap_chars: Bounded tail of the previous window's text carried into
             the next window as ``overlap``.
+        included_ranges_by_page: Optional source-authorized ranges. When set,
+            only complete structural segments wholly inside one of these
+            original-page ranges are emitted. Gaps reset overlap so text from
+            outside the selected section cannot leak into model context.
 
     Returns:
         Windows in document order, with stable ``chunk_id``s.
@@ -414,7 +441,12 @@ def build_source_windows(
     segments: list[_Segment] = []
     version_id: uuid.UUID | None = None
     for page in ordered:
-        segments.extend(_segment_page(page))
+        scope_ranges = (
+            included_ranges_by_page.get(page.page_number, ())
+            if included_ranges_by_page is not None
+            else None
+        )
+        segments.extend(_segment_page(page, scope_ranges=scope_ranges))
         if version_id is None:
             version_id = page.document_version_id
     if version_id is None or not segments:
@@ -427,6 +459,26 @@ def build_source_windows(
     cur_segments: list[_Segment] = []
 
     for seg in segments:
+        if included_ranges_by_page is not None:
+            allowed_ranges = included_ranges_by_page.get(seg.page_number, ())
+            if not any(
+                seg.char_start >= source_range.start
+                and seg.char_end <= source_range.end
+                for source_range in allowed_ranges
+            ):
+                if not acc.empty:
+                    windows.append(
+                        _finalize_window(
+                            acc, cur_segments, prev_text, overlap_chars,
+                            pages_by_number, version_id, organization_id, document_id,
+                        )
+                    )
+                    acc = _WindowAccumulator()
+                    cur_segments = []
+                # Do not carry an overlap across excluded tender content.
+                prev_text = None
+                continue
+
         # Flush before adding if the atomic segment would overflow and the
         # window is non-empty.  An oversized single segment still goes in whole.
         if not acc.empty and acc.length + 1 + len(seg.text) > max_chars:

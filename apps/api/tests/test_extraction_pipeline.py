@@ -60,7 +60,7 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
-from tender_compliance_api.extraction.chunking import SourceWindow
+from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
 from tender_compliance_api.extraction.coverage_audit import (
     ImageCoverageQuote,
     ImageObligationCoverageResponse,
@@ -78,6 +78,7 @@ from tender_compliance_api.extraction.prompts import (
     PROMPT_VERSION,
     SCHEMA_VERSION,
     ExtractionResponse,
+    system_prompt_for_source_window,
 )
 from tender_compliance_api.extraction.requirement import promotion_key
 from tender_compliance_api.extraction.schema import (
@@ -86,9 +87,133 @@ from tender_compliance_api.extraction.schema import (
     TrustedSourceContext,
     UncertaintyLevel,
 )
+from tender_compliance_api.extraction.technical_scope import SourceTextRange
 from tender_compliance_api.storage.fake import FakeStorageAdapter
 from tender_compliance_api.storage.keys import build_key
-from tender_compliance_worker.processor import JobProcessor
+from tender_compliance_worker.processor import (
+    JobProcessor,
+    _boundary_continuation_ranges,
+    _subtract_source_range,
+)
+
+
+def test_boundary_continuation_keeps_one_lettered_row_across_pages() -> None:
+    previous_text = (
+        "j) Warranty: Vendor to provide comprehensive three-year warranty on the "
+        "complete system and utilities. Expenses are borne by vendor for the\n"
+    )
+    next_text = (
+        "replacement/repair of faulty items. It starts on acceptance.\n\n"
+        "k) Vendor must provide a service network.\n"
+    )
+    version_id = uuid.uuid4()
+    previous_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=12,
+        extracted_text=previous_text,
+        cleaned_text=previous_text,
+        ocr_needed=0,
+    )
+    next_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=13,
+        extracted_text=next_text,
+        cleaned_text=next_text,
+        ocr_needed=0,
+    )
+
+    spans = _boundary_continuation_ranges(
+        previous_page,
+        next_page,
+        (SourceTextRange(0, len(previous_text)),),
+        (SourceTextRange(0, len(next_text)),),
+    )
+
+    assert spans is not None
+    previous_span, next_span = spans
+    assert previous_text[previous_span.start : previous_span.end].startswith("j) Warranty:")
+    assert next_text[next_span.start : next_span.end].startswith("replacement/repair")
+    assert "k) Vendor" not in next_text[next_span.start : next_span.end]
+
+    windows = build_source_windows(
+        [previous_page, next_page],
+        organization_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        max_chars=5000,
+        overlap_chars=0,
+        included_ranges_by_page={
+            12: (previous_span,),
+            13: (next_span,),
+        },
+    )
+    assert len(windows) == 1
+    assert len(windows[0].sources) == 2
+    assert "for the\nreplacement/repair" in windows[0].text
+
+
+def test_boundary_continuation_does_not_join_two_labeled_rows() -> None:
+    previous_text = "a) First requirement ends with the\n"
+    next_text = "b) Second requirement starts here.\n"
+    version_id = uuid.uuid4()
+    previous_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=1,
+        extracted_text=previous_text,
+        cleaned_text=previous_text,
+        ocr_needed=0,
+    )
+    next_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=2,
+        extracted_text=next_text,
+        cleaned_text=next_text,
+        ocr_needed=0,
+    )
+
+    assert _boundary_continuation_ranges(
+        previous_page,
+        next_page,
+        (SourceTextRange(0, len(previous_text)),),
+        (SourceTextRange(0, len(next_text)),),
+    ) is None
+
+
+def test_excluded_continuation_fragments_preserve_unrelated_page_ranges() -> None:
+    source_ranges = (SourceTextRange(0, 100),)
+    remaining = _subtract_source_range(
+        source_ranges,
+        (SourceTextRange(20, 30), SourceTextRange(60, 80)),
+    )
+
+    assert remaining == (
+        SourceTextRange(0, 20),
+        SourceTextRange(30, 60),
+        SourceTextRange(80, 100),
+    )
+
+
+def test_lettered_requirement_labels_split_chunk_segments() -> None:
+    text = f"a) {'x' * 50}\nb) {'y' * 50}"
+    version_id = uuid.uuid4()
+    page = DocumentPage(
+        document_version_id=version_id,
+        page_number=1,
+        extracted_text=text,
+        cleaned_text=text,
+        ocr_needed=0,
+    )
+
+    windows = build_source_windows(
+        [page],
+        organization_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        max_chars=60,
+        overlap_chars=0,
+    )
+
+    assert len(windows) == 2
+    assert windows[0].text.startswith("a)")
+    assert windows[1].text.startswith("b)")
 
 # ---------------------------------------------------------------------------
 # DB helpers (self-contained; tests/ is not a package)
@@ -388,29 +513,50 @@ class TestPromptVersioning:
         assert "fabricate" in EXTRACTION_SYSTEM_PROMPT
         assert "verbatim" in EXTRACTION_SYSTEM_PROMPT
 
-    def test_system_prompt_limits_rows_to_product_technical_specifications(self) -> None:
-        prompt = EXTRACTION_SYSTEM_PROMPT.lower()
+    def test_system_prompt_is_section_bounded_and_preserves_source_wording(self) -> None:
+        prompt = " ".join(EXTRACTION_SYSTEM_PROMPT.lower().split())
         for phrase in (
-            "only product/equipment technical specifications",
-            "dedicated technical-specifications section",
-            "performance limits",
-            "accuracy/resolution",
-            "included accessories/consumables/spares",
-            "exclude content outside that scope",
-            "eligibility and past-performance criteria",
-            "warranty, maintenance, after-sales service",
-            "if a passage cannot be reliably identified",
+            "application supplies source windows only from that selected section",
+            "do not use, infer from, or add material from any other part of the tender",
+            "reproduce specification text exactly",
+            "do not paraphrase, summarize, explain, assess compliance",
+            "normalized_text: the exact same text as raw_source",
+            "preferred",
+            "or another reputable supplier",
+            "only when they are inside the selected technical section",
+            "never fabricate",
+            'standalone numbered heading such as "1. growth chamber" is its own row',
+            "separately lettered specification rows",
+            "never merge sibling lettered rows",
+            "keep the full text belonging to one labeled row together",
+            "preserve grouped bullets as one candidate",
+            "grips and fixtures",
+            "grouped \"other requirements\"",
+            "utilities/spares",
+            "lc50kn, pr9+sj1",
+            "ve-xs1/m5+rce-25",
+            "keep wide frame option, dual station configuration, and load cells together",
+            "diamond-scriber example",
         ):
             assert phrase in prompt
-        assert "preferred" in prompt
-        assert "optional" in prompt
-        assert "do not turn a preference or example into a" in prompt
-        assert "1.3.0" == PROMPT_VERSION
+        assert "1.10.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
         # The LLM response schema is bounded by the CP25 RequirementCandidate.
         field = ExtractionResponse.model_fields["candidates"]
         assert field is not None  # candidates: list[RequirementCandidate]
+
+    def test_source_window_selects_lettered_or_grouped_bullet_row_rules(self) -> None:
+        lettered = system_prompt_for_source_window(
+            "1. Growth chamber\na) First item\nb) Second item\n"
+        )
+        grouped = system_prompt_for_source_window(
+            "Grips and Fixtures\n• First accessory\n• Second accessory\n"
+        )
+        assert "exactly one candidate per lettered row" in lettered
+        assert "do not merge sibling letters" in lettered.lower()
+        assert "keep related unnumbered bullets together" in grouped.lower()
+        assert "do not emit one candidate per bullet" in grouped.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -1335,6 +1481,48 @@ class TestPromotionPersistence:
 
         asyncio.run(_run())
 
+    def test_uncertain_requirement_persists_only_for_human_review(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            text = "Hydraulic test capacity: 300 kN."
+
+            async with sf() as session:
+                svc = DocumentService(session)
+                candidate = _make_candidate_row(
+                    session, info["version_id"], "c-uncertain", text, text, 1
+                )
+                candidate.uncertainty = "uncertain"
+                session.add(candidate)
+                await session.flush()
+                inserted, skipped = await svc.persist_requirements(
+                    auth,
+                    document_id=info["doc_id"],
+                    version_number=info["version_number"],
+                    run_id=info["run_id"],
+                )
+                await session.commit()
+                assert (inserted, skipped) == (1, 0)
+
+            async with sf() as session:
+                requirement = (
+                    await session.execute(
+                        select(Requirement).where(
+                            Requirement.document_version_id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert requirement.raw_source == text
+                assert requirement.uncertainty == "uncertain"
+                assert requirement.review_state == RequirementReviewState.NEEDS_CLARIFICATION
+
+        asyncio.run(_run())
+
 
     def test_reprocess_is_idempotent_and_preserves_review_state(
         self, session_cm
@@ -1894,7 +2082,10 @@ class TestExtractStageDiagnosticsCaptureCP31:
         async def _run() -> None:
             info = await _create_version_with_run(session_cm)
             sf = _get_session_factory()
-            text = "The enclosure shall be sealed to IP65 minimum ingress protection."
+            text = (
+                "TECHNICAL SPECIFICATION:\n"
+                "The enclosure shall be sealed to IP65 minimum ingress protection."
+            )
             fake = FakeLlmAdapter(
                 responses=[
                     ExtractionResponse(
@@ -1946,6 +2137,58 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     )
                 ).scalars().all()
                 assert len(rows) == 1
+
+        asyncio.run(_run())
+
+    def test_do_extract_fails_closed_without_technical_section(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            fake = FakeLlmAdapter()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            processor = JobProcessor(sf, llm=fake)
+
+            async with sf() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=info["version_id"],
+                        page_number=1,
+                        cleaned_text=(
+                            "Eligibility criteria\n"
+                            "The bidder shall provide audited financial statements."
+                        ),
+                        ocr_needed=False,
+                    )
+                )
+                await session.flush()
+                service = DocumentService(session)
+                await processor._do_extract(  # noqa: SLF001
+                    session, service, auth, version, run_id=info["run_id"]
+                )
+                await session.commit()
+
+            assert fake.calls == []
+            async with sf() as session:
+                run = (
+                    await session.execute(
+                        select(ProcessingRun).where(
+                            ProcessingRun.id == info["processing_run_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert run.status == RunStatus.FAILED
+                assert run.error_type == "technical_specification_section_not_found"
 
         asyncio.run(_run())
 
@@ -2024,7 +2267,10 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     DocumentPage(
                         document_version_id=info["version_id"],
                         page_number=1,
-                        cleaned_text="The enclosure shall be sealed to IP6S.",
+                        cleaned_text=(
+                            "TECHNICAL SPECIFICATION:\n"
+                            "The enclosure shall be sealed to IP6S."
+                        ),
                         ocr_needed=True,
                         rendered_image_object_key=image_key,
                     )
@@ -2109,7 +2355,10 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     DocumentPage(
                         document_version_id=info["version_id"],
                         page_number=1,
-                        cleaned_text="Unclear scanned technical text.",
+                        cleaned_text=(
+                            "TECHNICAL SPECIFICATION:\n"
+                            "Unclear scanned technical text."
+                        ),
                         ocr_needed=True,
                         rendered_image_object_key=image_key,
                     )

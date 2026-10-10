@@ -62,7 +62,7 @@ from tender_compliance_api.document.service import (
 )
 from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.parser.adapter import ParserAdapter
-from tender_compliance_api.parser.pypdf import PypdfParserAdapter
+from tender_compliance_api.parser.pymupdf import PyMuPDFParserAdapter
 from tender_compliance_api.project import (
     ProjectArchivedError,
     ProjectNotFoundError,
@@ -133,8 +133,8 @@ def get_queue_adapter() -> QueueAdapter:
 
 
 def get_parser() -> ParserAdapter:
-    """Return the configured PDF parser (PypdfParserAdapter)."""
-    return PypdfParserAdapter()
+    """Return the configured PDF parser (PyMuPDFParserAdapter)."""
+    return PyMuPDFParserAdapter()
 
 
 # ---------------------------------------------------------------------------

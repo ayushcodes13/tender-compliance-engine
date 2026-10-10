@@ -42,7 +42,11 @@ from tender_compliance_api.db.models import (
     User,
 )
 from tender_compliance_api.main import app  # noqa: F401
-from tender_compliance_api.parser import FakeParserAdapter, PypdfParserAdapter
+from tender_compliance_api.parser import (
+    FakeParserAdapter,
+    PyMuPDFParserAdapter,
+    PypdfParserAdapter,
+)
 from tender_compliance_api.parser.adapter import PageResult
 from tender_compliance_api.queue import DEFAULT_QUEUE, QueuedJob
 from tender_compliance_api.queue.adapter import make_job_id
@@ -104,6 +108,10 @@ def _make_protected_pdf(password: str = "secret") -> bytes:
 
 async def _parse(parser: PypdfParserAdapter, data: bytes, mime: str):
     """Helper to call the async parse method."""
+    return await parser.parse(data, mime)
+
+
+async def _parse_pymupdf(parser: PyMuPDFParserAdapter, data: bytes, mime: str):
     return await parser.parse(data, mime)
 
 
@@ -349,6 +357,107 @@ class TestPypdfParserAdapter:
         assert result.pages[0].text == "first page text"
         assert result.pages[1].text == "second page text"
         assert result.pages[2].text == "third page text"
+
+
+class TestPyMuPDFParserAdapter:
+    def test_extracts_native_hyphenated_text_without_pypdf_spacing_artifact(self) -> None:
+        import pymupdf
+
+        document = pymupdf.open()
+        page = document.new_page(width=612, height=792)
+        page.insert_text((36, 72), "III-V wafers and vacuum-backed chuck")
+        pdf_bytes = document.tobytes()
+        document.close()
+
+        result = asyncio.run(
+            _parse_pymupdf(
+                PyMuPDFParserAdapter(), pdf_bytes, "application/pdf"
+            )
+        )
+
+        assert result.parser_name == "pymupdf"
+        assert result.page_count == 1
+        assert "III-V wafers" in result.pages[0].text
+        assert "vacuum-backed chuck" in result.pages[0].text
+        assert result.pages[0].visual_verification_required is False
+        assert result.pages[0].ocr_needed is False
+
+    def test_removes_only_standalone_page_numbers_in_page_margins(self) -> None:
+        import pymupdf
+
+        document = pymupdf.open()
+        page = document.new_page(width=612, height=792)
+        page.insert_text((300, 20), "1")
+        page.insert_text((36, 80), "1) This is a technical requirement.")
+        page.insert_text((300, 784), "1")
+        pdf_bytes = document.tobytes()
+        document.close()
+
+        result = asyncio.run(
+            _parse_pymupdf(PyMuPDFParserAdapter(), pdf_bytes, "application/pdf")
+        )
+
+        text = result.pages[0].text
+        assert "This is a technical requirement." in text
+        assert "\n1\n" not in f"\n{text}\n"
+
+    def test_table_aware_text_keeps_rows_without_marking_native_text_as_ocr(self) -> None:
+        import pymupdf
+
+        document = pymupdf.open()
+        page = document.new_page(width=612, height=792)
+        page.insert_text((36, 70), "TECHNICAL SPECIFICATION")
+        page.insert_text((300, 784), "1")
+        # A bordered table with enough content to cross the parser's adoption
+        # threshold while keeping each source row distinct.
+        y = 100
+        for left, right in [
+            ("5. Control system", "Recipe storage for at least 100 process programs"),
+            ("4. Process gas", "Mass flow controller range 0-500 sccm for each gas line"),
+            ("3. Pumping system", "Dry pump with roots blower and automatic isolation"),
+            ("2. Load lock", "Base pressure 1 x 10-6 mbar measured at the chamber"),
+            ("1. Growth chamber", "Temperature range 20-400°C with a uniformity of ±2°C"),
+        ]:
+            page.draw_rect((36, y, 576, y + 48))
+            page.draw_line((300, y), (300, y + 48))
+            page.insert_text((42, y + 18), left)
+            page.insert_text((306, y + 18), right)
+            y += 48
+        pdf_bytes = document.tobytes()
+        document.close()
+
+        result = asyncio.run(
+            _parse_pymupdf(PyMuPDFParserAdapter(), pdf_bytes, "application/pdf")
+        )
+
+        text = result.pages[0].text
+        assert "TECHNICAL SPECIFICATION" in text
+        assert "\n1\n" not in f"\n{text}\n"
+        assert text.index("5. Control system") < text.index("4. Process gas")
+        assert text.index("4. Process gas") < text.index("3. Pumping system")
+        assert "2. Load lock | Base pressure 1 x 10-6 mbar" in text
+        assert "3. Pumping system | Dry pump with roots blower" in text
+        assert result.pages[0].visual_verification_required is False
+
+    def test_empty_native_text_page_requires_ocr(self) -> None:
+        result = asyncio.run(
+            _parse_pymupdf(
+                PyMuPDFParserAdapter(), _make_blank_pdf(1), "application/pdf"
+            )
+        )
+        assert result.page_count == 1
+        assert result.pages[0].ocr_needed is True
+        assert result.pages[0].text == ""
+        assert "OCR required" in result.pages[0].warnings[0]
+
+    def test_rejects_unsupported_mime_and_malformed_pdf(self) -> None:
+        parser = PyMuPDFParserAdapter()
+        unsupported = asyncio.run(_parse_pymupdf(parser, b"x", "text/plain"))
+        malformed = asyncio.run(
+            _parse_pymupdf(parser, b"not a pdf", "application/pdf")
+        )
+        assert "unsupported" in (unsupported.fatal_error or "")
+        assert malformed.fatal_error is not None
 
 
 # ---------------------------------------------------------------------------

@@ -27,7 +27,7 @@ from tender_compliance_api.ocr.tesseract import TesseractOcrAdapter
 from tender_compliance_api.parser import (
     CompositeParserAdapter,
     DocxParserAdapter,
-    PypdfParserAdapter,
+    PyMuPDFParserAdapter,
 )
 from tender_compliance_api.parser.adapter import ParserAdapter
 from tender_compliance_api.queue import (
@@ -191,7 +191,7 @@ def create_worker(
     :class:`DevLlmAdapter` is used so the full extraction pipeline is
     exercisable locally without network access.  Defaults:
     :class:`CompositeParserAdapter` dispatching to
-    :class:`PypdfParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
+    :class:`PyMuPDFParserAdapter` (PDF, CP19) and :class:`DocxParserAdapter`
     (DOCX, CP22), :class:`PymupdfRendererAdapter` (CP20), and
     :class:`TesseractOcrAdapter` (CP21).  The LLM extraction default is
     :class:`OpenAiLlmAdapter` (``gpt-4o`` per ``docs/review.md``).
@@ -211,7 +211,7 @@ def create_worker(
     if parser is None:
         parser = CompositeParserAdapter(
             {
-                "application/pdf": PypdfParserAdapter(),
+                "application/pdf": PyMuPDFParserAdapter(),
                 "application/vnd.openxmlformats-officedocument."
                 "wordprocessingml.document": DocxParserAdapter(),
             }
