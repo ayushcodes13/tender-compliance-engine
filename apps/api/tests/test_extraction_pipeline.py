@@ -178,6 +178,58 @@ def test_boundary_continuation_does_not_join_two_labeled_rows() -> None:
     ) is None
 
 
+def test_boundary_continuation_joins_unlabeled_new_sentence() -> None:
+    previous_text = (
+        "m) In-situ characterization facility includes the RHEED system.\n"
+    )
+    next_text = (
+        "The RHEED analysis software shall provide real-time image acquisition.\n"
+        "1.1 Growth chamber pumping system\n"
+        "a) Cryogenic pumping system.\n"
+    )
+    version_id = uuid.uuid4()
+    previous_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=8,
+        extracted_text=previous_text,
+        cleaned_text=previous_text,
+        ocr_needed=0,
+    )
+    next_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=9,
+        extracted_text=next_text,
+        cleaned_text=next_text,
+        ocr_needed=0,
+    )
+
+    spans = _boundary_continuation_ranges(
+        previous_page,
+        next_page,
+        (SourceTextRange(0, len(previous_text)),),
+        (SourceTextRange(0, len(next_text)),),
+    )
+    assert spans is not None
+    previous_span, next_span = spans
+
+    windows = build_source_windows(
+        [previous_page, next_page],
+        organization_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        max_chars=5000,
+        overlap_chars=0,
+        included_ranges_by_page={
+            8: (previous_span,),
+            9: (next_span,),
+        },
+    )
+    assert len(windows) == 1
+    assert len(windows[0].sources) == 2
+    assert "The RHEED analysis software" in windows[0].text
+    assert "1.1 Growth chamber pumping system" not in windows[0].text
+    assert "a) Cryogenic pumping system" not in windows[0].text
+
+
 def test_excluded_continuation_fragments_preserve_unrelated_page_ranges() -> None:
     source_ranges = (SourceTextRange(0, 100),)
     remaining = _subtract_source_range(
