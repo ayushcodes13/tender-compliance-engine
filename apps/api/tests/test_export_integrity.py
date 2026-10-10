@@ -274,9 +274,7 @@ def test_post_render_validator_rejects_clipped_tender_text_in_every_export() -> 
             "docx",
             headers,
             expected,
-            build_vendor_response_docx(
-                [clipped_phase1_row], tender_name="Tender", document_version=1
-            ),
+            build_vendor_response_docx([clipped_phase1_row]),
         )
     )
 
@@ -337,9 +335,7 @@ def test_post_render_validator_accepts_full_multiline_text_in_every_export() -> 
             "docx",
             headers,
             expected,
-            build_vendor_response_docx(
-                [phase1_row], tender_name="Tender", document_version=1
-            ),
+            build_vendor_response_docx([phase1_row]),
         )
     )
 
@@ -386,9 +382,7 @@ def test_post_render_validator_rejects_missing_and_duplicate_rows_in_every_expor
             "docx",
             headers,
             expected,
-            lambda rows: build_vendor_response_docx(
-                rows, tender_name="Tender", document_version=1
-            ),
+            lambda rows: build_vendor_response_docx(rows),
             phase1_row,
         )
     )

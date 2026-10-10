@@ -43,6 +43,9 @@ from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.extraction.adapter import LlmAdapter
 from tender_compliance_api.extraction.chunking import build_source_windows
 from tender_compliance_api.extraction.extractor import extract_from_windows
+from tender_compliance_api.extraction.technical_scope import (
+    select_technical_specification_ranges,
+)
 from tender_compliance_api.logs import error_category
 from tender_compliance_api.ocr.adapter import OcrAdapter
 from tender_compliance_api.parser.adapter import ParserAdapter, ParseResult
@@ -491,11 +494,44 @@ class JobProcessor:
 
         try:
             pages = await self._load_pages(session, version.id)
+            scope = select_technical_specification_ranges(pages)
+            if not scope.found:
+                await svc.complete_run(
+                    auth,
+                    document_id=version.document_id,
+                    version_number=version.version_number,
+                    stage=ProcessingStage.EXTRACT,
+                    run_id=run_id,
+                    error_type="technical_specification_section_not_found",
+                    error_message=(
+                        "Could not identify a technical-specification or "
+                        "technical-compliance section. No tender text was "
+                        "sent for requirement extraction."
+                    ),
+                )
+                return
+
             windows = build_source_windows(
                 pages,
                 organization_id=auth.organization_id,
                 document_id=version.document_id,
+                included_ranges_by_page=scope.ranges_by_page,
             )
+            if not windows:
+                await svc.complete_run(
+                    auth,
+                    document_id=version.document_id,
+                    version_number=version.version_number,
+                    stage=ProcessingStage.EXTRACT,
+                    run_id=run_id,
+                    error_type="technical_specification_text_unavailable",
+                    error_message=(
+                        "A technical-specification section heading was found, "
+                        "but no parseable source text was available within it."
+                    ),
+                )
+                return
+
             run = await svc.get_run(
                 auth,
                 document_id=version.document_id,

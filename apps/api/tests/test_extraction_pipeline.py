@@ -388,23 +388,20 @@ class TestPromptVersioning:
         assert "fabricate" in EXTRACTION_SYSTEM_PROMPT
         assert "verbatim" in EXTRACTION_SYSTEM_PROMPT
 
-    def test_system_prompt_limits_rows_to_product_technical_specifications(self) -> None:
-        prompt = EXTRACTION_SYSTEM_PROMPT.lower()
+    def test_system_prompt_is_section_bounded_and_preserves_source_wording(self) -> None:
+        prompt = " ".join(EXTRACTION_SYSTEM_PROMPT.lower().split())
         for phrase in (
-            "only product/equipment technical specifications",
-            "dedicated technical-specifications section",
-            "performance limits",
-            "accuracy/resolution",
-            "included accessories/consumables/spares",
-            "exclude content outside that scope",
-            "eligibility and past-performance criteria",
-            "warranty, maintenance, after-sales service",
-            "if a passage cannot be reliably identified",
+            "application supplies source windows only from that selected section",
+            "do not use, infer from, or add material from any other part of the tender",
+            "reproduce specification text exactly",
+            "do not paraphrase, summarize, explain, assess compliance",
+            "normalized_text: the exact same text as raw_source",
+            "preferred",
+            "or another reputable supplier",
+            "only when they are inside the selected technical section",
+            "never fabricate",
         ):
             assert phrase in prompt
-        assert "preferred" in prompt
-        assert "optional" in prompt
-        assert "do not turn a preference or example into a" in prompt
         assert "1.3.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
@@ -1894,7 +1891,10 @@ class TestExtractStageDiagnosticsCaptureCP31:
         async def _run() -> None:
             info = await _create_version_with_run(session_cm)
             sf = _get_session_factory()
-            text = "The enclosure shall be sealed to IP65 minimum ingress protection."
+            text = (
+                "TECHNICAL SPECIFICATION:\n"
+                "The enclosure shall be sealed to IP65 minimum ingress protection."
+            )
             fake = FakeLlmAdapter(
                 responses=[
                     ExtractionResponse(
@@ -1946,6 +1946,58 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     )
                 ).scalars().all()
                 assert len(rows) == 1
+
+        asyncio.run(_run())
+
+    def test_do_extract_fails_closed_without_technical_section(self, session_cm) -> None:
+        async def _run() -> None:
+            info = await _create_version_with_run(session_cm)
+            sf = _get_session_factory()
+            fake = FakeLlmAdapter()
+            auth = AuthContext(
+                actor_id=info["user_id"],
+                organization_id=info["org_id"],
+                roles=frozenset({"owner"}),
+            )
+            processor = JobProcessor(sf, llm=fake)
+
+            async with sf() as session:
+                version = (
+                    await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.id == info["version_id"]
+                        )
+                    )
+                ).scalar_one()
+                session.add(
+                    DocumentPage(
+                        document_version_id=info["version_id"],
+                        page_number=1,
+                        cleaned_text=(
+                            "Eligibility criteria\n"
+                            "The bidder shall provide audited financial statements."
+                        ),
+                        ocr_needed=False,
+                    )
+                )
+                await session.flush()
+                service = DocumentService(session)
+                await processor._do_extract(  # noqa: SLF001
+                    session, service, auth, version, run_id=info["run_id"]
+                )
+                await session.commit()
+
+            assert fake.calls == []
+            async with sf() as session:
+                run = (
+                    await session.execute(
+                        select(ProcessingRun).where(
+                            ProcessingRun.id == info["processing_run_id"]
+                        )
+                    )
+                ).scalar_one()
+                assert run.status == RunStatus.FAILED
+                assert run.error_type == "technical_specification_section_not_found"
 
         asyncio.run(_run())
 
@@ -2024,7 +2076,10 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     DocumentPage(
                         document_version_id=info["version_id"],
                         page_number=1,
-                        cleaned_text="The enclosure shall be sealed to IP6S.",
+                        cleaned_text=(
+                            "TECHNICAL SPECIFICATION:\n"
+                            "The enclosure shall be sealed to IP6S."
+                        ),
                         ocr_needed=True,
                         rendered_image_object_key=image_key,
                     )
@@ -2109,7 +2164,10 @@ class TestExtractStageDiagnosticsCaptureCP31:
                     DocumentPage(
                         document_version_id=info["version_id"],
                         page_number=1,
-                        cleaned_text="Unclear scanned technical text.",
+                        cleaned_text=(
+                            "TECHNICAL SPECIFICATION:\n"
+                            "Unclear scanned technical text."
+                        ),
                         ocr_needed=True,
                         rendered_image_object_key=image_key,
                     )

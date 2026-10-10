@@ -3476,23 +3476,25 @@ If the product direction changes, update this file through a focused PR, explain
 
 **Plain-English outcome:** After reviewing extracted tender requirements, a user can export a DOCX response sheet for an OEM to complete. This is a blank response template; it does not assess or claim OEM compliance.
 
+**Current sample-aligned output contract (2026-10-10):** Export only verbatim requirements found inside the tender's selected technical-specification or technical-compliance section, using the four columns demonstrated by the supplied examples: `S.No.`, `Technical Specification`, `Compliance (Yes / No)`, and `Any Deviation`. Keep the two response columns blank. Include all listed rows and nested bullets within that section, including subsections such as “Other requirements” or “Terms & Conditions”. Do not include metadata, explanations, interpretations, recommendations, or compliance assessments in the sheet; provenance remains available in the review UI and source viewer.
+
 ### Scope
 
-1. Export each current, non-superseded requirement in canonical order without truncating its wording.
-2. Preserve known clause and page locations and show the requirement review state.
-3. Leave OEM compliance and deviation/remarks cells empty.
-4. Keep the existing evidence-backed final matrix export unchanged and separate.
+1. Export each current, non-superseded requirement in canonical order without truncating or rewriting its source wording.
+2. Use the sample-aligned four-column format; keep bidder response cells empty.
+3. Keep provenance and review state in the review UI/source viewer rather than in the sheet.
+4. Keep the existing final matrix export separate.
 
 ### This checkpoint is complete only when
 
 - [x] A user can generate and download a vendor response DOCX from the compliance sheet UI.
 - [x] Every exported requirement is present exactly as stored, including long multi-line text.
-- [x] Known source clause/page and review state are shown; unknown locations are not synthesized.
+- [x] Technical requirement wording is included without adding information or interpretations.
 - [x] OEM response cells are blank and no compliance status is added.
 - [x] Tests cover full text retention, provenance fields, blank response cells, and the export route.
 - [x] DOCX rendering is visually reviewed and relevant checks pass.
 
-**Implementation note:** Added a separate Vendor Response DOCX export beside final compliance exports. It uses canonical Phase 1 requirements, retains full text and available source locations, shows review state, and leaves OEM response columns blank. It stores an immutable export artifact and emits a distinct audit action. Verification: `pytest tests/test_final_export.py` (12 passed), strict mypy, Ruff, web typecheck/build, the commercial-flow browser test (including download), and rendered DOCX visual review passed.
+**Historical implementation note:** The initial Vendor Response DOCX showed review state and source locations. The current implementation uses the sample-aligned four-column layout, preserves complete source wording, and leaves response cells blank. It stores an immutable export artifact and emits a distinct audit action.
 
 ### Guardrail
 
@@ -3535,6 +3537,8 @@ If the product direction changes, update this file through a focused PR, explain
 **Status:** IN PROGRESS — PRs #140–#143 add post-render artifact/source-quote checks, persisted validation states, strict cited-page fallback, OCR highlights, and per-cell validation. PR #150 adds per-window extraction-call outcomes and an independent source-bounded omission scan; PRs #151–#152 fix quote-only citation navigation and cover clipping/missing/duplicate exports across formats. PR #154 preserves Unicode in final PDF exports, and PR #155 covers schema, provider, and image-retrieval failures. PR #165 prioritizes the exact source anchor and restricts text/image validation to the page emitted in the citation. PR #168 maps extraction-window quotes back to page-local fragments and requires every cited fragment to pass visual validation. A targeted live run over four Example 3 windows on tender pages 16–19 completed extraction and coverage calls and retained three quotations absent from the sample DOCX as potential omissions for human review. PR #170 scopes out titles, contents, bidder procedure, commercial quote terms, general procurement-law restrictions unrelated to the offered system, and bare table labels, while retaining technical specifications, supplier delivery/support duties, and supplier capability evidence requested in the response sheet. Targeted live checks on Example 2 confirm the supplier experience clause is in scope and the country-based subcontracting restriction is out of scope. A read-only v1.2 Azure rerun matched all persisted source windows and returned 40 possible omissions / 1 invalid audit for Example 1, 409 / 7 for Example 2, and 52 / 1 for Example 3. These are review findings, not confirmed omissions. Manual comparison found a response-row continuation present in the supplied Example 2 DOCX but absent from the generated matrix; the independent scan surfaced it. PR #171 adds a reviewer action for a surfaced omission, including source verification, uncertainty retention, and duplicate prevention. PR #164 adds the inline citation evidence drawer and immutable page viewer. PR #179 adds append-only reviewer decisions for surfaced coverage findings. A follow-up fixes source-viewer auto-scroll when a citation has a persisted anchor ID but no requirement ID or quote text. Source-validation failures now show generated wording beside the saved source excerpt and link directly to the cited-page evidence drawer. The second pass is not proof of tender-wide completeness; the examples remain in human review pending classification and source-window error resolution.
 
 **Current output scope decision (2026-10-10):** The user clarified that compliance sheets must contain only the product/equipment specifications from the tender's technical-specification section or clearly identifiable technical-specification tables. This supersedes earlier CP70 prompt scope that included supplier delivery/support, installation, warranty, qualification, references, and supporting-proof duties. Those separate duties must no longer be generated as rows or surfaced as omissions. Retain product properties, values, units, performance limits, configuration, interfaces, utilities, included accessories, standards, tests, and technical options. If a passage is ambiguous, leave it out of the sheet and keep it available for human review.
+
+**Latest sample-based clarification during this PR (2026-10-10):** Compare the supplied input/output pairs and select the tender's own technical-specification/compliance section (prefer its explicit compliance sheet when one exists). Preserve every listed row and nested bullet in that section exactly, including “Other requirements” or “Terms & Conditions” subsections demonstrated by the examples. Do not semantically filter those rows as non-product duties when they appear inside the selected section. Exclude content outside that section. This current user instruction supersedes the preceding product-only scope statement for this implementation.
 
 **Plain-English outcome:** Before a tender-derived response sheet or final matrix is issued, each tender-derived requirement cell is checked against its immutable tender source. Reviewers can open a citation at the exact source location and see which text supports the row.
 

@@ -24,54 +24,39 @@ SCHEMA_VERSION: str = "1.0.0"
 #: is NEVER placed here — it is injected only as the user message by the
 #: adapter.  The instructions enforce the CP25 boundary from the model side.
 EXTRACTION_SYSTEM_PROMPT: str = """\
-You extract content for a technical-specification compliance sheet. Include
-only product/equipment technical specifications in the tender's dedicated
-technical-specifications section or in a clearly identifiable technical
-specification table. This includes measurable or descriptive product
-properties, performance limits, dimensions, accuracy/resolution, materials,
-configuration, interfaces, utilities, included accessories/consumables/spares,
-standards, test methods, and technical options. Short table cells, bullets,
-numbered rows, and multi-line specifications are in scope when they state a
-product specification.
+You extract the technical specifications explicitly present in the selected
+technical-specification or technical-compliance section of a tender. The
+application supplies source windows only from that selected section. Do not
+use, infer from, or add material from any other part of the tender.
 
-Exclude content outside that scope, even when it is a supplier obligation:
-eligibility and past-performance criteria, references or authorization,
-documentary proof, delivery, installation, commissioning, training, packaging,
-acceptance administration, warranty, maintenance, after-sales service,
-commercial terms, and bid-submission instructions. A technical-sounding duty
-does not become a product specification merely because it appears in the same
-tender. Do not create rows from section titles, table headings, or parameter
-labels without their specified values or conditions. If a passage cannot be
-reliably identified as a product/equipment specification, abstain rather than
-including it.
+Reproduce specification text exactly as it appears in the source window. Do
+not paraphrase, summarize, explain, assess compliance, recommend, correct OCR,
+or add values, units, conditions, tolerances, or technical details. Keep the
+original numbering, terminology, punctuation, bullets, and qualifiers such as
+"preferred" and "optional". Keep complete table rows and their nested bullets
+together when they express one listed item. Keep source qualifiers such as
+"or another reputable supplier" exactly as written. Preserve service, support, and
+other requirements only when they are inside the selected technical section;
+their presence elsewhere in the tender does not make them in scope.
 
-Preserve technical qualifiers such as "preferred" and "optional"; do not turn
-a preference or example into a mandatory product specification. Report exactly
-what is written; do not
-interpret beyond the source, summarize away a material condition, correct OCR,
-or fill gaps. Never fabricate specifications, citations, values, or units.
-
-You receive one trusted source window (page text) as your user message.
-Only cite text that appears verbatim in that window. Your output must
-validate against a strict JSON schema; if you cannot honour the schema,
-do not emit a candidate.
+You receive one trusted source window from the selected section. Only cite
+text that appears verbatim in that window. Your output must validate against a
+strict JSON schema; if you cannot honour the schema, do not emit a candidate.
 
 For every candidate:
-- normalized_text: a concise statement of the requirement (what must be true).
-- raw_source: the exact text fragment you are citing, copied verbatim from
-  the window.
-- requirement_type: one of obligation | prohibition | permission.
-- uncertainty: one of confirmed | uncertain | abstain. Use "abstain" when
-  the window contains no clear technical requirement or you cannot cite
-  accurately.
-- clause_section: the observed clause/section label at the start of the
-  line, if any (may be null).
+- normalized_text: the exact same text as raw_source; do not rewrite it.
+- raw_source: the complete exact source fragment for one listed requirement,
+  specification row, or nested bullet group.
+- requirement_type: one of obligation | prohibition | permission, based only
+  on the explicit source wording.
+- uncertainty: one of confirmed | uncertain | abstain. Use "abstain" when the
+  source wording is unclear or cannot be copied accurately.
+- clause_section: the observed source label, if any (may be null).
 
-If the window contains no in-scope product specification, return an empty
-candidates list. Do not include a separate service, warranty, delivery, support,
-qualification, or proof obligation just because it is mandatory in the tender.
-Do not invent page numbers, offsets, or document context — you do not
-control those; they are attached by the system after validation.
+If no technical specification is present in the supplied window, return an
+empty candidates list. Never fabricate an item, citation, page, offset, value,
+unit, or document context; trusted source locations are attached after
+validation.
 """
 
 

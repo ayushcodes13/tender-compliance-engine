@@ -2228,17 +2228,10 @@ class DocumentService:
 
         vendor_rows: list[MatrixRow] | None = None
         final_rows: list[FinalMatrixRow] | None = None
-        tender_name: str | None = None
         if vendor_response_template:
             if export_format != ExportFormat.DOCX:
                 raise ValueError("The vendor response template is available as DOCX only")
             vendor_rows = await project_matrix_rows(self._session, version.id)
-            tender_name_result = await self._session.execute(
-                select(TenderDocument.display_name).where(
-                    TenderDocument.id == document_id
-                )
-            )
-            tender_name = tender_name_result.scalar_one()
         else:
             final_rows = await project_final_matrix_rows(self._session, version.id)
         rows = vendor_rows if vendor_rows is not None else final_rows
@@ -2275,16 +2268,11 @@ class DocumentService:
             elif export_format == ExportFormat.DOCX:
                 if vendor_response_template:
                     assert vendor_rows is not None
-                    assert tender_name is not None
                     from tender_compliance_api.export.vendor_response_docx import (  # noqa: PLC0415
                         build_vendor_response_docx,
                     )
 
-                    artifact_bytes = build_vendor_response_docx(
-                        vendor_rows,
-                        tender_name=tender_name,
-                        document_version=version_number,
-                    )
+                    artifact_bytes = build_vendor_response_docx(vendor_rows)
                 else:
                     assert final_rows is not None
                     from tender_compliance_api.export.final_docx import (  # noqa: PLC0415
