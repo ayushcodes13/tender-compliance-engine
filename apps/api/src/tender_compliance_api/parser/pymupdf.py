@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _MIN_TRUSTWORTHY_TEXT_LEN = 5
 _PAGE_NUMBER_RE = re.compile(r"^\s*\d{1,3}\s*$")
 _PAGE_MARGIN_POINTS = 120.0
+_SUSPICIOUS_SUBSCRIPT_ORDER = re.compile(
+    r"\b(?:details\s+of\s+)?\d\s+\d+\s+achievable\s+"
+    r"[A-Z][a-z]?\s*/\s*[A-Z][a-z]?\b",
+    re.I,
+)
 
 
 def _page_number_artifacts(
@@ -235,6 +240,12 @@ class PyMuPDFParserAdapter(ParserAdapter):
                 text = text.strip()
                 warnings: list[str] = []
                 ocr_needed = False
+                if _SUSPICIOUS_SUBSCRIPT_ORDER.search(text):
+                    visual_verification_required = True
+                    warnings.append(
+                        "native text may have separated chemical subscripts; "
+                        "compare with rendered page"
+                    )
                 if not text:
                     ocr_needed = True
                     warnings.append("page has no extractable text layer — OCR required")

@@ -93,7 +93,12 @@ from tender_compliance_api.storage.keys import build_key
 from tender_compliance_worker.processor import (
     JobProcessor,
     _boundary_continuation_ranges,
+    _sample_heading_ranges,
+    _standalone_numbered_heading_ranges,
     _subtract_source_range,
+    _table_cell_source_windows,
+    _technical_preamble_ranges,
+    _technical_section_title_ranges,
 )
 
 
@@ -149,6 +154,115 @@ def test_boundary_continuation_keeps_one_lettered_row_across_pages() -> None:
     assert len(windows) == 1
     assert len(windows[0].sources) == 2
     assert "for the\nreplacement/repair" in windows[0].text
+
+
+def test_standalone_numbered_section_labels_are_literal_rows() -> None:
+    text = (
+        "1. Growth chamber\n"
+        "2.1 Buffer Chamber pumping system:\n"
+        "7. Computer package and relevant software shall provide full logging.\n"
+        "10. Sources/Manufactures\n"
+    )
+    included = (SourceTextRange(0, len(text)),)
+    rows = _standalone_numbered_heading_ranges(text, included)
+    assert [text[row.start : row.end] for row in rows] == [
+        "1. Growth chamber",
+        "2.1 Buffer Chamber pumping system:",
+        "10. Sources/Manufactures",
+    ]
+
+
+def test_technical_sample_lead_in_is_excluded_from_sheet_windows() -> None:
+    text = (
+        "Item details and technical specifications as mentioned below: Supply,\n"
+        "Installation and Commissioning of Geosynthetic Universal Testing Machine.\n"
+    )
+    rows = _technical_preamble_ranges(text, (SourceTextRange(0, len(text)),))
+    assert len(rows) == 1
+    assert text[rows[0].start : rows[0].end].startswith("Item details")
+
+
+def test_technical_section_title_is_not_a_requirement_window() -> None:
+    text = "SECTION V / Technical Specification\n"
+    rows = _technical_section_title_ranges(
+        text, (SourceTextRange(0, len(text)),)
+    )
+    assert [text[item.start : item.end] for item in rows] == [
+        "SECTION V / Technical Specification"
+    ]
+
+
+def test_sample_heading_row_is_separated_from_nonrow_section_label() -> None:
+    text = "Other important requirements:\nOptional Items\n"
+    row_headings, section_labels = _sample_heading_ranges(
+        text, (SourceTextRange(0, len(text)),)
+    )
+    assert [text[item.start : item.end] for item in row_headings] == [
+        "Other important requirements:"
+    ]
+    assert [text[item.start : item.end] for item in section_labels] == [
+        "Optional Items"
+    ]
+
+
+def test_table_rows_extract_only_the_technical_specification_cells() -> None:
+    text = (
+        "S.no | Technical Specification | Qty | Compliance (Yes/No) | Any Deviation\n"
+        "1 | Universal Testing Machine (300 kN) with 300 kN capacity. | 01 | |\n"
+    )
+    page = DocumentPage(
+        document_version_id=uuid.uuid4(),
+        page_number=17,
+        extracted_text=text,
+        cleaned_text=text,
+        ocr_needed=0,
+        ocr_confidence=None,
+    )
+    windows, excluded, schema = _table_cell_source_windows(
+        page,
+        organization_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        included_ranges=(SourceTextRange(0, len(text)),),
+        schema=None,
+    )
+    assert schema == (1,)
+    assert len(windows) == 1
+    assert windows[0].text == "Universal Testing Machine (300 kN) with 300 kN capacity."
+    source = windows[0].sources[0]
+    assert text[source.char_start : source.char_end] == windows[0].text
+    assert source.source_text == windows[0].text
+    assert windows[0].literal_source_row is True
+    assert excluded == (
+        SourceTextRange(0, text.index("1 |")),
+        SourceTextRange(text.index("1 |"), len(text)),
+    )
+
+
+def test_parameter_tables_keep_the_name_and_required_specification() -> None:
+    text = (
+        "Parameter | Required Specification | Compliance (Yes / No) | Any remarks\n"
+        "Main Instrument | Precision manual diamond scriber. | |\n"
+    )
+    page = DocumentPage(
+        document_version_id=uuid.uuid4(),
+        page_number=1,
+        extracted_text=text,
+        cleaned_text=text,
+        ocr_needed=0,
+        ocr_confidence=None,
+    )
+    windows, _, schema = _table_cell_source_windows(
+        page,
+        organization_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        included_ranges=(SourceTextRange(0, len(text)),),
+        schema=None,
+    )
+    assert schema == (0, 1)
+    assert len(windows) == 1
+    assert windows[0].text == "Main Instrument | Precision manual diamond scriber."
+    source = windows[0].sources[0]
+    assert text[source.char_start : source.char_end] == windows[0].text
 
 
 def test_boundary_continuation_does_not_join_two_labeled_rows() -> None:
@@ -591,7 +705,7 @@ class TestPromptVersioning:
             "diamond-scriber example",
         ):
             assert phrase in prompt
-        assert "1.11.0" == PROMPT_VERSION
+        assert "1.12.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
         # The LLM response schema is bounded by the CP25 RequirementCandidate.

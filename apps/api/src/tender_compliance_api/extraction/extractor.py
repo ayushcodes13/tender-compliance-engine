@@ -36,6 +36,7 @@ Behaviour mapped to CP28:
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, cast
@@ -73,6 +74,7 @@ from tender_compliance_api.extraction.prompts import (
 from tender_compliance_api.extraction.schema import (
     CandidateValidationError,
     RequirementCandidate,
+    RequirementType,
     SourcedRequirementCandidate,
     UncertaintyLevel,
 )
@@ -81,6 +83,17 @@ from tender_compliance_api.extraction.verbatim_validation import (
     _valid_positive,
     validate_candidate,
 )
+
+_TECHNICAL_SECTION_LEAD_IN_RE = re.compile(
+    r"^\s*item\s+details\s+and\s+technical\s+specifications\s+"
+    r"as\s+mentioned\s+below\s*:",
+    re.I,
+)
+
+
+def _is_technical_section_lead_in(text: str) -> bool:
+    """Drop a section's table-introduction sentence from generated rows."""
+    return bool(_TECHNICAL_SECTION_LEAD_IN_RE.match(text))
 
 #: Marker on LlmCallConfig identifying the extraction entry point (CP28).
 _EXTRACT_CALL_SITE = "extract_candidates"
@@ -336,6 +349,47 @@ async def extract_from_windows(
             ]
             coverage_status = "not_run"
             coverage_error_category: str | None = None
+            if window.literal_source_row:
+                candidate = RequirementCandidate(
+                    normalized_text=window.text,
+                    raw_source=window.text,
+                    requirement_type=RequirementType.OBLIGATION,
+                    uncertainty=UncertaintyLevel.CONFIRMED,
+                    clause_section=(
+                        window.sources[0].clause_number if window.sources else None
+                    ),
+                    group_hint=None,
+                )
+                record = _to_record(
+                    window,
+                    candidate,
+                    persist_uncertain_for_review=persist_uncertain_for_review,
+                )
+                window_candidates.append(record)
+                # This window is one parser-identified row and the persisted
+                # quote is the entire trusted window, so deterministic row
+                # equality is the coverage check; no model call is needed.
+                window_omissions: list[dict[str, Any]] = []
+                coverage_status = (
+                    "completed"
+                    if enable_obligation_coverage_audit and not window.ocr_warning
+                    else "not_run"
+                )
+                return _WindowOutcome(
+                    candidates=window_candidates,
+                    calls=calls,
+                    result=WindowExtractionResult(
+                        chunk_id=window.chunk_id,
+                        window_index=window_index,
+                        call_status="completed",
+                        candidate_count=1 if record.is_valid else 0,
+                        ocr_warning=window.ocr_warning,
+                        source_spans=source_spans,
+                        coverage_status=coverage_status,
+                        coverage_error_category=coverage_error_category,
+                        potential_omissions=window_omissions,
+                    ),
+                )
             try:
                 result = await llm.extract(
                     system_prompt=system_prompt_for_source_window(window.text),
@@ -386,6 +440,8 @@ async def extract_from_windows(
             calls.append(result.call)
             fallback_calls = 0
             for cand in _iter_candidates(result):
+                if _is_technical_section_lead_in(cand.raw_source):
+                    continue
                 record = _to_record(
                     window,
                     cand,

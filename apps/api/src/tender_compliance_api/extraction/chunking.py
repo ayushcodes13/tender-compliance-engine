@@ -36,7 +36,7 @@ import hashlib
 import re
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from tender_compliance_api.db.models import DocumentPage
 from tender_compliance_api.extraction.schema import (
@@ -50,6 +50,12 @@ _CLAUSE_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s")
 _LETTERED_ROW_RE = re.compile(r"^\s*[a-z]\)\s+\S", re.I)
 _LETTERED_ROW_START_RE = re.compile(r"(?m)^[ \t]*[a-z]\)[ \t]+\S", re.I)
 _NUMBERED_HEADING_START_RE = re.compile(r"(?m)^[ \t]*\d+(?:\.\d+)*\.?[ \t]+\S")
+_SUBSCRIPT_WARNING_MARKER = "native text may have separated chemical subscripts"
+_SUSPICIOUS_SUBSCRIPT_ORDER = re.compile(
+    r"\b(?:details\s+of\s+)?\d\s+\d+\s+achievable\s+"
+    r"[A-Z][a-z]?\s*/\s*[A-Z][a-z]?\b",
+    re.I,
+)
 
 #: A line containing a table-cell delimiter.
 _TABLE_RE = re.compile(r"\|")
@@ -106,6 +112,7 @@ class SourceWindow:
     hierarchy: tuple[str, ...] = ()
     table_context: tuple[str, ...] = ()
     ocr_warning: bool = False
+    literal_source_row: bool = False
 
 
 def _line_kind(line: str) -> str:
@@ -140,6 +147,16 @@ def _hierarchy_for(clause: str) -> list[str]:
     return [".".join(parts[: i + 1]) for i in range(len(parts))]
 
 
+def _visual_review_applies(page: DocumentPage, text: str) -> bool:
+    metadata = page.structural_metadata or {}
+    if not metadata.get("visual_verification_required"):
+        return False
+    warnings = metadata.get("warnings", ())
+    if any(_SUBSCRIPT_WARNING_MARKER in str(item).casefold() for item in warnings):
+        return bool(_SUSPICIOUS_SUBSCRIPT_ORDER.search(text))
+    return True
+
+
 def _segment_page(
     page: DocumentPage,
     *,
@@ -172,9 +189,7 @@ def _segment_page(
     # error from cleanup.  All segments from such a page inherit the flag so the
     # extraction orchestrator (CP28.7) can bump affected candidates' uncertainty.
     page_metadata = page.structural_metadata or {}
-    page_ocr_warning = bool(page.ocr_needed) or bool(page_metadata.get("error")) or bool(
-        page_metadata.get("visual_verification_required")
-    )
+    page_ocr_warning = bool(page.ocr_needed) or bool(page_metadata.get("error"))
 
     cur_kind: str | None = None
     cur_lines: list[tuple[str, int, int]] = []
@@ -194,7 +209,7 @@ def _segment_page(
                 char_end=cur_lines[-1][2],
                 clause=active_clause,
                 table_label=cur_table_label,
-                ocr_warning=page_ocr_warning,
+                ocr_warning=page_ocr_warning or _visual_review_applies(page, body),
             )
         )
 
@@ -231,7 +246,7 @@ def _segment_page(
                     char_end=end,
                     clause=active_clause,
                     table_label=None,
-                    ocr_warning=page_ocr_warning,
+                    ocr_warning=page_ocr_warning or _visual_review_applies(page, line),
                 )
             )
             cur_kind = None
@@ -525,7 +540,8 @@ def build_lettered_row_windows(
     windows: list[SourceWindow] = []
     for row_range in lettered_row_ranges(page.cleaned_text or "", included_ranges):
         windows.extend(
-            build_source_windows(
+            replace(window, literal_source_row=True)
+            for window in build_source_windows(
                 [page],
                 organization_id=organization_id,
                 document_id=document_id,
@@ -537,6 +553,57 @@ def build_lettered_row_windows(
             )
         )
     return windows
+
+
+def build_literal_source_window(
+    page: DocumentPage,
+    *,
+    organization_id: uuid.UUID,
+    document_id: uuid.UUID,
+    char_start: int,
+    char_end: int,
+    clause_number: str | None = None,
+    table_context: Sequence[str] = (),
+) -> SourceWindow:
+    """Anchor one already-segmented source row without asking a model to copy it."""
+    page_text = page.cleaned_text or ""
+    if char_start < 0 or char_end > len(page_text) or char_start >= char_end:
+        raise ValueError("source row offsets must select text within the page")
+    text = page_text[char_start:char_end]
+    page_metadata = page.structural_metadata or {}
+    ocr_warning = (
+        bool(page.ocr_needed)
+        or bool(page_metadata.get("error"))
+        or _visual_review_applies(page, text)
+    )
+    source = TrustedSourceContext.from_page(
+        page,
+        organization_id,
+        document_id,
+        clause_number=clause_number,
+        source_text=text,
+        location_type=LocationType.EXACT,
+    ).model_copy(
+        update={
+            "char_start": char_start,
+            "char_end": char_end,
+            "window_char_start": 0,
+            "window_char_end": len(text),
+            "page_source_text": page_text,
+            "page_source_char_start": 0,
+        }
+    )
+    content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    key = f"{page.document_version_id}:{page.page_number}:{char_start}:{char_end}:{content_hash}"
+    chunk_id = "cw-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    return SourceWindow(
+        chunk_id=chunk_id,
+        text=text,
+        sources=(source,),
+        table_context=tuple(table_context),
+        ocr_warning=ocr_warning,
+        literal_source_row=True,
+    )
 
 
 def lettered_row_ranges(
