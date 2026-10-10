@@ -54,6 +54,26 @@ def _page(n: int, text: str) -> DocumentPage:
 
 
 class TestBasicWindowing:
+    def test_subscript_warning_is_limited_to_the_affected_source_row(self) -> None:
+        text = (
+            "a) Normal vacuum range is 1x10-7 Torr.\n"
+            "b) Details of 2 4 achievable As /As cracking ratios.\n"
+        )
+        page = _page(10, text)
+        page.structural_metadata = {
+            "visual_verification_required": True,
+            "warnings": [
+                "native text may have separated chemical subscripts; compare with rendered page"
+            ],
+        }
+        windows = build_lettered_row_windows(
+            page,
+            organization_id=_ORG,
+            document_id=_DOC,
+            included_ranges=(SourceTextRange(0, len(text)),),
+        )
+        assert [window.ocr_warning for window in windows] == [False, True]
+
     def test_lettered_row_windows_keep_wrapped_text_and_stop_at_siblings(self) -> None:
         text = (
             "1. Equipment\n"
@@ -76,6 +96,7 @@ class TestBasicWindowing:
         assert "b) Second item" not in windows[0].text
         assert "1.1 Next section" not in windows[1].text
         assert all(window.sources[0].page_number == 4 for window in windows)
+        assert all(window.literal_source_row for window in windows)
         for window in windows:
             source = window.sources[0]
             assert text[source.char_start : source.char_end].rstrip("\n") == window.text

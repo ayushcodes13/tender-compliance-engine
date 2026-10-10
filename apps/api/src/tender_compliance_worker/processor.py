@@ -43,7 +43,9 @@ from tender_compliance_api.document.service import DocumentNotFoundError, Docume
 from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.extraction.adapter import LlmAdapter
 from tender_compliance_api.extraction.chunking import (
+    SourceWindow,
     build_lettered_row_windows,
+    build_literal_source_window,
     build_source_windows,
     lettered_row_ranges,
 )
@@ -70,6 +72,24 @@ _LETTERED_SPEC_ROW_RE = re.compile(r"^[ \t]*[a-z]\)[ \t]+\S", re.I | re.M)
 _SOURCE_ROW_START_RE = re.compile(
     r"(?m)^[ \t]*(?:[a-z]\)|\d+(?:\.\d+)*(?:[.)])?)[ \t]+\S", re.I
 )
+_STANDALONE_NUMBERED_HEADING_RE = re.compile(
+    r"^\s*\d+(?:\.\d+)*[.)]?\s+.{1,70}?\s*$"
+)
+_TECHNICAL_PREAMBLE_RE = re.compile(
+    r"^\s*item\s+details\s+and\s+technical\s+specifications\s+"
+    r"as\s+mentioned\s+below\s*:",
+    re.I,
+)
+_TECHNICAL_SECTION_TITLE_RE = re.compile(
+    r"^\s*(?:section\s*[-\wIVX]+\s*[/|]\s*)?"
+    r"technical\s+(?:specifications?|parameters?)\s*$|"
+    r"^.*[/|]\s*technical\s+(?:specifications?|parameters?)\s*$",
+    re.I,
+)
+_STANDALONE_SAMPLE_ROW_HEADING_RE = re.compile(
+    r"^\s*other\s+important\s+requirements\s*:\s*$", re.I
+)
+_NON_ROW_SECTION_LABEL_RE = re.compile(r"^\s*optional\s+items\s*$", re.I)
 
 
 def _span_is_in_scope(
@@ -151,6 +171,162 @@ def _subtract_source_range(
                 next_ranges.append(SourceTextRange(removed.end, source_range.end))
         remaining = next_ranges
     return tuple(remaining)
+
+
+def _technical_table_schema(cells: tuple[str, ...]) -> tuple[int, ...] | None:
+    labels = tuple(" ".join(cell.casefold().split()) for cell in cells)
+    if len(labels) >= 2 and "parameter" in labels[0] and "required specification" in labels[1]:
+        return (0, 1)
+    if len(labels) >= 2 and any("s.no" in value or "serial" in value for value in labels[0:1]):
+        if "technical specification" in labels[1]:
+            return (1,)
+    if labels and "technical parameters" in labels[0]:
+        return (0,)
+    return None
+
+
+def _table_cell_source_windows(
+    page: DocumentPage,
+    *,
+    organization_id: uuid.UUID,
+    document_id: uuid.UUID,
+    included_ranges: tuple[SourceTextRange, ...],
+    schema: tuple[int, ...] | None,
+) -> tuple[list[SourceWindow], tuple[SourceTextRange, ...], tuple[int, ...] | None]:
+    """Build literal source windows from detected table rows and retain schema."""
+    text = page.cleaned_text or ""
+    windows = []
+    excluded: list[SourceTextRange] = []
+    offset = 0
+    current_schema = schema
+    for raw_line in text.splitlines(keepends=True):
+        line_start = offset
+        line_end = offset + len(raw_line)
+        offset = line_end
+        line = raw_line.rstrip("\r\n")
+        if not any(
+            source_range.start <= line_start and line_end <= source_range.end
+            for source_range in included_ranges
+        ):
+            continue
+        if " | " not in line:
+            continue
+        cells = tuple(line.split(" | "))
+        detected_schema = _technical_table_schema(cells)
+        if detected_schema is not None:
+            current_schema = detected_schema
+            excluded.append(SourceTextRange(line_start, line_end))
+            continue
+        if current_schema is None or max(current_schema, default=0) >= len(cells):
+            continue
+        # A new response-table heading invalidates the previous column map.
+        if any("compliance" in cell.casefold() for cell in cells):
+            current_schema = _technical_table_schema(cells)
+            if current_schema is not None:
+                excluded.append(SourceTextRange(line_start, line_end))
+            continue
+
+        cell_ranges: list[tuple[int, int]] = []
+        cell_offset = line_start
+        for cell in cells:
+            cell_ranges.append((cell_offset, cell_offset + len(cell)))
+            cell_offset += len(cell) + len(" | ")
+        first_cell, last_cell = current_schema[0], current_schema[-1]
+        cell_start = cell_ranges[first_cell][0]
+        cell_end = cell_ranges[last_cell][1]
+        source_value = text[cell_start:cell_end]
+        if not source_value.strip():
+            continue
+        windows.append(
+            build_literal_source_window(
+                page,
+                organization_id=organization_id,
+                document_id=document_id,
+                char_start=cell_start,
+                char_end=cell_end,
+                table_context=cells,
+            )
+        )
+        excluded.append(SourceTextRange(line_start, line_end))
+    return windows, tuple(excluded), current_schema
+
+
+def _standalone_numbered_heading_ranges(
+    text: str, included_ranges: tuple[SourceTextRange, ...]
+) -> tuple[SourceTextRange, ...]:
+    """Identify short numbered section labels that the examples keep as rows."""
+    found: list[SourceTextRange] = []
+    offset = 0
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        end = offset + len(line)
+        if (
+            line.strip()
+            and _STANDALONE_NUMBERED_HEADING_RE.fullmatch(line)
+            and any(item.start <= offset and end <= item.end for item in included_ranges)
+        ):
+            body = re.sub(r"^\s*\d+(?:\.\d+)*[.)]?\s+", "", line).strip()
+            # Avoid turning short complete sentences or numbered instructions
+            # into heading rows; section labels end in a colon or have no
+            # sentence-final punctuation.
+            if body.endswith(":") or body[-1:] not in ".!?;":
+                found.append(SourceTextRange(offset, end))
+        offset += len(raw_line)
+    return tuple(found)
+
+
+def _technical_preamble_ranges(
+    text: str, included_ranges: tuple[SourceTextRange, ...]
+) -> tuple[SourceTextRange, ...]:
+    """Exclude the sample's explicit lead-in sentence from sheet rows."""
+    found: list[SourceTextRange] = []
+    offset = 0
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        end = offset + len(line)
+        if (
+            _TECHNICAL_PREAMBLE_RE.match(line)
+            and any(item.start <= offset and end <= item.end for item in included_ranges)
+        ):
+            found.append(SourceTextRange(offset, end))
+        offset += len(raw_line)
+    return tuple(found)
+
+
+def _technical_section_title_ranges(
+    text: str, included_ranges: tuple[SourceTextRange, ...]
+) -> tuple[SourceTextRange, ...]:
+    found: list[SourceTextRange] = []
+    offset = 0
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        end = offset + len(line)
+        if (
+            _TECHNICAL_SECTION_TITLE_RE.fullmatch(line)
+            and any(item.start <= offset and end <= item.end for item in included_ranges)
+        ):
+            found.append(SourceTextRange(offset, end))
+        offset += len(raw_line)
+    return tuple(found)
+
+
+def _sample_heading_ranges(
+    text: str, included_ranges: tuple[SourceTextRange, ...]
+) -> tuple[tuple[SourceTextRange, ...], tuple[SourceTextRange, ...]]:
+    """Separate the example's standalone data-row heading from a non-row label."""
+    row_headings: list[SourceTextRange] = []
+    section_labels: list[SourceTextRange] = []
+    offset = 0
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        end = offset + len(line)
+        if any(item.start <= offset and end <= item.end for item in included_ranges):
+            if _STANDALONE_SAMPLE_ROW_HEADING_RE.fullmatch(line):
+                row_headings.append(SourceTextRange(offset, end))
+            elif _NON_ROW_SECTION_LABEL_RE.fullmatch(line):
+                section_labels.append(SourceTextRange(offset, end))
+        offset += len(raw_line)
+    return tuple(row_headings), tuple(section_labels)
 
 #: The system worker's actor ID — seeded by Alembic migration 0035 because
 #: audit_logs.actor_id is a foreign key to users.id.
@@ -645,6 +821,7 @@ class JobProcessor:
                 )
 
             windows = []
+            active_table_schema: tuple[int, ...] | None = None
             for page in ordered_pages:
                 page_ranges = page_scope.get(page.page_number)
                 if not page_ranges:
@@ -652,6 +829,74 @@ class JobProcessor:
                 included_ranges = _subtract_source_range(
                     page_ranges,
                     tuple(excluded_by_page.get(page.page_number, ())),
+                )
+                page_text = page.cleaned_text or ""
+                preamble_ranges = _technical_preamble_ranges(
+                    page_text, included_ranges
+                )
+                section_title_ranges = _technical_section_title_ranges(
+                    page_text,
+                    _subtract_source_range(included_ranges, preamble_ranges),
+                )
+                numbered_headings = _standalone_numbered_heading_ranges(
+                    page_text,
+                    _subtract_source_range(
+                        included_ranges, (*preamble_ranges, *section_title_ranges)
+                    ),
+                )
+                sample_row_headings, nonrow_labels = _sample_heading_ranges(
+                    page_text,
+                    _subtract_source_range(
+                        included_ranges,
+                        (
+                            *preamble_ranges,
+                            *section_title_ranges,
+                            *numbered_headings,
+                        ),
+                    ),
+                )
+                windows.extend(
+                    build_literal_source_window(
+                        page,
+                        organization_id=auth.organization_id,
+                        document_id=version.document_id,
+                        char_start=source_range.start,
+                        char_end=source_range.end,
+                    )
+                    for source_range in numbered_headings
+                )
+                windows.extend(
+                    build_literal_source_window(
+                        page,
+                        organization_id=auth.organization_id,
+                        document_id=version.document_id,
+                        char_start=source_range.start,
+                        char_end=source_range.end,
+                    )
+                    for source_range in sample_row_headings
+                )
+                included_ranges = _subtract_source_range(
+                    included_ranges,
+                    (
+                        *preamble_ranges,
+                        *section_title_ranges,
+                        *numbered_headings,
+                        *sample_row_headings,
+                        *nonrow_labels,
+                    ),
+                )
+                table_windows, table_row_ranges, active_table_schema = (
+                    _table_cell_source_windows(
+                        page,
+                        organization_id=auth.organization_id,
+                        document_id=version.document_id,
+                        included_ranges=included_ranges,
+                        schema=active_table_schema,
+                    )
+                )
+                windows.extend(table_windows)
+                included_ranges = _subtract_source_range(
+                    included_ranges, table_row_ranges
                 )
                 if len(_LETTERED_SPEC_ROW_RE.findall(page.cleaned_text or "")) >= 6:
                     # Give each explicit row and its wrapped continuation its
@@ -696,19 +941,34 @@ class JobProcessor:
             for previous_page, next_page, previous_range, next_range in (
                 boundary_continuations
             ):
-                windows.extend(
-                    build_source_windows(
-                        [previous_page, next_page],
-                        organization_id=auth.organization_id,
-                        document_id=version.document_id,
-                        max_chars=5000,
-                        overlap_chars=0,
-                        included_ranges_by_page={
-                            previous_page.page_number: (previous_range,),
-                            next_page.page_number: (next_range,),
-                        },
-                    )
+                continuation_windows = build_source_windows(
+                    [previous_page, next_page],
+                    organization_id=auth.organization_id,
+                    document_id=version.document_id,
+                    max_chars=5000,
+                    overlap_chars=0,
+                    included_ranges_by_page={
+                        previous_page.page_number: (previous_range,),
+                        next_page.page_number: (next_range,),
+                    },
                 )
+                if _LETTERED_SPEC_ROW_RE.match(
+                    (previous_page.cleaned_text or "")[previous_range.start :]
+                ):
+                    continuation_windows = [
+                        SourceWindow(
+                            chunk_id=window.chunk_id,
+                            text=window.text,
+                            sources=window.sources,
+                            overlap=window.overlap,
+                            hierarchy=window.hierarchy,
+                            table_context=window.table_context,
+                            ocr_warning=window.ocr_warning,
+                            literal_source_row=True,
+                        )
+                        for window in continuation_windows
+                    ]
+                windows.extend(continuation_windows)
             windows.sort(
                 key=lambda window: (
                     window.sources[0].page_number if window.sources else 2**31 - 1,

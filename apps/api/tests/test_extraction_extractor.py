@@ -87,6 +87,7 @@ def _window(
     text: str,
     chunk_id: str = "c1",
     ocr_warning: bool = False,
+    literal_source_row: bool = False,
 ) -> SourceWindow:
     src = TrustedSourceContext.from_page(page, ORG_ID, DOC_ID)
     return SourceWindow(
@@ -97,6 +98,7 @@ def _window(
         hierarchy=(),
         table_context=(),
         ocr_warning=ocr_warning,
+        literal_source_row=literal_source_row,
     )
 
 
@@ -1245,6 +1247,51 @@ def test_empty_windows_is_noop() -> None:
         assert outcome.llm_calls == []
         assert outcome.window_results == []
         assert calls == []
+
+    asyncio.run(_run())
+
+
+def test_section_lead_in_candidate_is_not_exported_as_a_requirement() -> None:
+    async def _run() -> None:
+        source = (
+            "Item details and technical specifications as mentioned below: "
+            "Supply, Installation and Commissioning of the machine."
+        )
+        llm = FakeLlmAdapter(responses=[_response([_cand(source, source)])])
+        calls, log_call = _make_log()
+
+        outcome = await extract_from_windows(
+            [_window(_page(source), source)], llm, log_call=log_call
+        )
+
+        assert len(llm.calls) == 1
+        assert outcome.candidates == []
+
+    asyncio.run(_run())
+
+
+def test_literal_source_row_is_persisted_without_model_rewriting() -> None:
+    async def _run() -> None:
+        source = "v) Water cooling circuitry for specific components (cryo pump, turbo)."
+        llm = FakeLlmAdapter()
+        calls, log_call = _make_log()
+
+        outcome = await extract_from_windows(
+            [_window(_page(source), source, literal_source_row=True)],
+            llm,
+            log_call=log_call,
+        )
+
+        assert llm.calls == []
+        assert calls == []
+        assert outcome.llm_calls == []
+        assert len(outcome.candidates) == 1
+        candidate = outcome.candidates[0]
+        assert candidate.raw_source == source
+        assert candidate.normalized_text == source
+        assert candidate.is_valid is True
+        assert candidate.persistable is True
+        assert outcome.window_results[0].call_status == "completed"
 
     asyncio.run(_run())
 

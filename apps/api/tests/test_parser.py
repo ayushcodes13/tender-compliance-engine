@@ -360,6 +360,25 @@ class TestPypdfParserAdapter:
 
 
 class TestPyMuPDFParserAdapter:
+    def test_suspicious_separated_subscripts_require_rendered_page_review(self) -> None:
+        import pymupdf
+
+        document = pymupdf.open()
+        page = document.new_page(width=612, height=792)
+        page.insert_text(
+            (36, 72),
+            "As and As modes. Details of 2 4 achievable As /As cracking ratios.",
+        )
+        pdf_bytes = document.tobytes()
+        document.close()
+
+        result = asyncio.run(
+            _parse_pymupdf(PyMuPDFParserAdapter(), pdf_bytes, "application/pdf")
+        )
+
+        assert result.pages[0].visual_verification_required is True
+        assert any("chemical subscripts" in item for item in result.pages[0].warnings)
+
     def test_extracts_native_hyphenated_text_without_pypdf_spacing_artifact(self) -> None:
         import pymupdf
 
