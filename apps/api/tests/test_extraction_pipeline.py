@@ -539,7 +539,7 @@ class TestPromptVersioning:
             "diamond-scriber example",
         ):
             assert phrase in prompt
-        assert "1.10.0" == PROMPT_VERSION
+        assert "1.11.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
         # The LLM response schema is bounded by the CP25 RequirementCandidate.
