@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from io import BytesIO
 from uuid import uuid4
+
+import docx
+from docx.oxml.ns import qn
 
 from tender_compliance_api.export.expected import (
     final_matrix_docx,
@@ -85,6 +89,15 @@ def _final_row(text: str) -> FinalMatrixRow:
         clarification_statuses=[],
         deviation_statuses=[],
     )
+
+
+def test_vendor_response_docx_keeps_each_specification_row_together() -> None:
+    artifact = build_vendor_response_docx([_row(), replace(_row(), serial=2)])
+    document = docx.Document(BytesIO(artifact))
+
+    rows = document.tables[0].rows[1:]
+    assert len(rows) == 2
+    assert all(row._tr.find(qn("w:trPr")).find(qn("w:cantSplit")) is not None for row in rows)
 
 
 def test_export_integrity_catches_mutated_non_source_cell() -> None:

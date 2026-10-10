@@ -89,6 +89,11 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
 
     for row_index, row in enumerate(rows):
         cells = table.add_row().cells
+        # Keep the serial number and its full specification together when the
+        # row fits on a page. Word still splits rows taller than a page.
+        row_properties = table.rows[-1]._tr.get_or_add_trPr()
+        prevent_split = OxmlElement("w:cantSplit")
+        row_properties.append(prevent_split)
         values = (str(row.serial), row.tender_requirement, "", "")
         for index, (cell, value, width) in enumerate(zip(cells, values, widths, strict=True)):
             cell.width = Inches(width)

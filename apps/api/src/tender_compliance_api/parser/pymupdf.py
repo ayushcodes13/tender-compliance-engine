@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import warnings
+from statistics import median
 
 import pymupdf
 
@@ -21,10 +22,85 @@ _MIN_TRUSTWORTHY_TEXT_LEN = 5
 _PAGE_NUMBER_RE = re.compile(r"^\s*\d{1,3}\s*$")
 _PAGE_MARGIN_POINTS = 120.0
 _SUSPICIOUS_SUBSCRIPT_ORDER = re.compile(
-    r"\b(?:details\s+of\s+)?\d\s+\d+\s+achievable\s+"
-    r"[A-Z][a-z]?\s*/\s*[A-Z][a-z]?\b",
+    r"(?:\b(?:details\s+of\s+)?\d\s+\d+\s+achievable\s+"
+    r"[A-Z][a-z]?\s*/\s*[A-Z][a-z]?\b|"
+    r"\b[A-Z][a-z]?\s*/\s*[A-Z][a-z]?\s+\d\s+\d+\b)",
     re.I,
 )
+_SUBSCRIPT_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+
+def _positioned_cell_text(
+    page: pymupdf.Page, cell_bbox: tuple[float, float, float, float]
+) -> str | None:
+    """Read one table cell in visual order, using glyph positions for subscripts.
+
+    ``find_tables().extract()`` can move small lowered digits onto a separate
+    line (for example, ``As₂`` becomes ``As`` followed by ``2``). Only callers
+    that already detected that specific corruption use this bounded recovery.
+    The embedded PDF glyphs and their coordinates remain the source of every
+    returned character; no OCR or inferred repair is involved.
+    """
+    cell = pymupdf.Rect(cell_bbox)
+    try:
+        blocks = page.get_text("rawdict").get("blocks", [])
+    except Exception:  # noqa: BLE001 — table extraction remains the fallback
+        return None
+
+    positioned_lines: list[tuple[float, float, str]] = []
+    for block in blocks:
+        for line in block.get("lines", []):
+            line_bbox = line.get("bbox")
+            if not isinstance(line_bbox, (tuple, list)) or len(line_bbox) < 4:
+                continue
+            x0, y0, x1, y1 = (float(value) for value in line_bbox[:4])
+            if not cell.intersects(pymupdf.Rect(x0, y0, x1, y1)):
+                continue
+            chars = [
+                char
+                for span in line.get("spans", [])
+                for char in span.get("chars", [])
+                if isinstance(char.get("bbox"), (tuple, list))
+                and len(char["bbox"]) >= 4
+                and cell.contains(
+                    pymupdf.Point(
+                        (float(char["bbox"][0]) + float(char["bbox"][2])) / 2,
+                        (float(char["bbox"][1]) + float(char["bbox"][3])) / 2,
+                    )
+                )
+            ]
+            if not chars:
+                continue
+            alphabetic_baselines = [
+                float(char["origin"][1])
+                for char in chars
+                if str(char.get("c", "")).isalpha()
+                and isinstance(char.get("origin"), (tuple, list))
+                and len(char["origin"]) >= 2
+            ]
+            baseline = median(alphabetic_baselines) if alphabetic_baselines else None
+            line_chars: list[str] = []
+            for char in chars:
+                value = str(char.get("c", ""))
+                origin = char.get("origin")
+                if (
+                    len(value) == 1
+                    and value.isdigit()
+                    and baseline is not None
+                    and isinstance(origin, (tuple, list))
+                    and len(origin) >= 2
+                    and float(origin[1]) - baseline >= 0.75
+                ):
+                    value = value.translate(_SUBSCRIPT_DIGITS)
+                line_chars.append(value)
+            text = "".join(line_chars).rstrip()
+            if text.strip():
+                positioned_lines.append((y0, x0, text))
+
+    if not positioned_lines:
+        return None
+    positioned_lines.sort(key=lambda item: (item[0], item[1]))
+    return "\n".join(text for _, _, text in positioned_lines).strip()
 
 
 def _page_number_artifacts(
@@ -100,8 +176,26 @@ def _table_aware_text(page: pymupdf.Page, native_text: str) -> str | None:
         try:
             bbox = tuple(float(value) for value in table.bbox)
             table_boxes.append(bbox)
-            for cells in table.extract():
-                values = [" ".join(str(cell).split()) for cell in cells if cell]
+            extracted_rows = table.extract()
+            for row_index, cells in enumerate(extracted_rows):
+                table_row = table.rows[row_index]
+                values: list[str] = []
+                for cell_index, cell_text in enumerate(cells):
+                    if not cell_text:
+                        continue
+                    value = str(cell_text)
+                    if _SUSPICIOUS_SUBSCRIPT_ORDER.search(value):
+                        cell_boxes = table_row.cells
+                        if cell_index < len(cell_boxes) and cell_boxes[cell_index]:
+                            positioned = _positioned_cell_text(
+                                page, cell_boxes[cell_index]
+                            )
+                            if (
+                                positioned is not None
+                                and not _SUSPICIOUS_SUBSCRIPT_ORDER.search(positioned)
+                            ):
+                                value = positioned
+                    values.append(" ".join(value.split()))
                 row_text = " | ".join(values).strip()
                 if row_text:
                     content_blocks.append((bbox[1], row_text))
