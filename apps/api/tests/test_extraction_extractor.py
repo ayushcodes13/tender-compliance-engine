@@ -174,6 +174,51 @@ def test_confirmed_candidate_validated_and_persistable() -> None:
     asyncio.run(_run())
 
 
+def test_uncertain_source_valid_candidate_can_be_kept_for_human_review() -> None:
+    async def _run() -> None:
+        text = "Hydraulic test capacity: 300 kN."
+        candidate = _cand(
+            normalized=text,
+            raw_source=text,
+            unc=UncertaintyLevel.UNCERTAIN,
+        )
+        llm = FakeLlmAdapter(responses=[_response([candidate])])
+        _, log_call = _make_log()
+
+        default_outcome = await extract_from_windows(
+            [_window(_page(text), text)], llm, log_call=log_call
+        )
+        assert default_outcome.candidates[0].is_valid is True
+        assert default_outcome.candidates[0].persistable is False
+
+        review_llm = FakeLlmAdapter(responses=[_response([candidate])])
+        review_outcome = await extract_from_windows(
+            [_window(_page(text), text)],
+            review_llm,
+            log_call=log_call,
+            persist_uncertain_for_review=True,
+        )
+        record = review_outcome.candidates[0]
+        assert record.is_valid is True
+        assert record.persistable is True
+        assert record.uncertainty == UncertaintyLevel.UNCERTAIN.value
+
+        abstain = _cand(
+            normalized=text,
+            raw_source=text,
+            unc=UncertaintyLevel.ABSTAIN,
+        )
+        abstain_outcome = await extract_from_windows(
+            [_window(_page(text), text)],
+            FakeLlmAdapter(responses=[_response([abstain])]),
+            log_call=log_call,
+            persist_uncertain_for_review=True,
+        )
+        assert abstain_outcome.candidates[0].persistable is False
+
+    asyncio.run(_run())
+
+
 def test_independent_coverage_audit_flags_unemitted_source_obligation() -> None:
     async def _run() -> None:
         text = (
@@ -695,6 +740,52 @@ def test_verbatim_fallback_recovers_only_exact_guarded_quote() -> None:
     asyncio.run(_run())
 
 
+def test_verbatim_fallback_can_recover_exact_quote_from_multi_page_window() -> None:
+    async def _run() -> None:
+        page_one = _page("The unit has a 300 kN capacity.", page_number=1)
+        page_two = _page("The frame stiffness is 900 kN/mm.", page_number=2)
+        trusted = "The unit has a 300 kN capacity.\nThe frame stiffness is 900 kN/mm."
+        sources = tuple(
+            TrustedSourceContext.from_page(page, ORG_ID, DOC_ID).model_copy(
+                update={"source_text": trusted}
+            )
+            for page in (page_one, page_two)
+        )
+        window = SourceWindow(
+            chunk_id="multi-page",
+            text=trusted,
+            sources=sources,
+            overlap=None,
+            hierarchy=(),
+            table_context=(),
+            ocr_warning=False,
+        )
+        candidate = _cand(
+            "The unit has a 300 kN capacity; frame stiffness is 900 kN/mm.",
+            "The unit has a 300 kN capacity; frame stiffness is 900 kN/mm.",
+        )
+        fallback = VerbatimValidationResponse(
+            verdict="supported",
+            confidence=1.0,
+            matched_source=trusted,
+            reason="The complete wording occurs verbatim across the source window.",
+        )
+        llm = FakeLlmAdapter(responses=[_response([candidate]), fallback])
+        _calls, log_call = _make_log()
+
+        outcome = await extract_from_windows(
+            [window], llm, log_call=log_call, enable_verbatim_fallback=True
+        )
+
+        record = outcome.candidates[0]
+        assert record.persistable is True
+        assert record.uncertainty == UncertaintyLevel.UNCERTAIN.value
+        assert record.raw_source == trusted
+        assert record.verbatim_validation["status"] == "recovered_for_human_review"
+
+    asyncio.run(_run())
+
+
 def test_verbatim_fallback_rejects_malformed_and_does_not_run_after_match() -> None:
     for payload in (
         {
@@ -734,19 +825,28 @@ def test_verbatim_fallback_rejects_malformed_and_does_not_run_after_match() -> N
     asyncio.run(_run())
 
 
-def test_verbatim_fallback_skips_multisource_windows() -> None:
+def test_verbatim_fallback_can_recover_from_multisource_windows() -> None:
     async def _run() -> None:
         text = "The unit shall operate below 30 dB(A)."
+        second_page_text = "The system has an IP67 enclosure."
+        trusted = f"{text}\n{second_page_text}"
         window = SourceWindow(
             chunk_id="multi",
-            text=text,
+            text=trusted,
             sources=(
-                TrustedSourceContext.from_page(_page(text, 1), ORG_ID, DOC_ID),
-                TrustedSourceContext.from_page(_page(text, 2), ORG_ID, DOC_ID),
+                TrustedSourceContext.from_page(_page(text, 1), ORG_ID, DOC_ID).model_copy(
+                    update={"source_text": trusted}
+                ),
+                TrustedSourceContext.from_page(
+                    _page(second_page_text, 2), ORG_ID, DOC_ID
+                ).model_copy(
+                    update={"source_text": trusted}
+                ),
             ),
             ocr_warning=False,
         )
-        candidate = _cand("The unit shall operate below 30 dB(A).", "missing")
+        candidate_text = "The unit shall operate below 30 dB(A),"
+        candidate = _cand(candidate_text, candidate_text)
         llm = FakeLlmAdapter(
             responses=[
                 _response([candidate]),
@@ -754,7 +854,7 @@ def test_verbatim_fallback_skips_multisource_windows() -> None:
                     verdict="supported",
                     confidence=0.99,
                     matched_source=text,
-                    reason="Selected.",
+                    reason="Exact text is present on the cited window.",
                 ),
             ]
         )
@@ -762,8 +862,9 @@ def test_verbatim_fallback_skips_multisource_windows() -> None:
         outcome = await extract_from_windows(
             [window], llm, log_call=log_call, enable_verbatim_fallback=True
         )
-        assert outcome.candidates[0].is_valid is False
-        assert len(llm.calls) == 1
+        assert outcome.candidates[0].persistable is True
+        assert outcome.candidates[0].raw_source == text
+        assert len(llm.calls) == 2
 
     asyncio.run(_run())
 
@@ -940,6 +1041,74 @@ def test_ocr_warning_candidate_requires_exact_cited_page_image(monkeypatch) -> N
         assert record.uncertainty == UncertaintyLevel.UNCERTAIN.value
         assert record.verbatim_validation["status"] == "exact_page_image_match_for_human_review"
         assert calls[-1].call_site == "validate_extraction_candidate_page_image"
+
+    asyncio.run(_run())
+
+
+def test_native_text_mismatch_uses_exact_cited_page_image_for_review(monkeypatch) -> None:
+    async def _run() -> None:
+        source_text = "The effusion cell capacity is at least 80 cm3."
+        proposed_quote = "Effusion cell capacity: ≥80 cm3."
+        window = _window(_page(source_text), source_text)
+        llm = FakeLlmAdapter(
+            responses=[
+                _response([_cand(proposed_quote, proposed_quote)]),
+                VerbatimValidationResponse(
+                    verdict="not_supported",
+                    confidence=1.0,
+                    matched_source="",
+                    reason="The text layer does not match.",
+                ),
+            ]
+        )
+        _calls, log_call = _make_log()
+
+        async def exact_image_validation(**kwargs):
+            item = kwargs["items"][0]
+            return (
+                {
+                    item.item_id: PageImageQuoteDecision(
+                        item_id=item.item_id,
+                        verdict="exact",
+                        confidence=0.99,
+                        visible_quote=proposed_quote,
+                        reason="The proposed wording is visibly present on this page.",
+                    )
+                },
+                LlmCallResult(
+                    provider="fake",
+                    model="fake",
+                    prompt_version="1",
+                    schema_version="1",
+                    latency_ms=1,
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    total_tokens=None,
+                    cost_usd=None,
+                    finish_reason="stop",
+                    status="completed",
+                    call_site="validate_extraction_candidate_page_image",
+                ),
+            )
+
+        monkeypatch.setattr(
+            "tender_compliance_api.extraction.extractor.validate_quotes_on_page_image",
+            exact_image_validation,
+        )
+        outcome = await extract_from_windows(
+            [window],
+            llm,
+            log_call=log_call,
+            enable_verbatim_fallback=True,
+            coverage_page_images={1: _fake_png()},
+        )
+
+        record = outcome.candidates[0]
+        assert record.is_valid is True
+        assert record.persistable is True
+        assert record.uncertainty == UncertaintyLevel.UNCERTAIN.value
+        assert record.raw_source == proposed_quote
+        assert record.verbatim_validation["status"] == "exact_page_image_match_for_human_review"
 
     asyncio.run(_run())
 

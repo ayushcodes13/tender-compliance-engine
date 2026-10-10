@@ -47,6 +47,7 @@ from tender_compliance_api.extraction.technical_scope import SourceTextRange
 
 #: Same numbered-clause convention as ``parser.cleanup`` (e.g. "1.2.3 Scope").
 _CLAUSE_RE = re.compile(r"^\s*\d+(?:\.\d+)*\.?\s")
+_LETTERED_ROW_RE = re.compile(r"^\s*[a-z]\)\s+\S", re.I)
 
 #: A line containing a table-cell delimiter.
 _TABLE_RE = re.compile(r"\|")
@@ -110,7 +111,7 @@ def _line_kind(line: str) -> str:
 
     if _BLANK_RE.match(line):
         return "blank"
-    if _CLAUSE_RE.match(line):
+    if _CLAUSE_RE.match(line) or _LETTERED_ROW_RE.match(line):
         return "clause"
     if _TABLE_RE.search(line):
         return "table"

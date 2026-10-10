@@ -65,10 +65,10 @@ from tender_compliance_api.extraction.coverage_audit import (
     quote_is_present_in_source,
 )
 from tender_compliance_api.extraction.prompts import (
-    EXTRACTION_SYSTEM_PROMPT,
     PROMPT_VERSION,
     SCHEMA_VERSION,
     ExtractionResponse,
+    system_prompt_for_source_window,
 )
 from tender_compliance_api.extraction.schema import (
     CandidateValidationError,
@@ -175,7 +175,12 @@ def _iter_candidates(result: ExtractResult) -> list[RequirementCandidate]:
     return list(response.candidates)
 
 
-def _to_record(window: SourceWindow, candidate: RequirementCandidate) -> CandidateRecord:
+def _to_record(
+    window: SourceWindow,
+    candidate: RequirementCandidate,
+    *,
+    persist_uncertain_for_review: bool = False,
+) -> CandidateRecord:
     """Convert a model candidate into a validated, source-anchored record.
 
     Uses the window's primary source context (``sources[0]``) — which carries
@@ -203,6 +208,10 @@ def _to_record(window: SourceWindow, candidate: RequirementCandidate) -> Candida
 
     persistable = is_valid and (
         adjusted.uncertainty is UncertaintyLevel.CONFIRMED
+        or (
+            persist_uncertain_for_review
+            and adjusted.uncertainty is UncertaintyLevel.UNCERTAIN
+        )
     )
 
     return CandidateRecord(
@@ -231,6 +240,7 @@ async def extract_from_windows(
     prompt_version: str = PROMPT_VERSION,
     schema_version: str = SCHEMA_VERSION,
     enable_verbatim_fallback: bool = False,
+    persist_uncertain_for_review: bool = False,
     enable_obligation_coverage_audit: bool = False,
     coverage_page_images: Mapping[int, bytes] | None = None,
     coverage_page_texts: Mapping[int, str] | None = None,
@@ -245,6 +255,9 @@ async def extract_from_windows(
             failure) with the :class:`LlmCallResult` to persist (CP26
             ``extraction_runs``).
         prompt_version / schema_version: Recorded on every audit row.
+        persist_uncertain_for_review: Persist source-valid UNCERTAIN candidates
+            for explicit human review. ABSTAIN remains non-persistable and this
+            option does not bypass source-quote validation.
 
     Returns:
         One :class:`CandidateRecord` per proposed candidate, plus the list of
@@ -315,7 +328,7 @@ async def extract_from_windows(
             coverage_error_category: str | None = None
             try:
                 result = await llm.extract(
-                    system_prompt=EXTRACTION_SYSTEM_PROMPT,
+                    system_prompt=system_prompt_for_source_window(window.text),
                     user_text=_compose_input(window),
                     response_model=ExtractionResponse,
                     config=config,
@@ -363,10 +376,20 @@ async def extract_from_windows(
             calls.append(result.call)
             fallback_calls = 0
             for cand in _iter_candidates(result):
-                record = _to_record(window, cand)
+                record = _to_record(
+                    window,
+                    cand,
+                    persist_uncertain_for_review=persist_uncertain_for_review,
+                )
                 if not record.is_valid and enable_verbatim_fallback and not window.ocr_warning:
+                    # Every source fragment for a multi-page window carries
+                    # the same trusted window text. The strict fallback may
+                    # recover an exact literal from that window; promotion
+                    # later maps it back to page-local fragments and keeps an
+                    # approximate anchor if a unique page span cannot be
+                    # established.
                     trusted_text = window.sources[0].source_text if window.sources else None
-                    if trusted_text and len(window.sources) == 1:
+                    if trusted_text:
                         if fallback_calls >= MAX_FALLBACKS_PER_WINDOW:
                             record = replace(
                                 record, verbatim_validation={"status": "fallback_budget_exhausted"}
@@ -386,7 +409,11 @@ async def extract_from_windows(
                                         "uncertainty": UncertaintyLevel.UNCERTAIN,
                                     }
                                 )
-                                recovered_record = _to_record(window, recovered)
+                                recovered_record = _to_record(
+                                    window,
+                                    recovered,
+                                    persist_uncertain_for_review=persist_uncertain_for_review,
+                                )
                                 if recovered_record.is_valid:
                                     record = replace(
                                         recovered_record,
@@ -450,14 +477,16 @@ async def extract_from_windows(
     llm_calls = [call for outcome in outcomes for call in outcome.calls]
     window_results = [outcome.result for outcome in outcomes]
 
-    # Native text on a flagged page is not a trusted basis for candidate
-    # citations. Validate each candidate against only its single cited page
-    # image, with the same batch and call limits used at export.
+    # If native text cannot validate a candidate, or the page is already
+    # flagged for OCR/structure uncertainty, use only that single cited page
+    # image as the bounded strict fallback. This can recover visually legible
+    # text whose PDF content stream has broken reading order; the result still
+    # enters human review with an approximate anchor.
     image_candidates_by_page: dict[int, list[int]] = {}
     window_by_chunk = {window.chunk_id: window for window in windows}
     for candidate_index, record in enumerate(candidates) if enable_verbatim_fallback else ():
         window = window_by_chunk.get(record.chunk_id)
-        if not record.ocr_warning or window is None:
+        if (record.is_valid and not record.ocr_warning) or window is None:
             continue
         if len(window.sources) != 1:
             candidates[candidate_index] = replace(
@@ -480,14 +509,15 @@ async def extract_from_windows(
         page_image = (coverage_page_images or {}).get(page_number)
         if not page_image:
             for index in candidate_indexes:
-                candidates[index] = replace(
-                    candidates[index],
-                    persistable=False,
-                    verbatim_validation={
-                        "status": "page_image_unavailable",
-                        "page_number": page_number,
-                    },
-                )
+                if candidates[index].ocr_warning:
+                    candidates[index] = replace(
+                        candidates[index],
+                        persistable=False,
+                        verbatim_validation={
+                            "status": "page_image_unavailable",
+                            "page_number": page_number,
+                        },
+                    )
             continue
         max_page_items = MAX_IMAGE_QUOTES_PER_CALL * MAX_IMAGE_VALIDATION_CALLS_PER_PAGE
         for index in candidate_indexes[max_page_items:]:

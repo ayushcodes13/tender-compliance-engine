@@ -17,6 +17,7 @@ together atomically.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol
@@ -44,6 +45,7 @@ from tender_compliance_api.extraction.adapter import LlmAdapter
 from tender_compliance_api.extraction.chunking import build_source_windows
 from tender_compliance_api.extraction.extractor import extract_from_windows
 from tender_compliance_api.extraction.technical_scope import (
+    SourceTextRange,
     select_technical_specification_ranges,
 )
 from tender_compliance_api.logs import error_category
@@ -54,6 +56,94 @@ from tender_compliance_api.renderer.adapter import RendererAdapter, RenderResult
 from tender_compliance_api.storage.adapter import ObjectStorageAdapter
 
 logger = logging.getLogger(__name__)
+
+# Technical response sheets often contain long nested specification rows that
+# exceed the generic short-window default. Keep a complete labeled row and its
+# bullets together when possible so the extractor can retain the source's row
+# grouping rather than emitting only isolated fragments.
+_TECHNICAL_SOURCE_WINDOW_CHARS = 3000
+_LETTERED_SPEC_ROW_RE = re.compile(r"^\s*[a-z]\)\s+\S", re.I | re.M)
+_LETTERED_ROW_START_RE = re.compile(r"(?m)^[ \t]*[a-z]\)[ \t]+\S", re.I)
+_CONTINUATION_TAIL_RE = re.compile(
+    r"(?:\b(?:a|an|and|as|at|by|for|from|in|including|of|on|or|the|to|under|with)|[-–—])\s*$",
+    re.I,
+)
+
+
+def _span_is_in_scope(
+    start: int, end: int, scope_ranges: tuple[SourceTextRange, ...]
+) -> bool:
+    cursor = start
+    for source_range in sorted(scope_ranges, key=lambda item: item.start):
+        if source_range.end <= cursor:
+            continue
+        if source_range.start > cursor:
+            return False
+        cursor = max(cursor, source_range.end)
+        if cursor >= end:
+            return True
+    return False
+
+
+def _boundary_continuation_ranges(
+    previous_page: DocumentPage,
+    next_page: DocumentPage,
+    previous_scope: tuple[SourceTextRange, ...],
+    next_scope: tuple[SourceTextRange, ...],
+) -> tuple[SourceTextRange, SourceTextRange] | None:
+    """Find a labeled source row split across adjacent pages.
+
+    The previous fragment must be in scope, letter-labeled, and end with a
+    word that requires continuation. The next in-scope paragraph must be
+    unlabeled prose. This avoids joining ordinary neighboring specifications.
+    """
+    previous_text = previous_page.cleaned_text or ""
+    next_text = next_page.cleaned_text or ""
+    previous_labels = list(_LETTERED_ROW_START_RE.finditer(previous_text))
+    next_labels = list(_LETTERED_ROW_START_RE.finditer(next_text))
+    if not previous_labels:
+        return None
+    prev_start = previous_labels[-1].start()
+    prev_end = len(previous_text)
+    footer = re.search(rf"(?:^|\n)[ \t]*{previous_page.page_number}[ \t]*$", previous_text)
+    if footer:
+        # Keep the preceding row's terminating newline, which is part of the
+        # parser's exact segment span; exclude the standalone footer number.
+        prev_end = footer.start() + 1
+    prev_value = previous_text[prev_start:prev_end].strip()
+    next_start = 0
+    next_end = next_labels[0].start() if next_labels else len(next_text)
+    next_value = next_text[next_start:next_end].strip()
+    if not _span_is_in_scope(prev_start, prev_end, previous_scope):
+        return None
+    if not _span_is_in_scope(next_start, next_end, next_scope):
+        return None
+    if not _CONTINUATION_TAIL_RE.search(prev_value):
+        return None
+    if not next_value or re.match(r"^\s*(?:[a-z]\)|\d+[.)])\s+", next_value, re.I):
+        return None
+    if not next_value[:1].islower():
+        return None
+    return SourceTextRange(prev_start, prev_end), SourceTextRange(next_start, next_end)
+
+
+def _subtract_source_range(
+    ranges: tuple[SourceTextRange, ...],
+    excluded: tuple[SourceTextRange, ...] = (),
+) -> tuple[SourceTextRange, ...]:
+    remaining = list(ranges)
+    for removed in excluded:
+        next_ranges: list[SourceTextRange] = []
+        for source_range in remaining:
+            if removed.end <= source_range.start or removed.start >= source_range.end:
+                next_ranges.append(source_range)
+                continue
+            if source_range.start < removed.start:
+                next_ranges.append(SourceTextRange(source_range.start, removed.start))
+            if removed.end < source_range.end:
+                next_ranges.append(SourceTextRange(removed.end, source_range.end))
+        remaining = next_ranges
+    return tuple(remaining)
 
 #: The system worker's actor ID — seeded by Alembic migration 0035 because
 #: audit_logs.actor_id is a foreign key to users.id.
@@ -90,7 +180,7 @@ class JobProcessor:
         session_factory: Callable returning an async context manager
             yielding an ``AsyncSession``.
         parser: :class:`ParserAdapter` used to extract page text (CP19).
-            Defaults to :class:`PypdfParserAdapter`.
+            Defaults to :class:`PyMuPDFParserAdapter`.
         renderer: :class:`RendererAdapter` used to rasterize page images
             (CP20).  When ``None``, no page images are produced.  Defaults
             to :class:`PymupdfRendererAdapter`.
@@ -297,7 +387,7 @@ class JobProcessor:
         # Parse the document.  Record the parser that *actually* produced
         # this result on the version — if a composite adapter dispatched to
         # a sub-adapter, parse_result.parser_name is the sub-adapter's
-        # identity ("pypdf" / "python-docx"), not the composite's.
+        # identity ("pymupdf" / "python-docx"), not the composite's.
         parse_result = await self._parser.parse(data, version.mime_type)
 
         version.parser_name = parse_result.parser_name
@@ -511,11 +601,94 @@ class JobProcessor:
                 )
                 return
 
-            windows = build_source_windows(
-                pages,
-                organization_id=auth.organization_id,
-                document_id=version.document_id,
-                included_ranges_by_page=scope.ranges_by_page,
+            # Keep ordinary extraction windows page-local. The only exception
+            # is a labeled requirement that visibly continues mid-sentence at
+            # the next page; it receives a bounded two-page window with both
+            # original page fragments retained as source anchors.
+            boundary_continuations: list[
+                tuple[DocumentPage, DocumentPage, SourceTextRange, SourceTextRange]
+            ] = []
+            page_scope = scope.ranges_by_page
+            ordered_pages = sorted(pages, key=lambda item: item.page_number)
+            excluded_by_page: dict[int, list[SourceTextRange]] = {}
+            for previous_page, next_page in zip(
+                ordered_pages, ordered_pages[1:], strict=False
+            ):
+                previous_scope = page_scope.get(previous_page.page_number, ())
+                next_scope = page_scope.get(next_page.page_number, ())
+                if not previous_scope or not next_scope:
+                    continue
+                continuation = _boundary_continuation_ranges(
+                    previous_page,
+                    next_page,
+                    previous_scope,
+                    next_scope,
+                )
+                if continuation is None:
+                    continue
+                previous_range, next_range = continuation
+                boundary_continuations.append(
+                    (previous_page, next_page, previous_range, next_range)
+                )
+                excluded_by_page.setdefault(previous_page.page_number, []).append(
+                    previous_range
+                )
+                excluded_by_page.setdefault(next_page.page_number, []).append(
+                    next_range
+                )
+
+            windows = [
+                window
+                for page in ordered_pages
+                if (page_ranges := page_scope.get(page.page_number))
+                for window in build_source_windows(
+                    [page],
+                    organization_id=auth.organization_id,
+                    document_id=version.document_id,
+                    included_ranges_by_page={
+                        page.page_number: _subtract_source_range(
+                            page_ranges,
+                            tuple(excluded_by_page.get(page.page_number, ())),
+                        )
+                    },
+                    # Lettered equipment tables need smaller contexts so the
+                    # model sees sibling rows as separate obligations and is
+                    # less likely to merge a long section (such as an on-site
+                    # acceptance test) into one unmatchable quote. Keep longer
+                    # contexts for unlettered nested feature lists, which the
+                    # examples present together as one response row.
+                    max_chars=(
+                        1200
+                        if len(
+                            _LETTERED_SPEC_ROW_RE.findall(page.cleaned_text or "")
+                        )
+                        >= 6
+                        else _TECHNICAL_SOURCE_WINDOW_CHARS
+                    ),
+                )
+            ]
+            for previous_page, next_page, previous_range, next_range in (
+                boundary_continuations
+            ):
+                windows.extend(
+                    build_source_windows(
+                        [previous_page, next_page],
+                        organization_id=auth.organization_id,
+                        document_id=version.document_id,
+                        max_chars=5000,
+                        overlap_chars=0,
+                        included_ranges_by_page={
+                            previous_page.page_number: (previous_range,),
+                            next_page.page_number: (next_range,),
+                        },
+                    )
+                )
+            windows.sort(
+                key=lambda window: (
+                    window.sources[0].page_number if window.sources else 2**31 - 1,
+                    window.sources[0].char_start if window.sources else 2**31 - 1,
+                    window.chunk_id,
+                )
             )
             if not windows:
                 await svc.complete_run(
@@ -568,6 +741,11 @@ class JobProcessor:
                 self._llm,
                 log_call=lambda call: svc.log_llm_call(run.id, call),
                 enable_verbatim_fallback=self._verbatim_validation_fallback_enabled,
+                # Source windows were restricted to an explicitly titled
+                # technical-specification section. Source-valid uncertain
+                # rows belong in human review so they remain visible in the
+                # tender sheet; abstentions and invalid source quotes stay out.
+                persist_uncertain_for_review=True,
                 enable_obligation_coverage_audit=coverage_audit_enabled,
                 coverage_page_images=coverage_page_images,
                 coverage_page_texts=coverage_page_texts,
@@ -855,10 +1033,10 @@ class JobProcessor:
 
 
 def _default_parser() -> ParserAdapter:
-    """Return the default production parser (pypdf)."""
-    from tender_compliance_api.parser.pypdf import PypdfParserAdapter
+    """Return the default production PDF parser (PyMuPDF)."""
+    from tender_compliance_api.parser.pymupdf import PyMuPDFParserAdapter
 
-    return PypdfParserAdapter()
+    return PyMuPDFParserAdapter()
 
 
 def _default_storage() -> ObjectStorageAdapter:

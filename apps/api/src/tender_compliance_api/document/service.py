@@ -3562,7 +3562,7 @@ class DocumentService:
 
         version = await self.get_version_or_raise(auth, document_id, version_number)
 
-        rows = (
+        rows = list((
             await self._session.execute(
                 select(ExtractionCandidate)
                 .where(
@@ -3573,7 +3573,31 @@ class DocumentService:
                 )
                 .order_by(ExtractionCandidate.chunk_id, ExtractionCandidate.id)
             )
-        ).scalars().all()
+        ).scalars().all())
+
+        def source_order(candidate: ExtractionCandidate) -> tuple[int, int, str, str]:
+            anchors = resolve_sources(candidate.raw_source, candidate.sources_json)
+            if not anchors:
+                return (2**31 - 1, 2**31 - 1, candidate.chunk_id, str(candidate.id))
+            first = min(
+                anchors,
+                key=lambda anchor: (
+                    anchor.page_number,
+                    anchor.char_start if anchor.char_start is not None else 2**31 - 1,
+                ),
+            )
+            return (
+                first.page_number,
+                first.char_start if first.char_start is not None else 2**31 - 1,
+                candidate.chunk_id,
+                str(candidate.id),
+            )
+
+        # Extraction windows can be processed concurrently and have
+        # content-addressed chunk IDs, neither of which represents reading
+        # order. Resolve the trusted source anchors and persist display order
+        # in the order the tender presents the rows.
+        rows.sort(key=source_order)
 
         # Keys already present for this version (reprocess idempotency).
         existing_keys = {
@@ -3589,7 +3613,7 @@ class DocumentService:
 
         inserted = 0
         skipped = 0
-        for row in rows:
+        for display_order, row in enumerate(rows, start=1):
             inp: PromotionInput = to_promotion_input(row)
             recovered_by_fallback = row.verbatim_validation is not None
             if inp.promotion_key in existing_keys:
@@ -3608,10 +3632,13 @@ class DocumentService:
                 raw_source=inp.raw_source,
                 uncertainty=inp.uncertainty,
                 clause_number=inp.clause_number,
+                display_order=display_order,
                 ocr_warning=inp.ocr_warning,
                 review_state=(
                     RequirementReviewState.OCR_WARNING
                     if inp.ocr_warning
+                    else RequirementReviewState.NEEDS_CLARIFICATION
+                    if inp.uncertainty == "uncertain"
                     else RequirementReviewState.NEEDS_CLARIFICATION
                     if recovered_by_fallback
                     else RequirementReviewState.UNREVIEWED

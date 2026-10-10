@@ -62,6 +62,7 @@ class _Heading:
 
 
 _TECH_SPEC_RE = re.compile(r"\btechnical\s+(?:specifications?|requirements?)\b", re.I)
+_TECH_PARAMETERS_RE = re.compile(r"\btechnical\s+parameters?\b", re.I)
 _SECTION_RE = re.compile(
     r"^\s*(?:[^.;!?]{0,50}?\s*/\s*)?section\s*[-–—]?\s*(?:[\divxlc]+)\b",
     re.I,
@@ -73,11 +74,13 @@ _ANNEXURE_RE = re.compile(
 _PART_RE = re.compile(r"^\s*part\s*[-–—]?\s*([\divxlc]+)\b", re.I)
 _OTHER_MAJOR_RE = re.compile(
     r"^\s*(?:general\s+terms\s+and\s+conditions|eligibility\s+criteria|"
-    r"commercial\s+bid|price\s+schedule|bid\s+schedule|check\s*list)\b",
+    r"terms\s*&\s*conditions\s+details|commercial\s+bid|price\s+schedule|"
+    r"bid\s+schedule|check\s*list)\b",
     re.I,
 )
 _NOTE_RE = re.compile(r"^\s*notes?\s*[:.)-]", re.I)
 _TOC_PAGE_RE = re.compile(r"\b(?:pg\.?|page\s*#?)\s*\d+\b", re.I)
+_NUMBERED_ITEM_RE = re.compile(r"^\s*(\d{1,3})\s*[.)]\s+\S")
 
 
 def _normalise_line(value: str) -> str:
@@ -114,7 +117,7 @@ def _is_heading_shape(line: str) -> bool:
     # or by a qualifier such as "Additional". Keep this bounded to short label
     # lines without sentence punctuation so narrative references in eligibility
     # and commercial clauses do not open a technical section.
-    match = _TECH_SPEC_RE.search(stripped)
+    match = _TECH_SPEC_RE.search(stripped) or _TECH_PARAMETERS_RE.search(stripped)
     if match and len(stripped) <= 100 and not re.search(r"[.;!?]", stripped):
         prefix = stripped[: match.start()].strip()
         if not prefix or prefix.endswith("/") or prefix.casefold() == "additional":
@@ -130,14 +133,33 @@ def _find_headings(lines: list[_Line]) -> list[_Heading]:
     headings: list[_Heading] = []
     for index, line in enumerate(lines):
         normalized = _normalise_line(line.text)
-        if not _TECH_SPEC_RE.search(normalized):
+        technical_match = _TECH_SPEC_RE.search(normalized)
+        parameter_match = _TECH_PARAMETERS_RE.search(normalized)
+        if not technical_match and not parameter_match:
             continue
+        if parameter_match and not technical_match:
+            # A table's column label often follows a full technical heading.
+            # Treat it as the scope heading only when no such title was just
+            # printed on the same page.
+            if any(
+                lines[previous].page_number == line.page_number
+                and _TECH_SPEC_RE.search(_normalise_line(lines[previous].text))
+                for previous in range(max(0, index - 3), index)
+            ):
+                continue
         if _TOC_PAGE_RE.search(normalized):
             continue
         if not _is_heading_shape(normalized):
             continue
 
         start_index = index
+        if parameter_match and index > 0:
+            previous = lines[index - 1]
+            if (
+                previous.page_number == line.page_number
+                and _NUMBERED_ITEM_RE.match(_normalise_line(previous.text))
+            ):
+                start_index = index - 1
         # Keep a nearby section/annexure/part label with its descriptive title.
         if not (_SECTION_RE.match(normalized) or _ANNEXURE_RE.match(normalized)):
             for previous_index in range(max(0, index - 2), index):
@@ -177,6 +199,50 @@ def _is_boundary(line: str) -> bool:
     )
 
 
+def _first_numbered_item(
+    lines: list[_Line], heading: _Heading, headings: Sequence[_Heading]
+) -> int | None:
+    """Return the first top-level numbered item inside a technical section."""
+    next_heading = min(
+        (
+            item.start_index
+            for item in headings
+            if item.start_index > heading.start_index
+        ),
+        default=len(lines),
+    )
+    # Table column headings can appear immediately after the first numbered
+    # row (e.g. "1. Growth chamber" then "Technical Parameters | Remark").
+    # In that layout, the heading belongs to the same section and the first
+    # item is just above it.
+    for line in reversed(lines[max(0, heading.line_index - 3) : heading.line_index]):
+        normalized = _normalise_line(line.text)
+        if _is_boundary(normalized):
+            break
+        match = _NUMBERED_ITEM_RE.match(normalized)
+        if match:
+            return int(match.group(1))
+    for line in lines[heading.line_index + 1 : next_heading]:
+        if _is_boundary(_normalise_line(line.text)):
+            break
+        match = _NUMBERED_ITEM_RE.match(_normalise_line(line.text))
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _heading_key(value: str) -> str:
+    normalized = _normalise_line(value).casefold().rstrip(" :.-")
+    # Some tenders use a technical-table column label (for example,
+    # "Technical Parameters NIQ | Remark | Compliance Y/N") for the original
+    # specification, then relabel its repeated Annexure-I copy as
+    # "Technical Specification". These labels identify the same technical
+    # section when their numbered sequences reveal the continuation.
+    if _TECH_SPEC_RE.search(normalized) or _TECH_PARAMETERS_RE.search(normalized):
+        return "technical-section"
+    return normalized
+
+
 def select_technical_specification_ranges(
     pages: Sequence[_PageLike],
 ) -> TechnicalSectionSelection:
@@ -202,6 +268,33 @@ def select_technical_specification_ranges(
         or _ANNEXURE_RE.match(_normalise_line(lines[heading.line_index].text))
     ]
     selected_headings = compliance_headings or structural_headings or headings
+    # Some tenders repeat the technical section as a later compliance-sheet
+    # annexure, but the supplied response sheet may be based on the original
+    # numbered section. When an earlier section with the same title begins at
+    # item 1 and the later annexure continues the numbering, select the
+    # original section. Keep preferring the compliance sheet when it is the
+    # only section or starts its own sequence at item 1.
+    if compliance_headings:
+        selected_headings = list(compliance_headings)
+        for compliance_heading in compliance_headings:
+            earlier_duplicate = next(
+                (
+                    heading
+                    for heading in headings
+                    if heading.start_index < compliance_heading.start_index
+                    and _heading_key(heading.text) == _heading_key(compliance_heading.text)
+                ),
+                None,
+            )
+            if earlier_duplicate is None:
+                continue
+            earlier_first = _first_numbered_item(lines, earlier_duplicate, headings)
+            compliance_first = _first_numbered_item(lines, compliance_heading, headings)
+            if earlier_first == 1 and compliance_first not in (None, 1):
+                selected_headings.remove(compliance_heading)
+                if earlier_duplicate not in selected_headings:
+                    selected_headings.append(earlier_duplicate)
+        selected_headings.sort(key=lambda heading: heading.start_index)
     selected_starts = {heading.start_index for heading in selected_headings}
     selected_ranges: dict[int, list[SourceTextRange]] = {}
     selected_titles: list[str] = []

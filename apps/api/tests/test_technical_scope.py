@@ -101,6 +101,37 @@ def test_existing_compliance_sheet_is_preferred_over_repeated_spec_narrative() -
     assert "Declaration sheet" not in selected
 
 
+def test_original_numbered_specification_wins_over_later_renumbered_compliance_copy() -> None:
+    pages = [
+        _page(
+            8,
+            "1. Growth chamber\n"
+            "Technical Parameters NIQ\n"
+            "Base pressure better than <2x10-10 Torr.\n"
+            "2. Buffer/Preparation/Out-gassing chamber\n"
+            "Double shielded chamber with water cooling.\n",
+        ),
+        _page(
+            24,
+            "ANNEXURE-I\n"
+            "COMPLIANCE SHEET\n"
+            "TECHNICAL SPECIFICATION\n"
+            "12. Growth chamber\n"
+            "Technical Parameters NIQ\n"
+            "Base pressure better than <2x10-10 Torr.\n"
+            "13. Buffer/Preparation/Out-gassing chamber\n"
+            "Double shielded chamber with water cooling.\n",
+        ),
+    ]
+
+    selected = _window_text(pages)
+
+    assert "1. Growth chamber" in selected
+    assert "12. Growth chamber" not in selected
+    assert "2. Buffer/Preparation/Out-gassing chamber" in selected
+    assert "13. Buffer/Preparation/Out-gassing chamber" not in selected
+
+
 def test_part_boundary_and_notes_after_the_technical_matrix_are_excluded() -> None:
     pages = [
         _page(
@@ -140,6 +171,27 @@ def test_no_explicit_technical_section_returns_no_ranges() -> None:
     assert scope.found is False
     assert scope.ranges_by_page == {}
     assert _window_text(pages) == ""
+
+
+def test_technical_parameters_table_heading_is_an_explicit_scope_boundary() -> None:
+    page = _page(
+        1,
+        "Eligibility Criteria\n"
+        "The bidder must submit registration documents.\n"
+        "Technical Parameters NIQ | Remark | Compliance Y/N\n"
+        "1. Growth chamber\n"
+        "Base pressure better than <2x10-10 Torr.\n"
+        "General Terms and Conditions\n"
+        "Payment is due within 30 days.\n",
+    )
+
+    selected = _window_text([page])
+
+    assert "Technical Parameters NIQ" in selected
+    assert "1. Growth chamber" in selected
+    assert "Base pressure better than <2x10-10 Torr." in selected
+    assert "registration documents" not in selected
+    assert "Payment is due" not in selected
 
 
 def test_selected_windows_keep_original_page_offsets_and_never_bridge_excluded_text() -> None:
