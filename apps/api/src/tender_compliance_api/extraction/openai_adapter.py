@@ -70,6 +70,8 @@ def _completion_options(config: LlmCallConfig) -> dict[str, object]:
         options["max_tokens"] = config.max_tokens
     if config.temperature is not None:
         options["temperature"] = config.temperature
+    if config.seed is not None:
+        options["seed"] = config.seed
     return options
 
 
@@ -80,7 +82,7 @@ def _adapt_unsupported_option(error: Exception, options: dict[str, object]) -> b
     the underlying model family. Use the provider's typed error fields instead
     of guessing from the alias. At most two distinct parameter adjustments are
     possible: ``max_tokens`` to ``max_completion_tokens``, then default
-    temperature by omitting the override.
+    temperature or sampling seed by omitting the unsupported override.
     """
     if getattr(error, "status_code", None) != 400:
         return False
@@ -95,6 +97,8 @@ def _adapt_unsupported_option(error: Exception, options: dict[str, object]) -> b
         return True
     if parameter == "temperature" and code in {"unsupported_value", "unsupported_parameter"}:
         return options.pop("temperature", None) is not None
+    if parameter == "seed" and code == "unsupported_parameter":
+        return options.pop("seed", None) is not None
     return False
 
 
@@ -207,7 +211,7 @@ class OpenAiLlmAdapter(LlmAdapter):
         last_error: Exception | None = None
 
         start = time.monotonic()
-        while failed_attempts < max_retries and compatibility_adjustments <= 2:
+        while failed_attempts < max_retries and compatibility_adjustments <= 3:
             try:
                 completion = await asyncio.wait_for(
                     client.chat.completions.parse(
@@ -248,7 +252,7 @@ class OpenAiLlmAdapter(LlmAdapter):
                 return ExtractResult(response=response, call=call)
             except Exception as exc:
                 last_error = exc
-                if compatibility_adjustments < 2 and _adapt_unsupported_option(exc, options):
+                if compatibility_adjustments < 3 and _adapt_unsupported_option(exc, options):
                     compatibility_adjustments += 1
                     continue
                 failed_attempts += 1

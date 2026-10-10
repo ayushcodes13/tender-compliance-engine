@@ -1394,6 +1394,7 @@ def test_extraction_uses_zero_temperature_when_provider_supports_it() -> None:
         await extract_from_windows([_window(_page(text), text)], llm, log_call=log_call)
         assert llm.config is not None
         assert llm.config.temperature == 0.0
+        assert llm.config.seed == 42
 
     asyncio.run(_run())
 

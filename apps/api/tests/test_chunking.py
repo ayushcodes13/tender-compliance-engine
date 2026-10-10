@@ -23,12 +23,14 @@ import pytest
 from tender_compliance_api.db.models import DocumentPage
 from tender_compliance_api.extraction.chunking import (
     SourceWindow,
+    build_lettered_row_windows,
     build_source_windows,
 )
 from tender_compliance_api.extraction.schema import (
     LocationType,
     TrustedSourceContext,
 )
+from tender_compliance_api.extraction.technical_scope import SourceTextRange
 
 _ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _DOC = uuid.UUID("00000000-0000-0000-0000-000000000002")
@@ -52,6 +54,32 @@ def _page(n: int, text: str) -> DocumentPage:
 
 
 class TestBasicWindowing:
+    def test_lettered_row_windows_keep_wrapped_text_and_stop_at_siblings(self) -> None:
+        text = (
+            "1. Equipment\n"
+            "a) First item with a wrapped\n"
+            "continuation and value ≥ 20 mm.\n\n"
+            "b) Second item.\n\n"
+            "1.1 Next section\n"
+            "c) Third item.\n"
+        )
+        page = _page(4, text)
+        windows = build_lettered_row_windows(
+            page,
+            organization_id=_ORG,
+            document_id=_DOC,
+            included_ranges=(SourceTextRange(0, len(text)),),
+        )
+        assert len(windows) == 3
+        assert "a) First item" in windows[0].text
+        assert "continuation and value ≥ 20 mm." in windows[0].text
+        assert "b) Second item" not in windows[0].text
+        assert "1.1 Next section" not in windows[1].text
+        assert all(window.sources[0].page_number == 4 for window in windows)
+        for window in windows:
+            source = window.sources[0]
+            assert text[source.char_start : source.char_end].rstrip("\n") == window.text
+
     def test_single_window_when_text_fits(self) -> None:
         text = "The handrail shall be painted RAL 9005 matte."
         windows = build_source_windows(

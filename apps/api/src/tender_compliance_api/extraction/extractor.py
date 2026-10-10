@@ -282,8 +282,9 @@ async def extract_from_windows(
         prompt_version=prompt_version,
         schema_version=schema_version,
         # Keep structured extraction focused and reduce run-to-run variation
-        # in candidate grouping where the provider supports temperature.
+        # in candidate grouping where the provider supports these parameters.
         temperature=0.0,
+        seed=42,
         call_site=_EXTRACT_CALL_SITE,
     )
 

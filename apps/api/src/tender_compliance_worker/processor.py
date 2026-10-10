@@ -42,7 +42,11 @@ from tender_compliance_api.db.models import (
 from tender_compliance_api.document.service import DocumentNotFoundError, DocumentService
 from tender_compliance_api.errors import PROCESSING_STAGE_FAILURE
 from tender_compliance_api.extraction.adapter import LlmAdapter
-from tender_compliance_api.extraction.chunking import build_source_windows
+from tender_compliance_api.extraction.chunking import (
+    build_lettered_row_windows,
+    build_source_windows,
+    lettered_row_ranges,
+)
 from tender_compliance_api.extraction.extractor import extract_from_windows
 from tender_compliance_api.extraction.technical_scope import (
     SourceTextRange,
@@ -640,36 +644,55 @@ class JobProcessor:
                     next_range
                 )
 
-            windows = [
-                window
-                for page in ordered_pages
-                if (page_ranges := page_scope.get(page.page_number))
-                for window in build_source_windows(
-                    [page],
-                    organization_id=auth.organization_id,
-                    document_id=version.document_id,
-                    included_ranges_by_page={
-                        page.page_number: _subtract_source_range(
-                            page_ranges,
-                            tuple(excluded_by_page.get(page.page_number, ())),
-                        )
-                    },
-                    # Lettered equipment tables need smaller contexts so the
-                    # model sees sibling rows as separate obligations and is
-                    # less likely to merge a long section (such as an on-site
-                    # acceptance test) into one unmatchable quote. Keep longer
-                    # contexts for unlettered nested feature lists, which the
-                    # examples present together as one response row.
-                    max_chars=(
-                        1200
-                        if len(
-                            _LETTERED_SPEC_ROW_RE.findall(page.cleaned_text or "")
-                        )
-                        >= 6
-                        else _TECHNICAL_SOURCE_WINDOW_CHARS
-                    ),
+            windows = []
+            for page in ordered_pages:
+                page_ranges = page_scope.get(page.page_number)
+                if not page_ranges:
+                    continue
+                included_ranges = _subtract_source_range(
+                    page_ranges,
+                    tuple(excluded_by_page.get(page.page_number, ())),
                 )
-            ]
+                if len(_LETTERED_SPEC_ROW_RE.findall(page.cleaned_text or "")) >= 6:
+                    # Give each explicit row and its wrapped continuation its
+                    # own request. This prevents omissions in dense schedules
+                    # while preserving exact source offsets and scope limits.
+                    windows.extend(
+                        build_lettered_row_windows(
+                            page,
+                            organization_id=auth.organization_id,
+                            document_id=version.document_id,
+                            included_ranges=included_ranges,
+                        )
+                    )
+                    # Keep unlettered technical text and numbered section
+                    # descriptions in the ordinary extractor. Removing the
+                    # explicit row spans prevents duplicate row extraction.
+                    unlettered_ranges = _subtract_source_range(
+                        included_ranges,
+                        lettered_row_ranges(page.cleaned_text or "", included_ranges),
+                    )
+                    windows.extend(
+                        build_source_windows(
+                            [page],
+                            organization_id=auth.organization_id,
+                            document_id=version.document_id,
+                            included_ranges_by_page={
+                                page.page_number: unlettered_ranges
+                            },
+                            max_chars=_TECHNICAL_SOURCE_WINDOW_CHARS,
+                        )
+                    )
+                    continue
+                windows.extend(
+                    build_source_windows(
+                        [page],
+                        organization_id=auth.organization_id,
+                        document_id=version.document_id,
+                        included_ranges_by_page={page.page_number: included_ranges},
+                        max_chars=_TECHNICAL_SOURCE_WINDOW_CHARS,
+                    )
+                )
             for previous_page, next_page, previous_range, next_range in (
                 boundary_continuations
             ):
