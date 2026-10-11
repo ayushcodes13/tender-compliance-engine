@@ -9,10 +9,9 @@ from dataclasses import dataclass
 from tender_compliance_api.matrix.projection import MatrixRow
 
 _BULLET_MARKERS = r"[•●▪◦‣\uf0a7\uf0b7]"
-_INLINE_BULLET_MARKERS = r"[•●▪◦‣]"
 _MARKER = re.compile(
     rf"(?m)(?:^[ \t]*(?P<line_marker>(?:\d+(?:\.\d+)*[.)]|[A-Za-z][.)]|"
-    rf"{_BULLET_MARKERS}))|(?<=\s)(?P<inline_bullet>{_INLINE_BULLET_MARKERS}))[ \t]*"
+    rf"{_BULLET_MARKERS}))|(?<=\s)(?P<inline_bullet>{_BULLET_MARKERS}))[ \t]*"
 )
 _NUMBER = re.compile(r"^(?P<number>\d+(?:\.\d+)*)(?:[.)])?[ \t]+")
 _LETTER = re.compile(r"^(?P<letter>[A-Za-z])[.)][ \t]+")
@@ -38,7 +37,20 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
     OEM-facing specification cell. Whitespace separating list items is layout
     whitespace; whitespace inside an unsplit source value is retained.
     """
-    matches = list(_MARKER.finditer(text))
+    matches = []
+    for match in _MARKER.finditer(text):
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        label = text[line_start : match.start()].rstrip()
+        if (
+            match.group("inline_bullet") == "\uf0b7"
+            and len(label) <= 24
+            and label.endswith(":")
+        ):
+            # Some PDF text layers put the private-use bullet between a short
+            # field label and its value (for example, "Power supply: • 380V").
+            # Keep that label/value pair together as one technical parameter.
+            continue
+        matches.append(match)
     if not matches:
         return [(None, text)] if text.strip() else []
 

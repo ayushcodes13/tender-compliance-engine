@@ -119,6 +119,23 @@ def test_vendor_response_docx_renders_pdf_private_use_bullets_without_rewriting_
     )
 
 
+def test_vendor_response_splits_private_use_bullets_after_a_section_heading() -> None:
+    source = (
+        "Universal Testing Machine incorporating the following features: "
+        "\uf0b7 Auto ranging force readout with ±0.5% accuracy "
+        "\uf0b7 Force sampling rate: 1000/s"
+    )
+    row = replace(_row(), tender_requirement=source, raw_source=source)
+
+    lines = response_sheet_lines([row])
+
+    assert [(line.serial, line.source_text, line.level) for line in lines] == [
+        ("1", "Universal Testing Machine incorporating the following features:", 0),
+        ("1.1", "\uf0b7 Auto ranging force readout with ±0.5% accuracy", 1),
+        ("1.2", "\uf0b7 Force sampling rate: 1000/s", 1),
+    ]
+
+
 def test_export_integrity_catches_mutated_non_source_cell() -> None:
     row = _row()
     expected_headers, expected = phase1_matrix_xlsx([row])
