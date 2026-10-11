@@ -352,7 +352,11 @@ function sequentialNumberMarkers(text: string): number[] {
 }
 
 function splitTechnicalRequirement(text: string): TechnicalRequirementDisplay {
-  const bulletPositions = markerPositions(text, TECHNICAL_BULLET);
+  const equivalenceBulletPositions = markerPositions(text, /(?:^|\s)≡\s*/g);
+  const repeatedEquivalenceBullets = equivalenceBulletPositions.length > 1;
+  const bulletPositions = markerPositions(text, TECHNICAL_BULLET).filter(
+    (position) => text[position] !== "≡" || repeatedEquivalenceBullets
+  );
   const numberPositions = bulletPositions.length ? [] : sequentialNumberMarkers(text);
   const letterPositions = bulletPositions.length || numberPositions.length
     ? []
