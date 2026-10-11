@@ -260,6 +260,9 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
     if (report.source_validation?.checked_rows !== undefined) {
       details.push(`${report.source_validation.checked_rows} of ${artifact.requirement_count} groups source-checked`);
     }
+    if (report.presentation_validation?.status === "passed") {
+      details.push("section headings and nested list layout checked");
+    }
     const llmRows = report?.source_validation?.llm_assisted_rows?.length ?? 0;
     const counts = details.length
       ? `${details.join(" ")}.`
@@ -278,12 +281,20 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
     const issueCount =
       (report?.issues?.length ?? 0) +
       (report?.source_validation?.issues?.length ?? 0) +
+      (report?.presentation_validation?.issues?.length ?? 0) +
       (report?.window_processing?.potential_omissions?.length ?? 0);
     return issueCount
       ? `${issueCount} validation or coverage finding${issueCount === 1 ? "" : "s"}. This export is unavailable for download until it has a passing result.${zeroCandidateWindowSummary(report?.window_processing)}`
       : `Validation could not establish a safe result. This export is unavailable for download.${zeroCandidateWindowSummary(report?.window_processing)}`;
   }
   if (artifact.validation_status === "failed") {
+    const presentationIssues = report?.presentation_validation?.issues ?? [];
+    if (presentationIssues.some((issue) => issue.code === "section_heading_not_standalone")) {
+      return "A tender section heading was joined to specification text. The file was withheld; inspect the cited source and regenerate it.";
+    }
+    if (presentationIssues.some((issue) => issue.code === "open_circle_marker_leaked")) {
+      return "A nested list marker was not presented as a nested specification. The file was withheld; inspect the cited source and regenerate it.";
+    }
     return "The generated content did not match its saved requirements and source checks. No file was issued.";
   }
   if (artifact.status !== "completed") {
@@ -474,50 +485,44 @@ function romanLabel(index: number): string {
   return `${label})`;
 }
 
-function TechnicalRequirementText({ text }: { text: string }) {
-  const content = splitTechnicalRequirement(text);
-  if (!content.specifications.length) {
-    return <p className="technical-requirement-introduction">{content.introduction}</p>;
-  }
-
+function TechnicalSpecificationList({
+  specifications,
+}: {
+  specifications: TechnicalSubspecification[];
+}) {
   return (
-    <div className="technical-requirement-copy">
-      {content.introduction ? (
-        <p className="technical-requirement-introduction">{content.introduction}</p>
-      ) : null}
-      <ol className="technical-specification-list" aria-label="Technical specifications">
-        {content.specifications.map((specification, index) => specification.headingLevel ? (
-          <li
-            className={`technical-specification-section technical-specification-section-${specification.headingLevel}`}
-            key={`${index}-${specification.text}`}
-            role="presentation"
-          >
-            <h3>{specification.text}</h3>
-          </li>
-        ) : (
-          <li className="technical-specification-item" key={`${index}-${specification.text.slice(0, 32)}`}>
-            <span className="technical-specification-label">
-              {alphabeticLabel(content.specifications.slice(0, index).filter((item) => !item.headingLevel).length)}
-            </span>
-            <div className="technical-specification-detail">
-              <span>{specification.text}</span>
-              {specification.nested?.length ? (
-                <ol className="technical-specification-nested" aria-label="Nested specifications">
-                  {specification.nested.map((item, nestedIndex) => (
-                    <li key={`${nestedIndex}-${item.slice(0, 32)}`}>
-                      <span className="technical-specification-label">
-                        {romanLabel(nestedIndex)}
-                      </span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
+    <ol className="technical-specification-list" aria-label="Technical specifications">
+      {specifications.map((specification, index) => specification.headingLevel ? (
+        <li
+          className={`technical-specification-section technical-specification-section-${specification.headingLevel}`}
+          key={`${index}-${specification.text}`}
+          role="presentation"
+        >
+          <h3>{specification.text}</h3>
+        </li>
+      ) : (
+        <li className="technical-specification-item" key={`${index}-${specification.text.slice(0, 32)}`}>
+          <span className="technical-specification-label" aria-hidden="true">
+            {alphabeticLabel(specifications.slice(0, index).filter((item) => !item.headingLevel).length)}
+          </span>
+          <div className="technical-specification-detail">
+            <span>{specification.text}</span>
+            {specification.nested?.length ? (
+              <ol className="technical-specification-nested" aria-label="Nested specifications">
+                {specification.nested.map((item, nestedIndex) => (
+                  <li key={`${nestedIndex}-${item.slice(0, 32)}`}>
+                    <span className="technical-specification-label" aria-hidden="true">
+                      {romanLabel(nestedIndex)}
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -1307,21 +1312,26 @@ export function FinalMatrixView(props: {
           <div className="technical-requirement-list" aria-label="Tender technical specifications">
             <div className="technical-requirement-list-header" aria-hidden="true">
               <span>#</span>
-              <span>Technical specifications from the tender</span>
+              <span>Technical specification from tender</span>
+              <span>Tender source</span>
             </div>
             {rows.map((row) => {
               const sourcePage =
                 Number.isInteger(row.source_page) && (row.source_page ?? 0) > 0
                   ? row.source_page
                   : null;
+              const technicalContent = splitTechnicalRequirement(row.tender_requirement);
+              const itemCount = technicalContent.specifications.filter(
+                (item) => !item.headingLevel
+              ).length;
               return (
                 <article className="technical-requirement-card" key={row.requirement_id}>
                   <div className="technical-requirement-number" aria-label={`Requirement ${row.serial}`}>
                     {row.serial})
                   </div>
-                  <div className="technical-requirement-main">
-                    <TechnicalRequirementText text={row.tender_requirement} />
-                  </div>
+                  <strong className="technical-requirement-heading">
+                    {technicalContent.introduction || "Technical specifications"}
+                  </strong>
                   {sourcePage !== null ? (
                     <a
                       className="technical-requirement-source"
@@ -1344,13 +1354,26 @@ export function FinalMatrixView(props: {
                     >
                       <span>Source page</span>
                       <strong>{sourcePage}</strong>
-                      <span className="technical-source-action">Open cited source</span>
+                      <span className="technical-source-action">Open cited page</span>
                     </a>
                   ) : (
                     <span className="technical-requirement-source-unavailable">
                       Source location unavailable
                     </span>
                   )}
+                  {technicalContent.specifications.length ? (
+                    <details className="technical-requirement-disclosure" open>
+                      <summary className="technical-requirement-summary">
+                        <span>Technical details</span>
+                        {itemCount > 0 ? (
+                          <span className="technical-requirement-count">
+                            {itemCount} {itemCount === 1 ? "item" : "items"}
+                          </span>
+                        ) : null}
+                      </summary>
+                      <TechnicalSpecificationList specifications={technicalContent.specifications} />
+                    </details>
+                  ) : null}
                 </article>
               );
             })}
