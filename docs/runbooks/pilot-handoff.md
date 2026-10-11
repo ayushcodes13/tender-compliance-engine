@@ -40,48 +40,18 @@ private reverse proxy or VPN. Do not expose the UI directly to the internet.
 
 1. Create a tender project.
 2. Upload the tender PDF or DOCX.
-3. Let the worker parse/OCR/extract source-linked requirements.
-4. Review/correct the extracted requirements.
-5. Upload vendor/OEM material:
-   - datasheets;
-   - manuals;
-   - brochures;
-   - certificates;
-   - test reports;
-   - quotations;
-   - proposals;
-   - an existing vendor compliance sheet.
-6. Review the evidence proposed for each requirement.
-7. Review the deterministic numeric/unit comparison and bounded qualitative
-   assessment.
-8. Resolve conflicts, missing evidence, clarifications, and deviations.
-9. Confirm or override the final compliance decision.
-10. Open the final compliance sheet.
-11. Export XLSX, DOCX, or PDF.
-12. Lock/approve a submission version when ready.
+3. Let the worker parse/OCR the tender and extract technical specifications.
+4. Review the numbered items, nested rows, source wording, and cited tender pages.
+5. Resolve extraction warnings and surfaced coverage findings, or leave them
+   clearly marked for human review.
+6. Export the source-linked DOCX response sheet with blank OEM response fields.
+7. Send that response sheet to the OEM to complete.
 
 ## Vendor/OEM scope
 
-The product is vendor-agnostic: no OEM name or product family is hard-coded into
-the workflow.
-
-That does **not** mean every arbitrary file will automatically produce a
-confident COMPLIANT/NON_COMPLIANT result.
-
-The safe contract is:
-
-- PDF/DOCX technical material is accepted;
-- explicit tender requirements are extracted and source-linked;
-- vendor evidence is searched/reviewed;
-- supported numerical comparisons are deterministic;
-- when evidence is missing, ambiguous, contradictory, or refers to the wrong
-  metric/model/scope, the row remains unresolved
-  (`NOT_DEMONSTRATED`, `CONFLICT`, or `HUMAN_REVIEW_REQUIRED`) rather than
-  guessing;
-- the final compliance sheet/export is still available and preserves those
-  unresolved states for the reviewer.
-
-This conservative behavior is part of the product, not an error condition.
+This pilot prepares the OEM response sheet from the tender alone. It does not
+ingest OEM evidence, fill in supplier responses, or decide whether a product
+complies. OEM answers are entered by the supplier after the sheet is exported.
 
 ## Readiness check
 
@@ -134,13 +104,9 @@ to delete the PostgreSQL, Redis, and document-storage Docker volumes.
 
 ## Before the first paying pilot
 
-Run the manual acceptance checklist in
-[../POST61_RELEASE_REVIEW.md](../POST61_RELEASE_REVIEW.md) using:
-
-- one representative real tender;
-- one scanned/mixed-quality tender;
-- representative vendor/OEM technical documentation;
-- the false-compliance adversarial cases in that checklist.
-
-After that, product work should be driven by failures observed in real tenders,
-not by adding generic agent/RAG infrastructure.
+Complete the tender-only release gates in
+[../CLIENT_READINESS.md](../CLIENT_READINESS.md). Use the supplied tender and
+response-sheet examples, then repeat the upload-to-export flow on a
+representative client tender in the private pilot environment. Do not present
+an export as complete while its source-validation or coverage findings still
+need review.

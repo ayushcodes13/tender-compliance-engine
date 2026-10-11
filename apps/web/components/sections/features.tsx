@@ -35,11 +35,12 @@ export function FeaturesSection() {
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
         >
           <h2 className="font-display text-3xl text-text-primary sm:text-4xl">
-            Source-linked extraction with review
+            Tender specifications, organized for OEM response
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-text-secondary">
-            Every requirement is extracted with a precise source anchor,
-            reviewed by your team, then exported as a citation-backed matrix.
+            Extract only the technical requirements already stated in the
+            tender, review them against their cited pages, and export a sheet
+            with blank fields for the supplier.
           </p>
         </motion.div>
 
