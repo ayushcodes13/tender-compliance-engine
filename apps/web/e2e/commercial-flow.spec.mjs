@@ -589,6 +589,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
               status: "not_available",
               completeness_proven: false,
               obligation_audit_status: "not_available",
+              zero_candidate_windows: [
+                { window_index: 2, chunk_id: "window-2", pages: [5, 6] },
+              ],
             },
             source_validation: {
               status: "passed",
@@ -757,6 +760,14 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   ]);
   expect(vendorSheetDownload.suggestedFilename()).toBe("tender_vendor_response_v1.docx");
   await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
+  const emptyExtractionNotice = page.getByRole("alert").filter({
+    hasText: "1 technical-section window had no extracted rows",
+  });
+  await expect(emptyExtractionNotice).toContainText("may be a heading or continuation");
+  await expect(emptyExtractionNotice.getByRole("link", { name: "page 5" })).toHaveAttribute(
+    "href",
+    `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&page=5`
+  );
   await expect(
     page.getByRole("cell", { name: /Whole-tender completeness was not verified/ })
   ).toBeVisible();
@@ -764,6 +775,9 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("cell", { name: /Whole-tender completeness was not verified/ })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: /technical-section window had no extracted rows on pages 5, 6/ })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toHaveCount(1);
   const [historyDownload] = await Promise.all([
