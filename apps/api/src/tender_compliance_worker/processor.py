@@ -637,6 +637,11 @@ class JobProcessor:
                         stage=stage,
                         run_id=run_id,
                     )
+                    # Publish PROCESSING and the RUNNING stage before doing
+                    # potentially slow parsing, rendering, OCR, or model work.
+                    # Otherwise clients keep seeing QUEUED until the entire
+                    # document has finished.
+                    await session.commit()
 
                 if stage == ProcessingStage.PARSE:
                     # Real parsing: read bytes, parse, store pages.
@@ -678,6 +683,11 @@ class JobProcessor:
                         error_type=None,
                         error_message=None,
                     )
+
+                # Persist each completed stage independently so the API can
+                # report stage progress and a later retry can reuse completed
+                # work after a worker interruption.
+                await session.commit()
 
             # Parser identity was recorded inside _do_parse from the
             # ParseResult (so a composite dispatch surfaces the real

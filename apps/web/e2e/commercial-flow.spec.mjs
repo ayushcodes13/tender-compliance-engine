@@ -9,7 +9,7 @@ const secondSourceId = "00000000-0000-4000-8000-000000000102";
 const thirdSourceId = "00000000-0000-4000-8000-000000000103";
 const secondSourceQuote = "The equipment shall include a local emergency stop.";
 const thirdSourceQuote = "The control panel shall display active fault codes.";
-const coverageQuote = "The instrument shall include installation and operator training.";
+const coverageQuote = "The instrument shall have a measurement range of 0 to 25 mm.";
 
 function project(status = "draft") {
   return {
@@ -106,11 +106,12 @@ function finalMatrixRow() {
   };
 }
 
-test("buyer can create a project, upload tender/OEM sources, and reach the compliance sheet", async ({ page }) => {
+test("buyer can upload a tender, review source-linked technical rows, and export a blank OEM response sheet", async ({ page }) => {
   let currentProject = project();
   let tenderDocs = [];
   let oemDocs = [];
   let exportArtifacts = [];
+  let vendorResponseAttempts = 0;
 
   await page.route(
     (url) => {
@@ -463,7 +464,7 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
           page_number: 9,
           source_quote: coverageQuote,
           decision: "not_in_scope",
-          rationale: "This sentence is buyer procedure, not a supplier obligation.",
+          rationale: "This is an installation service note, not a technical specification.",
         });
         return json({
           id: "coverage-review-1",
@@ -571,27 +572,32 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
         method === "POST" &&
         url.searchParams.get("template") === "vendor-response"
       ) {
+        vendorResponseAttempts += 1;
+        const needsReview = vendorResponseAttempts === 1;
         const artifact = {
           id: "vendor-response-export-1",
-          status: "completed",
+          status: needsReview ? "failed" : "completed",
           export_format: "docx",
           generated_at: createdAt,
           requirement_count: 2,
-          validation_status: "passed",
+          validation_status: needsReview ? "needs_review" : "passed",
           validation_report: {
-            artifact_integrity: "passed",
+            artifact_integrity: needsReview ? "not_run" : "passed",
             expected_rows: 1,
             actual_rows: 1,
             checked_columns: 7,
             checked_cells: 7,
             issues: [],
             window_processing: {
-              status: "not_available",
+              status: "complete",
               completeness_proven: false,
-              obligation_audit_status: "not_available",
-              zero_candidate_windows: [
-                { window_index: 2, chunk_id: "window-2", pages: [5, 6] },
-              ],
+              obligation_audit_status: needsReview ? "potential_omissions" : "no_potential_omissions",
+              potential_omissions: needsReview
+                ? [{ window_index: 4, pages: [9], source_quote: coverageQuote }]
+                : [],
+              zero_candidate_windows: needsReview
+                ? []
+                : [{ window_index: 2, chunk_id: "window-2", pages: [5, 6] }],
             },
             source_validation: {
               status: "passed",
@@ -633,14 +639,14 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   ).toBeVisible();
 
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("button", { name: "New tender" }).click();
   await page.getByLabel("Project name").fill("Pilot Tender");
   await page.getByRole("dialog").getByRole("button", { name: "Create project" }).click();
 
   await expect(page).toHaveURL(/\/projects\/project-1$/);
   await expect(page.getByRole("heading", { name: "Pilot Tender" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tender documents" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Vendor / OEM sources" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vendor / OEM sources" })).toHaveCount(0);
 
   await page.getByLabel("Choose PDF or DOCX file").setInputFiles({
     name: "tender.pdf",
@@ -650,80 +656,63 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
 
   await expect(page.getByText("tender.pdf", { exact: true }).first()).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Review requirements" }).first()
+    page.getByRole("link", { name: "Review technical specifications" }).first()
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Compliance sheet" }).first()
+    page.getByRole("link", { name: "OEM response sheet" }).first()
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Step 2 Vendor \/ OEM/ })
+    page.getByRole("link", { name: /Step 2 Review specifications/ })
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Step 3 Review/ })
+    page.getByRole("link", { name: /Step 3 OEM response sheet/ })
   ).toBeVisible();
+  await expect(page.getByText("Vendor / OEM")).toHaveCount(0);
 
-  await page.getByLabel("Document type").selectOption("compliance_sheet");
-  await page.getByRole("textbox", { name: "Vendor", exact: true }).fill("Acme Instruments");
-  await page.getByRole("textbox", { name: "Product / model", exact: true }).fill("Model X");
-  await page.locator("#vendor-sources input[type=file]").setInputFiles({
-    name: "vendor-compliance.pdf",
-    mimeType: "application/pdf",
-    buffer: Buffer.from("%PDF-1.4\n% vendor browser smoke fixture"),
-  });
-
-  await expect(
-    page.getByText(/Uploaded vendor-compliance\.pdf as OEM source v1/)
-  ).toBeVisible();
-  await expect(page.getByText("Vendor compliance sheet").first()).toBeVisible();
-
-  await page.getByRole("link", { name: "Compliance sheet" }).first().click();
+  await page.getByRole("link", { name: "OEM response sheet" }).first().click();
 
   await expect(page).toHaveURL(/\/projects\/project-1\/matrix$/);
   await expect(
-    page.getByRole("heading", { name: "Compliance sheet — Pilot Tender" })
+    page.getByRole("heading", { name: "OEM response sheet — Pilot Tender" })
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Final compliance sheet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tender technical specifications" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Step 4 Compliance sheet/ })
+    page.getByRole("link", { name: /Step 3 OEM response sheet/ })
   ).toHaveAttribute("aria-current", "step");
-  const summary = page.getByLabel("Compliance sheet summary");
-  await expect(summary.getByText("Total requirements")).toBeVisible();
-  await expect(summary.getByText("Compliant", { exact: true })).toBeVisible();
-  await expect(summary.getByText("Needs attention")).toBeVisible();
+  await expect(page.getByText("Vendor fact", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Assessment", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Compliant", { exact: true })).toHaveCount(0);
   await expect(page.getByText("The positioning resolution shall be 1 µm or better.")).toBeVisible();
-  await expect(page.getByRole("row", { name: /Page location has not been established/ })).toContainText("—");
-  await expect(page.getByText("Value: undefined", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Page location has not been established/ })).toBeVisible();
   await expect(page.getByText("Location unavailable")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Open tender source for requirement 2/ })
   ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Export XLSX" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Export DOCX" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Export PDF" })).toBeVisible();
-  await page.getByRole("button", { name: "Export XLSX" }).click();
+  await expect(page.getByRole("button", { name: "Download response sheet (DOCX)" })).toBeVisible();
+  await page.getByRole("button", { name: "Download response sheet (DOCX)" }).click();
   await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   const findingLink = page.getByRole("link", {
     name: "Open tender page 9 and inspect excerpt",
   });
   await expect(findingLink).toBeVisible();
-  const requirementType = page.getByLabel("Requirement type");
+  const requirementType = page.getByLabel("Technical-specification row type");
   await expect(requirementType).toHaveValue("");
   await expect(
-    page.getByRole("button", { name: "Add excerpt as unreviewed requirement" })
+    page.getByRole("button", { name: "Add excerpt as unreviewed technical specification" })
   ).toBeDisabled();
   await requirementType.selectOption("obligation");
   await expect(
-    page.getByRole("button", { name: "Add excerpt as unreviewed requirement" })
+    page.getByRole("button", { name: "Add excerpt as unreviewed technical specification" })
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Add excerpt as unreviewed requirement" }).click();
+  await page.getByRole("button", { name: "Add excerpt as unreviewed technical specification" }).click();
   await expect(page.getByRole("button", { name: "Added for review" })).toBeVisible();
   await expect(page.getByText(/Run an export again to recheck coverage/)).toBeVisible();
-  await page.getByLabel("Why this is not a supplier requirement").fill(
-    "This sentence is buyer procedure, not a supplier obligation."
+  await page.getByLabel("Why this is not a technical specification").fill(
+    "This is an installation service note, not a technical specification."
   );
-  await page.getByRole("button", { name: "Mark not a supplier requirement" }).click();
-  await expect(page.getByText(/Review recorded: not a supplier requirement/)).toBeVisible();
+  await page.getByRole("button", { name: "Mark not a technical specification" }).click();
+  await expect(page.getByText(/Review recorded: not a technical specification/)).toBeVisible();
   await findingLink.click();
   await expect(page).toHaveURL(/page=9&sourceQuote=/);
   await expect(page.getByText("Page 9 · No rendered image", { exact: true })).toBeVisible();
@@ -732,31 +721,15 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   ).toBeVisible();
 
   await page.goto("/projects/project-1/matrix");
-  await expect(page.getByRole("heading", { name: "Final compliance sheet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tender technical specifications" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Export history" })).toBeVisible();
   await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
   await expect(page.getByText(/This export is unavailable for download until it has a passing result\./)).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Export PDF" }).click();
-  await expect(page.getByText(/Image validation error category: image_parse_error\./)).toBeVisible();
-  await expect(
-    page.getByText(/page-image check found wording differences in 1 row/)
-  ).toBeVisible();
-  const sourceFindings = page.locator('[aria-labelledby="source-validation-heading"]');
-  await expect(sourceFindings).toContainText("Source wording findings");
-  await expect(sourceFindings).toContainText("Generated wording does not match the cited tender excerpt exactly.");
-  await expect(sourceFindings).toContainText(finalMatrixRow().tender_requirement);
-  await expect(sourceFindings).toContainText(finalMatrixRow().raw_source);
-  await page.getByRole("button", { name: "Open cited page 12" }).click();
-  const validationEvidence = page.getByRole("dialog", { name: "Evidence" });
-  await expect(validationEvidence).toBeVisible();
-  await expect(validationEvidence).toContainText("Page 12");
-  await expect(validationEvidence).toContainText(finalMatrixRow().raw_source);
-  await validationEvidence.getByRole("button", { name: "Close evidence panel" }).click();
+  await expect(page.getByRole("button", { name: "Download", exact: true })).toHaveCount(0);
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Export vendor response DOCX" }).click(),
+    page.getByRole("button", { name: "Download response sheet (DOCX)" }).click(),
   ]);
   expect(vendorSheetDownload.suggestedFilename()).toBe("tender_vendor_response_v1.docx");
   await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
@@ -769,23 +742,23 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
     `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&page=5`
   );
   await expect(
-    page.getByRole("cell", { name: /Whole-tender completeness was not verified/ })
+    page.getByRole("cell", { name: /independent scan found no unmatched obligation excerpts/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Refresh export history" }).click();
   await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /Whole-tender completeness was not verified/ })
+    page.getByRole("cell", { name: /independent scan found no unmatched obligation excerpts/ })
   ).toBeVisible();
   await expect(
     page.getByRole("cell", { name: /technical-section window had no extracted rows on pages 5, 6/ })
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Download" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Download", exact: true })).toHaveCount(1);
   const [historyDownload] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Download" }).click(),
+    page.getByRole("button", { name: "Download", exact: true }).click(),
   ]);
   expect(historyDownload.suggestedFilename()).toBe("tender_export_v1_vendor-r.docx");
-  await expect(page.getByRole("button", { name: "Create draft submission" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create draft submission" })).toHaveCount(0);
 
   const sourceLink = page.getByRole("link", {
     name: "Open tender source for requirement 1, page 12",
@@ -815,7 +788,7 @@ test("buyer can create a project, upload tender/OEM sources, and reach the compl
   await page.goto(`/projects/project-1/review?documentId=${tenderDocumentId}&version=1&requirementId=${requirementId}&page=12&sourceId=${firstSourceId}`);
   await expect(page.getByText("Page 12 · No rendered image", { exact: true })).toBeVisible();
   const reviewEvidencePane = page.getByRole("complementary", {
-    name: "Requirement evidence and review",
+    name: "Tender source and requirement review",
   });
   await expect(reviewEvidencePane.locator("blockquote")).toHaveText(
     finalMatrixRow().raw_source

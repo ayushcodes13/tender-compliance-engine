@@ -283,8 +283,9 @@ export function FinalMatrixView(props: {
   documentId: string;
   version: number;
   documentName: string;
+  technicalOnly?: boolean;
 }) {
-  const { projectId, documentId, version, documentName } = props;
+  const { projectId, documentId, version, documentName, technicalOnly = false } = props;
   const [citationDrawer, setCitationDrawer] = useState<CitationTarget | null>(null);
   const [rows, setRows] = useState<FinalMatrixRowResponse[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionResponse[]>([]);
@@ -479,7 +480,9 @@ export function FinalMatrixView(props: {
       return;
     }
     if (decision === "not_in_scope" && !draft?.rationale.trim()) {
-      setError("Explain why this excerpt is not a supplier requirement.");
+      setError(technicalOnly
+        ? "Explain why this excerpt is not a technical specification."
+        : "Explain why this excerpt is not a supplier requirement.");
       return;
     }
     setBusy(`review-${key}`);
@@ -752,8 +755,10 @@ export function FinalMatrixView(props: {
     <section style={{ marginTop: 28 }}>
       <div className="section-title-row">
         <div>
-          <h2>Final compliance sheet</h2>
-          <p>Evidence-backed status plus unresolved review state.</p>
+          <h2>{technicalOnly ? "Tender technical specifications" : "Final compliance sheet"}</h2>
+          <p>{technicalOnly
+            ? "Source-linked rows extracted from the tender. Review them here, then download a blank response sheet for the OEM."
+            : "Evidence-backed status plus unresolved review state."}</p>
         </div>
         <button className="button button-secondary button-small" type="button" onClick={() => void reload()}>
           <RefreshCw size={12} aria-hidden="true" /> Refresh
@@ -813,7 +818,7 @@ export function FinalMatrixView(props: {
       ) : null}
       {coverageFindings.length || Object.keys(coverageReviews).length ? (
         <div className="source-highlight-unavailable" role="alert" style={{ marginTop: 12 }}>
-          <strong>Coverage review</strong>
+          <strong>{technicalOnly ? "Possible missing technical specifications" : "Coverage review"}</strong>
           <ul>
             {coverageFindings.map((finding, index) => (
               <li key={`${finding.pages.join("-")}-${index}`} style={{ marginTop: 10 }}>
@@ -838,14 +843,16 @@ export function FinalMatrixView(props: {
                       </Link>
                       {review ? (
                         <p role="status" style={{ margin: "8px 0 0" }}>
-                          Review recorded: {review.decision === "not_in_scope" ? "not a supplier requirement" : "covered by an existing requirement"} · {new Date(review.reviewed_at).toLocaleString()}
+                          Review recorded: {review.decision === "not_in_scope"
+                            ? technicalOnly ? "not a technical specification" : "not a supplier requirement"
+                            : "covered by an existing requirement"} · {new Date(review.reviewed_at).toLocaleString()}
                           {review.rationale ? ` · ${review.rationale}` : ""}
                           <span> Run an export again to confirm this finding is resolved.</span>
                         </p>
                       ) : (
                         <>
                           <label className="form-field" style={{ marginTop: 8, maxWidth: 420 }}>
-                            Existing requirement that covers this excerpt
+                        {technicalOnly ? "Existing technical specification that covers this excerpt" : "Existing requirement that covers this excerpt"}
                             <select
                               value={draft.requirementId}
                               onChange={(event) => setCoverageReviewDrafts((current) => ({
@@ -871,7 +878,7 @@ export function FinalMatrixView(props: {
                             {busy === `review-${key}` ? "Saving…" : "Mark as already covered"}
                           </button>
                           <label className="form-field" style={{ marginTop: 12, maxWidth: 520 }}>
-                            Why this is not a supplier requirement
+                            {technicalOnly ? "Why this is not a technical specification" : "Why this is not a supplier requirement"}
                             <textarea
                               value={draft.rationale}
                               maxLength={2000}
@@ -888,7 +895,7 @@ export function FinalMatrixView(props: {
                             disabled={!draft.rationale.trim() || busy === `review-${key}`}
                             onClick={() => void recordCoverageReview(finding, page, "not_in_scope")}
                           >
-                            {busy === `review-${key}` ? "Saving…" : "Mark not a supplier requirement"}
+                            {busy === `review-${key}` ? "Saving…" : technicalOnly ? "Mark not a technical specification" : "Mark not a supplier requirement"}
                           </button>
                         </>
                       )}
@@ -896,7 +903,7 @@ export function FinalMatrixView(props: {
                   );
                 })}
                 <label className="form-field" style={{ marginTop: 8, maxWidth: 320 }}>
-                  Requirement type
+                  {technicalOnly ? "Technical-specification row type" : "Requirement type"}
                   <select
                     value={coverageTypes[finding.source_quote] ?? ""}
                     onChange={(event) => setCoverageTypes((current) => ({
@@ -922,7 +929,7 @@ export function FinalMatrixView(props: {
                       disabled={added || !coverageTypes[finding.source_quote] || busy === `coverage-${key}`}
                       onClick={() => void addCoverageFinding(finding, page)}
                     >
-                      {added ? "Added for review" : busy === `coverage-${key}` ? "Adding…" : "Add excerpt as unreviewed requirement"}
+                      {added ? "Added for review" : busy === `coverage-${key}` ? "Adding…" : technicalOnly ? "Add excerpt as unreviewed technical specification" : "Add excerpt as unreviewed requirement"}
                     </button>
                   );
                 })}
@@ -936,7 +943,9 @@ export function FinalMatrixView(props: {
                 <li key={coverageReviewKey(review.page_number, review.source_quote)} style={{ marginTop: 10 }}>
                   <p><mark>{review.source_quote}</mark></p>
                   <p role="status">
-                    Page {review.page_number}: {review.decision === "not_in_scope" ? "not a supplier requirement" : "covered by an existing requirement"} · {new Date(review.reviewed_at).toLocaleString()}
+                    Page {review.page_number}: {review.decision === "not_in_scope"
+                      ? technicalOnly ? "not a technical specification" : "not a supplier requirement"
+                      : "covered by an existing requirement"} · {new Date(review.reviewed_at).toLocaleString()}
                     {review.rationale ? ` · ${review.rationale}` : ""}
                   </p>
                 </li>
@@ -989,7 +998,7 @@ export function FinalMatrixView(props: {
         </div>
       ) : null}
 
-      <div className="compliance-summary-grid" aria-label="Compliance sheet summary">
+      {!technicalOnly ? <div className="compliance-summary-grid" aria-label="Compliance sheet summary">
         <div className="compliance-summary-card">
           <span>Total requirements</span>
           <strong>{rows.length}</strong>
@@ -1010,9 +1019,9 @@ export function FinalMatrixView(props: {
           <strong>{unresolved.length}</strong>
           <small>Unconfirmed, missing evidence, or conflict</small>
         </div>
-      </div>
+      </div> : null}
 
-      {unresolved.length > 0 ? (
+      {!technicalOnly && unresolved.length > 0 ? (
         <div className="compliance-attention-banner" role="status">
           <AlertCircle size={15} aria-hidden="true" />
           <div>
@@ -1023,7 +1032,7 @@ export function FinalMatrixView(props: {
             </span>
           </div>
         </div>
-      ) : (
+      ) : !technicalOnly ? (
         <div className="compliance-ready-banner" role="status">
           <CheckCircle size={15} aria-hidden="true" />
           <div>
@@ -1031,20 +1040,22 @@ export function FinalMatrixView(props: {
             <span>Review the final source links before locking a submission.</span>
           </div>
         </div>
-      )}
+      ) : null}
 
       <div className="matrix-container">
         <table className="matrix-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Tender requirement</th>
+              <th>{technicalOnly ? "Technical specification from tender" : "Tender requirement"}</th>
               <th>Tender source</th>
-              <th>Vendor fact</th>
-              <th>Evidence</th>
-              <th>Assessment</th>
-              <th>Human review</th>
-              <th>Open issues</th>
+              {!technicalOnly ? <>
+                <th>Vendor fact</th>
+                <th>Evidence</th>
+                <th>Assessment</th>
+                <th>Human review</th>
+                <th>Open issues</th>
+              </> : null}
             </tr>
           </thead>
           <tbody>
@@ -1059,7 +1070,7 @@ export function FinalMatrixView(props: {
                 row.deviation_statuses.some((s) => s === "proposed") ? "Deviation" : null,
               ].filter(Boolean);
               return (
-                <tr key={row.requirement_id} className={issues.length || !row.assessment_is_confirmed ? "unresolved" : ""}>
+                <tr key={row.requirement_id} className={!technicalOnly && (issues.length || !row.assessment_is_confirmed) ? "unresolved" : ""}>
                   <td>{row.serial}</td>
                   <td>{row.tender_requirement}</td>
                   <td>
@@ -1079,6 +1090,7 @@ export function FinalMatrixView(props: {
                       <span>Location unavailable</span>
                     )}
                   </td>
+                  {!technicalOnly ? <>
                   <td>
                     {typeof row.vendor_spec_value === "number"
                       ? `${row.vendor_spec_parameter ?? "Value"}: ${row.vendor_spec_value}${row.vendor_spec_unit ? ` ${row.vendor_spec_unit}` : ""}`
@@ -1097,6 +1109,7 @@ export function FinalMatrixView(props: {
                     ) : "Pending"}
                   </td>
                   <td>{issues.join(" · ") || "—"}</td>
+                  </> : null}
                 </tr>
               );
             })}
@@ -1104,7 +1117,7 @@ export function FinalMatrixView(props: {
         </table>
       </div>
 
-      <div className="export-panel">
+      {!technicalOnly ? <div className="export-panel">
         <div>
           <strong>Export compliance sheet</strong>
           <p>Download the current source-linked matrix. Unresolved rows remain visible.</p>
@@ -1123,12 +1136,14 @@ export function FinalMatrixView(props: {
           </button>
         ))}
         </div>
-      </div>
+      </div> : null}
 
       <div className="export-panel" style={{ marginTop: 12 }}>
         <div>
-          <strong>Prepare a vendor response sheet</strong>
-          <p>Exports the tender requirements with blank OEM compliance and deviation fields.</p>
+          <strong>{technicalOnly ? "Download OEM response sheet" : "Prepare a vendor response sheet"}</strong>
+          <p>{technicalOnly
+            ? "Keeps the tender’s original technical wording and provides blank response fields for the OEM."
+            : "Exports the tender requirements with blank OEM compliance and deviation fields."}</p>
         </div>
         <button
           className="button button-secondary"
@@ -1137,7 +1152,7 @@ export function FinalMatrixView(props: {
           onClick={() => void exportVendorResponseSheet()}
         >
           <Download size={14} aria-hidden="true" />
-          {busy === "export-vendor-response" ? "Generating…" : "Export vendor response DOCX"}
+          {busy === "export-vendor-response" ? "Generating…" : technicalOnly ? "Download response sheet (DOCX)" : "Export vendor response DOCX"}
         </button>
       </div>
 
@@ -1207,7 +1222,7 @@ export function FinalMatrixView(props: {
         )}
       </div>
 
-      <div className="detail-panel" style={{ marginTop: 20 }}>
+      {!technicalOnly ? <div className="detail-panel" style={{ marginTop: 20 }}>
         <div className="section-title-row">
           <div>
             <h2>Submission versions</h2>
@@ -1264,7 +1279,7 @@ export function FinalMatrixView(props: {
             </tbody>
           </table>
         )}
-      </div>
+      </div> : null}
     </section>
     <CitationEvidenceDrawer citation={citationDrawer} onClose={() => setCitationDrawer(null)} />
     </>

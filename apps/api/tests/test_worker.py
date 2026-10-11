@@ -51,7 +51,7 @@ from tender_compliance_api.extraction.schema import (
 from tender_compliance_api.main import app
 from tender_compliance_api.matrix.projection import project_matrix_rows
 from tender_compliance_api.parser import FakeParserAdapter
-from tender_compliance_api.parser.adapter import PageResult
+from tender_compliance_api.parser.adapter import PageResult, ParseResult
 from tender_compliance_api.queue import (
     DEFAULT_QUEUE,
     FakeQueueAdapter,
@@ -339,6 +339,90 @@ class TestMakeJobId:
 
 class TestJobProcessor:
     """Tests for the worker's JobProcessor (CP19 — PARSE stage integration)."""
+
+    def test_processing_status_is_visible_while_parse_is_running(self, session_cm) -> None:
+        async def _run():
+            info = await _create_version(
+                session_cm, uuid.uuid4(), DocumentProcessingStatus.QUEUED
+            )
+            sf = _get_session_factory()
+            storage = FakeStorageAdapter()
+            storage._store[info["storage_key"]] = info["pdf_bytes"]
+            storage._meta[info["storage_key"]] = {
+                "content_type": "application/pdf",
+                "content_length": len(info["pdf_bytes"]),
+                "etag": "test-etag",
+                "stored_at": time.time(),
+            }
+
+            class BlockingParser(FakeParserAdapter):
+                def __init__(self) -> None:
+                    super().__init__(
+                        pages=[
+                            PageResult(
+                                page_number=1,
+                                text="test page text",
+                                text_length=15,
+                                ocr_needed=False,
+                                warnings=[],
+                                error=None,
+                            )
+                        ]
+                    )
+                    self.started = asyncio.Event()
+                    self.release = asyncio.Event()
+
+                async def parse(self, data: bytes, mime_type: str) -> ParseResult:
+                    self.started.set()
+                    await self.release.wait()
+                    return await super().parse(data, mime_type)
+
+            parser = BlockingParser()
+            processor = JobProcessor(sf, parser=parser, storage=storage)
+            run_id = make_job_id(
+                str(info["version_id"]), ProcessingStage.PARSE.value
+            )
+            job = QueuedJob(
+                job_id=str(run_id),
+                payload={
+                    "document_version_id": str(info["version_id"]),
+                    "document_id": str(info["doc_id"]),
+                    "organization_id": str(info["org_id"]),
+                    "version_number": info["version_number"],
+                    "stage": "parse",
+                    "run_id": str(run_id),
+                    "attempt": 1,
+                },
+                attempt=1,
+                queue=DEFAULT_QUEUE,
+            )
+
+            task = asyncio.create_task(processor.process(job))
+            try:
+                await asyncio.wait_for(parser.started.wait(), timeout=5)
+                async with sf() as session:
+                    version_result = await session.execute(
+                        select(DocumentVersion).where(
+                            DocumentVersion.id == info["version_id"]
+                        )
+                    )
+                    run_result = await session.execute(
+                        select(ProcessingRun).where(
+                            ProcessingRun.document_version_id == info["version_id"],
+                            ProcessingRun.run_id == run_id,
+                            ProcessingRun.stage == ProcessingStage.PARSE,
+                        )
+                    )
+                    assert (
+                        version_result.scalar_one().processing_status
+                        == DocumentProcessingStatus.PROCESSING
+                    )
+                    assert run_result.scalar_one().status == RunStatus.RUNNING
+            finally:
+                parser.release.set()
+            await task
+
+        asyncio.run(_run())
 
     def test_process_transitions_to_parsed(self, session_cm) -> None:
         """Processing a QUEUED version transitions it to PARSED."""

@@ -5,7 +5,7 @@
 <h1 align="center">Tender Compliance Engine</h1>
 
 <p align="center">
-  <strong>Turn technical tenders into source-linked requirements that people can review and export.</strong>
+  <strong>Turn a technical tender into a source-linked specification sheet for the OEM to complete.</strong>
 </p>
 
 <p align="center">
@@ -22,13 +22,13 @@
 
 ## See the workflow
 
-The screenshots below use synthetic test data. They show the current interface and do not represent a completed client tender or a compliance decision.
+The screenshots below use synthetic test data. They show the current interface and do not represent a completed client tender or a supplier compliance decision.
 
 ![Tender workspace with project status and review progress](docs/screenshots/screenshot-dashboard.png)
 
 ### 1. Upload and organize the tender
 
-The project workspace keeps tender source versions and vendor/OEM material together, with processing state and the next review action visible.
+The project workspace keeps the immutable tender version, processing state, and next review action visible.
 
 ![Tender project workspace with source documents and workflow steps](docs/screenshots/project-workspace.png)
 
@@ -38,29 +38,28 @@ Reviewers can inspect extracted requirements alongside the rendered tender page.
 
 ![Requirement review with tender source and highlighted citation](docs/screenshots/source-linked-review.png)
 
-### 3. Inspect the compliance sheet
+### 3. Export the OEM response sheet
 
-The matrix brings tender requirements, source links, available vendor facts, evidence, assessment state, and human review into one view. Missing evidence remains a review state; it is not presented as non-compliance.
+The response sheet contains the tender's original technical wording and blank OEM response fields. Source links and validation details remain available in the app for review.
 
-![Compliance matrix with unresolved items clearly marked](docs/screenshots/compliance-matrix.png)
+![Tender-derived technical response sheet with a visible no-extraction warning and page links](docs/screenshots/oem-response-sheet.png)
 
 ## Product scope
 
-The current product flow is:
+The client-facing product flow is:
 
 ```text
 Tender upload
   → parsing and OCR
   → source-linked requirement extraction
   → human review and correction
-  → vendor/OEM evidence review
-  → evidence-backed assessment
-  → compliance matrix and export
+  → post-export wording and source validation
+  → blank OEM response sheet
 ```
 
-The generated compliance sheet is limited to product/equipment specifications from the tender's technical-specification section or clearly identifiable specification tables. Separate eligibility, past-performance, supporting-proof, delivery, installation, warranty, maintenance, service, and bid-process clauses are excluded. The system preserves the original document and the source location it actually knows. OCR uncertainty stays visible for review. Numerical values and units are evaluated deterministically where supported; a model response or successful export is not proof that a tender is complete.
+The generated response sheet contains only the technical specifications in the tender's selected technical-specification section or clearly identifiable specification tables. It preserves source wording, numbering, nested rows, and blank OEM response cells. The system does not add recommendations, interpretations, or compliance decisions. OCR uncertainty, failed source checks, possible omissions, and technical windows with no extracted rows stay visible for human review. A passing check confirms generated rows and citations; it does not prove that every tender specification was found.
 
-Supported file inputs include PDF and DOCX. The app can export the compliance sheet as XLSX, DOCX, and PDF. See [the architecture guide](docs/ARCHITECTURE.md) for system boundaries and [the checkpoint plan](docs/checkpoint.md) for implementation status.
+Supported tender inputs include PDF and DOCX. The primary OEM response sheet is a DOCX. Additional matrix formats and OEM evidence/compliance services remain in the backend but are not part of the client-facing workflow. See [the architecture guide](docs/ARCHITECTURE.md) for system boundaries and [the checkpoint plan](docs/checkpoint.md) for implementation status.
 
 ## Current readiness
 
@@ -90,10 +89,9 @@ For direct local development, see the Makefile targets and [the development note
 
 - A requirement keeps its tender source wording, document version, page or clause when known, and approximate/exact location status.
 - Reviewers can edit, split, merge, reorder, confirm, or flag extracted requirements while retaining the audit trail.
-- Accepted vendor evidence links to its source document and version.
-- Missing evidence is not the same as contradictory evidence or non-compliance.
 - OCR ambiguities and unverified coverage findings require human review.
-- Export and submission controls reflect unresolved validation findings; a generated file alone does not certify completeness.
+- Export validation reads the generated DOCX, checks the technical wording and source quotations, and blocks files when checks fail or need review.
+- A passing row check is not a guarantee of tender-wide completeness; unresolved coverage findings and zero-row windows remain visible.
 
 ## Architecture
 
@@ -107,10 +105,10 @@ FastAPI API ─── PostgreSQL
       ├── Redis-backed processing worker
       ├── ClamAV upload scanning
       ├── Tesseract OCR
-      └── OpenAI-compatible extraction and bounded language interpretation
+      └── OpenAI-compatible structured technical-specification extraction
 ```
 
-The pilot is a compact application stack, not a microservice mesh. Storage and provider integrations sit behind adapters so a later deployment can use managed services without changing the product's source-traceability rules.
+The pilot is a compact application stack, not a microservice mesh. OEM-evidence, assessment, and submission modules are retained in the backend for now, but the current client workflow does not expose them. Storage and provider integrations sit behind adapters so a later deployment can use managed services without changing the product's source-traceability rules.
 
 ## Repository map
 

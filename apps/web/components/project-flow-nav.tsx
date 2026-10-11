@@ -1,46 +1,41 @@
 "use client";
 
-import { Check, FileCheck2, FileText, ShieldCheck, SearchCheck } from "lucide-react";
+import { Check, FileText, FileCheck2, SearchCheck } from "lucide-react";
 import Link from "next/link";
 
-type FlowStep = "tender" | "vendor" | "review" | "compliance";
+type FlowStep = "tender" | "review" | "response";
 
 const steps = [
   { id: "tender" as const, label: "Tender", icon: FileText },
-  { id: "vendor" as const, label: "Vendor / OEM", icon: FileCheck2 },
-  { id: "review" as const, label: "Review", icon: SearchCheck },
-  { id: "compliance" as const, label: "Compliance sheet", icon: ShieldCheck },
+  { id: "review" as const, label: "Review specifications", icon: SearchCheck },
+  { id: "response" as const, label: "OEM response sheet", icon: FileCheck2 },
 ];
 
 export function ProjectFlowNav(props: {
   projectId: string;
   current: FlowStep;
   tenderReady: boolean;
-  vendorReady?: boolean;
 }) {
-  const { projectId, current, tenderReady, vendorReady = false } = props;
+  const { projectId, current, tenderReady } = props;
   const currentIndex = steps.findIndex((step) => step.id === current);
 
   const hrefFor = (step: FlowStep) => {
     if (step === "tender") return `/projects/${projectId}#tender-sources`;
-    if (step === "vendor") return `/projects/${projectId}#vendor-sources`;
     if (step === "review") return `/projects/${projectId}/review`;
     return `/projects/${projectId}/matrix`;
   };
 
   const enabled = (step: FlowStep) => {
-    if (step === "tender" || step === "vendor") return true;
-    return tenderReady;
+    return step === "tender" || tenderReady;
   };
 
   const completed = (step: FlowStep, index: number) => {
     if (step === "tender") return tenderReady;
-    if (step === "vendor") return vendorReady;
     return index < currentIndex;
   };
 
   return (
-    <nav className="project-flow-nav" aria-label="Tender compliance workflow">
+    <nav className="project-flow-nav" aria-label="Tender response sheet workflow">
       {steps.map((step, index) => {
         const Icon = step.icon;
         const isCurrent = step.id === current;
