@@ -2009,7 +2009,7 @@ a {
 
 .technical-requirement-list-header {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 124px;
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: end;
   gap: 16px;
   padding: 0 22px 10px;
@@ -2021,24 +2021,24 @@ a {
   text-transform: uppercase;
 }
 
-.technical-requirement-list-header span:first-child,
-.technical-requirement-list-header span:last-child {
+.technical-requirement-list-header span:first-child {
   text-align: center;
 }
 
 .technical-requirement-card {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 124px;
+  grid-template-columns: 42px minmax(0, 1fr);
   grid-template-areas:
-    "number heading source"
-    ". details details";
+    "number heading"
+    ". source"
+    ". details";
   align-items: start;
-  gap: 12px 18px;
-  padding: 24px;
-  border: 1px solid #dbe3ed;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fff 0%, #fcfdff 100%);
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.045);
+  gap: 10px 18px;
+  padding: 23px 25px 20px;
+  border: 1px solid #d9e1eb;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(23, 32, 51, 0.035);
 }
 
 .technical-requirement-number {
@@ -2061,9 +2061,9 @@ a {
   grid-area: heading;
   min-width: 0;
   color: #172033;
-  font-size: 16.5px;
-  font-weight: 600;
-  line-height: 1.55;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.5;
   text-wrap: pretty;
 }
 
@@ -2083,14 +2083,14 @@ a {
 
 .technical-requirement-summary {
   display: flex;
-  min-height: 30px;
+  min-height: 36px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 0 0 8px;
-  border-bottom: 1px solid #e8edf3;
-  color: #526177;
-  font-size: 12px;
+  padding: 0 0 9px;
+  border-bottom: 1px solid #e6ebf1;
+  color: #344256;
+  font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -2150,12 +2150,12 @@ a {
   grid-template-columns: 34px minmax(0, 1fr);
   align-items: start;
   gap: 14px;
-  padding: 13px 2px;
+  padding: 12px 2px;
   border: 0;
   border-bottom: 1px solid #edf1f6;
   border-radius: 0;
   background: transparent;
-  color: #334155;
+  color: #29364a;
   font-size: 15.5px;
   line-height: 1.7;
   text-wrap: pretty;
@@ -2209,11 +2209,16 @@ a {
 }
 
 .technical-specification-label {
-  display: block;
-  width: 30px;
-  margin-top: 1px;
+  display: inline-flex;
+  width: 27px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  border-radius: 6px;
+  background: #f0f4fb;
   color: #2457d6;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.7;
@@ -2238,6 +2243,8 @@ a {
 
 .technical-specification-nested .technical-specification-label {
   width: 24px;
+  min-height: 22px;
+  background: #f5f6f8;
   color: #69768a;
   font-size: 11.5px;
   font-weight: 650;
@@ -2245,15 +2252,16 @@ a {
 
 .technical-requirement-source {
   grid-area: source;
-  display: grid;
-  min-height: 42px;
-  align-content: center;
-  justify-items: start;
-  gap: 3px;
-  padding: 6px 9px;
+  display: inline-flex;
+  width: fit-content;
+  min-height: 34px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 4px 10px;
   border: 1px solid #e2e7ef;
-  border-radius: 9px;
-  background: #f8fafc;
+  border-radius: 8px;
+  background: #fafbfd;
   color: #64748b;
   text-decoration: none;
   text-align: left;
@@ -2274,14 +2282,14 @@ a {
 
 .technical-requirement-source > span:first-child {
   color: #6b7789;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.025em;
 }
 
 .technical-requirement-source strong {
   color: #27364b;
-  font-size: 14px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2306,10 +2314,6 @@ a {
     padding: 0 14px 4px;
   }
 
-  .technical-requirement-list-header span:last-child {
-    display: none;
-  }
-
   .technical-requirement-list {
     gap: 10px;
   }
@@ -2319,9 +2323,9 @@ a {
     grid-template-areas:
       "number heading"
       ". source"
-      "details details";
+      ". details";
     gap: 8px 12px;
-    padding: 18px 15px;
+    padding: 17px 15px 15px;
   }
 
   .technical-requirement-number {
@@ -2369,11 +2373,9 @@ a {
   }
 
   .technical-requirement-source {
-    display: flex;
-    min-height: 40px;
-    align-items: center;
+    min-height: 36px;
     gap: 7px;
-    padding: 5px 0;
+    padding: 4px 9px;
     text-align: left;
   }
 

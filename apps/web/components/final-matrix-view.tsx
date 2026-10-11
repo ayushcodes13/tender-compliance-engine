@@ -1313,7 +1313,6 @@ export function FinalMatrixView(props: {
             <div className="technical-requirement-list-header" aria-hidden="true">
               <span>#</span>
               <span>Technical specification from tender</span>
-              <span>Tender source</span>
             </div>
             {rows.map((row) => {
               const sourcePage =
