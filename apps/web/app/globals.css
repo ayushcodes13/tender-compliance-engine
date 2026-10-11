@@ -3020,6 +3020,20 @@ a.project-flow-step:hover {
   padding-left: 8px;
 }
 
+.export-validation-finding-text {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+  border-left: 2px solid var(--color-border);
+  padding-left: 10px;
+}
+
+.export-validation-finding-text mark {
+  background: #fff0c2;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
 .export-validation-report a {
   color: var(--color-accent, #2457d6);
   font-weight: 600;

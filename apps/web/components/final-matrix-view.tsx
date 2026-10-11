@@ -334,8 +334,8 @@ function ExportValidationDetails({
     })),
   ];
   const sourceResults = report.source_validation?.llm_fallback_results ?? [];
-  const reportUrl = (page: number, row?: FinalMatrixRowResponse) =>
-    `/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}${row ? `&requirementId=${encodeURIComponent(row.requirement_id)}` : ""}`;
+  const reportUrl = (page: number, row?: FinalMatrixRowResponse, quote?: string) =>
+    `/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}${row ? `&requirementId=${encodeURIComponent(row.requirement_id)}` : ""}${quote ? `&sourceQuote=${encodeURIComponent(quote)}` : ""}`;
 
   return (
     <details className="export-validation-details">
@@ -360,6 +360,10 @@ function ExportValidationDetails({
                 const row = rows.find((item) => item.requirement_id === issue.row_id);
                 return <li key={`${issue.row_id}-${issue.code}-${index}`}>
                   {row ? `Requirement ${row.serial}: ` : "Requirement: "}{sourceValidationMessage(issue.code)}
+                  {row ? <div className="export-validation-finding-text">
+                    <p><strong>Generated wording:</strong> {row.tender_requirement}</p>
+                    <p><strong>Saved source excerpt:</strong> <mark>{row.raw_source || "Source excerpt unavailable"}</mark></p>
+                  </div> : null}
                   {row?.source_page ? <> <Link href={reportUrl(row.source_page, row)}>Open page {row.source_page} for this requirement</Link></> : null}
                 </li>;
               })}
@@ -398,7 +402,7 @@ function ExportValidationDetails({
               <strong>Possible missing specifications ({coverage.potential_omissions?.length})</strong>
               <ul>{coverage.potential_omissions?.map((finding, index) => <li key={`${finding.window_index}-${index}`}>
                 <blockquote>{finding.source_quote}</blockquote>
-                {finding.pages.map((page) => <span key={page}><Link href={reportUrl(page)}>Open page {page}</Link>{" "}</span>)}
+                {finding.pages.map((page) => <span key={page}><Link href={reportUrl(page, undefined, finding.source_quote)}>Open excerpt on page {page}</Link>{" "}</span>)}
               </li>)}</ul>
             </> : null}
             {(coverage.failed_windows ?? []).length ? <section><strong>Extraction windows not completed:</strong><ul>{(coverage.failed_windows ?? []).map((window) => <li key={window.window_index}>Window {window.window_index + 1}{window.coverage_error_category ? ` · ${window.coverage_error_category}` : ""}: {window.pages.length ? window.pages.map((page) => <span key={page}><Link href={reportUrl(page)}>page {page}</Link>{" "}</span>) : "source page unavailable"}</li>)}</ul></section> : null}
