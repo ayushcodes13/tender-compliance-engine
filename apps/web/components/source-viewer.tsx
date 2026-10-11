@@ -55,9 +55,11 @@ export function SourceViewer({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
-  const [imageScale, setImageScale] = useState(1);
+  const [imageDimensions, setImageDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const selectedAnchorRef = useRef<HTMLDivElement>(null);
 
   const loadPage = useCallback(async () => {
@@ -129,7 +131,7 @@ export function SourceViewer({
       block: "center",
       inline: "center",
     });
-  }, [anchors, imageUrl, imageScale, isSelected, selectedAnchorId, zoom]);
+  }, [anchors, imageUrl, imageDimensions, isSelected, selectedAnchorId, zoom]);
 
   const handleZoomIn = () => setZoom((z) => Math.min(200, z + 8));
   const handleZoomOut = () => setZoom((z) => Math.max(50, z - 8));
@@ -151,25 +153,26 @@ export function SourceViewer({
   const getBboxStyle = useCallback(
     (anchor: SourceAnchor) => {
       const bbox = anchor.bbox;
-      if (!bbox) return null;
+      if (!bbox || !imageDimensions) return null;
       return {
-        left: `${bbox.x / imageScale}px`,
-        top: `${bbox.y / imageScale}px`,
-        width: `${bbox.width / imageScale}px`,
-        height: `${bbox.height / imageScale}px`,
+        left: `${(bbox.x / imageDimensions.width) * 100}%`,
+        top: `${(bbox.y / imageDimensions.height) * 100}%`,
+        width: `${(bbox.width / imageDimensions.width) * 100}%`,
+        height: `${(bbox.height / imageDimensions.height) * 100}%`,
       };
     },
-    [imageScale]
+    [imageDimensions]
   );
 
   const handleImageLoad = () => {
-    if (imgRef.current) {
-      // imageScale = naturalWidth / displayedWidth
-      const displayedWidth = containerRef.current
-        ? containerRef.current.offsetWidth
-        : imgRef.current.naturalWidth;
-      setImageScale(imgRef.current.naturalWidth / displayedWidth);
-    }
+    const image = imgRef.current;
+    if (!image?.naturalWidth || !image.naturalHeight) return;
+    // Bboxes are in rendered-image pixels. Percent positions stay aligned as
+    // the source pane changes size, without relying on a stale measured scale.
+    setImageDimensions({
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
   };
 
   if (loading) {
@@ -394,7 +397,6 @@ export function SourceViewer({
           );
         })()}
         <div
-          ref={containerRef}
           className="source-image-container"
           style={{
             transform: `scale(${zoom / 100})`,

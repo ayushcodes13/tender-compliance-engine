@@ -400,7 +400,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
         return route.fulfill({
           status: 200,
           contentType: "image/svg+xml",
-          body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80" viewBox="0 0 100 80"><rect width="100" height="80" fill="#fff"/><path d="M5 5h90M5 20h90M5 35h90M5 50h90" stroke="#cbd5e1"/></svg>',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="800" viewBox="0 0 1000 800"><rect width="1000" height="800" fill="#fff"/><path d="M50 50h900M50 200h900M50 350h900M50 500h900" stroke="#cbd5e1"/></svg>',
         });
       }
       if (
@@ -879,5 +879,19 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   const secondSelectedCitation = page.getByRole("dialog", { name: "Evidence" }).locator(".source-highlight.approximate.selected");
   await expect(secondSelectedCitation).toHaveCount(1);
   await expect(secondSelectedCitation).toHaveAttribute("title", `Approximate source: ${thirdSourceQuote}`);
-  await expect(secondSelectedCitation.getByText("4.4Approx", { exact: true })).toBeVisible();
+  await expect(secondSelectedCitation.getByText("Cited source", { exact: true })).toBeVisible();
+
+  const highlightMatchesImageScale = () => secondSelectedCitation.evaluate((highlight) => {
+    const image = highlight.parentElement.querySelector(".source-page-image");
+    if (!(image instanceof HTMLImageElement) || !image.naturalWidth || !image.naturalHeight) {
+      return false;
+    }
+    const imageRect = image.getBoundingClientRect();
+    const highlightRect = highlight.getBoundingClientRect();
+    const expectedTop = imageRect.top + imageRect.height * 30 / image.naturalHeight;
+    return Math.abs(highlightRect.top - expectedTop) < 1;
+  });
+  await expect.poll(highlightMatchesImageScale).toBe(true);
+  await page.setViewportSize({ width: 1120, height: 820 });
+  await expect.poll(highlightMatchesImageScale).toBe(true);
 });
