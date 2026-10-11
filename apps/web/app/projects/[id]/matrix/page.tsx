@@ -125,7 +125,7 @@ export default function ProjectMatrixPage() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-            <h1>OEM response sheet — {project.name}</h1>
+            <h1 className="response-sheet-title">OEM response sheet</h1>
               <p className="page-description">
                 Review the tender’s technical specifications and create a source-linked
                 response sheet with blank OEM fields. The system does not decide compliance.

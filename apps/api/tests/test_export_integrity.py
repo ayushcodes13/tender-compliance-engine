@@ -464,6 +464,12 @@ def test_vendor_response_sheet_separates_numbered_groups_and_lettered_items() ->
         ("12.a", "a) Cylindrical chamber with vacuum anneal.", 1),
         ("12.b", "b) Provision for 10 effusion cells.", 1),
     ]
+    assert [line.display_label for line in lines] == ["12)", "a)", "b)"]
+    assert [line.display_text for line in lines] == [
+        "Growth chamber",
+        "Cylindrical chamber with vacuum anneal.",
+        "Provision for 10 effusion cells.",
+    ]
     headers, expected = vendor_response_docx([heading, first_item, second_item])
     artifact = build_vendor_response_docx([heading, first_item, second_item])
     result = validate_generated_requirement_cells(
@@ -477,6 +483,9 @@ def test_vendor_response_sheet_separates_numbered_groups_and_lettered_items() ->
     assert result.expected_rows == result.actual_rows == 3
     table = Document(BytesIO(artifact)).tables[0]
     assert len(table.rows) == 4
+    assert [table.rows[index].cells[0].text for index in range(1, 4)] == [
+        "12)", "a)", "b)"
+    ]
     assert all(not table.rows[index].cells[2].text for index in range(1, 4))
     assert all(not table.rows[index].cells[3].text for index in range(1, 4))
 
@@ -500,10 +509,16 @@ def test_vendor_response_sheet_splits_bullets_without_changing_source_text() -> 
 
     assert [line.level for line in lines] == [0, 1, 1]
     assert [line.serial for line in lines] == ["1", "1.1", "1.2"]
+    assert [line.display_label for line in lines] == ["1)", "a)", "b)"]
     assert [line.source_text for line in lines] == [
         "Universal Testing Machine",
         "• Auto ranging force readout having accuracy of better than ±0.5%",
         "• Force sampling rate: 1000/s",
+    ]
+    assert [line.display_text for line in lines] == [
+        "Universal Testing Machine",
+        "Auto ranging force readout having accuracy of better than ±0.5%",
+        "Force sampling rate: 1000/s",
     ]
     rendered = Document(BytesIO(build_vendor_response_docx([row])))
     assert rendered.sections[0].page_width.inches == pytest.approx(11.69, abs=0.01)
@@ -523,6 +538,7 @@ def test_bullet_rows_get_contiguous_numbers_under_their_source_parent() -> None:
     lines = response_sheet_lines([heading, *bullets])
 
     assert [line.serial for line in lines] == ["3", "3.1", "3.2", "3.3"]
+    assert [line.display_label for line in lines] == ["3)", "a)", "b)", "c)"]
 
 
 def test_bullet_groups_start_at_their_own_requirement_number() -> None:
@@ -544,6 +560,34 @@ def test_bullet_groups_start_at_their_own_requirement_number() -> None:
     assert [line.serial for line in lines] == [
         "2", "2.1", "3", "3.1", "3.2"
     ]
+    assert [line.display_label for line in lines] == [
+        "2)", "a)", "3)", "a)", "b)"
+    ]
+    assert len({line.bookmark_name for line in lines}) == len(lines)
+    headers, expected = vendor_response_docx([unlabelled_group, titled_group])
+    artifact = build_vendor_response_docx([unlabelled_group, titled_group])
+    result = validate_generated_requirement_cells(
+        expected, artifact, export_format="docx", expected_headers=headers
+    )
+    assert result.status == "passed", result.issues
+    table = Document(BytesIO(artifact)).tables[0]
+    assert [row.cells[0].text for row in table.rows[1:]] == [
+        "2)", "a)", "3)", "a)", "b)"
+    ]
+
+
+def test_vendor_response_alphabetic_labels_continue_after_z() -> None:
+    source = "Specification group\n" + "\n".join(
+        f"• Requirement {index} at {100 + index} kN" for index in range(1, 29)
+    )
+    row = replace(_row(), raw_source=source, tender_requirement=source)
+
+    lines = response_sheet_lines([row])
+
+    assert lines[0].display_label == "1)"
+    assert [line.display_label for line in lines[1:]][-3:] == ["z)", "aa)", "ab)"]
+    assert lines[-1].source_text == "• Requirement 28 at 128 kN"
+    assert lines[-1].display_text == "Requirement 28 at 128 kN"
 
 
 def test_vendor_response_sheet_splits_inline_pdf_bullets_and_parameter_cell() -> None:
@@ -561,6 +605,12 @@ def test_vendor_response_sheet_splits_inline_pdf_bullets_and_parameter_cell() ->
         ("1", "Wafer Chuck (1 number)", "", 0),
         ("1.1", "", "• Vacuum-backed chuck", 1),
         ("1.2", "", "• XY movement range: 25 mm", 1),
+    ]
+    assert [line.display_label for line in lines] == ["1)", "a)", "b)"]
+    assert [line.display_text for line in lines] == [
+        "Wafer Chuck (1 number)",
+        "Vacuum-backed chuck",
+        "XY movement range: 25 mm",
     ]
     headers, expected = vendor_response_docx([row])
     result = validate_generated_requirement_cells(
@@ -597,6 +647,14 @@ def test_vendor_response_sheet_splits_flattened_sequential_numbered_items() -> N
             "3. Online demonstration during Technical Evaluation",
             1,
         ),
+    ]
+    assert [line.display_label for line in lines] == ["8)", "a)", "b)", "c)"]
+    assert [line.display_text for line in lines] == [
+        "Terms & Conditions:",
+        "500% Overload capacity in both modes",
+        "Universal Testing Machine shall perform cyclic testing with minimum "
+        "5000 cycles and 0.5% accuracy",
+        "Online demonstration during Technical Evaluation",
     ]
 
 

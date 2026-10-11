@@ -8,40 +8,10 @@
 @source "../components/**/*.{ts,tsx}";
 @source "../lib/**/*.{ts,tsx}";
 
-/* ============================================================================
-   Plus Jakarta Sans — self-hosted (SIL OFL 1.1, see public/fonts/OFL.txt)
-
-   Used as a compact, readable interface face. It is self-hosted so customer
-   deployments do not need outbound font requests at build or runtime.
-   ============================================================================ */
-
-@font-face {
-  font-family: "Plus Jakarta Sans";
-  font-style: normal;
-  font-weight: 300 800;
-  font-display: swap;
-  src: url("/fonts/plus-jakarta-sans-latin-ext.woff2") format("woff2");
-  unicode-range: u+0100-02ba, u+02bd-02c5, u+02c7-02cc, u+02ce-02d7,
-    u+02dd-02ff, u+0304, u+0308, u+0329, u+1d00-1dbf, u+1e00-1e9f, u+1ef2-1eff,
-    u+2020, u+20a0-20ab, u+20ad-20c0, u+2113, u+2c60-2c7f, u+a720-a7ff;
-}
-
-@font-face {
-  font-family: "Plus Jakarta Sans";
-  font-style: normal;
-  font-weight: 300 800;
-  font-display: swap;
-  src: url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
-  unicode-range: u+0000-00ff, u+0131, u+0152-0153, u+02bb-02bc, u+02c6, u+02da,
-    u+02dc, u+0304, u+0308, u+0329, u+2000-206f, u+20ac, u+2122, u+2191, u+2193,
-    u+2212, u+2215, u+feff, u+fffd;
-}
-
 @theme {
-  --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
-    -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-sans: var(--font-plus-jakarta);
-  --font-display: var(--font-plus-jakarta);
+  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-sans: var(--font-system);
+  --font-display: var(--font-system);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
@@ -116,9 +86,9 @@
   --color-error-bg:      #fff1f0;
   --color-error-border:  #efbbb6;
 
-  --font-plus-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui,
-    -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-sans: var(--font-plus-jakarta);
+  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-sans: var(--font-system);
+  --font-display: var(--font-system);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Fira Code",
     "Roboto Mono", "Courier New", monospace;
 
@@ -533,6 +503,12 @@ a {
   font-size: 28px;
   font-weight: 650;
   letter-spacing: -0.025em;
+}
+
+.page-heading h1.response-sheet-title {
+  font-size: clamp(1.75rem, 2.5vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .page-description {
@@ -2024,7 +2000,7 @@ a {
 
 .technical-requirement-list {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -2033,29 +2009,23 @@ a {
 
 .technical-requirement-card {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 132px;
+  grid-template-columns: 42px minmax(0, 1fr) 124px;
   align-items: start;
-  gap: 20px;
-  padding: 22px 24px;
-  border: 1px solid #dce4ee;
-  border-radius: 14px;
-  background: var(--color-surface);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.035), 0 8px 24px rgba(23, 32, 51, 0.025);
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid #d9e2ed;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.035);
 }
 
 .technical-requirement-number {
-  display: inline-flex;
-  min-width: 38px;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #d9e5ff;
-  border-radius: 9px;
-  background: #f0f5ff;
+  display: block;
+  padding-top: 1px;
   color: #2457d6;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2067,21 +2037,22 @@ a {
 .technical-requirement-copy,
 .technical-requirement-introduction {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.68;
+  color: #344256;
+  font-size: 15.5px;
+  line-height: 1.72;
   text-wrap: pretty;
 }
 
 .technical-requirement-introduction {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   color: #172033;
-  font-size: 16px;
+  font-size: 16.5px;
   font-weight: 650;
 }
 
 .technical-specification-list {
   display: grid;
-  gap: 8px;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2097,44 +2068,43 @@ a {
 
 .technical-specification-item {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid #e7ecf3;
-  border-radius: 10px;
-  background: #fbfcfe;
+  gap: 10px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid #edf1f5;
+  border-radius: 0;
+  background: transparent;
   color: #344256;
+  font-size: 15px;
+  line-height: 1.68;
+  text-wrap: pretty;
+}
+
+.technical-specification-item:last-child {
+  border-bottom: 0;
+}
+
+.technical-specification-nested li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #536176;
   font-size: 14.5px;
   line-height: 1.68;
   text-wrap: pretty;
 }
 
-.technical-specification-nested li {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: start;
-  gap: 11px;
-  padding: 9px 11px;
-  border: 1px solid #edf0f5;
-  border-radius: 8px;
-  background: #fff;
-  color: #344256;
-  font-size: 14px;
-  line-height: 1.68;
-  text-wrap: pretty;
-}
-
-.technical-specification-item:hover,
-.technical-specification-nested li:hover {
-  border-color: #d5deeb;
-  background: #fff;
-}
-
 .technical-specification-section {
   grid-column: 1 / -1;
-  margin-top: 9px;
-  padding: 13px 10px 5px;
+  margin-top: 10px;
+  padding: 14px 0 6px;
   border-top: 1px solid #e3e8ef;
 }
 
@@ -2159,51 +2129,47 @@ a {
 }
 
 .technical-specification-label {
-  display: inline-flex;
-  min-width: 27px;
-  min-height: 26px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #dce7fb;
-  border-radius: 7px;
-  background: #f1f5fd;
+  display: inline-block;
+  min-width: 24px;
+  padding-top: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #2457d6;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  line-height: 1.4;
 }
 
 .technical-specification-nested {
-  margin: 10px 0 1px;
-  padding: 0 0 0 14px;
-  border-left: 2px solid #dce6f7;
+  margin: 10px 0 2px 4px;
+  padding: 3px 0 1px 13px;
+  border-left: 2px solid #e3eaf3;
 }
 
 .technical-specification-nested li {
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 11px;
-  padding: 8px 10px;
-  color: #4b5a70;
-  font-size: 13.5px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  padding: 6px 0;
+  color: #536176;
+  font-size: 14.5px;
   line-height: 1.65;
 }
 
 .technical-specification-nested .technical-specification-label {
-  border-color: #e7ebf1;
-  background: #f7f8fa;
-  color: #5d6c82;
-  font-size: 11.5px;
+  color: #69768a;
+  font-size: 12.5px;
   font-weight: 650;
 }
 
 .technical-requirement-source {
   display: grid;
-  min-height: 72px;
+  min-height: 64px;
   align-content: center;
   justify-items: start;
   gap: 3px;
-  padding: 9px 11px;
+  padding: 8px 10px;
   border: 1px solid #e2e7ef;
   border-radius: 9px;
   background: #f8fafc;
@@ -2275,21 +2241,22 @@ a {
   }
 
   .technical-specification-item {
-    grid-template-columns: 25px minmax(0, 1fr);
+    grid-template-columns: 22px minmax(0, 1fr);
     gap: 8px;
-    padding: 11px 10px;
-    font-size: 14px;
+    padding: 8px 0;
+    font-size: 14.5px;
   }
 
   .technical-specification-nested {
-    padding-left: 12px;
+    margin-left: 2px;
+    padding-left: 11px;
   }
 
   .technical-specification-nested li {
-    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-columns: 22px minmax(0, 1fr);
     gap: 8px;
-    padding: 8px;
-    font-size: 13.5px;
+    padding: 6px 0;
+    font-size: 14px;
   }
 
   .technical-requirement-source,

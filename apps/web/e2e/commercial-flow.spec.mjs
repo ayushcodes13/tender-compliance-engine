@@ -688,9 +688,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await page.getByRole("link", { name: "OEM response sheet" }).first().click();
 
   await expect(page).toHaveURL(/\/projects\/project-1\/matrix$/);
-  await expect(
-    page.getByRole("heading", { name: "OEM response sheet — Pilot Tender" })
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "OEM response sheet" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tender technical specifications" })).toBeVisible();
   await expect(page.getByRole("status").filter({
     hasText: "Human review is still required.",

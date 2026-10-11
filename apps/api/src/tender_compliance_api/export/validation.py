@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 import pymupdf
 from docx import Document
+from docx.oxml.ns import qn
 from openpyxl import load_workbook  # type: ignore[import-untyped]
 
 ValidationStatus = Literal["passed", "failed"]
@@ -168,14 +169,24 @@ def _docx_table(
             else headers.index("s.no.")
         )
         for row in table.rows[1:]:
-            row_id = _content_key(row.cells[id_index].text)
-            rows.append(
-                {
-                    original_headers[index]: cell.text
-                    for index, cell in enumerate(row.cells)
-                    if index < len(original_headers)
-                }
+            bookmark_id = next(
+                (
+                    name
+                    for bookmark in row._tr.xpath(".//w:bookmarkStart")
+                    if (name := bookmark.get(qn("w:name")))
+                    and name.startswith("tce_row_")
+                ),
+                None,
             )
+            row_id = bookmark_id or _content_key(row.cells[id_index].text)
+            row_values = {
+                original_headers[index]: cell.text
+                for index, cell in enumerate(row.cells)
+                if index < len(original_headers)
+            }
+            if bookmark_id:
+                row_values["__row_identity__"] = bookmark_id
+            rows.append(row_values)
             for index, cell in enumerate(row.cells):
                 if index >= len(original_headers):
                     continue
@@ -370,7 +381,9 @@ def validate_generated_requirement_cells(
     actual: list[RequirementCell] = []
     for field_row in actual_fields:
         normalized = {header_key(key): value for key, value in field_row.items()}
-        row_id = _content_key(normalized.get(identity_header, ""))
+        row_id = _content_key(
+            normalized.get("__row_identity__") or normalized.get(identity_header, "")
+        )
         text = normalized.get(text_header, "")
         actual.append(
             RequirementCell(

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from hashlib import sha256
 
 from tender_compliance_api.matrix.projection import MatrixRow
 
@@ -19,6 +20,9 @@ _INLINE_NUMBER = re.compile(
 )
 _LETTER = re.compile(r"^(?P<letter>[A-Za-z])[.)][ \t]+")
 _BULLET = re.compile(r"^(?P<bullet>[•●▪◦‣\uf0a7\uf0b7])[ \t]*")
+_DISPLAY_MARKER = re.compile(
+    rf"^(?:\d+(?:\.\d+)*[.)]|[A-Za-z][.)]|{_BULLET_MARKERS})[ \t]+"
+)
 
 
 @dataclass(frozen=True)
@@ -31,14 +35,62 @@ class VendorResponseLine:
     source_text: str
     level: int
     parent_requirement_id: str
+    display_label: str
+
+    @property
+    def display_source_text(self) -> str:
+        """Render source list markers through the response-sheet row labels."""
+        text = self.source_text
+        marker = _DISPLAY_MARKER.match(text)
+        if marker:
+            text = text[marker.end() :]
+        return text
+
+    @property
+    def display_text(self) -> str:
+        return "\n".join(
+            part for part in (self.item_text, self.display_source_text) if part
+        )
+
+    @property
+    def bookmark_name(self) -> str:
+        """Stable invisible identity for rows whose visible a)/b) repeats."""
+        return f"tce_row_{sha256(self.row_id.encode('utf-8')).hexdigest()[:32]}"
+
+
+def _alphabetic_label(index: int) -> str:
+    remainder = index + 1
+    label = ""
+    while remainder:
+        remainder, digit = divmod(remainder - 1, 26)
+        label = chr(ord("a") + digit) + label
+    return f"{label})"
+
+
+def _add_display_labels(lines: list[VendorResponseLine]) -> list[VendorResponseLine]:
+    child_counts: dict[str, int] = {}
+    labelled: list[VendorResponseLine] = []
+    active_parent: str | None = None
+    for line in lines:
+        if line.level == 0:
+            active_parent = line.serial
+            child_counts[active_parent] = 0
+            label = f"{line.serial})"
+        else:
+            parent = active_parent or line.serial.split(".", maxsplit=1)[0]
+            index = child_counts.get(parent, 0)
+            child_counts[parent] = index + 1
+            label = _alphabetic_label(index)
+        labelled.append(replace(line, display_label=label))
+    return labelled
 
 
 def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
     """Split only at list markers that begin a source line.
 
-    The marker stays in the fragment, so every source character remains in the
-    OEM-facing specification cell. Whitespace separating list items is layout
-    whitespace; whitespace inside an unsplit source value is retained.
+    Raw marker-bearing fragments stay available for validation; the response
+    sheet renders those structural markers as row labels. Whitespace separating
+    list items is layout whitespace; whitespace inside a fragment is retained.
     """
     markers: list[tuple[int, int, str]] = []
     for match in _MARKER.finditer(text):
@@ -152,6 +204,7 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                 source_text=fragment,
                 level=level,
                 parent_requirement_id=str(row.requirement_id),
+                display_label="",
             )
         )
 
@@ -291,4 +344,4 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
             active_source_parent = serial
             active_child_index = 0
 
-    return result
+    return _add_display_labels(result)
