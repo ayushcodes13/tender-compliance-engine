@@ -569,7 +569,7 @@ export function TenderReviewWorkspace(props: {
             {visibleRequirements.map((item) => {
               const active = item.id === selectedId;
               const itemStatus = item.review_state as RequirementStatus;
-              const clause = item.clause_number ?? "—";
+              const clause = item.clause_number;
               return (
                 <article
                   key={item.id}
@@ -583,10 +583,11 @@ export function TenderReviewWorkspace(props: {
                     onClick={() => selectRequirement(item.id)}
                     aria-pressed={active}
                   >
-                    <div className="requirement-meta-line">
-                      <span>{item.id}</span>
-                      <span>Clause {clause}</span>
-                    </div>
+                    {clause ? (
+                      <div className="requirement-meta-line">
+                        <span>Clause {clause}</span>
+                      </div>
+                    ) : null}
                     <p>{item.normalized_text}</p>
                     <div className="requirement-card-bottom">
                       <span className={statusClass(itemStatus)}>
@@ -856,7 +857,6 @@ export function TenderReviewWorkspace(props: {
                 </>
               ) : (
                 <div className="normalized-card">
-                  <span className="normalized-id">{selectedSummary?.id}</span>
                   <p>{selectedSummary?.normalized_text}</p>
                 </div>
               )}
