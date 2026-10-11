@@ -225,7 +225,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
             requirement_id: otherRequirementId,
             source_page: null,
             review_status: "unreviewed",
-            tender_requirement: "Grips and fixtures  Dual-cylinder design for wide-width tests  Maximum pressure: 700 bar",
+            tender_requirement: "Grips and fixtures  Dual-cylinder design for wide-width tests  Maximum pressure: 700 bar  WF850-300kN: Wide frame giving 850 mm throat for mounting environmental chambers, large grips or platens Dual Station Configuration  STS100: Additional drilling and mounting spigot to give dual station configuration mounted side by side in the lower frame Load Cells  LC300kN: o 3000 kgf load cell o Range: 0.400 kN to 300.00 kN",
             vendor_spec_parameter: null,
             vendor_spec_value: undefined,
             vendor_spec_unit: null,
@@ -707,6 +707,21 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await expect(page.getByText("a)", { exact: true })).toBeVisible();
   await expect(page.getByText("b)", { exact: true })).toBeVisible();
   await expect(page.getByText("Dual-cylinder design for wide-width tests")).toBeVisible();
+  const specificationRow = page.locator(".technical-specification-item").first();
+  await expect(specificationRow).toHaveCSS("border-top-width", "0px");
+  await expect(specificationRow).toHaveCSS("border-left-width", "0px");
+  await expect(specificationRow).toHaveCSS("font-size", "15.5px");
+  await expect(
+    page.locator(".technical-specification-section h3").filter({
+      hasText: "Dual Station Configuration",
+    })
+  ).toBeVisible();
+  await expect(
+    page.locator(".technical-specification-item").filter({ hasText: "WF850-300kN" })
+  ).not.toContainText("Dual Station Configuration");
+  await expect(
+    page.locator(".technical-specification-item").filter({ hasText: "STS100" })
+  ).not.toContainText("Load Cells");
   await expect(page.getByText("Source location unavailable")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Open source for requirement 2/ })
