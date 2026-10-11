@@ -389,6 +389,18 @@ function splitTechnicalRequirement(text: string): TechnicalRequirementDisplay {
     .replace(/\s*\|\s*$/, "");
   const specifications: TechnicalSubspecification[] = [];
   for (const item of splitAtMarkers(text, markerPositionsToUse)) {
+    const trailingSectionHeading = item.match(
+      /^(.*?)\s+(Dual Station Configuration|Load Cells)$/
+    );
+    if (trailingSectionHeading?.[1].trim()) {
+      specifications.push({ text: trailingSectionHeading[1].trim() });
+      specifications.push({
+        text: trailingSectionHeading[2],
+        headingLevel: 2,
+      });
+      continue;
+    }
+
     const accessoryHeader = item.match(
       /^(.*?)\s+(Accessories and Attachments)(?:\s+(Wide Frame Option))?$/
     );

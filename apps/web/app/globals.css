@@ -2000,7 +2000,7 @@ a {
 
 .technical-requirement-list {
   display: grid;
-  gap: 12px;
+  gap: 18px;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -2012,9 +2012,9 @@ a {
   grid-template-columns: 42px minmax(0, 1fr) 124px;
   align-items: end;
   gap: 16px;
-  padding: 0 22px 8px;
+  padding: 0 22px 10px;
   color: #64738a;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.075em;
   line-height: 1.35;
@@ -2030,21 +2030,26 @@ a {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 124px;
   align-items: start;
-  gap: 16px;
-  padding: 20px 22px;
-  border: 1px solid #d9e2ed;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.035);
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid #dbe3ed;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff 0%, #fcfdff 100%);
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.045);
 }
 
 .technical-requirement-number {
-  display: block;
-  padding-top: 1px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #d9e5ff;
+  border-radius: 11px;
+  background: #f1f5ff;
   color: #2457d6;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2057,21 +2062,23 @@ a {
 .technical-requirement-introduction {
   margin: 0;
   color: #344256;
-  font-size: 15.5px;
-  line-height: 1.72;
+  font-size: 16px;
+  line-height: 1.75;
   text-wrap: pretty;
 }
 
 .technical-requirement-introduction {
-  margin-bottom: 12px;
+  margin: 0 0 18px;
   color: #172033;
-  font-size: 16.5px;
+  font-size: 18px;
   font-weight: 650;
+  line-height: 1.55;
+  text-wrap: balance;
 }
 
 .technical-specification-list {
   display: grid;
-  gap: 7px;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2087,23 +2094,18 @@ a {
 
 .technical-specification-item {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
-  padding: 11px 12px;
-  border: 1px solid #e3e9f0;
-  border-radius: 8px;
-  background: #fff;
-  color: #344256;
-  font-size: 15px;
-  line-height: 1.65;
+  gap: 14px;
+  padding: 13px 2px;
+  border: 0;
+  border-bottom: 1px solid #edf1f6;
+  border-radius: 0;
+  background: transparent;
+  color: #334155;
+  font-size: 15.5px;
+  line-height: 1.7;
   text-wrap: pretty;
-  transition: border-color 140ms ease, background-color 140ms ease;
-}
-
-.technical-specification-item:hover {
-  border-color: #cbd7e5;
-  background: #fcfdff;
 }
 
 .technical-specification-nested li {
@@ -2123,37 +2125,46 @@ a {
 
 .technical-specification-section {
   grid-column: 1 / -1;
-  margin-top: 10px;
-  padding: 14px 0 6px;
+  margin-top: 18px;
+  padding: 15px 16px 8px;
   border-top: 1px solid #e3e8ef;
+  border-radius: 8px 8px 0 0;
+  background: #f7f9fc;
 }
 
 .technical-specification-section h3 {
   margin: 0;
   color: #35445a;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   line-height: 1.45;
 }
 
 .technical-specification-section-2 {
-  margin: 0 0 0 40px;
-  padding: 5px 0 2px;
+  margin: 0 0 0 48px;
+  padding: 9px 0 4px;
   border-top: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .technical-specification-section-2 h3 {
-  color: #5a687b;
-  font-size: 12px;
-  font-weight: 650;
+  color: #536176;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .technical-specification-label {
-  display: inline-block;
-  min-width: 28px;
-  padding-top: 1px;
+  display: inline-grid;
+  width: 30px;
+  height: 27px;
+  place-items: center;
+  margin-top: 1px;
+  border-radius: 7px;
+  background: #f1f5ff;
   color: #2457d6;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
@@ -2161,32 +2172,28 @@ a {
 
 .technical-specification-nested {
   display: grid;
-  gap: 5px;
-  margin: 11px 0 2px 2px;
-  padding: 2px 0 2px 14px;
-  border-left: 2px solid #e3eaf3;
+  gap: 0;
+  margin: 13px 0 2px 1px;
+  padding: 3px 0 3px 16px;
+  border-left: 2px solid #dce5f1;
 }
 
 .technical-specification-nested li {
-  grid-template-columns: 25px minmax(0, 1fr);
+  grid-template-columns: 27px minmax(0, 1fr);
   gap: 9px;
-  padding: 7px 10px;
-  border: 1px solid #edf1f5;
-  border-radius: 7px;
-  background: #f8fafc;
+  padding: 6px 0;
   color: #536176;
   font-size: 14.5px;
-  line-height: 1.6;
-  transition: background-color 140ms ease;
-}
-
-.technical-specification-nested li:hover {
-  background: #f2f6fb;
+  line-height: 1.65;
 }
 
 .technical-specification-nested .technical-specification-label {
+  width: 24px;
+  height: 23px;
+  border-radius: 6px;
+  background: #f4f6f9;
   color: #69768a;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 650;
 }
 
@@ -2262,37 +2269,48 @@ a {
   .technical-requirement-card {
     grid-template-columns: 34px minmax(0, 1fr);
     gap: 8px 12px;
-    padding: 16px 14px;
+    padding: 18px 15px;
   }
 
   .technical-requirement-number {
-    min-width: 32px;
-    min-height: 30px;
-    font-size: 15px;
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
   }
 
   .technical-requirement-copy,
   .technical-requirement-introduction {
-    font-size: 14.5px;
-    line-height: 1.66;
+    font-size: 15px;
+    line-height: 1.68;
+  }
+
+  .technical-requirement-introduction {
+    margin-bottom: 14px;
+    font-size: 16.5px;
   }
 
   .technical-specification-item {
-    grid-template-columns: 26px minmax(0, 1fr);
-    gap: 8px;
-    padding: 10px;
-    font-size: 14.5px;
+    grid-template-columns: 29px minmax(0, 1fr);
+    gap: 9px;
+    padding: 11px 0;
+    font-size: 15px;
+  }
+
+  .technical-specification-label {
+    width: 26px;
+    height: 24px;
+    font-size: 11.5px;
   }
 
   .technical-specification-nested {
-    margin-left: 2px;
-    padding-left: 11px;
+    margin-left: 0;
+    padding-left: 10px;
   }
 
   .technical-specification-nested li {
     grid-template-columns: 23px minmax(0, 1fr);
     gap: 7px;
-    padding: 7px 8px;
+    padding: 6px 0;
     font-size: 14px;
   }
 
