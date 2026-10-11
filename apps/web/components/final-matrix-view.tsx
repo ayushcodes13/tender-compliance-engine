@@ -1351,9 +1351,8 @@ export function FinalMatrixView(props: {
                         });
                       }}
                     >
-                      <span>Source page</span>
-                      <strong>{sourcePage}</strong>
-                      <span className="technical-source-action">Open cited page</span>
+                      <strong>Page {sourcePage}</strong>
+                      <span className="technical-source-action">View cited source</span>
                     </a>
                   ) : (
                     <span className="technical-requirement-source-unavailable">
