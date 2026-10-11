@@ -7,7 +7,7 @@ from io import BytesIO
 
 import docx
 from docx.enum.section import WD_ORIENT
-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -140,9 +140,13 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
     table.autofit = False
 
     header_row = table.rows[0]
+    header_properties = header_row._tr.get_or_add_trPr()
     repeat_header = OxmlElement("w:tblHeader")
     repeat_header.set(qn("w:val"), "true")
-    header_row._tr.get_or_add_trPr().append(repeat_header)
+    header_properties.append(repeat_header)
+    header_properties.append(OxmlElement("w:cantSplit"))
+    header_row.height = Inches(0.35)
+    header_row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
     for index, (header, width) in enumerate(zip(headers, widths, strict=True)):
         cell = header_row.cells[index]
         cell.width = Inches(width)

@@ -101,6 +101,11 @@ def test_vendor_response_docx_keeps_each_specification_row_together() -> None:
     rows = document.tables[0].rows[1:]
     assert len(rows) == 2
     assert all(row._tr.find(qn("w:trPr")).find(qn("w:cantSplit")) is not None for row in rows)
+    header_properties = document.tables[0].rows[0]._tr.find(qn("w:trPr"))
+    assert header_properties is not None
+    assert header_properties.find(qn("w:tblHeader")) is not None
+    assert header_properties.find(qn("w:cantSplit")) is not None
+    assert document.tables[0].rows[0].height.inches >= 0.35
 
 
 def test_vendor_response_docx_has_no_boxed_cell_borders() -> None:
@@ -565,6 +570,34 @@ def test_vendor_response_sheet_splits_inline_pdf_bullets_and_parameter_cell() ->
         expected_headers=headers,
     )
     assert result.status == "passed", result.issues
+
+
+def test_vendor_response_sheet_splits_flattened_sequential_numbered_items() -> None:
+    source = (
+        "Terms & Conditions: 1. 500% Overload capacity in both modes "
+        "2. Universal Testing Machine shall perform cyclic testing with "
+        "minimum 5000 cycles and 0.5% accuracy "
+        "3. Online demonstration during Technical Evaluation"
+    )
+    row = replace(_row(), serial=8, raw_source=source, tender_requirement=source)
+
+    lines = response_sheet_lines([row])
+
+    assert [(line.serial, line.source_text, line.level) for line in lines] == [
+        ("8", "Terms & Conditions:", 0),
+        ("8.1", "1. 500% Overload capacity in both modes", 1),
+        (
+            "8.2",
+            "2. Universal Testing Machine shall perform cyclic testing with "
+            "minimum 5000 cycles and 0.5% accuracy",
+            1,
+        ),
+        (
+            "8.3",
+            "3. Online demonstration during Technical Evaluation",
+            1,
+        ),
+    ]
 
 
 def test_post_render_validator_rejects_missing_and_duplicate_rows_in_every_export() -> None:
