@@ -682,6 +682,65 @@ def test_bullet_groups_start_at_their_own_requirement_number() -> None:
     assert [row.cells[0].text for row in table.rows[1:]] == ["2)", "a)", "3)", "a)", "b)"]
 
 
+def test_inline_lettered_items_split_and_section_heading_does_not_use_row_order() -> None:
+    parent = replace(
+        _row(),
+        serial=11,
+        raw_source="11. Growth test performed on-site as part of system acceptance",
+        tender_requirement="11. Growth test performed on-site as part of system acceptance",
+    )
+    inline_items = replace(
+        _row(),
+        serial=19,
+        raw_source=(
+            "r) At least two viewing ports, s) Suitable bake out facilities. "
+            "Flexible easy mount/dismount tent concept preferred."
+        ),
+        tender_requirement=(
+            "r) At least two viewing ports, s) Suitable bake out facilities. "
+            "Flexible easy mount/dismount tent concept preferred."
+        ),
+    )
+    following_item = replace(
+        _row(),
+        serial=20,
+        raw_source="t) Specific heating arrangement with temperature sensors.",
+        tender_requirement="t) Specific heating arrangement with temperature sensors.",
+    )
+    section_heading = replace(
+        _row(),
+        serial=92,
+        raw_source="Other important requirements:",
+        tender_requirement="Other important requirements:",
+    )
+    section_item = replace(
+        _row(),
+        serial=93,
+        raw_source="a) The vendor shall provide support.",
+        tender_requirement="a) The vendor shall provide support.",
+    )
+
+    lines = response_sheet_lines(
+        [parent, inline_items, following_item, section_heading, section_item]
+    )
+
+    assert [line.display_label for line in lines] == [
+        "11)",
+        "a)",
+        "b)",
+        "c)",
+        "",
+        "a)",
+    ]
+    assert [line.display_text for line in lines[1:4]] == [
+        "At least two viewing ports,",
+        "Suitable bake out facilities. Flexible easy mount/dismount tent concept preferred.",
+        "Specific heating arrangement with temperature sensors.",
+    ]
+    assert lines[4].is_section_heading
+    assert lines[4].display_text == "Other important requirements:"
+
+
 def test_vendor_response_alphabetic_labels_continue_after_z() -> None:
     source = "Specification group\n" + "\n".join(
         f"• Requirement {index} at {100 + index} kN" for index in range(1, 29)
