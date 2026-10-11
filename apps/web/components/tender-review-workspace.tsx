@@ -23,8 +23,6 @@ import { useRouter } from "next/navigation";
 
 import { SourceViewer } from "@/components/source-viewer";
 import { CitationEvidenceDrawer, CitationTarget } from "@/components/citation-evidence-drawer";
-import { EvidencePanel } from "@/components/evidence-panel";
-import { ComplianceReviewPanel } from "@/components/compliance-review-panel";
 import { ProjectFlowNav } from "@/components/project-flow-nav";
 
 import {
@@ -151,25 +149,11 @@ export function TenderReviewWorkspace(props: {
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
   const sourceRef = useRef<HTMLElement | null>(null);
-  const [vendorReady, setVendorReady] = useState(false);
 
   useEffect(() => {
     setActiveSourceId(initialSourceId ?? null);
     setSourcePageOverride(initialSourcePage);
   }, [initialSourceId, initialSourcePage]);
-
-  useEffect(() => {
-    void api
-      .fetchOemDocuments(projectId)
-      .then((items) =>
-        setVendorReady(
-          items.some((item) =>
-            ["parsed", "partial", "ocr_warning"].includes(item.processing_status)
-          )
-        )
-      )
-      .catch(() => setVendorReady(false));
-  }, [projectId]);
 
   // Fetch requirements list from the real API.
   const { data: reqList, loading, error } = useRequirements(
@@ -347,31 +331,6 @@ export function TenderReviewWorkspace(props: {
     });
   };
 
-  const STOP_WORDS = new Set([
-    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for",
-    "with", "at", "by", "from", "is", "are", "was", "were", "be", "been",
-    "has", "have", "had", "must", "shall", "should", "will", "may", "can",
-  ]);
-  const queryTerms = useMemo(() => {
-    const rawText =
-      detail?.normalized_text ?? selectedSummary?.normalized_text ?? "";
-    if (!rawText) return [];
-    const tokens = rawText
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((token) => token.length > 2 && !STOP_WORDS.has(token));
-    const unique: string[] = [];
-    const seen = new Set<string>();
-    for (const token of tokens) {
-      if (!seen.has(token)) {
-        seen.add(token);
-        unique.push(token);
-      }
-    }
-    return unique.slice(0, 20);
-  }, [detail?.normalized_text, selectedSummary?.normalized_text]);
-  const [evidenceRevision, setEvidenceRevision] = useState(0);
-
   const saveNormalizedText = async () => {
     const nextText = draftText.trim();
     if (!nextText) return;
@@ -482,9 +441,6 @@ export function TenderReviewWorkspace(props: {
     );
   }
 
-  // Trigger evidence refresh from parent (e.g. after requirement review update).
-  const refreshEvidence = () => setEvidenceRevision((n) => n + 1);
-
   return (
     <>
     <div className="project-workspace">
@@ -503,7 +459,7 @@ export function TenderReviewWorkspace(props: {
 
         <div className="project-topbar-actions">
           <Link href={`/projects/${projectId}/matrix`} className="button button-primary button-small">
-            Open compliance sheet
+            Open OEM response sheet
           </Link>
         </div>
       </header>
@@ -513,7 +469,6 @@ export function TenderReviewWorkspace(props: {
           projectId={projectId}
           current="review"
           tenderReady
-          vendorReady={vendorReady}
         />
       </div>
 
@@ -537,7 +492,7 @@ export function TenderReviewWorkspace(props: {
           href={`/projects/${projectId}/matrix`}
           className="project-tab"
         >
-          Compliance sheet
+          OEM response sheet
           <span aria-hidden="true">↗</span>
         </Link>
 
@@ -743,10 +698,10 @@ export function TenderReviewWorkspace(props: {
           )}
         </section>
 
-        {/* Right pane: evidence and review */}
-        <aside className="evidence-pane" aria-label="Requirement evidence and review">
+        {/* Right pane: tender source and human review */}
+        <aside className="evidence-pane" aria-label="Tender source and requirement review">
           <div className="evidence-header">
-            <h2>Requirement evidence</h2>
+            <h2>Tender source</h2>
             <span className={statusClass(selectedStatus)}>
               {statusLabel(selectedStatus)}
             </span>
@@ -846,24 +801,6 @@ export function TenderReviewWorkspace(props: {
                 Locate in source
               </button>
             </section>
-
-            {/* Evidence review panel (CP51) */}
-            {selectedId ? (
-              <EvidencePanel
-                projectId={projectId}
-                requirementId={selectedId}
-                queryTerms={queryTerms}
-                onEvidenceChanged={refreshEvidence}
-              />
-            ) : null}
-
-            {/* Human compliance review (CP54/56–58) */}
-            {selectedId ? (
-              <ComplianceReviewPanel
-                projectId={projectId}
-                requirementId={selectedId}
-              />
-            ) : null}
 
             <section className="evidence-section">
               <div className="evidence-section-heading">

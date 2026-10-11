@@ -25,7 +25,16 @@ def _set_cell_shading(cell: docx.table._Cell, fill: str) -> None:
 
 def _remove_table_borders(table: docx.table.Table) -> None:
     """Keep the response columns aligned without printing a box around each cell."""
-    edges = ("top", "start", "bottom", "end", "insideH", "insideV")
+    edges = (
+        "top",
+        "left",
+        "start",
+        "bottom",
+        "right",
+        "end",
+        "insideH",
+        "insideV",
+    )
 
     table_properties = table._tbl.tblPr
     table_borders = table_properties.find(qn("w:tblBorders"))

@@ -19,9 +19,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `npm run start -- -H 127.0.0.1 -p ${port}`,
+      command: `node e2e/start-standalone.mjs ${port} ${backendURL}`,
       url: baseURL,
-      env: { BACKEND_INTERNAL_URL: backendURL },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

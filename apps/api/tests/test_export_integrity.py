@@ -106,7 +106,7 @@ def test_vendor_response_docx_keeps_each_specification_row_together() -> None:
 def test_vendor_response_docx_has_no_boxed_cell_borders() -> None:
     document = docx.Document(BytesIO(build_vendor_response_docx([_row()])))
     table = document.tables[0]
-    edges = ("top", "start", "bottom", "end", "insideH", "insideV")
+    edges = ("top", "left", "start", "bottom", "right", "end", "insideH", "insideV")
 
     table_borders = table._tbl.tblPr.find(qn("w:tblBorders"))
     assert table_borders is not None

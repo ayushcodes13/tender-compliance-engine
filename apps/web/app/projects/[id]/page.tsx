@@ -17,7 +17,6 @@ import {
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
-import { OemDocumentsPanel } from "@/components/oem-documents-panel";
 import { ProjectFlowNav } from "@/components/project-flow-nav";
 import {
   api,
@@ -40,7 +39,7 @@ function statusLabel(status: Project["status"]): string {
     case "review_in_progress":
       return "In review";
     case "matrix_ready":
-      return "Compliance sheet ready";
+      return "Response sheet ready";
     case "exported":
       return "Exported";
     case "archived":
@@ -167,7 +166,6 @@ export default function ProjectPage() {
   const [dragOver, setDragOver] = useState(false);
   const [retryingVersion, setRetryingVersion] = useState<string | null>(null);
   const [processingActionError, setProcessingActionError] = useState<string | null>(null);
-  const [oemSourceCount, setOemSourceCount] = useState(0);
 
   useEffect(() => {
     if (!projectId) return;
@@ -462,13 +460,13 @@ export default function ProjectPage() {
                 href={`/projects/${project.id}/review`}
                 className="button button-secondary button-small"
               >
-                Review requirements
+                Review technical specifications
               </Link>
               <Link
                 href={`/projects/${project.id}/matrix`}
                 className="button button-primary button-small"
               >
-                Compliance sheet
+                OEM response sheet
               </Link>
             </>
           ) : null}
@@ -481,8 +479,8 @@ export default function ProjectPage() {
             <div>
               <h1>{project.name}</h1>
               <p className="page-description">
-                Add the tender and vendor/OEM sources, review the evidence-backed
-                decisions, then export the final compliance sheet. Current status:
+                Upload the tender, review its extracted technical specifications,
+                then export a source-linked sheet for the OEM to complete. Current status:
                 {" "}{statusLabel(project.status)}.
               </p>
             </div>
@@ -490,9 +488,8 @@ export default function ProjectPage() {
 
           <ProjectFlowNav
             projectId={project.id}
-            current={latestDocumentReady ? "vendor" : "tender"}
+            current="tender"
             tenderReady={latestDocumentReady}
-            vendorReady={oemSourceCount > 0}
           />
 
           {/* ----- Project details panel ----- */}
@@ -796,7 +793,7 @@ export default function ProjectPage() {
                                 href={`/projects/${project.id}/review`}
                                 className="button button-secondary button-small"
                               >
-                                Review requirements
+                                Review technical specifications
                               </Link>
                             ) : (
                               <span className="field-help">Updates automatically</span>
@@ -823,20 +820,6 @@ export default function ProjectPage() {
               )}
             </div>
 
-            {/* ----- OEM/vendor evidence sources ----- */}
-            <OemDocumentsPanel
-              projectId={project.id}
-              disabled={isArchived}
-              onItemsChange={(items) =>
-                setOemSourceCount(
-                  items.filter((item) =>
-                    ["parsed", "partial", "ocr_warning"].includes(
-                      item.processing_status
-                    )
-                  ).length
-                )
-              }
-            />
           </div>
         </div>
       </div>

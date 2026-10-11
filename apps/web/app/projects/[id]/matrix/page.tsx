@@ -17,7 +17,6 @@ export default function ProjectMatrixPage() {
   const [document, setDocument] = useState<DocumentItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [vendorReady, setVendorReady] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -26,17 +25,11 @@ export default function ProjectMatrixPage() {
       setLoading(true);
       setError(null);
       try {
-        const [proj, docs, oemDocs] = await Promise.all([
+        const [proj, docs] = await Promise.all([
           api.fetchProject(projectId),
           api.fetchDocuments(projectId),
-          api.fetchOemDocuments(projectId),
         ]);
         setProject(proj);
-        setVendorReady(
-          oemDocs.some((item) =>
-            ["parsed", "partial", "ocr_warning"].includes(item.processing_status)
-          )
-        );
         // Pick the latest version with a parsed status; fall back to newest.
         const parsed = docs
           .filter((d) => d.processing_status === "parsed")
@@ -84,7 +77,7 @@ export default function ProjectMatrixPage() {
           <div className="empty-list" style={{ marginTop: "24px" }}>
             <AlertCircle size={18} aria-hidden="true" />
             <strong>
-              {error ?? "No tender available for compliance sheet"}
+              {error ?? "No tender available for the OEM response sheet"}
             </strong>
             {error ? <span>{error}</span> : null}
             <Link
@@ -123,7 +116,7 @@ export default function ProjectMatrixPage() {
             className="topnav-tab button button-primary button-small"
             style={{ fontWeight: 600 }}
           >
-            Compliance sheet
+            OEM response sheet
           </Link>
         </nav>
       </header>
@@ -132,10 +125,11 @@ export default function ProjectMatrixPage() {
         <div className="page-container">
           <section className="page-heading">
             <div>
-              <h1>Compliance sheet — {project.name}</h1>
+            <h1>OEM response sheet — {project.name}</h1>
               <p className="page-description">
-                Review the source-linked compliance sheet, resolve any remaining
-                unresolved rows, and export XLSX, DOCX, or PDF. Tender source:
+                Review the tender’s technical specifications and create a source-linked
+                response sheet with blank OEM fields. The system does not decide compliance.
+                Tender source:
                 {" "}v{document.version_number} · {document.display_name}
               </p>
             </div>
@@ -143,9 +137,8 @@ export default function ProjectMatrixPage() {
 
           <ProjectFlowNav
             projectId={projectId}
-            current="compliance"
+            current="response"
             tenderReady
-            vendorReady={vendorReady}
           />
 
           <FinalMatrixView
@@ -153,6 +146,7 @@ export default function ProjectMatrixPage() {
             documentId={document.document_id}
             version={document.version_number}
             documentName={document.display_name}
+            technicalOnly
           />
         </div>
       </div>
