@@ -13,6 +13,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+from tender_compliance_api.export.vendor_response_rows import response_sheet_lines
 from tender_compliance_api.matrix.projection import MatrixRow
 
 
@@ -70,7 +71,10 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
     document = docx.Document()
     section = document.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
-    section.page_width, section.page_height = section.page_height, section.page_width
+    # A4 landscape gives the technical column enough width for long tender
+    # clauses while remaining the standard sheet size for the supplied bids.
+    section.page_width = Inches(11.69)
+    section.page_height = Inches(8.27)
     section.left_margin = Inches(0.55)
     section.right_margin = Inches(0.55)
     section.top_margin = Inches(0.55)
@@ -89,7 +93,7 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
         "Compliance (Yes / No)",
         "Any Deviation",
     )
-    widths = (0.55, 6.35, 1.45, 1.45)
+    widths = (0.7, 6.45, 1.55, 1.55)
     table = document.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
     table.autofit = False
@@ -107,26 +111,31 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
         cell.text = header
         for paragraph in cell.paragraphs:
             paragraph.alignment = (
-                WD_ALIGN_PARAGRAPH.CENTER if index != 1 else WD_ALIGN_PARAGRAPH.LEFT
+                WD_ALIGN_PARAGRAPH.LEFT if index == 1 else WD_ALIGN_PARAGRAPH.CENTER
             )
             for run in paragraph.runs:
                 run.bold = True
                 run.font.size = Pt(9)
                 run.font.color.rgb = RGBColor(255, 255, 255)
 
-    for row_index, row in enumerate(rows):
+    for row_index, line in enumerate(response_sheet_lines(rows)):
         cells = table.add_row().cells
-        # Keep the serial number and its full specification together when the
-        # row fits on a page. Word still splits rows taller than a page.
+        # Keep each row together when it fits on a page. Word still splits
+        # rows taller than a page.
         row_properties = table.rows[-1]._tr.get_or_add_trPr()
         prevent_split = OxmlElement("w:cantSplit")
         row_properties.append(prevent_split)
-        values = (str(row.serial), row.tender_requirement, "", "")
+        source_text = "\n".join(
+            part for part in (line.item_text, line.source_text) if part
+        )
+        values = (line.serial, source_text, "", "")
         for index, (cell, value, width) in enumerate(zip(cells, values, widths, strict=True)):
             cell.width = Inches(width)
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
             _set_cell_margins(cell)
-            if row_index % 2:
+            if line.level == 0:
+                _set_cell_shading(cell, "E8EEF6")
+            elif row_index % 2:
                 _set_cell_shading(cell, "F3F6FA")
             if index == 1:
                 _set_source_text(cell, value)
@@ -134,10 +143,16 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
                 cell.text = value
             for paragraph in cell.paragraphs:
                 paragraph.paragraph_format.space_after = Pt(2)
+                if index == 1 and line.level > 0:
+                    paragraph.paragraph_format.left_indent = Inches(0.22)
                 paragraph.alignment = (
-                    WD_ALIGN_PARAGRAPH.CENTER if index in (0, 2, 3) else WD_ALIGN_PARAGRAPH.LEFT
+                    WD_ALIGN_PARAGRAPH.CENTER
+                    if index in (0, 2, 3)
+                    else WD_ALIGN_PARAGRAPH.LEFT
                 )
                 for run in paragraph.runs:
+                    if line.level == 0:
+                        run.bold = True
                     run.font.size = Pt(9)
                     run.font.color.rgb = RGBColor(31, 41, 55)
 

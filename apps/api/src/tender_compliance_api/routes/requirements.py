@@ -1738,6 +1738,7 @@ async def create_export(
                 ExportArtifact.status == ExportStatus.FAILED,
             )
             .order_by(ExportArtifact.generated_at.desc())
+            .limit(1)
         )
         failing_artifact = result.scalar_one_or_none()
         if failing_artifact is None:
@@ -1820,6 +1821,7 @@ async def create_final_matrix_export(
                 ExportArtifact.export_format == fmt,
             )
             .order_by(ExportArtifact.generated_at.desc())
+            .limit(1)
         )
         failing_artifact = result.scalar_one_or_none()
         if failing_artifact is None:

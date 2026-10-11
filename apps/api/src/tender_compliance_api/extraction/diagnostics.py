@@ -80,9 +80,9 @@ def compute_diagnostics(
             the deduped count and the reconcilation summary JSON.
 
     Counts:
-        - total_windows counts every source window, including literal table
-          rows that do not require a primary model call. Fallback validation
-          calls are included only in total_llm_calls.
+        - total_windows counts source windows, including literal table rows
+          that need no primary model call; extraction-call count is a lower
+          bound when window results are incomplete. All calls are in total_llm_calls.
         - accepted  = candidates that are valid AND persistable (promotable).
         - rejected  = candidates that failed source validation (fabrication guard).
         - ocr_warning = candidates drawn from an OCR/structurally-unreliable window
