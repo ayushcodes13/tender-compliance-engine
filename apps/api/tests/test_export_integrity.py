@@ -103,6 +103,29 @@ def test_vendor_response_docx_keeps_each_specification_row_together() -> None:
     assert all(row._tr.find(qn("w:trPr")).find(qn("w:cantSplit")) is not None for row in rows)
 
 
+def test_vendor_response_docx_has_no_boxed_cell_borders() -> None:
+    document = docx.Document(BytesIO(build_vendor_response_docx([_row()])))
+    table = document.tables[0]
+    edges = ("top", "start", "bottom", "end", "insideH", "insideV")
+
+    table_borders = table._tbl.tblPr.find(qn("w:tblBorders"))
+    assert table_borders is not None
+    assert all(
+        table_borders.find(qn(f"w:{edge}")) is not None
+        and table_borders.find(qn(f"w:{edge}")).get(qn("w:val")) == "nil"
+        for edge in edges
+    )
+    for row in table.rows:
+        for cell in row.cells:
+            cell_borders = cell._tc.get_or_add_tcPr().find(qn("w:tcBorders"))
+            assert cell_borders is not None
+            assert all(
+                cell_borders.find(qn(f"w:{edge}")) is not None
+                and cell_borders.find(qn(f"w:{edge}")).get(qn("w:val")) == "nil"
+                for edge in edges
+            )
+
+
 def test_vendor_response_docx_renders_pdf_private_use_bullets_without_rewriting_text() -> None:
     source = "Accuracy: \uf0b7 better than ±0.5%\nPower supply: \uf0b7 380V"
     row = replace(_row(), tender_requirement=source, raw_source=source)

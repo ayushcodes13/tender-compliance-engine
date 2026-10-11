@@ -23,10 +23,43 @@ def _set_cell_shading(cell: docx.table._Cell, fill: str) -> None:
     cell._tc.get_or_add_tcPr().append(shading)
 
 
+def _remove_table_borders(table: docx.table.Table) -> None:
+    """Keep the response columns aligned without printing a box around each cell."""
+    edges = ("top", "start", "bottom", "end", "insideH", "insideV")
+
+    table_properties = table._tbl.tblPr
+    table_borders = table_properties.find(qn("w:tblBorders"))
+    if table_borders is None:
+        table_borders = OxmlElement("w:tblBorders")
+        table_properties.append(table_borders)
+    for edge in edges:
+        border = table_borders.find(qn(f"w:{edge}"))
+        if border is None:
+            border = OxmlElement(f"w:{edge}")
+            table_borders.append(border)
+        border.set(qn("w:val"), "nil")
+
+    # Explicit cell-level nil borders override borders inherited from Word's
+    # table styles, including when a DOCX is opened in another office suite.
+    for row in table.rows:
+        for cell in row.cells:
+            cell_properties = cell._tc.get_or_add_tcPr()
+            cell_borders = cell_properties.find(qn("w:tcBorders"))
+            if cell_borders is None:
+                cell_borders = OxmlElement("w:tcBorders")
+                cell_properties.append(cell_borders)
+            for edge in edges:
+                border = cell_borders.find(qn(f"w:{edge}"))
+                if border is None:
+                    border = OxmlElement(f"w:{edge}")
+                    cell_borders.append(border)
+                border.set(qn("w:val"), "nil")
+
+
 def _set_cell_margins(cell: docx.table._Cell) -> None:
     properties = cell._tc.get_or_add_tcPr()
     margins = OxmlElement("w:tcMar")
-    for side, value in (("top", "90"), ("start", "100"), ("bottom", "90"), ("end", "100")):
+    for side, value in (("top", "60"), ("start", "100"), ("bottom", "60"), ("end", "100")):
         margin = OxmlElement(f"w:{side}")
         margin.set(qn("w:w"), value)
         margin.set(qn("w:type"), "dxa")
@@ -77,8 +110,8 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
     section.page_height = Inches(8.27)
     section.left_margin = Inches(0.55)
     section.right_margin = Inches(0.55)
-    section.top_margin = Inches(0.55)
-    section.bottom_margin = Inches(0.55)
+    section.top_margin = Inches(0.4)
+    section.bottom_margin = Inches(0.4)
 
     title = document.add_paragraph()
     title.paragraph_format.space_after = Pt(12)
@@ -95,7 +128,6 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
     )
     widths = (0.7, 6.45, 1.55, 1.55)
     table = document.add_table(rows=1, cols=len(headers))
-    table.style = "Table Grid"
     table.autofit = False
 
     header_row = table.rows[0]
@@ -155,6 +187,8 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
                         run.bold = True
                     run.font.size = Pt(9)
                     run.font.color.rgb = RGBColor(31, 41, 55)
+
+    _remove_table_borders(table)
 
     buffer = BytesIO()
     document.save(buffer)
