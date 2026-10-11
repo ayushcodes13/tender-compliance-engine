@@ -303,6 +303,120 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
   return "This artifact has no passing validation result and is unavailable for download.";
 }
 
+function validationCodeLabel(code: string): string {
+  return code.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function ExportValidationDetails({
+  artifact,
+  rows,
+  projectId,
+  documentId,
+  version,
+}: {
+  artifact: ExportArtifactResponse;
+  rows: FinalMatrixRowResponse[];
+  projectId: string;
+  documentId: string;
+  version: number;
+}) {
+  const report = artifact.validation_report;
+  if (!report) return <span>Detailed validation report unavailable.</span>;
+
+  const coverage = report.window_processing;
+  const sourceIssues = report.source_validation?.issues ?? [];
+  const reportIssues = [
+    ...(report.issues ?? []),
+    ...(report.presentation_validation?.issues ?? []).map((issue) => ({
+      row_id: "",
+      code: issue.code,
+      field: issue.detail,
+    })),
+  ];
+  const sourceResults = report.source_validation?.llm_fallback_results ?? [];
+  const reportUrl = (page: number, row?: FinalMatrixRowResponse, quote?: string) =>
+    `/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}${row ? `&requirementId=${encodeURIComponent(row.requirement_id)}` : ""}${quote ? `&sourceQuote=${encodeURIComponent(quote)}` : ""}`;
+
+  return (
+    <details className="export-validation-details">
+      <summary>View saved validation details</summary>
+      <div className="export-validation-report">
+        <p>
+          <strong>Generated file:</strong> {report.artifact_integrity ?? "not checked"}; {report.actual_rows ?? "?"} of {report.expected_rows ?? "?"} rows, {report.checked_columns ?? "?"} columns and {report.checked_cells ?? "?"} cells checked.
+        </p>
+        {report.source_validation ? (
+          <p>
+            <strong>Source wording:</strong> {report.source_validation.checked_rows} row groups checked against their cited tender sources; {report.source_validation.llm_assisted_rows?.length ?? 0} required the page-image check.
+          </p>
+        ) : <p><strong>Source wording:</strong> no saved result.</p>}
+        {report.presentation_validation ? (
+          <p><strong>Sheet layout:</strong> {report.presentation_validation.status}; {report.presentation_validation.checked_headings} headings and {report.presentation_validation.checked_open_circle_markers} nested markers checked.</p>
+        ) : null}
+        {sourceIssues.length ? (
+          <section>
+            <strong>Source wording findings ({sourceIssues.length})</strong>
+            <ul>
+              {sourceIssues.map((issue, index) => {
+                const row = rows.find((item) => item.requirement_id === issue.row_id);
+                return <li key={`${issue.row_id}-${issue.code}-${index}`}>
+                  {row ? `Requirement ${row.serial}: ` : "Requirement: "}{sourceValidationMessage(issue.code)}
+                  {row ? <div className="export-validation-finding-text">
+                    <p><strong>Generated wording:</strong> {row.tender_requirement}</p>
+                    <p><strong>Saved source excerpt:</strong> <mark>{row.raw_source || "Source excerpt unavailable"}</mark></p>
+                  </div> : null}
+                  {row?.source_page ? <> <Link href={reportUrl(row.source_page, row)}>Open page {row.source_page} for this requirement</Link></> : null}
+                </li>;
+              })}
+            </ul>
+          </section>
+        ) : null}
+        {sourceResults.some((result) => result.verdict === "not_exact" || result.verdict === "cannot_tell" || result.call_status === "failed" || result.status === "image_unavailable") ? (
+          <section>
+            <strong>Page-image checks needing attention</strong>
+            <ul>
+              {sourceResults.filter((result) => result.verdict === "not_exact" || result.verdict === "cannot_tell" || result.call_status === "failed" || result.status === "image_unavailable").map((result, index) => {
+                const row = rows.find((item) => item.requirement_id === result.row_id);
+                const verdict = result.verdict === "not_exact" ? "wording difference found" : result.verdict === "cannot_tell" ? "wording could not be confirmed" : result.status === "image_unavailable" ? "source page image unavailable" : `check could not finish${result.error_category ? ` (${result.error_category})` : ""}`;
+                return <li key={`${result.row_id}-${result.page_number}-${index}`}>
+                  {row ? `Requirement ${row.serial}: ` : "Requirement: "}{verdict} on page {result.page_number}. <Link href={reportUrl(result.page_number, row)}>Open cited page</Link>
+                </li>;
+              })}
+            </ul>
+          </section>
+        ) : null}
+        {reportIssues.length ? (
+          <section>
+            <strong>Generated-content findings ({reportIssues.length})</strong>
+            <ul>{reportIssues.map((issue, index) => <li key={`${issue.row_id}-${issue.code}-${index}`}>
+              {issue.row_id && rows.some((row) => row.requirement_id === issue.row_id)
+                ? `Requirement ${rows.find((row) => row.requirement_id === issue.row_id)?.serial}: `
+                : ""}{validationCodeLabel(issue.code)}{issue.field ? ` · ${issue.field}` : ""}
+            </li>)}</ul>
+          </section>
+        ) : null}
+        {coverage ? (
+          <section>
+            <strong>Tender coverage:</strong> extraction {coverage.audited_windows ?? 0} of {coverage.expected_windows ?? 0} source windows; independent scan: {coverage.obligation_audit_status?.replaceAll("_", " ") ?? "not available"}.
+            <p className="field-help">A completed scan with no findings does not prove that every specification was extracted.</p>
+            {(coverage.potential_omissions ?? []).length ? <>
+              <strong>Possible missing specifications ({coverage.potential_omissions?.length})</strong>
+              <ul>{coverage.potential_omissions?.map((finding, index) => <li key={`${finding.window_index}-${index}`}>
+                <blockquote>{finding.source_quote}</blockquote>
+                {finding.pages.map((page) => <span key={page}><Link href={reportUrl(page, undefined, finding.source_quote)}>Open excerpt on page {page}</Link>{" "}</span>)}
+              </li>)}</ul>
+            </> : null}
+            {(coverage.failed_windows ?? []).length ? <section><strong>Extraction windows not completed:</strong><ul>{(coverage.failed_windows ?? []).map((window) => <li key={window.window_index}>Window {window.window_index + 1}{window.coverage_error_category ? ` · ${window.coverage_error_category}` : ""}: {window.pages.length ? window.pages.map((page) => <span key={page}><Link href={reportUrl(page)}>page {page}</Link>{" "}</span>) : "source page unavailable"}</li>)}</ul></section> : null}
+            {(coverage.obligation_audit_failed_windows ?? []).length ? <section><strong>Coverage checks that did not complete:</strong><ul>{(coverage.obligation_audit_failed_windows ?? []).map((window) => <li key={window.window_index}>Window {window.window_index + 1}{window.coverage_error_category ? ` · ${window.coverage_error_category}` : ""}: {window.pages.length ? window.pages.map((page) => <span key={page}><Link href={reportUrl(page)}>page {page}</Link>{" "}</span>) : "source page unavailable"}</li>)}</ul></section> : null}
+            {(coverage.zero_candidate_windows ?? []).length ? <section><strong>Windows with no extracted requirement rows:</strong><ul>{(coverage.zero_candidate_windows ?? []).map((window) => <li key={window.window_index}>Window {window.window_index + 1}: no candidate row was extracted. Review {window.pages.length ? window.pages.map((page) => <span key={page}><Link href={reportUrl(page)}>page {page}</Link>{" "}</span>) : "the source page (location unavailable)"} for a possible extraction gap.</li>)}</ul></section> : null}
+            {(coverage.ocr_warning_windows ?? []).length ? <section><strong>OCR-warning windows:</strong><ul>{(coverage.ocr_warning_windows ?? []).map((window) => <li key={window.window_index}>Window {window.window_index + 1}: check {window.pages.length ? window.pages.map((page) => <span key={page}><Link href={reportUrl(page)}>page {page}</Link>{" "}</span>) : "the source page (location unavailable)"} against the rendered document.</li>)}</ul></section> : null}
+            {(coverage.resolved_omissions ?? []).length ? <p><strong>Reviewer decisions recorded:</strong> {(coverage.resolved_omissions ?? []).length}. See the source review history for the attributed decisions.</p> : null}
+          </section>
+        ) : <p><strong>Tender coverage:</strong> no saved audit; completeness is unverified.</p>}
+      </div>
+    </details>
+  );
+}
+
 function exportGeneratedAt(value: string | null): string {
   if (!value) return "Date unavailable";
   const date = new Date(value);
@@ -1534,7 +1648,16 @@ export function FinalMatrixView(props: {
                       <td>{artifact.export_format?.toUpperCase() ?? "Export"}</td>
                       <td>{exportGeneratedAt(artifact.generated_at)}</td>
                       <td><span className={exportValidationTone(artifact)}>{exportValidationLabel(artifact)}</span></td>
-                      <td>{exportValidationSummary(artifact)}</td>
+                      <td>
+                        <div>{exportValidationSummary(artifact)}</div>
+                        <ExportValidationDetails
+                          artifact={artifact}
+                          rows={rows}
+                          projectId={projectId}
+                          documentId={documentId}
+                          version={version}
+                        />
+                      </td>
                       <td>
                         {passed ? (
                           <button

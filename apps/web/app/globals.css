@@ -2974,6 +2974,73 @@ a.project-flow-step:hover {
   text-underline-offset: 2px;
 }
 
+.export-validation-details {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.export-validation-details summary {
+  color: var(--color-accent, #2457d6);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.export-validation-report {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  border-left: 2px solid var(--color-border);
+  padding-left: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.export-validation-report p,
+.export-validation-report ul {
+  margin: 0;
+}
+
+.export-validation-report ul {
+  padding-left: 18px;
+}
+
+.export-validation-report section {
+  display: grid;
+  gap: 5px;
+}
+
+.export-validation-report strong {
+  color: var(--color-text);
+}
+
+.export-validation-report blockquote {
+  margin: 4px 0;
+  border-left: 2px solid var(--color-border);
+  padding-left: 8px;
+}
+
+.export-validation-finding-text {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+  border-left: 2px solid var(--color-border);
+  padding-left: 10px;
+}
+
+.export-validation-finding-text mark {
+  background: #fff0c2;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.export-validation-report a {
+  color: var(--color-accent, #2457d6);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .export-panel {
   display: flex;
   align-items: center;
