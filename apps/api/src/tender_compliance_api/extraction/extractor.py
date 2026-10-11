@@ -215,15 +215,53 @@ def _to_record(
     is_valid = False
     rejection_reason: str | None = None
     if primary is not None:
-        sourced = SourcedRequirementCandidate(candidate=adjusted, source=primary)
-        try:
-            sourced.validate_source()
-            is_valid = True
-        except CandidateValidationError as exc:
-            # raw_source is not a substring of the trusted window -> the model
-            # relocated/invented a citation.  Record for audit, do not persist
-            # as a requirement (AGENTS: "never fabricate a citation").
-            rejection_reason = str(exc)
+        if len(window.sources) > 1 and window.literal_source_row:
+            # A deliberately joined multi-page literal row is valid only when
+            # every page-local fragment exactly reconstructs its cited slice.
+            # The newline separators are inserted by the parser-side join;
+            # no uncovered wording or unanchored gap is accepted.
+            fragments = sorted(
+                window.sources,
+                key=lambda source: (
+                    source.window_char_start
+                    if source.window_char_start is not None
+                    else -1
+                ),
+            )
+            reconstructed: list[str] = []
+            fragment_valid = True
+            for index, source in enumerate(fragments):
+                start, end = source.window_char_start, source.window_char_end
+                if start is None or end is None or start < 0 or end < start:
+                    fragment_valid = False
+                    break
+                source_slice = window.text[start:end]
+                if source.source_text is None or source_slice != source.source_text:
+                    fragment_valid = False
+                    break
+                if index:
+                    previous_end = fragments[index - 1].window_char_end
+                    if previous_end is None or window.text[previous_end:start] != "\n":
+                        fragment_valid = False
+                        break
+                reconstructed.append(source_slice)
+            if fragment_valid and "\n".join(reconstructed) == adjusted.raw_source:
+                is_valid = True
+            else:
+                rejection_reason = (
+                    "multi-page source fragments do not exactly reconstruct "
+                    "the candidate citation"
+                )
+        else:
+            sourced = SourcedRequirementCandidate(candidate=adjusted, source=primary)
+            try:
+                sourced.validate_source()
+                is_valid = True
+            except CandidateValidationError as exc:
+                # raw_source is not a substring of the trusted window -> the model
+                # relocated/invented a citation.  Record for audit, do not persist
+                # as a requirement (AGENTS: "never fabricate a citation").
+                rejection_reason = str(exc)
 
     persistable = is_valid and (
         adjusted.uncertainty is UncertaintyLevel.CONFIRMED
@@ -369,7 +407,7 @@ async def extract_from_windows(
                 # This window is one parser-identified row and the persisted
                 # quote is the entire trusted window, so deterministic row
                 # equality is the coverage check; no model call is needed.
-                window_omissions: list[dict[str, Any]] = []
+                literal_window_omissions: list[dict[str, Any]] = []
                 coverage_status = (
                     "completed"
                     if enable_obligation_coverage_audit and not window.ocr_warning
@@ -387,7 +425,7 @@ async def extract_from_windows(
                         source_spans=source_spans,
                         coverage_status=coverage_status,
                         coverage_error_category=coverage_error_category,
-                        potential_omissions=window_omissions,
+                        potential_omissions=literal_window_omissions,
                     ),
                 )
             try:

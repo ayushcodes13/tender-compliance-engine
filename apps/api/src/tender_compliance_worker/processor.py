@@ -16,6 +16,7 @@ together atomically.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import uuid
@@ -249,6 +250,91 @@ def _table_cell_source_windows(
         )
         excluded.append(SourceTextRange(line_start, line_end))
     return windows, tuple(excluded), current_schema
+
+
+def _merge_blank_serial_table_rows(windows: list[SourceWindow]) -> list[SourceWindow]:
+    """Attach unnumbered specification-table continuations to their serial row.
+
+    Some tender tables continue one numbered item across page breaks using
+    blank serial-number cells. Keep that text in the prior item while retaining
+    an exact source fragment for each contributing page/cell.
+    """
+    merged: list[SourceWindow] = []
+    active_index: int | None = None
+    active_serial: str | None = None
+
+    def append_continuation(window: SourceWindow) -> None:
+        if active_index is None:
+            merged.append(window)
+            return
+        previous = merged[active_index]
+        separator = "\n"
+        shift = len(previous.text) + len(separator)
+        shifted_sources = tuple(
+            source.model_copy(
+                update={
+                    "window_char_start": shift,
+                    "window_char_end": shift + len(window.text),
+                }
+            )
+            for source in window.sources
+        )
+        merged[active_index] = SourceWindow(
+            chunk_id="cw-" + hashlib.sha256(
+                f"{previous.chunk_id}:{window.chunk_id}".encode()
+            ).hexdigest()[:12],
+            text=previous.text + separator + window.text,
+            sources=(*previous.sources, *shifted_sources),
+            overlap=None,
+            hierarchy=previous.hierarchy,
+            table_context=previous.table_context,
+            ocr_warning=previous.ocr_warning or window.ocr_warning,
+            literal_source_row=True,
+        )
+
+    for window in windows:
+        cells = window.table_context
+        serial = cells[0].strip() if len(cells) >= 3 else ""
+        has_serial_schema = len(cells) >= 3 and (serial.isdigit() or not serial)
+        if has_serial_schema and serial:
+            merged.append(window)
+            active_index = len(merged) - 1
+            active_serial = serial
+            continue
+
+        if has_serial_schema and not serial:
+            if active_index is not None and active_serial is not None:
+                append_continuation(window)
+            else:
+                merged.append(window)
+            continue
+
+        if not cells and active_index is not None and active_serial is not None:
+            if re.fullmatch(r"\s*Page\s+\d+\s+of\s+\d+\s*", window.text, re.I):
+                continue
+            previous_pages = [
+                source.page_number
+                for source in merged[active_index].sources
+                if source.page_number is not None
+            ]
+            window_pages = [
+                source.page_number
+                for source in window.sources
+                if source.page_number is not None
+            ]
+            last_source_page = max(previous_pages, default=0)
+            window_page = min(window_pages, default=0)
+            if window_page and window_page <= last_source_page + 1:
+                append_continuation(window)
+            else:
+                merged.append(window)
+            continue
+
+        merged.append(window)
+        active_index = None
+        active_serial = None
+
+    return merged
 
 
 def _standalone_numbered_heading_ranges(
@@ -820,7 +906,7 @@ class JobProcessor:
                     next_range
                 )
 
-            windows = []
+            windows: list[SourceWindow] = []
             active_table_schema: tuple[int, ...] | None = None
             for page in ordered_pages:
                 page_ranges = page_scope.get(page.page_number)
@@ -976,6 +1062,7 @@ class JobProcessor:
                     window.chunk_id,
                 )
             )
+            windows = _merge_blank_serial_table_rows(windows)
             if not windows:
                 await svc.complete_run(
                     auth,
