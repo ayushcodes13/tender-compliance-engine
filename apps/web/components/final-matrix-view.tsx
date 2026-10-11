@@ -278,6 +278,194 @@ function exportGeneratedAt(value: string | null): string {
   return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleString();
 }
 
+type TechnicalSubspecification = {
+  text: string;
+  nested?: string[];
+  headingLevel?: 1 | 2;
+};
+
+type TechnicalRequirementDisplay = {
+  introduction: string;
+  specifications: TechnicalSubspecification[];
+};
+
+const TECHNICAL_BULLET = /(?:^|\s)(?:\uf0a7|\uf0b7|[•●▪◦‣])\s*/g;
+const INLINE_NUMBER = /(?<!\S)(\d{1,2}[.)])[ \t]+(?=[A-Z0-9])/g;
+const INLINE_LETTER = /(?<!\S)([a-zA-Z][.)])[ \t]+(?=[A-Z0-9])/g;
+const INLINE_O_BULLET = /(?:^|\s)o\s+(?=[A-Z0-9])/g;
+
+function markerPositions(text: string, pattern: RegExp): number[] {
+  return Array.from(text.matchAll(pattern), (match) => {
+    const markerOffset = match[0].search(/[^\s]/);
+    return match.index + markerOffset;
+  });
+}
+
+function splitAtMarkers(text: string, positions: number[]): string[] {
+  return positions
+    .map((start, index) => {
+      const markerEnd = text.slice(start).match(/^(?:\uf0a7|\uf0b7|[•●▪◦‣]|\d{1,2}[.)]|[a-zA-Z][.)]|o)\s*/)?.[0].length;
+      if (!markerEnd) return "";
+      const end = positions[index + 1] ?? text.length;
+      return text.slice(start + markerEnd, end).trim();
+    })
+    .filter(Boolean);
+}
+
+function sequentialNumberMarkers(text: string): number[] {
+  const matches = Array.from(text.matchAll(INLINE_NUMBER));
+  for (let startIndex = 0; startIndex < matches.length; startIndex += 1) {
+    if (matches[startIndex][1]?.replace(/[.)]$/, "") !== "1") continue;
+    const sequence = [matches[startIndex]];
+    let expected = 2;
+    for (const candidate of matches.slice(startIndex + 1)) {
+      const value = candidate[1]?.replace(/[.)]$/, "");
+      if (value === String(expected)) {
+        sequence.push(candidate);
+        expected += 1;
+      } else if (value && /^\d+$/.test(value) && Number(value) > expected) {
+        break;
+      }
+    }
+    if (sequence.length >= 2) {
+      return sequence.map((match) => match.index ?? 0);
+    }
+  }
+  return [];
+}
+
+function splitTechnicalRequirement(text: string): TechnicalRequirementDisplay {
+  const bulletPositions = markerPositions(text, TECHNICAL_BULLET);
+  const numberPositions = bulletPositions.length ? [] : sequentialNumberMarkers(text);
+  const letterPositions = bulletPositions.length || numberPositions.length
+    ? []
+    : markerPositions(text, INLINE_LETTER);
+  const markerPositionsToUse = bulletPositions.length
+    ? bulletPositions
+    : numberPositions.length
+      ? numberPositions
+      : letterPositions;
+
+  if (!markerPositionsToUse.length) {
+    const nestedBulletPositions = markerPositions(text, INLINE_O_BULLET);
+    if (nestedBulletPositions.length < 2) {
+      return { introduction: text.trim(), specifications: [] };
+    }
+    return {
+      introduction: text.slice(0, nestedBulletPositions[0]).trim(),
+      specifications: splitAtMarkers(text, nestedBulletPositions).map((item) => ({ text: item })),
+    };
+  }
+
+  const introduction = text.slice(0, markerPositionsToUse[0]).trim();
+  const specifications: TechnicalSubspecification[] = [];
+  for (const item of splitAtMarkers(text, markerPositionsToUse)) {
+    const accessoryHeader = item.match(
+      /^(.*?)\s+(Accessories and Attachments)(?:\s+(Wide Frame Option))?$/
+    );
+    if (accessoryHeader) {
+      if (accessoryHeader[1].trim()) specifications.push({ text: accessoryHeader[1].trim() });
+      specifications.push({ text: accessoryHeader[2], headingLevel: 1 });
+      if (accessoryHeader[3]) {
+        specifications.push({ text: accessoryHeader[3], headingLevel: 2 });
+      }
+      continue;
+    }
+    if (item === "Dual Station Configuration" || item === "Load Cells") {
+      specifications.push({ text: item, headingLevel: 2 });
+      continue;
+    }
+
+    const nestedPositions = markerPositions(item, INLINE_O_BULLET);
+    if (nestedPositions.length < 2) {
+      specifications.push({ text: item });
+      continue;
+    }
+    const nested = splitAtMarkers(item, nestedPositions);
+    const parentText = item.slice(0, nestedPositions[0]).trim();
+    if (parentText) {
+      specifications.push({ text: parentText, nested });
+    } else {
+      specifications.push(...nested.map((text) => ({ text })));
+    }
+  }
+
+  return { introduction, specifications };
+}
+
+function alphabeticLabel(index: number): string {
+  let remainder = index + 1;
+  let label = "";
+  while (remainder > 0) {
+    remainder -= 1;
+    label = String.fromCharCode(97 + (remainder % 26)) + label;
+    remainder = Math.floor(remainder / 26);
+  }
+  return `${label})`;
+}
+
+function romanLabel(index: number): string {
+  const numerals: [number, string][] = [
+    [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"],
+  ];
+  let remaining = index + 1;
+  let label = "";
+  for (const [value, numeral] of numerals) {
+    while (remaining >= value) {
+      label += numeral;
+      remaining -= value;
+    }
+  }
+  return `${label})`;
+}
+
+function TechnicalRequirementText({ text }: { text: string }) {
+  const content = splitTechnicalRequirement(text);
+  if (!content.specifications.length) {
+    return <p className="technical-requirement-introduction">{content.introduction}</p>;
+  }
+
+  return (
+    <div className="technical-requirement-copy">
+      {content.introduction ? (
+        <p className="technical-requirement-introduction">{content.introduction}</p>
+      ) : null}
+      <ol className="technical-specification-list" aria-label="Technical specifications">
+        {content.specifications.map((specification, index) => specification.headingLevel ? (
+          <li
+            className={`technical-specification-section technical-specification-section-${specification.headingLevel}`}
+            key={`${index}-${specification.text}`}
+            role="presentation"
+          >
+            <h3>{specification.text}</h3>
+          </li>
+        ) : (
+          <li className="technical-specification-item" key={`${index}-${specification.text.slice(0, 32)}`}>
+            <span className="technical-specification-label" aria-hidden="true">
+              {alphabeticLabel(content.specifications.slice(0, index).filter((item) => !item.headingLevel).length)}
+            </span>
+            <div className="technical-specification-detail">
+              <span>{specification.text}</span>
+              {specification.nested?.length ? (
+                <ol className="technical-specification-nested" aria-label="Nested specifications">
+                  {specification.nested.map((item, nestedIndex) => (
+                    <li key={`${nestedIndex}-${item.slice(0, 32)}`}>
+                      <span className="technical-specification-label" aria-hidden="true">
+                        {romanLabel(nestedIndex)}
+                      </span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function FinalMatrixView(props: {
   projectId: string;
   documentId: string;
@@ -1042,7 +1230,56 @@ export function FinalMatrixView(props: {
         </div>
       ) : null}
 
-      <div className="matrix-container">
+      <div className={`matrix-container${technicalOnly ? " technical-requirement-container" : ""}`}>
+        {technicalOnly ? (
+          <div className="technical-requirement-list" aria-label="Tender technical specifications">
+            {rows.map((row) => {
+              const sourcePage =
+                Number.isInteger(row.source_page) && (row.source_page ?? 0) > 0
+                  ? row.source_page
+                  : null;
+              return (
+                <article className="technical-requirement-card" key={row.requirement_id}>
+                  <div className="technical-requirement-number" aria-label={`Requirement ${row.serial}`}>
+                    {row.serial}
+                  </div>
+                  <div className="technical-requirement-main">
+                    <TechnicalRequirementText text={row.tender_requirement} />
+                  </div>
+                  {sourcePage !== null ? (
+                    <a
+                      className="technical-requirement-source"
+                      href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&requirementId=${encodeURIComponent(row.requirement_id)}&page=${sourcePage}${row.source_anchor_id ? `&sourceId=${encodeURIComponent(row.source_anchor_id)}` : ""}`}
+                      aria-label={`Open source for requirement ${row.serial}, page ${sourcePage}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setCitationDrawer({
+                          projectId,
+                          documentId,
+                          documentName,
+                          version,
+                          pageNumber: sourcePage,
+                          requirementId: row.requirement_id,
+                          sourceId: row.source_anchor_id ?? null,
+                          quoteText: row.raw_source,
+                          clause: row.clause,
+                        });
+                      }}
+                    >
+                      <span>Source page</span>
+                      <strong>{sourcePage}</strong>
+                      <span className="technical-source-action">Open cited page</span>
+                    </a>
+                  ) : (
+                    <span className="technical-requirement-source-unavailable">
+                      Source location unavailable
+                    </span>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
         <table className="matrix-table">
           <thead>
             <tr>
@@ -1115,6 +1352,7 @@ export function FinalMatrixView(props: {
             })}
           </tbody>
         </table>
+        )}
       </div>
 
       {!technicalOnly ? <div className="export-panel">
