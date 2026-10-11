@@ -1293,6 +1293,11 @@ export function FinalMatrixView(props: {
       <div className={`matrix-container${technicalOnly ? " technical-requirement-container" : ""}`}>
         {technicalOnly ? (
           <div className="technical-requirement-list" aria-label="Tender technical specifications">
+            <div className="technical-requirement-list-header" aria-hidden="true">
+              <span>#</span>
+              <span>Technical specification from tender</span>
+              <span>Tender source</span>
+            </div>
             {rows.map((row) => {
               const sourcePage =
                 Number.isInteger(row.source_page) && (row.source_page ?? 0) > 0

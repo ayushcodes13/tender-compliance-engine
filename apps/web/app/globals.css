@@ -2007,6 +2007,25 @@ a {
   background: transparent;
 }
 
+.technical-requirement-list-header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 124px;
+  align-items: end;
+  gap: 16px;
+  padding: 0 22px 8px;
+  color: #64738a;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.technical-requirement-list-header span:first-child,
+.technical-requirement-list-header span:last-child {
+  text-align: center;
+}
+
 .technical-requirement-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 124px;
@@ -2052,7 +2071,7 @@ a {
 
 .technical-specification-list {
   display: grid;
-  gap: 0;
+  gap: 7px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2068,22 +2087,23 @@ a {
 
 .technical-specification-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
-  padding: 8px 0;
-  border: 0;
-  border-bottom: 1px solid #edf1f5;
-  border-radius: 0;
-  background: transparent;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #e3e9f0;
+  border-radius: 8px;
+  background: #fff;
   color: #344256;
   font-size: 15px;
-  line-height: 1.68;
+  line-height: 1.65;
   text-wrap: pretty;
+  transition: border-color 140ms ease, background-color 140ms ease;
 }
 
-.technical-specification-item:last-child {
-  border-bottom: 0;
+.technical-specification-item:hover {
+  border-color: #cbd7e5;
+  background: #fcfdff;
 }
 
 .technical-specification-nested li {
@@ -2130,11 +2150,8 @@ a {
 
 .technical-specification-label {
   display: inline-block;
-  min-width: 24px;
-  padding-top: 2px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  min-width: 28px;
+  padding-top: 1px;
   color: #2457d6;
   font-size: 13px;
   font-weight: 700;
@@ -2143,18 +2160,28 @@ a {
 }
 
 .technical-specification-nested {
-  margin: 10px 0 2px 4px;
-  padding: 3px 0 1px 13px;
+  display: grid;
+  gap: 5px;
+  margin: 11px 0 2px 2px;
+  padding: 2px 0 2px 14px;
   border-left: 2px solid #e3eaf3;
 }
 
 .technical-specification-nested li {
-  grid-template-columns: 24px minmax(0, 1fr);
-  gap: 10px;
-  padding: 6px 0;
+  grid-template-columns: 25px minmax(0, 1fr);
+  gap: 9px;
+  padding: 7px 10px;
+  border: 1px solid #edf1f5;
+  border-radius: 7px;
+  background: #f8fafc;
   color: #536176;
   font-size: 14.5px;
-  line-height: 1.65;
+  line-height: 1.6;
+  transition: background-color 140ms ease;
+}
+
+.technical-specification-nested li:hover {
+  background: #f2f6fb;
 }
 
 .technical-specification-nested .technical-specification-label {
@@ -2218,6 +2245,16 @@ a {
 }
 
 @media (max-width: 760px) {
+  .technical-requirement-list-header {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 0 14px 4px;
+  }
+
+  .technical-requirement-list-header span:last-child {
+    display: none;
+  }
+
   .technical-requirement-list {
     gap: 10px;
   }
@@ -2241,9 +2278,9 @@ a {
   }
 
   .technical-specification-item {
-    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-columns: 26px minmax(0, 1fr);
     gap: 8px;
-    padding: 8px 0;
+    padding: 10px;
     font-size: 14.5px;
   }
 
@@ -2253,9 +2290,9 @@ a {
   }
 
   .technical-specification-nested li {
-    grid-template-columns: 22px minmax(0, 1fr);
-    gap: 8px;
-    padding: 6px 0;
+    grid-template-columns: 23px minmax(0, 1fr);
+    gap: 7px;
+    padding: 7px 8px;
     font-size: 14px;
   }
 
