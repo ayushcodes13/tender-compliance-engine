@@ -75,6 +75,9 @@ function safeDiagnosticCategories(values: (string | null | undefined)[]): string
 function obligationCoverageMessage(
   coverage:
     | {
+        status?: string;
+        audited_windows?: number;
+        expected_windows?: number;
         obligation_audit_status?: string;
         potential_omissions?: { pages: number[]; source_quote: string }[];
         obligation_audit_failed_windows?: {
@@ -93,7 +96,7 @@ function obligationCoverageMessage(
     });
     const count = coverage.potential_omissions?.length ?? 0;
     const remaining = count - excerpts.length;
-    return `The independent obligation scan found ${count} possible omission${count === 1 ? "" : "s"}${excerpts.length ? `: ${excerpts.join("; ")}` : ""}${remaining > 0 ? `; and ${remaining} more` : ""}. Review the source and add any missing requirement before exporting.`;
+    return `The independent technical-specification scan found ${count} possible missing excerpt${count === 1 ? "" : "s"}${excerpts.length ? `: ${excerpts.join("; ")}` : ""}${remaining > 0 ? `; and ${remaining} more` : ""}. Review the source and add any confirmed missing specification before exporting.`;
   }
   if (coverage.obligation_audit_status === "audit_failed") {
     const categories = safeDiagnosticCategories(
@@ -111,10 +114,10 @@ function obligationCoverageMessage(
     const pageText = knownPages.length
       ? ` It also found possible omissions on page${knownPages.length === 1 ? "" : "s"} ${knownPages.join(", ")}.`
       : "";
-    return `The independent obligation scan failed or returned an unverifiable quote. Review the tender windows before exporting.${pageText}${categoryText}`;
+    return `The independent technical-specification scan failed or returned an unverifiable quote. Review the tender pages before exporting.${pageText}${categoryText}`;
   }
   if (coverage.obligation_audit_status === "not_available") {
-    return "No independent obligation scan is available for this extraction. Completeness was not checked.";
+    return "No independent technical-specification scan is available. Completeness was not checked.";
   }
   return null;
 }
@@ -122,22 +125,30 @@ function obligationCoverageMessage(
 function obligationCoverageSummary(
   coverage:
     | {
+        status?: string;
+        audited_windows?: number;
+        expected_windows?: number;
         obligation_audit_status?: string;
         zero_candidate_windows?: ZeroCandidateWindow[];
       }
     | undefined
 ): string {
   const zeroCandidateNotice = zeroCandidateWindowSummary(coverage);
+  const processingNotice = coverage?.status === "complete"
+    ? ` Extraction completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
+    : coverage?.status === "incomplete"
+      ? ` Extraction completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
+      : " Extraction-window processing could not be confirmed.";
   if (coverage?.obligation_audit_status === "no_potential_omissions") {
-    return ` The independent scan found no unmatched obligation excerpts, but it does not prove that every tender obligation was identified.${zeroCandidateNotice}`;
+    return `No unmatched technical-specification excerpts were flagged. This does not prove that every specification was extracted.${processingNotice}${zeroCandidateNotice}`;
   }
   if (coverage?.obligation_audit_status === "potential_omissions") {
-    return ` The independent scan found possible omissions that need human review.${zeroCandidateNotice}`;
+    return `The independent scan flagged possible missing specifications that need human review.${processingNotice}${zeroCandidateNotice}`;
   }
   if (coverage?.obligation_audit_status === "audit_failed") {
-    return ` The independent scan did not complete, so whole-tender completeness needs human review.${zeroCandidateNotice}`;
+    return `The independent technical-specification scan did not complete, so completeness is unverified.${processingNotice}${zeroCandidateNotice}`;
   }
-  return ` Whole-tender completeness was not verified because no independent obligation scan is available.${zeroCandidateNotice}`;
+  return `No independent technical-specification scan is available, so completeness is unverified.${processingNotice}${zeroCandidateNotice}`;
 }
 
 function zeroCandidateWindowSummary(
@@ -149,7 +160,7 @@ function zeroCandidateWindowSummary(
     (a, b) => a - b
   );
   const pageText = pages.length ? ` on pages ${pages.join(", ")}` : " with no known page location";
-  return ` ${windows.length} technical-section window${windows.length === 1 ? " had" : "s had"} no extracted rows${pageText}; review the source before relying on the sheet.`;
+  return ` ${windows.length} technical-specification window${windows.length === 1 ? " had" : "s had"} no extracted rows${pageText}; inspect those source pages before relying on the sheet.`;
 }
 
 function sourceValidationDiagnostic(
@@ -218,13 +229,13 @@ function exportValidationLabel(artifact: ExportArtifactResponse): string {
   if (artifact.validation_status === "needs_review") return "Needs review";
   if (artifact.validation_status === "failed") return "Content check failed";
   if (artifact.status !== "completed") return "Generation failed";
-  if (artifact.validation_status === "passed") return "Content checked";
+  if (artifact.validation_status === "passed") return "Rows checked; completeness unverified";
   return "Not validated";
 }
 
 function exportValidationTone(artifact: ExportArtifactResponse): string {
   if (artifact.validation_status === "passed" && artifact.status === "completed") {
-    return "status-pill status-reviewed";
+    return "status-pill status-warning";
   }
   if (artifact.validation_status === "needs_review") return "status-pill status-warning";
   if (artifact.validation_status === "failed") return "status-pill status-error";
@@ -244,7 +255,11 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
     if (report.checked_columns !== undefined && report.checked_cells !== undefined) {
       details.push(`${report.checked_columns} columns and ${report.checked_cells} cells checked`);
     }
-    if (report.actual_rows !== undefined) details.push(`across ${report.actual_rows} rows`);
+    if (artifact.requirement_count !== undefined) details.push(`for ${artifact.requirement_count} tender requirement groups`);
+    if (report.actual_rows !== undefined) details.push(`across ${report.actual_rows} rendered table rows`);
+    if (report.source_validation?.checked_rows !== undefined) {
+      details.push(`${report.source_validation.checked_rows} of ${artifact.requirement_count} groups source-checked`);
+    }
     const llmRows = report?.source_validation?.llm_assisted_rows?.length ?? 0;
     const counts = details.length
       ? `${details.join(" ")}.`
@@ -486,6 +501,7 @@ export function FinalMatrixView(props: {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationNotice, setValidationNotice] = useState<string | null>(null);
+  const [validationCoverageNotice, setValidationCoverageNotice] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [sourceValidationFindings, setSourceValidationFindings] = useState<
     SourceValidationFinding[]
@@ -496,6 +512,9 @@ export function FinalMatrixView(props: {
   const [coverageReviewDrafts, setCoverageReviewDrafts] = useState<Record<string, { requirementId: string; rationale: string }>>({});
   const [addedCoverageKeys, setAddedCoverageKeys] = useState<Set<string>>(new Set());
   const [coverageTypes, setCoverageTypes] = useState<Record<string, "obligation" | "prohibition" | "permission">>({});
+  const requirementsNotHumanReviewed = rows.filter(
+    (row) => row.review_status !== "reviewed"
+  ).length;
 
   const reload = async () => {
     setLoading(true);
@@ -706,6 +725,7 @@ export function FinalMatrixView(props: {
     setBusy(`export-${format}`);
     setError(null);
     setValidationNotice(null);
+    setValidationCoverageNotice(null);
     setActionNotice(null);
     setSourceValidationFindings([]);
     setCoverageFindings([]);
@@ -799,19 +819,16 @@ export function FinalMatrixView(props: {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      const llmCount =
-        artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
+      const report = artifact.validation_report;
+      const llmCount = report?.source_validation?.llm_assisted_rows?.length ?? 0;
       const coverage = artifact.validation_report?.window_processing;
-      const coverageNotice =
-        coverage?.status === "complete"
-          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
-          : coverage?.status === "not_available"
-            ? " No extraction-window processing audit is available."
-            : "";
-      const obligationNotice = obligationCoverageSummary(coverage);
+      const requirementGroups = artifact.requirement_count ?? rows.length;
+      const sourceCheckedGroups = report?.source_validation?.checked_rows;
+      const tableRows = report?.actual_rows;
       setValidationNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}${obligationNotice}`
+        `${artifact.validation_report?.checked_cells ?? 0} exported cells across ${artifact.validation_report?.checked_columns ?? 0} columns${tableRows === undefined ? "" : ` and ${tableRows} rendered table rows`} passed. ${sourceCheckedGroups ?? 0} of ${requirementGroups} requirement groups passed their source checks. ${llmCount ? `${llmCount} group${llmCount === 1 ? " used" : "s used"} strict page-image review.` : "All checked groups matched their saved source text directly."}`
       );
+      setValidationCoverageNotice(obligationCoverageSummary(coverage).trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -823,6 +840,7 @@ export function FinalMatrixView(props: {
     setBusy("export-vendor-response");
     setError(null);
     setValidationNotice(null);
+    setValidationCoverageNotice(null);
     setSourceValidationFindings([]);
     setCoverageFindings([]);
     setZeroCandidateWindows([]);
@@ -914,19 +932,16 @@ export function FinalMatrixView(props: {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      const llmCount =
-        artifact.validation_report?.source_validation?.llm_assisted_rows?.length ?? 0;
-      const coverage = artifact.validation_report?.window_processing;
-      const coverageNotice =
-        coverage?.status === "complete"
-          ? ` Extraction calls completed for ${coverage.audited_windows ?? 0} of ${coverage.expected_windows ?? 0} source windows.`
-          : coverage?.status === "not_available"
-            ? " No extraction-window processing audit is available."
-            : "";
-      const obligationNotice = obligationCoverageSummary(coverage);
+      const report = artifact.validation_report;
+      const llmCount = report?.source_validation?.llm_assisted_rows?.length ?? 0;
+      const coverage = report?.window_processing;
+      const requirementGroups = artifact.requirement_count ?? rows.length;
+      const sourceCheckedGroups = report?.source_validation?.checked_rows;
+      const tableRows = report?.actual_rows;
       setValidationNotice(
-        `All ${artifact.validation_report?.checked_columns ?? 0} exported columns (${artifact.validation_report?.checked_cells ?? 0} cells) and source checks passed for ${artifact.validation_report?.actual_rows ?? rows.length} tender rows. ${llmCount ? `${llmCount} row${llmCount === 1 ? " was" : "s were"} checked with the strict page-image fallback.` : "All rows matched their saved source text directly."}${coverageNotice}${obligationNotice}`
+        `${report?.checked_cells ?? 0} exported cells across ${report?.checked_columns ?? 0} columns${tableRows === undefined ? "" : ` and ${tableRows} rendered table rows`} passed. ${sourceCheckedGroups ?? 0} of ${requirementGroups} requirement groups passed their source checks. ${llmCount ? `${llmCount} group${llmCount === 1 ? " used" : "s used"} strict page-image review.` : "All checked groups matched their saved source text directly."}`
       );
+      setValidationCoverageNotice(obligationCoverageSummary(coverage).trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -954,6 +969,17 @@ export function FinalMatrixView(props: {
       </div>
 
       {error ? <div className="upload-error-banner" role="alert"><AlertCircle size={14} />{error}</div> : null}
+      {technicalOnly && requirementsNotHumanReviewed > 0 ? (
+        <div className="compliance-attention-banner" role="status">
+          <AlertCircle size={15} aria-hidden="true" />
+          <div>
+            <strong>Human review is still required.</strong>
+            <span>
+              {requirementsNotHumanReviewed} of {rows.length} requirement groups have not been confirmed by a person. Export checks verify file integrity and source wording; they do not confirm that extraction or grouping is correct. <Link href={`/projects/${projectId}/review`}>Review the specifications and sources</Link> before relying on this sheet.
+            </span>
+          </div>
+        </div>
+      ) : null}
       {sourceValidationFindings.length ? (
         <section className="source-highlight-unavailable" aria-labelledby="source-validation-heading" style={{ marginTop: 12 }}>
           <strong id="source-validation-heading">Source wording findings</strong>
@@ -1149,7 +1175,7 @@ export function FinalMatrixView(props: {
           style={{ marginTop: 12 }}
         >
           <strong id="zero-candidate-heading">
-            {zeroCandidateWindows.length} technical-section window{zeroCandidateWindows.length === 1 ? "" : "s"} had no extracted rows
+            {zeroCandidateWindows.length} technical-specification window{zeroCandidateWindows.length === 1 ? "" : "s"} had no extracted rows
           </strong>
           <p>
             This may be a heading or continuation with no separate requirement, or a missed specification. The export content check validates rows that were generated; it cannot confirm that these pages contain nothing else. Review each page before relying on the sheet.
@@ -1176,7 +1202,13 @@ export function FinalMatrixView(props: {
       {validationNotice ? (
         <div className="compliance-ready-banner" role="status">
           <CheckCircle size={15} aria-hidden="true" />
-          <div><strong>Export content check passed.</strong><span>{validationNotice}</span></div>
+          <div><strong>Export content and source checks passed.</strong><span>{validationNotice}</span></div>
+        </div>
+      ) : null}
+      {validationCoverageNotice ? (
+        <div className="compliance-attention-banner" role="status">
+          <AlertCircle size={15} aria-hidden="true" />
+          <div><strong>Tender coverage is not proven.</strong><span>{validationCoverageNotice}</span></div>
         </div>
       ) : null}
       {actionNotice ? (

@@ -2775,6 +2775,13 @@ a.project-flow-step:hover {
   font-size: 11px;
 }
 
+.compliance-attention-banner a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .export-panel {
   display: flex;
   align-items: center;
