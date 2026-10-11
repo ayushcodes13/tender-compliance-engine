@@ -143,16 +143,13 @@ def vendor_response_docx(rows: Sequence[MatrixRow]) -> tuple[list[str], list[Req
     ]
     expected: list[RequirementCell] = []
     for line in response_sheet_lines(rows):
-        source_text = "\n".join(
-            part for part in (line.item_text, line.source_text) if part
-        )
         fields = {
-            "S.No.": line.serial,
-            "Technical Specification": source_text,
+            "S.No.": line.display_label,
+            "Technical Specification": line.display_text,
             "Compliance (Yes / No)": "",
             "Any Deviation": "",
         }
-        expected.append(RequirementCell(line.serial, source_text, fields))
+        expected.append(RequirementCell(line.bookmark_name, line.display_text, fields))
     return headers, expected
 
 

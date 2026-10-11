@@ -103,11 +103,24 @@ def _set_source_text(cell: docx.table._Cell, value: str) -> None:
                 fonts.set(qn(f"w:{font_type}"), "Symbol")
 
 
+def _set_row_identity(cell: docx.table._Cell, name: str, bookmark_id: int) -> None:
+    """Attach an invisible stable row key while keeping repeated a)/b) labels."""
+    paragraph = cell.paragraphs[0]._p
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(bookmark_id))
+    start.set(qn("w:name"), name)
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(bookmark_id))
+    paragraph.insert(0, start)
+    paragraph.append(end)
+
+
 def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
     """Build the sample-aligned technical sheet with blank bidder response cells.
 
-    The technical specification cell is the exact source quote carried by the
-    canonical matrix projection. No review metadata, interpretation, or
+    Source-derived wording is split into answerable rows. Structural list
+    markers are rendered as row labels, while the saved source fragments stay
+    unchanged for source validation. No review metadata, interpretation, or
     pre-filled compliance assessment is added to this response document.
     """
     document = docx.Document()
@@ -170,10 +183,7 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
         row_properties = table.rows[-1]._tr.get_or_add_trPr()
         prevent_split = OxmlElement("w:cantSplit")
         row_properties.append(prevent_split)
-        source_text = "\n".join(
-            part for part in (line.item_text, line.source_text) if part
-        )
-        values = (line.serial, source_text, "", "")
+        values = (line.display_label, line.display_text, "", "")
         for index, (cell, value, width) in enumerate(zip(cells, values, widths, strict=True)):
             cell.width = Inches(width)
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
@@ -186,6 +196,8 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
                 _set_source_text(cell, value)
             else:
                 cell.text = value
+                if index == 0:
+                    _set_row_identity(cell, line.bookmark_name, row_index + 1)
             for paragraph in cell.paragraphs:
                 paragraph.paragraph_format.space_after = Pt(2)
                 if index == 1 and line.level > 0:
