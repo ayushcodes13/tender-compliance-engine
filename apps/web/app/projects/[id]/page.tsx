@@ -240,6 +240,14 @@ export default function ProjectPage() {
   const hasProcessingDocuments = documents.some((doc) =>
     ["uploaded", "queued", "processing"].includes(doc.processing_status)
   );
+  const projectStatusLabel = project
+    ? isArchived
+      ? statusLabel(project.status)
+      : latestDocument &&
+          !["review_in_progress", "matrix_ready", "exported"].includes(project.status)
+        ? documentProcessingMeta(latestDocument.processing_status).label
+        : statusLabel(project.status)
+    : "Draft";
 
   useEffect(() => {
     if (!hasProcessingDocuments) return;
@@ -431,7 +439,6 @@ export default function ProjectPage() {
           <span className="breadcrumb-muted">Projects</span>
           <span className="breadcrumb-separator">/</span>
           <strong>{project.name}</strong>
-          <span className="project-id">{project.id}</span>
         </div>
 
         <div className="project-topbar-actions">
@@ -481,7 +488,7 @@ export default function ProjectPage() {
               <p className="page-description">
                 Upload the tender, review its extracted technical specifications,
                 then export a source-linked sheet for the OEM to complete. Current status:
-                {" "}{statusLabel(project.status)}.
+                {" "}{projectStatusLabel}.
               </p>
             </div>
           </section>
@@ -560,20 +567,13 @@ export default function ProjectPage() {
 
               <div className="detail-row">
                 <span className="detail-label">Status</span>
-                <span className="detail-value">{statusLabel(project.status)}</span>
+                <span className="detail-value">{projectStatusLabel}</span>
               </div>
 
               <div className="detail-row">
                 <span className="detail-label">External tender ID</span>
                 <span className="detail-value">
                   {project.external_tender_id ?? "—"}
-                </span>
-              </div>
-
-              <div className="detail-row">
-                <span className="detail-label">Created by</span>
-                <span className="detail-value">
-                  {project.created_by ?? "—"}
                 </span>
               </div>
 
