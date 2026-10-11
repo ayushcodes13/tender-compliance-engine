@@ -328,6 +328,64 @@ class TestUploadVersioning:
 
         asyncio.run(_verify())
 
+    def test_same_content_in_multiple_projects_keeps_project_scoped_objects(
+        self, session_cm
+    ) -> None:
+        """Identical tender bytes in separate projects must not collide.
+
+        Stored objects belong to a project for retention and lifecycle, so
+        organization-wide checksum matches are not reusable objects.
+        """
+        headers, first_project_id = _build_auth_headers(session_cm)
+        user_id = uuid.UUID(headers["x-dev-user-id"])
+        org_id = uuid.UUID(headers["x-dev-organization-id"])
+        other_project_ids = [uuid.uuid4(), uuid.uuid4()]
+
+        async def _create_projects() -> None:
+            async with session_cm() as session:
+                for project_id in other_project_ids:
+                    session.add(
+                        Project(
+                            id=project_id,
+                            organization_id=org_id,
+                            name="Same Content Project",
+                            status=ProjectStatus.DRAFT,
+                            created_by=user_id,
+                        )
+                    )
+                await session.commit()
+
+        asyncio.run(_create_projects())
+        pdf_data = _make_valid_pdf()
+        project_ids = [first_project_id, *other_project_ids]
+        stored_object_ids: list[str] = []
+
+        for project_id in project_ids:
+            response = client.post(
+                f"/projects/{project_id}/upload",
+                files={"file": ("tender.pdf", pdf_data, "application/pdf")},
+                headers=headers,
+            )
+            assert response.status_code == 201, response.text
+            stored_object_ids.append(response.json()["stored_object_id"])
+
+        assert len(set(stored_object_ids)) == len(project_ids)
+
+        async def _verify() -> None:
+            async with session_cm() as session:
+                for project_id in project_ids:
+                    objects = (
+                        await session.execute(
+                            select(StoredObject).where(
+                                StoredObject.project_id == project_id
+                            )
+                        )
+                    ).scalars().all()
+                    assert len(objects) == 1
+                    assert objects[0].checksum_sha256
+
+        asyncio.run(_verify())
+
     def test_different_content_creates_new_version(self, session_cm) -> None:
         """Uploading different bytes to the same project creates a new
         version (v2) with a new StoredObject."""

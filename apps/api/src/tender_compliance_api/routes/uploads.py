@@ -344,14 +344,21 @@ async def upload_document(
     # --- Compute SHA-256 for duplicate detection ---
     checksum = hashlib.sha256(data).hexdigest()
 
-    # --- Check for existing StoredObject with same checksum (reuse bytes) ---
+    # --- Check for matching bytes already owned by this project ---
+    # Stored objects are project-scoped for lifecycle and retention. The same
+    # checksum can legitimately exist in multiple projects in one organization,
+    # so an organization-wide lookup is ambiguous and must not be reused here.
     existing_stored_result = await session.execute(
-        select(StoredObject).where(
+        select(StoredObject)
+        .where(
             StoredObject.organization_id == auth.organization_id,
+            StoredObject.project_id == project_id,
             StoredObject.checksum_sha256 == checksum,
         )
+        .order_by(StoredObject.created_at, StoredObject.id)
+        .limit(1)
     )
-    existing_stored = existing_stored_result.scalar_one_or_none()
+    existing_stored = existing_stored_result.scalars().first()
 
     # --- Find existing TenderDocument for this project ---
     existing_doc_result = await session.execute(
