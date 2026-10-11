@@ -92,11 +92,18 @@ class RedisQueueAdapter(QueueAdapter):
         job_key = _job_key(job_id)
         queue_key = _queue_key(queue)
 
-        # Idempotent: if the job already exists and is not claimed, skip.
+        # Idempotent while queued or claimed. If a worker died after popping a
+        # job, the metadata hash can outlive its claim even though no queue
+        # entry remains. In that case, restore the queue entry so API retries
+        # can recover the job instead of reporting a false queued state.
         exists = await client.exists(job_key)
         claim_exists = await client.exists(_claim_key(job_id))
-        if exists and not claim_exists:
-            return
+        if exists:
+            if claim_exists:
+                return
+            queue_position = await client.lpos(queue_key, job_id)
+            if queue_position is not None:
+                return
 
         # Store job metadata.
         await client.hset(
