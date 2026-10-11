@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Text, create_engine, inspect, text
 
 from alembic import command
 
@@ -23,7 +23,7 @@ ALEMBIC_INI = API_ROOT / "alembic.ini"
 ALEMBIC_DIR = API_ROOT / "alembic"
 
 _BASELINE_REV = "0001_initial_baseline"
-_HEAD_REV = "0037_coverage_finding_reviews"
+_HEAD_REV = "0038_unbounded_technical_text"
 
 # Tables introduced by CP08..CP58 migrations (one table per checkpoint).
 _APP_TABLES = {
@@ -89,6 +89,22 @@ def test_upgrade_head_creates_app_tables(tmp_path):
         "coverage_error_category",
         "potential_omissions",
     }.issubset(window_audit_columns)
+    for table_name, column_names in {
+        "extraction_candidates": {"normalized_text", "raw_source"},
+        "requirements": {"normalized_text", "raw_source"},
+        "requirement_revisions": {"previous_normalized_text"},
+        "requirement_constraints": {"raw_fragment"},
+    }.items():
+        column_types = {
+            column["name"]: column["type"]
+            for column in inspector.get_columns(table_name)
+        }
+        for column_name in column_names:
+            assert isinstance(column_types[column_name], Text), (
+                table_name,
+                column_name,
+                column_types[column_name],
+            )
     for table_name, column_name in (
         ("extraction_candidates", "clause_number"),
         ("extraction_candidates", "group_hint"),

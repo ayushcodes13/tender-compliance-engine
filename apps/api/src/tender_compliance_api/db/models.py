@@ -910,8 +910,8 @@ class ExtractionCandidate(Base):
     sources_json: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(
         JSON, nullable=True
     )
-    normalized_text: Mapped[str] = mapped_column(String(2048), nullable=False)
-    raw_source: Mapped[str] = mapped_column(String(2048), nullable=False)
+    normalized_text: Mapped[str] = mapped_column(Text(), nullable=False)
+    raw_source: Mapped[str] = mapped_column(Text(), nullable=False)
     requirement_type: Mapped[str] = mapped_column(String(32), nullable=False)
     uncertainty: Mapped[str] = mapped_column(String(16), nullable=False)
     clause_number: Mapped[str | None] = mapped_column(Text(), nullable=True)
@@ -1264,8 +1264,8 @@ class Requirement(Base):
         String(64), nullable=True, index=True
     )
     requirement_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    normalized_text: Mapped[str] = mapped_column(String(2048), nullable=False)
-    raw_source: Mapped[str] = mapped_column(String(2048), nullable=False)
+    normalized_text: Mapped[str] = mapped_column(Text(), nullable=False)
+    raw_source: Mapped[str] = mapped_column(Text(), nullable=False)
     uncertainty: Mapped[str] = mapped_column(String(16), nullable=False)
     clause_number: Mapped[str | None] = mapped_column(Text(), nullable=True)
     ocr_warning: Mapped[bool] = mapped_column(
@@ -1383,7 +1383,7 @@ class RequirementRevision(Base):
     )
     # The normalized text BEFORE the edit (never the new value).
     previous_normalized_text: Mapped[str] = mapped_column(
-        String(2048), nullable=False
+        Text(), nullable=False
     )
     # The updated_at value that was current at the time of the edit.
     # Used for optimistic-concurrency validation: if the caller passes
@@ -1573,7 +1573,7 @@ class RequirementConstraint(Base):
     # Verbatim source fragment this constraint was parsed from — never mutated,
     # never fabricated. The audit anchor for "every structured value audited
     # against its source fragment".
-    raw_fragment: Mapped[str] = mapped_column(String(2048), nullable=False)
+    raw_fragment: Mapped[str] = mapped_column(Text(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

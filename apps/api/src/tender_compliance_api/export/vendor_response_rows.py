@@ -14,6 +14,9 @@ _MARKER = re.compile(
     rf"{_BULLET_MARKERS}))|(?<=\s)(?P<inline_bullet>{_BULLET_MARKERS}))[ \t]*"
 )
 _NUMBER = re.compile(r"^(?P<number>\d+(?:\.\d+)*)(?:[.)])?[ \t]+")
+_INLINE_NUMBER = re.compile(
+    r"(?<!\S)(?P<marker>\d{1,2}[.)])[ \t]+(?=[A-Z0-9])"
+)
 _LETTER = re.compile(r"^(?P<letter>[A-Za-z])[.)][ \t]+")
 _BULLET = re.compile(r"^(?P<bullet>[•●▪◦‣\uf0a7\uf0b7])[ \t]*")
 
@@ -37,7 +40,7 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
     OEM-facing specification cell. Whitespace separating list items is layout
     whitespace; whitespace inside an unsplit source value is retained.
     """
-    matches = []
+    markers: list[tuple[int, int, str]] = []
     for match in _MARKER.finditer(text):
         line_start = text.rfind("\n", 0, match.start()) + 1
         label = text[line_start : match.start()].rstrip()
@@ -50,19 +53,48 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
             # field label and its value (for example, "Power supply: • 380V").
             # Keep that label/value pair together as one technical parameter.
             continue
-        matches.append(match)
-    if not matches:
+        marker = match.group("line_marker") or match.group("inline_bullet")
+        markers.append((match.start(), match.end(), marker))
+
+    # Some PDF table cells flatten numbered entries onto one line. Split only
+    # a sequential list beginning at 1; this avoids interpreting decimals or
+    # isolated numeric values as response rows.
+    inline_numbers = [
+        match
+        for match in _INLINE_NUMBER.finditer(text)
+        if text[text.rfind("\n", 0, match.start()) + 1 : match.start()].strip()
+    ]
+    sequences: list[list[re.Match[str]]] = []
+    for index, match in enumerate(inline_numbers):
+        if match.group("marker").rstrip(".)") != "1":
+            continue
+        sequence = [match]
+        expected = 2
+        for candidate in inline_numbers[index + 1 :]:
+            number = candidate.group("marker").rstrip(".)")
+            if number == str(expected):
+                sequence.append(candidate)
+                expected += 1
+            elif number.isdigit() and int(number) > expected:
+                break
+        if len(sequence) >= 2:
+            sequences.append(sequence)
+    if sequences:
+        for match in max(sequences, key=len):
+            markers.append((match.start(), match.end(), match.group("marker")))
+
+    markers.sort(key=lambda marker: marker[0])
+    if not markers:
         return [(None, text)] if text.strip() else []
 
     fragments: list[tuple[str | None, str]] = []
-    prefix = text[: matches[0].start()]
+    prefix = text[: markers[0][0]]
     if prefix.strip():
         fragments.append((None, prefix.strip()))
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        fragment = text[match.start() : end]
+    for index, (start, _marker_end, marker) in enumerate(markers):
+        end = markers[index + 1][0] if index + 1 < len(markers) else len(text)
+        fragment = text[start:end]
         if fragment.strip():
-            marker = match.group("line_marker") or match.group("inline_bullet")
             fragments.append((marker, fragment.strip()))
     return fragments
 
@@ -147,6 +179,9 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
             continue
 
         has_nested_items = len(fragments) > 1
+        has_heading_prefix = bool(
+            fragments[0][0] is None and fragments[0][1].rstrip().endswith(":")
+        )
         if len(fragments) == 1 and item_text and first_bullet:
             parent = source_number or str(row.serial)
             add(row, parent, "", 0, item_text)
@@ -219,10 +254,19 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                     add(row, f"{parent}.{child_key}", fragment, 1)
                 elif numeric:
                     group = numeric.group("number")
-                    add(row, group, fragment, 0)
-                    active_source_parent = group
-                    parent = group
-                    child_index = 0
+                    if has_heading_prefix:
+                        child_serial = (
+                            group
+                            if group.startswith(f"{parent}.")
+                            else f"{parent}.{group}"
+                        )
+                        add(row, child_serial, fragment, 1)
+                        child_index += 1
+                    else:
+                        add(row, group, fragment, 0)
+                        active_source_parent = group
+                        parent = group
+                        child_index = 0
                 else:
                     child_index += 1
                     add(row, f"{parent}.{child_index}", fragment, 1)
