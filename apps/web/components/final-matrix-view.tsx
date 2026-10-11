@@ -304,7 +304,9 @@ type TechnicalRequirementDisplay = {
   specifications: TechnicalSubspecification[];
 };
 
-const TECHNICAL_BULLET = /(?:^|\s)(?:\uf0a7|\uf0b7|[•●▪◦‣])\s*/g;
+// Some PDFs expose a repeated list-bullet font as U+2261 (≡). Treat it as a
+// presentation delimiter in this view only; the saved source text is unchanged.
+const TECHNICAL_BULLET = /(?:^|\s)(?:\uf0a7|\uf0b7|[•●▪◦‣≡])\s*/g;
 const INLINE_NUMBER = /(?<!\S)(\d{1,2}[.)])[ \t]+(?=[A-Z0-9])/g;
 const INLINE_LETTER = /(?<!\S)([a-zA-Z][.)])[ \t]+(?=[A-Z0-9])/g;
 const INLINE_O_BULLET = /(?:^|\s)o\s+(?=[A-Z0-9])/g;
@@ -319,7 +321,7 @@ function markerPositions(text: string, pattern: RegExp): number[] {
 function splitAtMarkers(text: string, positions: number[]): string[] {
   return positions
     .map((start, index) => {
-      const markerEnd = text.slice(start).match(/^(?:\uf0a7|\uf0b7|[•●▪◦‣]|\d{1,2}[.)]|[a-zA-Z][.)]|o)\s*/)?.[0].length;
+      const markerEnd = text.slice(start).match(/^(?:\uf0a7|\uf0b7|[•●▪◦‣≡]|\d{1,2}[.)]|[a-zA-Z][.)]|o)\s*/)?.[0].length;
       if (!markerEnd) return "";
       const end = positions[index + 1] ?? text.length;
       return text.slice(start + markerEnd, end).trim();
