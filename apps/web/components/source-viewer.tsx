@@ -31,11 +31,10 @@ function normalizeQuoteForSelection(value: string | null | undefined): string {
 /**
  * SourceViewer — renders a real uploaded source page (CP36).
  *
- * Fetches the rendered page PNG from the API and overlays source-anchor
- * bounding boxes from requirements.  Falls back to a text view when no
- * rendered image is available (explicit 404 from the backend), and
- * labels each anchor's location precision ("Exact" / "Approximate")
- * without upgrading certainty.
+ * Fetches the rendered page PNG from the API and highlights the selected
+ * citation's source anchor. Falls back to a text view when no rendered image
+ * is available (explicit 404 from the backend); precision remains visible in
+ * the review panel and is never upgraded here.
  */
 export function SourceViewer({
   projectId,
@@ -422,21 +421,19 @@ export function SourceViewer({
               the natural image dimensions; the container scale (zoom) is
               applied via CSS transform so coordinates stay proportional. */}
           {imageUrl &&
-            anchors.map((anchor, index) => {
+            anchors.filter(isSelected).map((anchor, index) => {
               const style = getBboxStyle(anchor);
               if (!style) return null;
-              const selected = isSelected(anchor);
               return (
                 <div
                   key={anchor.anchor_id ?? anchor.requirement_id ?? `${anchor.quote_text ?? "source"}-${index}`}
-                  ref={selected ? selectedAnchorRef : null}
-                  className={`source-highlight ${anchor.location_type === "exact" ? "exact" : "approximate"} ${selected ? "selected" : ""}`}
+                  ref={selectedAnchorRef}
+                  className={`source-highlight ${anchor.location_type === "exact" ? "exact" : "approximate"} selected`}
                   style={style}
                   title={`${anchor.location_type === "exact" ? "Exact" : "Approximate"} source: ${anchor.quote_text ?? anchor.source_text ?? ""}`}
                 >
                   <span className="source-highlight-label">
-                    {anchor.clause_number ?? "?"}
-                    {anchor.location_type === "exact" ? "Exact" : "Approx"}
+                    Cited source
                   </span>
                 </div>
               );
