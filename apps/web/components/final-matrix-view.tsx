@@ -324,7 +324,7 @@ function splitAtMarkers(text: string, positions: number[]): string[] {
       const markerEnd = text.slice(start).match(/^(?:\uf0a7|\uf0b7|[•●▪◦‣≡]|\d{1,2}[.)]|[a-zA-Z][.)]|o)\s*/)?.[0].length;
       if (!markerEnd) return "";
       const end = positions[index + 1] ?? text.length;
-      return text.slice(start + markerEnd, end).trim();
+      return text.slice(start + markerEnd, end).trim().replace(/\s*\|\s*$/, "");
     })
     .filter(Boolean);
 }
@@ -378,7 +378,10 @@ function splitTechnicalRequirement(text: string): TechnicalRequirementDisplay {
     };
   }
 
-  const introduction = text.slice(0, markerPositionsToUse[0]).trim();
+  const introduction = text
+    .slice(0, markerPositionsToUse[0])
+    .trim()
+    .replace(/\s*\|\s*$/, "");
   const specifications: TechnicalSubspecification[] = [];
   for (const item of splitAtMarkers(text, markerPositionsToUse)) {
     const accessoryHeader = item.match(
@@ -392,7 +395,11 @@ function splitTechnicalRequirement(text: string): TechnicalRequirementDisplay {
       }
       continue;
     }
-    if (item === "Dual Station Configuration" || item === "Load Cells") {
+    if (
+      item === "Dual Station Configuration" ||
+      item === "Load Cells" ||
+      /^Other requirements:?$/i.test(item)
+    ) {
       specifications.push({ text: item, headingLevel: 2 });
       continue;
     }

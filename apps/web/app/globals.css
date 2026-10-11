@@ -2024,28 +2024,33 @@ a {
 
 .technical-requirement-list {
   display: grid;
-  gap: 14px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dfe4ea;
+  border-radius: 12px;
+  background: var(--color-surface);
 }
 
 .technical-requirement-card {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 104px;
+  grid-template-columns: 46px minmax(0, 1fr) 112px;
   align-items: start;
-  gap: 16px;
-  padding: 20px 22px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
+  gap: 18px;
+  padding: 24px 26px;
   background: var(--color-surface);
-  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.035), 0 4px 14px rgba(23, 32, 51, 0.025);
+}
+
+.technical-requirement-card + .technical-requirement-card {
+  border-top: 1px solid #e6eaf0;
 }
 
 .technical-requirement-number {
   display: block;
-  padding-top: 1px;
-  color: var(--color-accent);
-  font-size: 19px;
+  padding-top: 2px;
+  color: #2457d6;
+  font-size: 21px;
   font-weight: 700;
-  line-height: 1.55;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2057,15 +2062,16 @@ a {
 .technical-requirement-copy,
 .technical-requirement-introduction {
   margin: 0;
-  font-size: 15.5px;
-  line-height: 1.72;
+  font-size: 15px;
+  line-height: 1.68;
   text-wrap: pretty;
 }
 
 .technical-requirement-introduction {
-  margin-bottom: 10px;
-  color: #1f2e43;
-  font-weight: 620;
+  margin-bottom: 12px;
+  color: #1c293b;
+  font-size: 15.5px;
+  font-weight: 650;
 }
 
 .technical-specification-list,
@@ -2080,13 +2086,13 @@ a {
 .technical-specification-item,
 .technical-specification-nested li {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
-  padding: 10px 0;
-  color: #34445b;
+  gap: 12px;
+  padding: 11px 0;
+  color: #35445a;
   font-size: 14.5px;
-  line-height: 1.68;
+  line-height: 1.7;
   text-wrap: pretty;
 }
 
@@ -2096,8 +2102,8 @@ a {
 
 .technical-specification-section {
   grid-column: 1 / -1;
-  margin-top: 8px;
-  padding: 12px 0 4px;
+  margin-top: 10px;
+  padding: 14px 0 5px;
   border-top: 1px solid #e3e8ef;
 }
 
@@ -2122,39 +2128,42 @@ a {
 }
 
 .technical-specification-label {
-  color: #3157a4;
-  font-size: 13px;
+  color: #2457d6;
+  font-size: 13.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1.85;
+  line-height: 1.8;
 }
 
 .technical-specification-nested {
-  margin: 8px 0 2px 1px;
-  padding-left: 14px;
-  border-left: 2px solid #e3eaf5;
+  margin: 9px 0 2px 0;
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid #dce6f7;
 }
 
 .technical-specification-nested li {
   grid-template-columns: 28px minmax(0, 1fr);
-  padding: 5px 0;
-  color: #536174;
-  font-size: 13px;
+  gap: 11px;
+  padding: 7px 0;
+  color: #4b5a70;
+  font-size: 14px;
+  line-height: 1.65;
 }
 
 .technical-specification-nested .technical-specification-label {
-  color: #66758a;
-  font-weight: 600;
+  color: #5d6c82;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .technical-requirement-source {
   display: grid;
-  min-height: 42px;
+  min-height: 44px;
   align-content: start;
   justify-items: end;
-  gap: 2px;
-  padding: 4px 0 4px 8px;
-  color: var(--color-text-subtle);
+  gap: 4px;
+  padding: 2px 0 2px 8px;
+  color: #64748b;
   text-decoration: none;
   text-align: right;
   transition-property: color;
@@ -2171,22 +2180,21 @@ a {
 }
 
 .technical-requirement-source > span:first-child {
-  color: var(--color-text-subtle);
-  font-size: 10px;
+  color: #6b7789;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
 
 .technical-requirement-source strong {
-  color: var(--color-text);
-  font-size: 15px;
+  color: #27364b;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 
 .technical-requirement-source .technical-source-action {
   color: var(--color-accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -2198,15 +2206,42 @@ a {
 }
 
 @media (max-width: 760px) {
+  .technical-requirement-list {
+    border-radius: 10px;
+  }
+
   .technical-requirement-card {
-    grid-template-columns: 30px minmax(0, 1fr);
-    gap: 10px 12px;
-    padding: 16px 15px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 20px 17px;
   }
 
   .technical-requirement-number {
-    padding-top: 0;
-    font-size: 17px;
+    padding-top: 1px;
+    font-size: 18px;
+  }
+
+  .technical-requirement-copy,
+  .technical-requirement-introduction {
+    font-size: 14.5px;
+    line-height: 1.66;
+  }
+
+  .technical-specification-item {
+    grid-template-columns: 25px minmax(0, 1fr);
+    gap: 9px;
+    padding: 9px 0;
+    font-size: 14px;
+  }
+
+  .technical-specification-nested {
+    padding-left: 12px;
+  }
+
+  .technical-specification-nested li {
+    grid-template-columns: 25px minmax(0, 1fr);
+    gap: 8px;
+    font-size: 13.5px;
   }
 
   .technical-requirement-source,
@@ -2218,8 +2253,8 @@ a {
     display: flex;
     min-height: 40px;
     align-items: center;
-    gap: 8px;
-    padding: 6px 0;
+    gap: 7px;
+    padding: 8px 0 0;
     text-align: left;
   }
 
@@ -2230,6 +2265,10 @@ a {
 
   .technical-requirement-source strong {
     font-size: 13px;
+  }
+
+  .technical-requirement-source > span:first-child {
+    font-size: 11px;
   }
 }
 
