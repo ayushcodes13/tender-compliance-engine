@@ -199,6 +199,21 @@ test("buyer can upload a tender, review source-linked technical rows, and export
       }
       if (
         path ===
+          `/projects/project-1/documents/${tenderDocumentId}/versions/1/review-counts` &&
+        method === "GET"
+      ) {
+        return json({
+          total: 2,
+          active: 2,
+          unreviewed: 1,
+          reviewed: 1,
+          needs_clarification: 0,
+          ocr_warning: 0,
+          superseded: 0,
+        });
+      }
+      if (
+        path ===
           `/projects/project-1/documents/${tenderDocumentId}/versions/1/final-matrix` &&
         method === "GET"
       ) {
@@ -210,7 +225,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
             requirement_id: otherRequirementId,
             source_page: null,
             review_status: "unreviewed",
-            tender_requirement: "Page location has not been established.",
+            tender_requirement: "Grips and fixtures  Dual-cylinder design for wide-width tests  Maximum pressure: 700 bar",
             vendor_spec_parameter: null,
             vendor_spec_value: undefined,
             vendor_spec_unit: null,
@@ -683,10 +698,17 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await expect(
     page.getByRole("link", { name: /Step 3 OEM response sheet/ })
   ).toHaveAttribute("aria-current", "step");
+  await expect(
+    page.getByRole("link", { name: /Step 2 Review specifications/ })
+  ).not.toHaveClass(/project-flow-step-complete/);
   await expect(page.getByText("Vendor fact", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Assessment", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Compliant", { exact: true })).toHaveCount(0);
   await expect(page.getByText("The positioning resolution shall be 1 µm or better.")).toBeVisible();
+  await expect(page.getByText("1)", { exact: true })).toBeVisible();
+  await expect(page.getByText("a)", { exact: true })).toBeVisible();
+  await expect(page.getByText("b)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Dual-cylinder design for wide-width tests")).toBeVisible();
   await expect(page.getByText("Source location unavailable")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Open source for requirement 2/ })

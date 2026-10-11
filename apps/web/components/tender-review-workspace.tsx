@@ -469,6 +469,8 @@ export function TenderReviewWorkspace(props: {
           projectId={projectId}
           current="review"
           tenderReady
+          documentId={documentId}
+          version={version}
         />
       </div>
 

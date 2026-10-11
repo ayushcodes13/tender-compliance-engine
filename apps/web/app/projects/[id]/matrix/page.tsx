@@ -139,6 +139,8 @@ export default function ProjectMatrixPage() {
             projectId={projectId}
             current="response"
             tenderReady
+            documentId={document.document_id}
+            version={document.version_number}
           />
 
           <FinalMatrixView

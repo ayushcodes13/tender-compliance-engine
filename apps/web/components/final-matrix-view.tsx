@@ -1273,7 +1273,7 @@ export function FinalMatrixView(props: {
               return (
                 <article className="technical-requirement-card" key={row.requirement_id}>
                   <div className="technical-requirement-number" aria-label={`Requirement ${row.serial}`}>
-                    {row.serial}
+                    {row.serial})
                   </div>
                   <div className="technical-requirement-main">
                     <TechnicalRequirementText text={row.tender_requirement} />

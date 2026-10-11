@@ -2040,16 +2040,12 @@ a {
 }
 
 .technical-requirement-number {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border: 1px solid #d7e3fb;
-  border-radius: 12px;
-  background: var(--color-accent-soft);
+  display: block;
+  padding-top: 1px;
   color: var(--color-accent);
-  font-size: 19px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2212,9 +2208,7 @@ a {
   }
 
   .technical-requirement-number {
-    width: 38px;
-    height: 38px;
-    border-radius: 11px;
+    padding-top: 0;
     font-size: 17px;
   }
 
