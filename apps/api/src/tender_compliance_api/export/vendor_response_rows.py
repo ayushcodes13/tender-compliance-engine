@@ -26,15 +26,13 @@ _MARKER = re.compile(
     rf"(?P<section_heading>(?<!\w)(?:{_SECTION_HEADING_MARKERS})(?!\w)))[ \t]*"
 )
 _NUMBER = re.compile(r"^(?P<number>\d+(?:\.\d+)*)(?:[.)])?[ \t]+")
-_INLINE_NUMBER = re.compile(
-    r"(?<!\S)(?P<marker>\d{1,2}[.)])[ \t]+(?=[A-Z0-9])"
-)
+_INLINE_NUMBER = re.compile(r"(?<!\S)(?P<marker>\d{1,2}[.)])[ \t]+(?=[A-Z0-9])")
 _LETTER = re.compile(r"^(?P<letter>[A-Za-z])[.)][ \t]+")
 _BULLET = re.compile(r"^(?P<bullet>[•●▪◦‣\uf0a7\uf0b7])[ \t]*")
 _OPEN_CIRCLE_BULLET = re.compile(r"^o(?=[ \t]+[A-Z0-9])")
 _DISPLAY_MARKER = re.compile(
     rf"^(?:\d+(?:\.\d+)*[.)]|[A-Za-z][.)]|{_BULLET_MARKERS}|"
-    rf"o(?=[ \t]+[A-Z0-9]))[ \t]+"
+    rf"o(?=[ \t]+[A-Z0-9]))(?:[ \t]*\r?\n[ \t]*|[ \t]+)"
 )
 
 
@@ -62,9 +60,7 @@ class VendorResponseLine:
 
     @property
     def display_text(self) -> str:
-        return "\n".join(
-            part for part in (self.item_text, self.display_source_text) if part
-        )
+        return "\n".join(part for part in (self.item_text, self.display_source_text) if part)
 
     @property
     def bookmark_name(self) -> str:
@@ -87,6 +83,8 @@ def _add_display_labels(lines: list[VendorResponseLine]) -> list[VendorResponseL
     active_parent: str | None = None
     for line in lines:
         if line.is_section_heading:
+            if active_parent is not None:
+                child_counts[active_parent] = 0
             labelled.append(line)
             continue
         if line.level == 0:
@@ -139,6 +137,7 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
             match.group("inline_bullet") == "\uf0b7"
             and len(label) <= 24
             and label.endswith(":")
+            and label[:-1].strip() not in _SECTION_HEADINGS
         ):
             # Some PDF text layers put the private-use bullet between a short
             # field label and its value (for example, "Power supply: • 380V").
@@ -191,6 +190,8 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
         end = markers[index + 1][0] if index + 1 < len(markers) else len(text)
         fragment = text[start:end]
         if fragment.strip():
+            if _BULLET.fullmatch(fragment.strip()):
+                continue
             fragments.append((marker, fragment.strip()))
     return fragments
 
@@ -325,13 +326,19 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
             nested_index = 0
             for fragment_index, (marker, fragment) in enumerate(fragments):
                 if marker == "__section_heading__":
-                    add(
-                        row,
-                        f"{parent}.heading.{fragment_index}",
-                        fragment.strip(),
-                        0,
-                        is_section_heading=True,
-                    )
+                    if fragment_index == 0 and not item_text and not source_number:
+                        parent = str(row.serial)
+                        add(row, parent, fragment.strip(), 0)
+                        active_source_parent = parent
+                        active_child_index = 0
+                    else:
+                        add(
+                            row,
+                            f"{parent}.heading.{fragment_index}",
+                            fragment.strip(),
+                            0,
+                            is_section_heading=True,
+                        )
                     continue
 
                 if _OPEN_CIRCLE_BULLET.match(fragment):
@@ -346,17 +353,18 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                     continue
 
                 bullet_heading = bool(
-                    marker
-                    and _BULLET.fullmatch(marker)
-                    and re.search(r":[ \t]*$", fragment)
+                    marker and _BULLET.fullmatch(marker) and re.search(r":[ \t]*$", fragment)
                 )
                 if bullet_heading:
-                    serial = str(row.serial) if fragment_index == 0 else parent
-                    add(row, serial, fragment, 0, item_text if fragment_index == 0 else "")
-                    parent = serial
-                    active_source_parent = parent
-                    active_child_index = 0
-                    last_level_one_serial = None
+                    if fragment_index == 0 and not item_text and not source_number:
+                        serial = parent
+                        level = 0
+                    else:
+                        child_index += 1
+                        serial = f"{parent}.{child_index}"
+                        level = 1
+                    add(row, serial, fragment, level)
+                    last_level_one_serial = serial if level == 1 else None
                     nested_index = 0
                     continue
 
@@ -388,9 +396,7 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                     group = numeric.group("number")
                     if has_heading_prefix:
                         child_serial = (
-                            group
-                            if group.startswith(f"{parent}.")
-                            else f"{parent}.{group}"
+                            group if group.startswith(f"{parent}.") else f"{parent}.{group}"
                         )
                         add(row, child_serial, fragment, 1)
                         last_level_one_serial = child_serial
@@ -422,9 +428,7 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
             active_child_index += 1
             add(row, f"{active_source_parent}.{active_child_index}", fragment, 1)
         else:
-            marker_number = (
-                first_number.group("number") if first_number else source_number
-            )
+            marker_number = first_number.group("number") if first_number else source_number
             serial = marker_number or str(row.serial)
             add(row, serial, fragment or item_text, 0, item_text)
             active_source_parent = serial

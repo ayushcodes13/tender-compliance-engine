@@ -16,8 +16,8 @@ from typing import Literal
 from docx import Document
 
 from tender_compliance_api.export.vendor_response_rows import (
-    _SECTION_HEADINGS,
     _OPEN_CIRCLE_MARKER,
+    _SECTION_HEADINGS,
 )
 from tender_compliance_api.matrix.projection import MatrixRow
 
@@ -60,8 +60,7 @@ def validate_vendor_response_presentation(
         if "technical specification" in headers and "s.no." in headers:
             specification_index = headers.index("technical specification")
             specification_cells.extend(
-                " ".join(row.cells[specification_index].text.split())
-                for row in table.rows[1:]
+                " ".join(row.cells[specification_index].text.split()) for row in table.rows[1:]
             )
             break
 
@@ -71,7 +70,11 @@ def validate_vendor_response_presentation(
             status="failed",
             checked_headings=0,
             checked_open_circle_markers=0,
-            issues=(VendorResponsePresentationIssue("response_table_missing", "Technical Specification table missing"),),
+            issues=(
+                VendorResponsePresentationIssue(
+                    "response_table_missing", "Technical Specification table missing"
+                ),
+            ),
         )
 
     source_text = "\n".join(row.raw_source or row.tender_requirement for row in rows)
@@ -80,17 +83,17 @@ def validate_vendor_response_presentation(
         for heading in _SECTION_HEADINGS
         if re.search(rf"(?<!\w){re.escape(heading)}(?!\w)", source_text)
     ]
+    standalone_heading_keys = {
+        re.sub(r"[:\s]+$", "", cell).casefold() for cell in specification_cells
+    }
     for heading in present_headings:
-        if heading not in specification_cells:
+        if heading.casefold() not in standalone_heading_keys:
             issues.append(
-                VendorResponsePresentationIssue(
-                    "section_heading_not_standalone", heading
-                )
+                VendorResponsePresentationIssue("section_heading_not_standalone", heading)
             )
 
     source_open_circle_markers = sum(
-        len(_OPEN_CIRCLE_MARKER.findall(row.raw_source or row.tender_requirement))
-        for row in rows
+        len(_OPEN_CIRCLE_MARKER.findall(row.raw_source or row.tender_requirement)) for row in rows
     )
     if source_open_circle_markers and any(
         _OPEN_CIRCLE_MARKER.search(value) for value in specification_cells

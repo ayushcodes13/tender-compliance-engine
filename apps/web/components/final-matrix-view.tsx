@@ -160,7 +160,7 @@ function zeroCandidateWindowSummary(
     (a, b) => a - b
   );
   const pageText = pages.length ? ` on pages ${pages.join(", ")}` : " with no known page location";
-  return ` ${windows.length} technical-specification window${windows.length === 1 ? " had" : "s had"} no extracted rows${pageText}; inspect those source pages before relying on the sheet.`;
+  return ` ${windows.length} extraction window${windows.length === 1 ? " returned" : "s returned"} no candidate rows${pageText}. Other windows may still have produced requirements citing those pages; review them to check for missed specifications.`;
 }
 
 function sourceValidationDiagnostic(
@@ -1220,10 +1220,10 @@ export function FinalMatrixView(props: {
           style={{ marginTop: 12 }}
         >
           <strong id="zero-candidate-heading">
-            {zeroCandidateWindows.length} technical-specification window{zeroCandidateWindows.length === 1 ? "" : "s"} had no extracted rows
+            {zeroCandidateWindows.length} extraction window{zeroCandidateWindows.length === 1 ? " returned" : "s returned"} no candidate rows
           </strong>
           <p>
-            This may be a heading or continuation with no separate requirement, or a missed specification. The export content check validates rows that were generated; it cannot confirm that these pages contain nothing else. Review each page before relying on the sheet.
+            This refers only to those extraction windows. Another window may have produced requirements cited to the same page. An empty window may be a heading or continuation, or it may contain a missed specification. Export checks verify generated rows, but they cannot establish that the tender has no more technical specifications. Review each linked source page before relying on the sheet.
           </p>
           <ul>
             {zeroCandidateWindows.map((window) => (
