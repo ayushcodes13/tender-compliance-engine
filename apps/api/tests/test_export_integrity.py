@@ -201,6 +201,29 @@ def test_vendor_response_keeps_accessory_headings_and_open_circle_rows_separate(
     assert report.checked_open_circle_markers == 2
 
 
+def test_vendor_response_groups_multiple_product_codes_under_unique_letter_rows() -> None:
+    source = (
+        "Grips and Fixtures \uf0b7 HG300D-200: o Dual cylinder hydraulic grips "
+        "o Capacity: 300 kN \uf0b7 ASF200-300: o Set of 4 serrated faces "
+        "o Trapezoidal Tear Test"
+    )
+    row = replace(_row(), raw_source=source, tender_requirement=source)
+
+    lines = response_sheet_lines([row])
+
+    assert [line.display_label for line in lines] == ["1)", "a)", "i)", "ii)", "b)", "i)", "ii)"]
+    assert [line.level for line in lines] == [0, 1, 2, 2, 1, 2, 2]
+    assert len({line.row_id for line in lines}) == len(lines)
+    headers, expected = vendor_response_docx([row])
+    report = validate_generated_requirement_cells(
+        expected,
+        build_vendor_response_docx([row]),
+        export_format="docx",
+        expected_headers=headers,
+    )
+    assert report.status == "passed"
+
+
 def test_vendor_response_presentation_validator_catches_flattened_headings_and_o_markers() -> None:
     source = (
         "Technical package. Accessories and Attachments Load Cells "
@@ -224,6 +247,33 @@ def test_vendor_response_presentation_validator_catches_flattened_headings_and_o
         "section_heading_not_standalone",
         "open_circle_marker_leaked",
     }
+
+
+def test_vendor_response_presentation_accepts_standalone_heading_with_source_colon() -> None:
+    source = "Other requirements: \uf0b7 Maintenance and service for 3 years"
+    row = replace(_row(), raw_source=source, tender_requirement=source)
+
+    report = validate_vendor_response_presentation([row], build_vendor_response_docx([row]))
+
+    assert report.status == "passed"
+    assert report.checked_headings == 1
+
+
+def test_vendor_response_promotes_leading_section_title_and_removes_bullet_artifacts() -> None:
+    source = (
+        "\uf0a7 Other requirements:\n"
+        "• Maintenance and service of the scriber for at least 3 years\n"
+        "• Training for users after installation."
+    )
+    row = replace(_row(), raw_source=source, tender_requirement=source)
+
+    lines = response_sheet_lines([row])
+
+    assert [(line.display_label, line.display_text) for line in lines] == [
+        ("1)", "Other requirements:"),
+        ("a)", "Maintenance and service of the scriber for at least 3 years"),
+        ("b)", "Training for users after installation."),
+    ]
 
 
 def test_export_integrity_catches_mutated_non_source_cell() -> None:
@@ -340,8 +390,7 @@ def test_docx_integrity_checks_all_tables_with_compliance_headers() -> None:
     assert result.actual_rows == 2
     assert result.status == "failed"
     assert any(
-        issue.row_id == extra_id and issue.code == "unexpected_row"
-        for issue in result.issues
+        issue.row_id == extra_id and issue.code == "unexpected_row" for issue in result.issues
     )
 
 
@@ -443,8 +492,7 @@ def test_post_render_validator_rejects_clipped_tender_text_in_every_export() -> 
         )
         assert result.status == "failed", export_format
         assert any(
-            issue.code == "changed_text"
-            and issue.field == "tender requirement"
+            issue.code == "changed_text" and issue.field == "tender requirement"
             for issue in result.issues
         ), (export_format, result.issues)
 
@@ -545,9 +593,7 @@ def test_vendor_response_sheet_separates_numbered_groups_and_lettered_items() ->
     assert result.expected_rows == result.actual_rows == 3
     table = Document(BytesIO(artifact)).tables[0]
     assert len(table.rows) == 4
-    assert [table.rows[index].cells[0].text for index in range(1, 4)] == [
-        "12)", "a)", "b)"
-    ]
+    assert [table.rows[index].cells[0].text for index in range(1, 4)] == ["12)", "a)", "b)"]
     assert all(not table.rows[index].cells[2].text for index in range(1, 4))
     assert all(not table.rows[index].cells[3].text for index in range(1, 4))
 
@@ -592,8 +638,12 @@ def test_bullet_rows_get_contiguous_numbers_under_their_source_parent() -> None:
         _row(), serial=3, raw_source="Scribing head", tender_requirement="Scribing head"
     )
     bullets = [
-        replace(_row(), serial=index, raw_source=f"• Requirement {index}",
-                tender_requirement=f"• Requirement {index}")
+        replace(
+            _row(),
+            serial=index,
+            raw_source=f"• Requirement {index}",
+            tender_requirement=f"• Requirement {index}",
+        )
         for index in range(4, 7)
     ]
 
@@ -619,12 +669,8 @@ def test_bullet_groups_start_at_their_own_requirement_number() -> None:
 
     lines = response_sheet_lines([unlabelled_group, titled_group])
 
-    assert [line.serial for line in lines] == [
-        "2", "2.1", "3", "3.1", "3.2"
-    ]
-    assert [line.display_label for line in lines] == [
-        "2)", "a)", "3)", "a)", "b)"
-    ]
+    assert [line.serial for line in lines] == ["2", "2.1", "3", "3.1", "3.2"]
+    assert [line.display_label for line in lines] == ["2)", "a)", "3)", "a)", "b)"]
     assert len({line.bookmark_name for line in lines}) == len(lines)
     headers, expected = vendor_response_docx([unlabelled_group, titled_group])
     artifact = build_vendor_response_docx([unlabelled_group, titled_group])
@@ -633,9 +679,7 @@ def test_bullet_groups_start_at_their_own_requirement_number() -> None:
     )
     assert result.status == "passed", result.issues
     table = Document(BytesIO(artifact)).tables[0]
-    assert [row.cells[0].text for row in table.rows[1:]] == [
-        "2)", "a)", "3)", "a)", "b)"
-    ]
+    assert [row.cells[0].text for row in table.rows[1:]] == ["2)", "a)", "3)", "a)", "b)"]
 
 
 def test_vendor_response_alphabetic_labels_continue_after_z() -> None:
@@ -759,9 +803,7 @@ def test_post_render_validator_rejects_missing_and_duplicate_rows_in_every_expor
     )
 
     headers, expected = final_matrix_docx([final_row])
-    cases.append(
-        ("docx", headers, expected, build_final_matrix_docx, final_row)
-    )
+    cases.append(("docx", headers, expected, build_final_matrix_docx, final_row))
 
     headers, expected = final_matrix_pdf([final_row])
     cases.append(("pdf", headers, expected, build_final_matrix_pdf, final_row))

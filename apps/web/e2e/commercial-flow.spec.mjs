@@ -777,9 +777,9 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await expect(coverageNotice).toContainText("does not prove that every specification was extracted");
   await expect(page.getByText(/1 of 2 requirement groups passed their source checks/)).toBeVisible();
   const emptyExtractionNotice = page.getByRole("alert").filter({
-    hasText: "1 technical-specification window had no extracted rows",
+    hasText: "1 extraction window returned no candidate rows",
   });
-  await expect(emptyExtractionNotice).toContainText("may be a heading or continuation");
+  await expect(emptyExtractionNotice).toContainText("Another window may have produced requirements cited to the same page");
   await expect(emptyExtractionNotice.getByRole("link", { name: "page 5" })).toHaveAttribute(
     "href",
     `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&page=5`
@@ -793,7 +793,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
     page.getByRole("cell", { name: /No unmatched technical-specification excerpts were flagged/ })
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /technical-specification window had no extracted rows on pages 5, 6/ })
+    page.getByRole("cell", { name: /extraction window returned no candidate rows on pages 5, 6/ })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Download", exact: true })).toHaveCount(1);
   const [historyDownload] = await Promise.all([
