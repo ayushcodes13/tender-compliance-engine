@@ -854,7 +854,7 @@ class TestFullProcessingFlow:
                         "Any Deviation",
                     ]
                     assert [cell.text for cell in table.rows[1].cells] == [
-                        "1",
+                        "1)",
                         "Hydraulic test capacity: 300 kN.",
                         "",
                         "",
