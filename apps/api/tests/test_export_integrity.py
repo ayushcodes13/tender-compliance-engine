@@ -7,6 +7,8 @@ from io import BytesIO
 from uuid import uuid4
 
 import docx
+import pytest
+from docx import Document
 from docx.oxml.ns import qn
 
 from tender_compliance_api.export.expected import (
@@ -27,6 +29,7 @@ from tender_compliance_api.export.validation import (
     validate_generated_requirement_cells,
 )
 from tender_compliance_api.export.vendor_response_docx import build_vendor_response_docx
+from tender_compliance_api.export.vendor_response_rows import response_sheet_lines
 from tender_compliance_api.export.xlsx import build_matrix_workbook, save_matrix_workbook
 from tender_compliance_api.matrix.projection import FinalMatrixRow, MatrixRow
 
@@ -387,6 +390,141 @@ def test_post_render_validator_accepts_full_multiline_text_in_every_export() -> 
         )
         assert result.status == "passed", (export_format, result.issues)
         assert result.expected_rows == result.actual_rows == 1
+
+
+def test_vendor_response_sheet_separates_numbered_groups_and_lettered_items() -> None:
+    heading = replace(
+        _row(),
+        serial=1,
+        raw_source="12. Growth chamber",
+        tender_requirement="12. Growth chamber",
+    )
+    first_item = replace(
+        _row(),
+        serial=2,
+        raw_source="a) Cylindrical chamber with vacuum anneal.",
+        tender_requirement="a) Cylindrical chamber with vacuum anneal.",
+    )
+    second_item = replace(
+        _row(),
+        serial=3,
+        raw_source="b) Provision for 10 effusion cells.",
+        tender_requirement="b) Provision for 10 effusion cells.",
+    )
+
+    lines = response_sheet_lines([heading, first_item, second_item])
+
+    assert [(line.serial, line.source_text, line.level) for line in lines] == [
+        ("12", "12. Growth chamber", 0),
+        ("12.a", "a) Cylindrical chamber with vacuum anneal.", 1),
+        ("12.b", "b) Provision for 10 effusion cells.", 1),
+    ]
+    headers, expected = vendor_response_docx([heading, first_item, second_item])
+    artifact = build_vendor_response_docx([heading, first_item, second_item])
+    result = validate_generated_requirement_cells(
+        expected,
+        artifact,
+        export_format="docx",
+        expected_headers=headers,
+    )
+
+    assert result.status == "passed", result.issues
+    assert result.expected_rows == result.actual_rows == 3
+    table = Document(BytesIO(artifact)).tables[0]
+    assert len(table.rows) == 4
+    assert all(not table.rows[index].cells[2].text for index in range(1, 4))
+    assert all(not table.rows[index].cells[3].text for index in range(1, 4))
+
+
+def test_vendor_response_sheet_splits_bullets_without_changing_source_text() -> None:
+    row = replace(
+        _row(),
+        raw_source=(
+            "Universal Testing Machine\n"
+            "• Auto ranging force readout having accuracy of better than ±0.5%\n"
+            "• Force sampling rate: 1000/s"
+        ),
+        tender_requirement=(
+            "Universal Testing Machine\n"
+            "• Auto ranging force readout having accuracy of better than ±0.5%\n"
+            "• Force sampling rate: 1000/s"
+        ),
+    )
+
+    lines = response_sheet_lines([row])
+
+    assert [line.level for line in lines] == [0, 1, 1]
+    assert [line.serial for line in lines] == ["1", "1.1", "1.2"]
+    assert [line.source_text for line in lines] == [
+        "Universal Testing Machine",
+        "• Auto ranging force readout having accuracy of better than ±0.5%",
+        "• Force sampling rate: 1000/s",
+    ]
+    rendered = Document(BytesIO(build_vendor_response_docx([row])))
+    assert rendered.sections[0].page_width.inches == pytest.approx(11.69, abs=0.01)
+    assert rendered.sections[0].page_height.inches == pytest.approx(8.27, abs=0.01)
+
+
+def test_bullet_rows_get_contiguous_numbers_under_their_source_parent() -> None:
+    heading = replace(
+        _row(), serial=3, raw_source="Scribing head", tender_requirement="Scribing head"
+    )
+    bullets = [
+        replace(_row(), serial=index, raw_source=f"• Requirement {index}",
+                tender_requirement=f"• Requirement {index}")
+        for index in range(4, 7)
+    ]
+
+    lines = response_sheet_lines([heading, *bullets])
+
+    assert [line.serial for line in lines] == ["3", "3.1", "3.2", "3.3"]
+
+
+def test_bullet_groups_start_at_their_own_requirement_number() -> None:
+    unlabelled_group = replace(
+        _row(),
+        serial=2,
+        raw_source="• First source item\n• Second source item",
+        tender_requirement="• First source item\n• Second source item",
+    )
+    titled_group = replace(
+        _row(),
+        serial=3,
+        raw_source="Accessories\n• First accessory\n• Second accessory",
+        tender_requirement="Accessories\n• First accessory\n• Second accessory",
+    )
+
+    lines = response_sheet_lines([unlabelled_group, titled_group])
+
+    assert [line.serial for line in lines] == [
+        "2", "2.1", "3", "3.1", "3.2"
+    ]
+
+
+def test_vendor_response_sheet_splits_inline_pdf_bullets_and_parameter_cell() -> None:
+    row = replace(
+        _row(),
+        raw_source="Wafer Chuck (1 number) | • Vacuum-backed chuck • XY movement range: 25 mm",
+        tender_requirement=(
+            "Wafer Chuck (1 number) | • Vacuum-backed chuck • XY movement range: 25 mm"
+        ),
+    )
+
+    lines = response_sheet_lines([row])
+
+    assert [(line.serial, line.item_text, line.source_text, line.level) for line in lines] == [
+        ("1", "Wafer Chuck (1 number)", "", 0),
+        ("1.1", "", "• Vacuum-backed chuck", 1),
+        ("1.2", "", "• XY movement range: 25 mm", 1),
+    ]
+    headers, expected = vendor_response_docx([row])
+    result = validate_generated_requirement_cells(
+        expected,
+        build_vendor_response_docx([row]),
+        export_format="docx",
+        expected_headers=headers,
+    )
+    assert result.status == "passed", result.issues
 
 
 def test_post_render_validator_rejects_missing_and_duplicate_rows_in_every_export() -> None:

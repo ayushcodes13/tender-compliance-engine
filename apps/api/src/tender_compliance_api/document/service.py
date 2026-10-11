@@ -2348,7 +2348,7 @@ class DocumentService:
                 "expected_rows": integrity.expected_rows,
                 "actual_rows": integrity.actual_rows,
                 "checked_columns": len(expected_headers),
-                "checked_cells": len(expected_headers) * len(rows),
+                "checked_cells": len(expected_headers) * len(expected_cells),
                 "issues": [
                     {"row_id": issue.row_id, "code": issue.code}
                     | ({"field": issue.field} if issue.field else {})

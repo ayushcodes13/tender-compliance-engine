@@ -3498,6 +3498,8 @@ If the product direction changes, update this file through a focused PR, explain
 
 **Historical implementation note:** The initial Vendor Response DOCX showed review state and source locations. The current implementation uses the sample-aligned four-column layout, preserves complete source wording, and leaves response cells blank. It stores an immutable export artifact and emits a distinct audit action.
 
+**OEM row hierarchy follow-up (2026-10-11):** Numbered items and their lettered or bulleted source subitems are emitted as separate boxed rows in the same four-column sheet. Each row has its own blank OEM response cells. Parameter/table-cell labels stay with their parent row, and full tender wording remains the source of truth if a supplied sample contains a clipped or altered version.
+
 ### Guardrail
 
 - This template is not a final assessment or submission. It must not pre-fill OEM compliance, deviation, evidence, or assessment status.

@@ -91,6 +91,13 @@ def test_counts_accepted_rejected_ocr_warning() -> None:
             ),  # ocr warning, not accepted (uncertain)
         ],
         llm_calls=[_call()],
+        window_results=[
+            WindowExtractionResult(
+                chunk_id="c1", window_index=1, call_status="completed",
+                candidate_count=5, ocr_warning=False, source_spans=[],
+                coverage_status="completed",
+            )
+        ],
     )
     s = compute_diagnostics(outcome, promoted_count=1)
     assert s.total_candidates == 5
@@ -100,6 +107,26 @@ def test_counts_accepted_rejected_ocr_warning() -> None:
     assert s.promoted_requirements == 1
     assert s.total_windows == 1
     assert s.total_llm_calls == 1
+
+
+def test_total_windows_includes_literal_windows_without_llm_calls() -> None:
+    outcome = ExtractionOutcome(
+        candidates=[_cand()],
+        llm_calls=[_call()],
+        window_results=[
+            WindowExtractionResult(
+                chunk_id=f"c{i}", window_index=i, call_status="completed",
+                candidate_count=1, ocr_warning=False, source_spans=[],
+                coverage_status="completed",
+            )
+            for i in range(1, 4)
+        ],
+    )
+
+    summary = compute_diagnostics(outcome)
+
+    assert summary.total_windows == 3
+    assert summary.total_llm_calls == 1
 
 
 def test_rejection_breakdown_groups_reasons() -> None:

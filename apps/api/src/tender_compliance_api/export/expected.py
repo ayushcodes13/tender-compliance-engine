@@ -20,6 +20,7 @@ from tender_compliance_api.export.final_xlsx import (
     _format_cell_value,
 )
 from tender_compliance_api.export.validation import RequirementCell
+from tender_compliance_api.export.vendor_response_rows import response_sheet_lines
 from tender_compliance_api.export.xlsx import MATRIX_COLUMNS
 from tender_compliance_api.matrix.projection import FinalMatrixRow, MatrixRow
 
@@ -141,14 +142,17 @@ def vendor_response_docx(rows: Sequence[MatrixRow]) -> tuple[list[str], list[Req
         "Any Deviation",
     ]
     expected: list[RequirementCell] = []
-    for row in rows:
+    for line in response_sheet_lines(rows):
+        source_text = "\n".join(
+            part for part in (line.item_text, line.source_text) if part
+        )
         fields = {
-            "S.No.": _plain(row.serial),
-            "Technical Specification": row.tender_requirement,
+            "S.No.": line.serial,
+            "Technical Specification": source_text,
             "Compliance (Yes / No)": "",
             "Any Deviation": "",
         }
-        expected.append(RequirementCell(str(row.serial), row.tender_requirement, fields))
+        expected.append(RequirementCell(line.serial, source_text, fields))
     return headers, expected
 
 
