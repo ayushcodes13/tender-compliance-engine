@@ -20,7 +20,6 @@ import {
   Search,
   Shield,
   Upload,
-  Zap,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -53,9 +52,9 @@ export interface HeroData {
 
 export const heroData: HeroData = {
   eyebrow: "For procurement, technical sales, and bid teams",
-  headline: "Source-linked compliance sheets for technical tenders.",
+  headline: "Technical tender specifications, ready for OEM response.",
   subhead:
-    "Upload a tender and your OEM evidence. Every requirement stays anchored to the page and clause it came from, so reviews and exports can be audited end to end.",
+    "Upload a tender to extract and organize only the technical specifications it already contains. Review each item against its cited source, then export a response sheet with blank fields for the OEM.",
   primaryCta: "Book a pilot",
   secondaryCta: "See how it works",
 };
@@ -73,27 +72,27 @@ export interface Feature {
 export const features: Feature[] = [
   {
     icon: Upload,
-    title: "Tender document processing",
+    title: "Tender parsing and OCR",
     description:
-      "PDF and DOCX parsing with built-in OCR. Every extracted requirement stays linked to its exact page, clause, and source text — never fabricated.",
+      "Process PDF and DOCX tenders. Scanned text and uncertain symbols stay flagged for review instead of being silently corrected.",
   },
   {
     icon: Search,
-    title: "Requirement extraction & review",
+    title: "Technical specifications from the tender",
     description:
-      "Deterministic parsing pulls technical constraints, thresholds, units, tolerances, and ranges. A human-review layer flags OCR warnings and uncertainty.",
+      "Keep the tender's wording, values, units, tolerances, conditions, numbering, and nested rows together for the OEM to answer.",
   },
   {
     icon: Shield,
-    title: "Source-preserved compliance matrix",
+    title: "Review beside the cited page",
     description:
-      "A citation-backed matrix that can never hide an unresolved row. XLSX, DOCX, and PDF exports carry full source/version metadata.",
+      "Open a row's tender page, check the exact excerpt, and resolve uncertain extraction before exporting.",
   },
   {
-    icon: Zap,
-    title: "Evidence-backed decisions",
+    icon: FileText,
+    title: "Blank OEM response sheet",
     description:
-      "Attach OEM datasheets, brochures, test reports, and quotations. A deterministic unit-normalisation engine compares values with auditable traceability.",
+      "Export the tender's technical specifications in a clean structure with response fields left for the supplier to complete.",
   },
 ];
 
@@ -118,30 +117,23 @@ export const workflowSteps: WorkflowStep[] = [
   },
   {
     number: 2,
-    title: "Review the requirements",
+    title: "Organize the technical specifications",
     description:
-      "Confirm, correct, split, or merge each requirement. OCR warnings and ambiguous terms are flagged for you, not resolved by guesswork.",
+      "Keep numbered items and nested rows together. Correct extraction or structure without changing the tender's technical meaning.",
     icon: Gavel,
   },
   {
     number: 3,
-    title: "Upload OEM documents",
+    title: "Verify each source",
     description:
-      "Attach datasheets, test reports, quotations, and existing compliance sheets as versioned evidence.",
-    icon: FileText,
-  },
-  {
-    number: 4,
-    title: "Review evidence and decisions",
-    description:
-      "Accept or reject proposed evidence. Each comparison runs on tested code and shows the reasoning behind the result.",
+      "Open the cited tender page to confirm wording, values, units, and source location. Uncertain items remain visible for review.",
     icon: Search,
   },
   {
-    number: 5,
-    title: "Export the compliance sheet",
+    number: 4,
+    title: "Export the OEM response sheet",
     description:
-      "Produce XLSX, DOCX, or PDF with full source and version metadata. Unresolved rows stay visible.",
+      "Download a source-linked sheet containing the tender's technical specifications and blank supplier response fields.",
     icon: BarChart3,
   },
 ];
@@ -165,15 +157,15 @@ export const benefits: Benefit[] = [
   },
   {
     icon: Search,
-    title: "Missing evidence is not non-compliance",
+    title: "No invented specifications",
     description:
-      "No attached evidence is recorded as unresolved, not as a failure. A gap in the pack never becomes an invented compliance verdict.",
+      "The sheet is derived from the tender. It does not add recommendations, assumptions, or OEM compliance decisions.",
   },
   {
     icon: BarChart3,
-    title: "Deterministic comparison",
+    title: "Technical wording stays traceable",
     description:
-      "Thresholds, units, tolerances, and ranges are compared by tested code that shows its working, not by a language model judging numbers.",
+      "Each extracted item links back to its tender page and source excerpt so a reviewer can check it before export.",
   },
   {
     icon: Gavel,
@@ -183,9 +175,9 @@ export const benefits: Benefit[] = [
   },
   {
     icon: FileText,
-    title: "Immutable source versions",
+    title: "Numbered and nested rows",
     description:
-      "Re-uploading a document creates a new version. Earlier evidence and the citations pointing at it stay intact.",
+      "Keep a main item and its a), b), c) sub-items visually grouped so the OEM can respond row by row.",
   },
   {
     icon: Upload,
@@ -208,7 +200,7 @@ export const faqs: FaqItem[] = [
   {
     question: "What does it do?",
     answer:
-      "It turns a tender document into a source-linked compliance sheet. Requirements are extracted with the page and clause they came from, a reviewer confirms or corrects them, OEM evidence is attached, and each requirement is compared against that evidence with tested code.",
+      "It extracts and organizes the technical specifications already present in a tender, keeps each item linked to its source page, and exports a response sheet with blank fields for the OEM. It does not determine whether an OEM complies.",
   },
   {
     question: "Do I need technical experience to use it?",
@@ -216,19 +208,19 @@ export const faqs: FaqItem[] = [
       "No. The workflow is built for procurement and compliance reviewers. Where a result needs judgement — an OCR warning, an ambiguous term, a conflict — the system asks a human rather than guessing.",
   },
   {
-    question: "How does it avoid inventing a compliance answer?",
+    question: "Does it add or interpret technical requirements?",
     answer:
-      "Every requirement keeps a link to its document version, page, and clause. Numeric thresholds, units, tolerances, and ranges are compared by deterministic code, not by a model. When evidence is missing, the sheet says so; missing evidence is never recorded as non-compliance.",
+      "No. The response sheet contains tender-derived technical specifications only. It preserves source wording and flags uncertain extraction for human review rather than guessing or adding a compliance decision.",
   },
   {
     question: "What files can I upload?",
     answer:
-      "Tender documents and OEM documents are both accepted as PDF or DOCX. Scanned pages are handled with OCR, and any low-confidence recognition is flagged for review instead of being silently corrected.",
+      "Upload a tender as PDF or DOCX. Scanned pages are handled with OCR, and uncertain recognition is flagged for review instead of being silently corrected.",
   },
   {
     question: "What can I export?",
     answer:
-      "The compliance sheet exports to XLSX, DOCX, or PDF, carrying the source document and version metadata for every row. Unresolved rows stay visible in the export.",
+      "Export a DOCX response sheet with the tender's technical specifications and blank OEM response fields. Source links and validation details remain available in the application for review.",
   },
   {
     question: "Where does my data go?",

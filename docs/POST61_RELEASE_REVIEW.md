@@ -1,5 +1,11 @@
 # Post-CP61 release review and manual acceptance checklist
 
+> Historical checklist: this document includes OEM evidence assessment and
+> submission-lifecycle acceptance from the broader CP61 implementation. The
+> current client-facing pilot is the Phase 1 tender-to-OEM-response-sheet flow.
+> Use [CLIENT_READINESS.md](CLIENT_READINESS.md) for its release gates; the
+> Phase 2 checks below are not prerequisites for that pilot.
+
 ## What this hardening pass proved
 
 The product is no longer validated only through database-seeded checkpoint tests.

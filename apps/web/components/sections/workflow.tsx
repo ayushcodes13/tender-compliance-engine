@@ -22,10 +22,10 @@ export function WorkflowSection() {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] as const }}
         >
           <h2 className="font-display text-3xl text-text-primary sm:text-4xl">
-            From Tender to Compliance Sheet
+            From Tender to OEM Response Sheet
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg text-text-secondary">
-            Five steps. Each decision stays tied to its source.
+            Four steps. Every listed specification stays tied to its tender source.
           </p>
         </motion.div>
 

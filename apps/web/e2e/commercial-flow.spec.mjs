@@ -647,12 +647,18 @@ test("buyer can upload a tender, review source-linked technical rows, and export
 
   await expect(
     page.getByRole("heading", {
-      name: /Source-linked compliance sheets for technical tenders\./,
+      name: /Technical tender specifications, ready for OEM response\./,
     })
   ).toBeVisible();
   await expect(
-    page.getByText("PDF / DOCX in · XLSX / DOCX / PDF out")
+    page.getByText("PDF / DOCX in · source-linked DOCX response sheet out")
   ).toBeVisible();
+  await page.locator("#faq").scrollIntoViewIfNeeded();
+  await expect(
+    page.getByText(/It does not determine whether an OEM complies\./)
+  ).toBeVisible();
+  await expect(page.getByText(/Evidence-backed decisions/i)).toHaveCount(0);
+  await expect(page.getByText(/Upload OEM documents/i)).toHaveCount(0);
 
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "New tender" }).click();

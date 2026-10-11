@@ -100,7 +100,14 @@ async function expectNoSeriousViolations(page, label) {
 test.describe("accessibility", () => {
   test("landing page has no serious WCAG A/AA violations", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Technical tender specifications, ready for OEM response.",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Blank OEM response sheet" }),
+    ).toBeVisible();
     await settle(page);
     await expectNoSeriousViolations(page, "/");
   });

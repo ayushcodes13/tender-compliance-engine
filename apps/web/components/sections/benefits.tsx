@@ -22,11 +22,11 @@ export function BenefitsSection() {
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] as const }}
         >
           <h2 className="font-display text-3xl text-text-primary sm:text-4xl">
-            What the engine guarantees
+            Built for source-led review
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-text-secondary">
-            Built for procurement and compliance teams who need certainty, not
-            approximations.
+            Preserve tender wording, keep citations visible, and leave uncertain
+            extraction for a person to review.
           </p>
         </motion.div>
 

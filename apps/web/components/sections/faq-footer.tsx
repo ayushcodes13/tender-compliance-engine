@@ -84,8 +84,8 @@ export function Footer() {
               <span>Tender Compliance Engine</span>
             </Link>
             <p className="mt-3 max-w-sm text-sm text-text-secondary">
-              Turn tender documents and OEM evidence into a source-linked,
-              human-reviewable compliance sheet.
+              Extract source-linked technical specifications from tenders and
+              prepare a clear response sheet for the OEM to complete.
             </p>
           </div>
 

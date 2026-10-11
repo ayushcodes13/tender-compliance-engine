@@ -90,7 +90,7 @@ export function HeroSection() {
           </motion.div>
 
           <motion.p className="mt-8 text-sm text-text-tertiary" variants={item}>
-            PDF / DOCX in · XLSX / DOCX / PDF out
+            PDF / DOCX in · source-linked DOCX response sheet out
           </motion.p>
         </motion.div>
       </motion.div>
