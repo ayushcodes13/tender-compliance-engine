@@ -17,6 +17,7 @@ _SECTION_HEADINGS = (
     "Dual Station Configuration",
     "Load Cells",
     "Other requirements",
+    "Other important requirements",
 )
 _SECTION_HEADING_MARKERS = "|".join(re.escape(value) for value in _SECTION_HEADINGS)
 _MARKER = re.compile(
@@ -27,6 +28,7 @@ _MARKER = re.compile(
 )
 _NUMBER = re.compile(r"^(?P<number>\d+(?:\.\d+)*)(?:[.)])?[ \t]+")
 _INLINE_NUMBER = re.compile(r"(?<!\S)(?P<marker>\d{1,2}[.)])[ \t]+(?=[A-Z0-9])")
+_INLINE_LETTER = re.compile(r"(?<!\w)(?P<letter>[A-Za-z])[.)][ \t]+(?=[A-Z0-9])")
 _LETTER = re.compile(r"^(?P<letter>[A-Za-z])[.)][ \t]+")
 _BULLET = re.compile(r"^(?P<bullet>[•●▪◦‣\uf0a7\uf0b7])[ \t]*")
 _OPEN_CIRCLE_BULLET = re.compile(r"^o(?=[ \t]+[A-Z0-9])")
@@ -83,8 +85,8 @@ def _add_display_labels(lines: list[VendorResponseLine]) -> list[VendorResponseL
     active_parent: str | None = None
     for line in lines:
         if line.is_section_heading:
-            if active_parent is not None:
-                child_counts[active_parent] = 0
+            active_parent = line.serial
+            child_counts[active_parent] = 0
             labelled.append(line)
             continue
         if line.level == 0:
@@ -178,6 +180,29 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
         for match in max(sequences, key=len):
             markers.append((match.start(), match.end(), match.group("marker")))
 
+    # Some PDF table cells put adjacent lettered specifications on one line
+    # (for example, ``r) First item, s) Second item``). Split only a
+    # contiguous alphabetical sequence so ordinary prose with one letter
+    # marker is left intact.
+    inline_letters = list(_INLINE_LETTER.finditer(text))
+    letter_sequences: list[list[re.Match[str]]] = []
+    for index, match in enumerate(inline_letters):
+        sequence = [match]
+        expected = ord(match.group("letter").lower()) + 1
+        for candidate in inline_letters[index + 1 :]:
+            candidate_letter = ord(candidate.group("letter").lower())
+            if candidate_letter == expected:
+                sequence.append(candidate)
+                expected += 1
+            elif candidate_letter > expected:
+                break
+        if len(sequence) >= 2:
+            letter_sequences.append(sequence)
+    if letter_sequences:
+        for match in max(letter_sequences, key=len):
+            markers.append((match.start(), match.end(), match.group(0).strip()))
+
+    markers = list({marker[0]: marker for marker in markers}.values())
     markers.sort(key=lambda marker: marker[0])
     if not markers:
         return [(None, text)] if text.strip() else []
@@ -277,6 +302,15 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
             active_child_index = 0
 
         if not fragments:
+            continue
+
+        if len(fragments) == 1 and fragments[0][0] == "__section_heading__":
+            # A section label is a grouping row, not an OEM answer item.
+            # Keep it visible without deriving its label from database order.
+            heading = fragments[0][1].strip()
+            add(row, str(row.serial), "", 0, heading, is_section_heading=True)
+            active_source_parent = str(row.serial)
+            active_child_index = 0
             continue
 
         has_nested_items = len(fragments) > 1
