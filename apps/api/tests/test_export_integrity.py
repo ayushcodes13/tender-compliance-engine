@@ -100,6 +100,22 @@ def test_vendor_response_docx_keeps_each_specification_row_together() -> None:
     assert all(row._tr.find(qn("w:trPr")).find(qn("w:cantSplit")) is not None for row in rows)
 
 
+def test_vendor_response_docx_renders_pdf_private_use_bullets_without_rewriting_text() -> None:
+    source = "Accuracy: \uf0b7 better than ±0.5%\nPower supply: \uf0b7 380V"
+    row = replace(_row(), tender_requirement=source, raw_source=source)
+    document = docx.Document(BytesIO(build_vendor_response_docx([row])))
+    cell = document.tables[0].rows[1].cells[1]
+
+    assert cell.text == source
+    marker_runs = [run for run in cell.paragraphs[0].runs if run.text == "\uf0b7"]
+    assert len(marker_runs) == 2
+    assert all(
+        run._element.rPr.rFonts.get(qn("w:ascii")) == "Symbol"
+        and run._element.rPr.rFonts.get(qn("w:hAnsi")) == "Symbol"
+        for run in marker_runs
+    )
+
+
 def test_export_integrity_catches_mutated_non_source_cell() -> None:
     row = _row()
     expected_headers, expected = phase1_matrix_xlsx([row])

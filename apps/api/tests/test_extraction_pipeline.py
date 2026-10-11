@@ -104,6 +104,7 @@ from tender_compliance_worker.processor import (
     _subtract_source_range,
     _table_cell_source_windows,
     _technical_preamble_ranges,
+    _technical_schedule_leadin_ranges,
     _technical_section_title_ranges,
 )
 
@@ -195,6 +196,26 @@ def test_technical_section_title_is_not_a_requirement_window() -> None:
     )
     assert [text[item.start : item.end] for item in rows] == [
         "SECTION V / Technical Specification"
+    ]
+
+
+def test_response_table_leadin_excludes_only_instructions_and_equipment_title() -> None:
+    text = (
+        "अनुभाग-5 / SECTION- V\n"
+        "तकनीकी विशिष्टता / Technical Specification\n"
+        "(Bidder should submit compliance matrix along with Technical Bid)\n"
+        "Item details and technical specifications as mentioned below: Supply,\n"
+        "Installation and Commissioning of Geosynthetic Universal Testing Machine.\n"
+        "S.no | Technical Specification | Qty | Compliance (Yes/No) | Any Deviation\n"
+        "1 | Universal Testing Machine (300 kN) with 300 kN capacity. | 01 | |\n"
+    )
+    ranges = _technical_schedule_leadin_ranges(
+        text, (SourceTextRange(0, len(text)),)
+    )
+    assert [text[item.start : item.end] for item in ranges] == [
+        "(Bidder should submit compliance matrix along with Technical Bid)",
+        "Item details and technical specifications as mentioned below: Supply,",
+        "Installation and Commissioning of Geosynthetic Universal Testing Machine.",
     ]
 
 
@@ -298,7 +319,10 @@ def test_blank_serial_specification_rows_continue_prior_row_across_pages() -> No
         for source in window.sources:
             assert (
                 window.text[source.window_char_start : source.window_char_end]
-                == source.source_text
+                == source.page_source_text[
+                    source.char_start - source.page_source_char_start :
+                    source.char_end - source.page_source_char_start
+                ]
             )
 
 
@@ -372,7 +396,10 @@ def test_unlabelled_continuation_between_serial_rows_stays_with_prior_row() -> N
         for source in window.sources:
             assert (
                 window.text[source.window_char_start : source.window_char_end]
-                == source.source_text
+                == source.page_source_text[
+                    source.char_start - source.page_source_char_start :
+                    source.char_end - source.page_source_char_start
+                ]
             )
 
 

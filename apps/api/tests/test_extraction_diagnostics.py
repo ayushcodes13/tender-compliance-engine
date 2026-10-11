@@ -12,7 +12,11 @@ from tender_compliance_api.extraction.adapter import LlmCallResult
 from tender_compliance_api.extraction.diagnostics import compute_diagnostics
 
 # CandidateRecord is a frozen dataclass: import the real thing.
-from tender_compliance_api.extraction.extractor import CandidateRecord, ExtractionOutcome
+from tender_compliance_api.extraction.extractor import (
+    CandidateRecord,
+    ExtractionOutcome,
+    WindowExtractionResult,
+)
 from tender_compliance_api.extraction.prompts import PROMPT_VERSION, SCHEMA_VERSION
 from tender_compliance_api.extraction.reconcile import ReconciliationResult
 
@@ -162,6 +166,34 @@ def test_versions_none_when_no_calls() -> None:
     assert s.provider is None
     assert s.model is None
     assert s.promoted_requirements == 0
+
+
+def test_total_windows_includes_literal_rows_without_primary_model_calls() -> None:
+    outcome = ExtractionOutcome(
+        candidates=[],
+        llm_calls=[_call()],
+        window_results=[
+            WindowExtractionResult(
+                chunk_id="literal-row",
+                window_index=1,
+                call_status="completed",
+                candidate_count=0,
+                ocr_warning=False,
+                source_spans=[],
+            ),
+            WindowExtractionResult(
+                chunk_id="model-window",
+                window_index=2,
+                call_status="completed",
+                candidate_count=0,
+                ocr_warning=False,
+                source_spans=[],
+            ),
+        ],
+    )
+    summary = compute_diagnostics(outcome)
+    assert summary.total_windows == 2
+    assert summary.total_llm_calls == 1
 
 
 def test_failed_call_still_provides_versions() -> None:

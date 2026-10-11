@@ -293,6 +293,13 @@ export function TenderReviewWorkspace(props: {
       : selectedSources[0]);
   const selectedSourceExcerpt =
     selectedSource?.quote_text?.trim() || selectedSource?.source_text;
+  const pageSourceText = selectedSource?.source_text?.trim();
+  const sourceViewerQuote =
+    pageSourceText && pageSourceText.length <= 2048
+      ? pageSourceText
+      : initialSourceQuote && initialSourceQuote.length <= 2048
+        ? initialSourceQuote
+        : null;
   const sourcePage =
     selectedSource?.page_number ?? preferredSourcePage ?? 1;
   const requestedCitationMissing =
@@ -717,12 +724,17 @@ export function TenderReviewWorkspace(props: {
               version={version}
               pageNumber={sourcePage}
               selectedRequirementId={
-                initialSourceQuote && !selectedId ? null : selectedId || null
+                selectedSource?.location_type === "exact" &&
+                !(initialSourceQuote && !selectedId)
+                  ? selectedId || null
+                  : null
               }
-              selectedAnchorId={selectedSource?.id ?? null}
-              highlightQuote={
-                selectedSourceExcerpt ?? initialSourceQuote ?? null
+              selectedAnchorId={
+                selectedSource?.location_type === "exact"
+                  ? selectedSource.id
+                  : null
               }
+              highlightQuote={sourceViewerQuote}
               totalPages={undefined}
               onPageChange={(page) => {
                 /* Page navigation handled within SourceViewer */

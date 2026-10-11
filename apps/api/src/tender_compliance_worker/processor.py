@@ -91,6 +91,17 @@ _STANDALONE_SAMPLE_ROW_HEADING_RE = re.compile(
     r"^\s*other\s+important\s+requirements\s*:\s*$", re.I
 )
 _NON_ROW_SECTION_LABEL_RE = re.compile(r"^\s*optional\s+items\s*$", re.I)
+_BIDDER_MATRIX_INSTRUCTION_RE = re.compile(
+    r"^\s*\(\s*bidder\s+should\s+submit\s+compliance\s+matrix\b.*\)\s*$",
+    re.I,
+)
+_MACHINE_SCHEDULE_TITLE_RE = re.compile(
+    r"^\s*supply\s*,?\s*installation\s+and\s+commissioning\s+of\b.*$",
+    re.I,
+)
+_MACHINE_SCHEDULE_TITLE_CONTINUATION_RE = re.compile(
+    r"^\s*(?:installation\s+and\s+)?commissioning\s+of\b.*$", re.I
+)
 
 
 def _span_is_in_scope(
@@ -270,11 +281,17 @@ def _merge_blank_serial_table_rows(windows: list[SourceWindow]) -> list[SourceWi
         previous = merged[active_index]
         separator = "\n"
         shift = len(previous.text) + len(separator)
+        merged_text = previous.text + separator + window.text
+        previous_sources = tuple(
+            source.model_copy(update={"source_text": merged_text})
+            for source in previous.sources
+        )
         shifted_sources = tuple(
             source.model_copy(
                 update={
                     "window_char_start": shift,
                     "window_char_end": shift + len(window.text),
+                    "source_text": merged_text,
                 }
             )
             for source in window.sources
@@ -283,8 +300,8 @@ def _merge_blank_serial_table_rows(windows: list[SourceWindow]) -> list[SourceWi
             chunk_id="cw-" + hashlib.sha256(
                 f"{previous.chunk_id}:{window.chunk_id}".encode()
             ).hexdigest()[:12],
-            text=previous.text + separator + window.text,
-            sources=(*previous.sources, *shifted_sources),
+            text=merged_text,
+            sources=(*previous_sources, *shifted_sources),
             overlap=None,
             hierarchy=previous.hierarchy,
             table_context=previous.table_context,
@@ -376,6 +393,57 @@ def _technical_preamble_ranges(
         ):
             found.append(SourceTextRange(offset, end))
         offset += len(raw_line)
+    return tuple(found)
+
+
+def _technical_schedule_leadin_ranges(
+    text: str, included_ranges: tuple[SourceTextRange, ...]
+) -> tuple[SourceTextRange, ...]:
+    """Exclude response instructions and the equipment title before a table.
+
+    Tender tables sometimes place a bidder instruction and an equipment name
+    between the technical-specification heading and the first numbered row.
+    These are useful context, but the supplied response examples start at the
+    numbered specification rows. Apply this narrow rule only when the same
+    page contains a recognized technical response-table header.
+    """
+    lines: list[tuple[int, int, str]] = []
+    offset = 0
+    table_header_start: int | None = None
+    active_schema: tuple[int, ...] | None = None
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        end = offset + len(line)
+        lines.append((offset, end, line))
+        if " | " in line:
+            active_schema = _technical_table_schema(tuple(line.split(" | ")))
+            if active_schema is not None:
+                table_header_start = offset
+                break
+        offset += len(raw_line)
+    if table_header_start is None:
+        return ()
+
+    found: list[SourceTextRange] = []
+    has_explicit_intro = False
+    for start, end, line in lines:
+        if start >= table_header_start:
+            break
+        if not any(item.start <= start and end <= item.end for item in included_ranges):
+            continue
+        if _TECHNICAL_PREAMBLE_RE.match(line):
+            has_explicit_intro = True
+            found.append(SourceTextRange(start, end))
+        elif _BIDDER_MATRIX_INSTRUCTION_RE.match(line):
+            found.append(SourceTextRange(start, end))
+        elif (
+            has_explicit_intro
+            and (
+                _MACHINE_SCHEDULE_TITLE_RE.match(line)
+                or _MACHINE_SCHEDULE_TITLE_CONTINUATION_RE.match(line)
+            )
+        ):
+            found.append(SourceTextRange(start, end))
     return tuple(found)
 
 
@@ -920,14 +988,24 @@ class JobProcessor:
                 preamble_ranges = _technical_preamble_ranges(
                     page_text, included_ranges
                 )
+                schedule_leadin_ranges = _technical_schedule_leadin_ranges(
+                    page_text, included_ranges
+                )
                 section_title_ranges = _technical_section_title_ranges(
                     page_text,
-                    _subtract_source_range(included_ranges, preamble_ranges),
+                    _subtract_source_range(
+                        included_ranges, (*preamble_ranges, *schedule_leadin_ranges)
+                    ),
                 )
                 numbered_headings = _standalone_numbered_heading_ranges(
                     page_text,
                     _subtract_source_range(
-                        included_ranges, (*preamble_ranges, *section_title_ranges)
+                        included_ranges,
+                        (
+                            *preamble_ranges,
+                            *schedule_leadin_ranges,
+                            *section_title_ranges,
+                        ),
                     ),
                 )
                 sample_row_headings, nonrow_labels = _sample_heading_ranges(
@@ -936,6 +1014,7 @@ class JobProcessor:
                         included_ranges,
                         (
                             *preamble_ranges,
+                            *schedule_leadin_ranges,
                             *section_title_ranges,
                             *numbered_headings,
                         ),
@@ -965,6 +1044,7 @@ class JobProcessor:
                     included_ranges,
                     (
                         *preamble_ranges,
+                        *schedule_leadin_ranges,
                         *section_title_ranges,
                         *numbered_headings,
                         *sample_row_headings,

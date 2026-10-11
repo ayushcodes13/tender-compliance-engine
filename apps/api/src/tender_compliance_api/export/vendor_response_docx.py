@@ -33,6 +33,33 @@ def _set_cell_margins(cell: docx.table._Cell) -> None:
     properties.append(margins)
 
 
+def _set_source_text(cell: docx.table._Cell, value: str) -> None:
+    """Keep source text intact while rendering PDF private-use bullets.
+
+    Some tender PDFs map the visible bullet glyph to U+F0B7. The document
+    content stream is source-faithful, but ordinary body fonts often lack that
+    private-use character and silently render it as blank space. Isolate only
+    those marker characters in a Symbol-font run so they remain visible while
+    the stored text remains unchanged for source validation.
+    """
+    cell.text = ""
+    paragraph = cell.paragraphs[0]
+    parts = value.split("\uf0b7")
+    for index, part in enumerate(parts):
+        if part:
+            paragraph.add_run(part)
+        if index < len(parts) - 1:
+            marker = paragraph.add_run("\uf0b7")
+            marker.font.name = "Symbol"
+            properties = marker._element.get_or_add_rPr()
+            fonts = properties.rFonts
+            if fonts is None:
+                fonts = OxmlElement("w:rFonts")
+                properties.insert(0, fonts)
+            for font_type in ("ascii", "hAnsi", "eastAsia", "cs"):
+                fonts.set(qn(f"w:{font_type}"), "Symbol")
+
+
 def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
     """Build the sample-aligned technical sheet with blank bidder response cells.
 
@@ -101,7 +128,10 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
             _set_cell_margins(cell)
             if row_index % 2:
                 _set_cell_shading(cell, "F3F6FA")
-            cell.text = value
+            if index == 1:
+                _set_source_text(cell, value)
+            else:
+                cell.text = value
             for paragraph in cell.paragraphs:
                 paragraph.paragraph_format.space_after = Pt(2)
                 paragraph.alignment = (

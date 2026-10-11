@@ -236,7 +236,26 @@ def _to_record(
                     fragment_valid = False
                     break
                 source_slice = window.text[start:end]
-                if source.source_text is None or source_slice != source.source_text:
+                page_text = source.page_source_text
+                page_base = source.page_source_char_start
+                page_start = (
+                    source.char_start - page_base
+                    if source.char_start is not None
+                    else None
+                )
+                page_end = (
+                    source.char_end - page_base
+                    if source.char_end is not None
+                    else None
+                )
+                if (
+                    page_text is None
+                    or page_start is None
+                    or page_end is None
+                    or page_start < 0
+                    or page_end < page_start
+                    or page_text[page_start:page_end].rstrip("\r\n") != source_slice
+                ):
                     fragment_valid = False
                     break
                 if index:
