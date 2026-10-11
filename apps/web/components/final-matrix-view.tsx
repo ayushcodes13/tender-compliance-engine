@@ -28,6 +28,7 @@ type CoverageReviewDisplay = {
   reviewed_at: string;
 };
 type SourceValidationFinding = { row_id: string; code: string };
+type ZeroCandidateWindow = { window_index: number; chunk_id: string; pages: number[] };
 
 function sourceValidationMessage(code: string): string {
   switch (code) {
@@ -119,18 +120,36 @@ function obligationCoverageMessage(
 }
 
 function obligationCoverageSummary(
-  coverage: { obligation_audit_status?: string } | undefined
+  coverage:
+    | {
+        obligation_audit_status?: string;
+        zero_candidate_windows?: ZeroCandidateWindow[];
+      }
+    | undefined
 ): string {
+  const zeroCandidateNotice = zeroCandidateWindowSummary(coverage);
   if (coverage?.obligation_audit_status === "no_potential_omissions") {
-    return " The independent scan found no unmatched obligation excerpts, but it does not prove that every tender obligation was identified.";
+    return ` The independent scan found no unmatched obligation excerpts, but it does not prove that every tender obligation was identified.${zeroCandidateNotice}`;
   }
   if (coverage?.obligation_audit_status === "potential_omissions") {
-    return " The independent scan found possible omissions that need human review.";
+    return ` The independent scan found possible omissions that need human review.${zeroCandidateNotice}`;
   }
   if (coverage?.obligation_audit_status === "audit_failed") {
-    return " The independent scan did not complete, so whole-tender completeness needs human review.";
+    return ` The independent scan did not complete, so whole-tender completeness needs human review.${zeroCandidateNotice}`;
   }
-  return " Whole-tender completeness was not verified because no independent obligation scan is available.";
+  return ` Whole-tender completeness was not verified because no independent obligation scan is available.${zeroCandidateNotice}`;
+}
+
+function zeroCandidateWindowSummary(
+  coverage: { zero_candidate_windows?: ZeroCandidateWindow[] } | undefined
+): string {
+  const windows = coverage?.zero_candidate_windows ?? [];
+  if (!windows.length) return "";
+  const pages = Array.from(new Set(windows.flatMap((window) => window.pages))).sort(
+    (a, b) => a - b
+  );
+  const pageText = pages.length ? ` on pages ${pages.join(", ")}` : " with no known page location";
+  return ` ${windows.length} technical-section window${windows.length === 1 ? " had" : "s had"} no extracted rows${pageText}; review the source before relying on the sheet.`;
 }
 
 function sourceValidationDiagnostic(
@@ -241,8 +260,8 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
       (report?.source_validation?.issues?.length ?? 0) +
       (report?.window_processing?.potential_omissions?.length ?? 0);
     return issueCount
-      ? `${issueCount} validation or coverage finding${issueCount === 1 ? "" : "s"}. This export is unavailable for download until it has a passing result.`
-      : "Validation could not establish a safe result. This export is unavailable for download.";
+      ? `${issueCount} validation or coverage finding${issueCount === 1 ? "" : "s"}. This export is unavailable for download until it has a passing result.${zeroCandidateWindowSummary(report?.window_processing)}`
+      : `Validation could not establish a safe result. This export is unavailable for download.${zeroCandidateWindowSummary(report?.window_processing)}`;
   }
   if (artifact.validation_status === "failed") {
     return "The generated content did not match its saved requirements and source checks. No file was issued.";
@@ -283,6 +302,7 @@ export function FinalMatrixView(props: {
     SourceValidationFinding[]
   >([]);
   const [coverageFindings, setCoverageFindings] = useState<PotentialOmission[]>([]);
+  const [zeroCandidateWindows, setZeroCandidateWindows] = useState<ZeroCandidateWindow[]>([]);
   const [coverageReviews, setCoverageReviews] = useState<Record<string, CoverageReviewDisplay>>({});
   const [coverageReviewDrafts, setCoverageReviewDrafts] = useState<Record<string, { requirementId: string; rationale: string }>>({});
   const [addedCoverageKeys, setAddedCoverageKeys] = useState<Set<string>>(new Set());
@@ -498,6 +518,7 @@ export function FinalMatrixView(props: {
     setActionNotice(null);
     setSourceValidationFindings([]);
     setCoverageFindings([]);
+    setZeroCandidateWindows([]);
     try {
       const artifact = await api.createFinalMatrixExport(
         projectId,
@@ -511,6 +532,9 @@ export function FinalMatrixView(props: {
       ]);
       setSourceValidationFindings(
         artifact.validation_report?.source_validation?.issues ?? []
+      );
+      setZeroCandidateWindows(
+        artifact.validation_report?.window_processing?.zero_candidate_windows ?? []
       );
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "failed") {
@@ -610,6 +634,7 @@ export function FinalMatrixView(props: {
     setValidationNotice(null);
     setSourceValidationFindings([]);
     setCoverageFindings([]);
+    setZeroCandidateWindows([]);
     try {
       const artifact = await api.createVendorResponseSheetExport(
         projectId,
@@ -622,6 +647,9 @@ export function FinalMatrixView(props: {
       ]);
       setSourceValidationFindings(
         artifact.validation_report?.source_validation?.issues ?? []
+      );
+      setZeroCandidateWindows(
+        artifact.validation_report?.window_processing?.zero_candidate_windows ?? []
       );
       if (artifact.status !== "completed") {
         if (artifact.validation_status === "failed") {
@@ -915,6 +943,38 @@ export function FinalMatrixView(props: {
               ))}
           </ul>
         </div>
+      ) : null}
+      {zeroCandidateWindows.length ? (
+        <section
+          className="source-highlight-unavailable"
+          aria-labelledby="zero-candidate-heading"
+          role="alert"
+          style={{ marginTop: 12 }}
+        >
+          <strong id="zero-candidate-heading">
+            {zeroCandidateWindows.length} technical-section window{zeroCandidateWindows.length === 1 ? "" : "s"} had no extracted rows
+          </strong>
+          <p>
+            This may be a heading or continuation with no separate requirement, or a missed specification. The export content check validates rows that were generated; it cannot confirm that these pages contain nothing else. Review each page before relying on the sheet.
+          </p>
+          <ul>
+            {zeroCandidateWindows.map((window) => (
+              <li key={`${window.window_index}-${window.chunk_id}`} style={{ marginTop: 8 }}>
+                Window {window.window_index}: {window.pages.length ? window.pages.map((page, index) => (
+                  <span key={page}>
+                    {index > 0 ? ", " : ""}
+                    <Link
+                      className="text-action"
+                      href={`/projects/${projectId}/review?documentId=${encodeURIComponent(documentId)}&version=${version}&page=${page}`}
+                    >
+                      page {page}
+                    </Link>
+                  </span>
+                )) : "source page unavailable"}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
       {validationNotice ? (
         <div className="compliance-ready-banner" role="status">
