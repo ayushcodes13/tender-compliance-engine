@@ -209,6 +209,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
             serial: 2,
             requirement_id: otherRequirementId,
             source_page: null,
+            review_status: "unreviewed",
             tender_requirement: "Page location has not been established.",
             vendor_spec_parameter: null,
             vendor_spec_value: undefined,
@@ -676,6 +677,9 @@ test("buyer can upload a tender, review source-linked technical rows, and export
     page.getByRole("heading", { name: "OEM response sheet — Pilot Tender" })
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tender technical specifications" })).toBeVisible();
+  await expect(page.getByRole("status").filter({
+    hasText: "Human review is still required.",
+  })).toContainText("1 of 2 requirement groups have not been confirmed by a person");
   await expect(
     page.getByRole("link", { name: /Step 3 OEM response sheet/ })
   ).toHaveAttribute("aria-current", "step");
@@ -683,10 +687,9 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await expect(page.getByText("Assessment", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Compliant", { exact: true })).toHaveCount(0);
   await expect(page.getByText("The positioning resolution shall be 1 µm or better.")).toBeVisible();
-  await expect(page.getByRole("row", { name: /Page location has not been established/ })).toBeVisible();
-  await expect(page.getByText("Location unavailable")).toBeVisible();
+  await expect(page.getByText("Source location unavailable")).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Open tender source for requirement 2/ })
+    page.getByRole("link", { name: /Open source for requirement 2/ })
   ).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Download response sheet (DOCX)" })).toBeVisible();
   await page.getByRole("button", { name: "Download response sheet (DOCX)" }).click();
@@ -732,9 +735,14 @@ test("buyer can upload a tender, review source-linked technical rows, and export
     page.getByRole("button", { name: "Download response sheet (DOCX)" }).click(),
   ]);
   expect(vendorSheetDownload.suggestedFilename()).toBe("tender_vendor_response_v1.docx");
-  await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
+  await expect(page.getByText("Rows checked; completeness unverified", { exact: true })).toBeVisible();
+  const coverageNotice = page.locator(".compliance-attention-banner").filter({
+    hasText: "Tender coverage is not proven.",
+  });
+  await expect(coverageNotice).toContainText("does not prove that every specification was extracted");
+  await expect(page.getByText(/1 of 2 requirement groups passed their source checks/)).toBeVisible();
   const emptyExtractionNotice = page.getByRole("alert").filter({
-    hasText: "1 technical-section window had no extracted rows",
+    hasText: "1 technical-specification window had no extracted rows",
   });
   await expect(emptyExtractionNotice).toContainText("may be a heading or continuation");
   await expect(emptyExtractionNotice.getByRole("link", { name: "page 5" })).toHaveAttribute(
@@ -742,15 +750,15 @@ test("buyer can upload a tender, review source-linked technical rows, and export
     `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&page=5`
   );
   await expect(
-    page.getByRole("cell", { name: /independent scan found no unmatched obligation excerpts/ })
+    page.getByRole("cell", { name: /No unmatched technical-specification excerpts were flagged/ })
   ).toBeVisible();
   await page.getByRole("button", { name: "Refresh export history" }).click();
-  await expect(page.getByText("Content checked", { exact: true })).toBeVisible();
+  await expect(page.getByText("Rows checked; completeness unverified", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /independent scan found no unmatched obligation excerpts/ })
+    page.getByRole("cell", { name: /No unmatched technical-specification excerpts were flagged/ })
   ).toBeVisible();
   await expect(
-    page.getByRole("cell", { name: /technical-section window had no extracted rows on pages 5, 6/ })
+    page.getByRole("cell", { name: /technical-specification window had no extracted rows on pages 5, 6/ })
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Download", exact: true })).toHaveCount(1);
   const [historyDownload] = await Promise.all([
@@ -761,7 +769,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await expect(page.getByRole("button", { name: "Create draft submission" })).toHaveCount(0);
 
   const sourceLink = page.getByRole("link", {
-    name: "Open tender source for requirement 1, page 12",
+    name: "Open source for requirement 1, page 12",
   });
   await expect(sourceLink).toHaveAttribute(
     "href",
