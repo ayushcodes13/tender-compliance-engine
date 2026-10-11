@@ -246,10 +246,10 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
   const report = artifact.validation_report;
   if (artifact.validation_status === "passed" && artifact.status === "completed") {
     if (!report) {
-      return (
-        "Content checks passed, but detailed counts are unavailable." +
-        obligationCoverageSummary(undefined)
-      );
+      return [
+        "Content checks passed, but detailed counts are unavailable.",
+        obligationCoverageSummary(undefined),
+      ].join(" ");
     }
     const details: string[] = [];
     if (report.checked_columns !== undefined && report.checked_cells !== undefined) {
@@ -264,10 +264,15 @@ function exportValidationSummary(artifact: ExportArtifactResponse): string {
     const counts = details.length
       ? `${details.join(" ")}.`
       : "Detailed validation counts are unavailable in the saved report.";
-    return (
-      `${counts}${llmRows ? ` ${llmRows} row${llmRows === 1 ? " used" : "s used"} strict page-image review.` : ""}` +
-      obligationCoverageSummary(report.window_processing)
-    );
+    return [
+      counts,
+      llmRows
+        ? `${llmRows} row${llmRows === 1 ? " used" : "s used"} strict page-image review.`
+        : null,
+      obligationCoverageSummary(report.window_processing),
+    ]
+      .filter((detail): detail is string => Boolean(detail))
+      .join(" ");
   }
   if (artifact.validation_status === "needs_review") {
     const issueCount =
