@@ -16,6 +16,7 @@ together atomically.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import uuid
@@ -90,6 +91,17 @@ _STANDALONE_SAMPLE_ROW_HEADING_RE = re.compile(
     r"^\s*other\s+important\s+requirements\s*:\s*$", re.I
 )
 _NON_ROW_SECTION_LABEL_RE = re.compile(r"^\s*optional\s+items\s*$", re.I)
+_BIDDER_MATRIX_INSTRUCTION_RE = re.compile(
+    r"^\s*\(\s*bidder\s+should\s+submit\s+compliance\s+matrix\b.*\)\s*$",
+    re.I,
+)
+_MACHINE_SCHEDULE_TITLE_RE = re.compile(
+    r"^\s*supply\s*,?\s*installation\s+and\s+commissioning\s+of\b.*$",
+    re.I,
+)
+_MACHINE_SCHEDULE_TITLE_CONTINUATION_RE = re.compile(
+    r"^\s*(?:installation\s+and\s+)?commissioning\s+of\b.*$", re.I
+)
 
 
 def _span_is_in_scope(
@@ -251,6 +263,97 @@ def _table_cell_source_windows(
     return windows, tuple(excluded), current_schema
 
 
+def _merge_blank_serial_table_rows(windows: list[SourceWindow]) -> list[SourceWindow]:
+    """Attach unnumbered specification-table continuations to their serial row.
+
+    Some tender tables continue one numbered item across page breaks using
+    blank serial-number cells. Keep that text in the prior item while retaining
+    an exact source fragment for each contributing page/cell.
+    """
+    merged: list[SourceWindow] = []
+    active_index: int | None = None
+    active_serial: str | None = None
+
+    def append_continuation(window: SourceWindow) -> None:
+        if active_index is None:
+            merged.append(window)
+            return
+        previous = merged[active_index]
+        separator = "\n"
+        shift = len(previous.text) + len(separator)
+        merged_text = previous.text + separator + window.text
+        previous_sources = tuple(
+            source.model_copy(update={"source_text": merged_text})
+            for source in previous.sources
+        )
+        shifted_sources = tuple(
+            source.model_copy(
+                update={
+                    "window_char_start": shift,
+                    "window_char_end": shift + len(window.text),
+                    "source_text": merged_text,
+                }
+            )
+            for source in window.sources
+        )
+        merged[active_index] = SourceWindow(
+            chunk_id="cw-" + hashlib.sha256(
+                f"{previous.chunk_id}:{window.chunk_id}".encode()
+            ).hexdigest()[:12],
+            text=merged_text,
+            sources=(*previous_sources, *shifted_sources),
+            overlap=None,
+            hierarchy=previous.hierarchy,
+            table_context=previous.table_context,
+            ocr_warning=previous.ocr_warning or window.ocr_warning,
+            literal_source_row=True,
+        )
+
+    for window in windows:
+        cells = window.table_context
+        serial = cells[0].strip() if len(cells) >= 3 else ""
+        has_serial_schema = len(cells) >= 3 and (serial.isdigit() or not serial)
+        if has_serial_schema and serial:
+            merged.append(window)
+            active_index = len(merged) - 1
+            active_serial = serial
+            continue
+
+        if has_serial_schema and not serial:
+            if active_index is not None and active_serial is not None:
+                append_continuation(window)
+            else:
+                merged.append(window)
+            continue
+
+        if not cells and active_index is not None and active_serial is not None:
+            if re.fullmatch(r"\s*Page\s+\d+\s+of\s+\d+\s*", window.text, re.I):
+                continue
+            previous_pages = [
+                source.page_number
+                for source in merged[active_index].sources
+                if source.page_number is not None
+            ]
+            window_pages = [
+                source.page_number
+                for source in window.sources
+                if source.page_number is not None
+            ]
+            last_source_page = max(previous_pages, default=0)
+            window_page = min(window_pages, default=0)
+            if window_page and window_page <= last_source_page + 1:
+                append_continuation(window)
+            else:
+                merged.append(window)
+            continue
+
+        merged.append(window)
+        active_index = None
+        active_serial = None
+
+    return merged
+
+
 def _standalone_numbered_heading_ranges(
     text: str, included_ranges: tuple[SourceTextRange, ...]
 ) -> tuple[SourceTextRange, ...]:
@@ -290,6 +393,57 @@ def _technical_preamble_ranges(
         ):
             found.append(SourceTextRange(offset, end))
         offset += len(raw_line)
+    return tuple(found)
+
+
+def _technical_schedule_leadin_ranges(
+    text: str, included_ranges: tuple[SourceTextRange, ...]
+) -> tuple[SourceTextRange, ...]:
+    """Exclude response instructions and the equipment title before a table.
+
+    Tender tables sometimes place a bidder instruction and an equipment name
+    between the technical-specification heading and the first numbered row.
+    These are useful context, but the supplied response examples start at the
+    numbered specification rows. Apply this narrow rule only when the same
+    page contains a recognized technical response-table header.
+    """
+    lines: list[tuple[int, int, str]] = []
+    offset = 0
+    table_header_start: int | None = None
+    active_schema: tuple[int, ...] | None = None
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        end = offset + len(line)
+        lines.append((offset, end, line))
+        if " | " in line:
+            active_schema = _technical_table_schema(tuple(line.split(" | ")))
+            if active_schema is not None:
+                table_header_start = offset
+                break
+        offset += len(raw_line)
+    if table_header_start is None:
+        return ()
+
+    found: list[SourceTextRange] = []
+    has_explicit_intro = False
+    for start, end, line in lines:
+        if start >= table_header_start:
+            break
+        if not any(item.start <= start and end <= item.end for item in included_ranges):
+            continue
+        if _TECHNICAL_PREAMBLE_RE.match(line):
+            has_explicit_intro = True
+            found.append(SourceTextRange(start, end))
+        elif _BIDDER_MATRIX_INSTRUCTION_RE.match(line):
+            found.append(SourceTextRange(start, end))
+        elif (
+            has_explicit_intro
+            and (
+                _MACHINE_SCHEDULE_TITLE_RE.match(line)
+                or _MACHINE_SCHEDULE_TITLE_CONTINUATION_RE.match(line)
+            )
+        ):
+            found.append(SourceTextRange(start, end))
     return tuple(found)
 
 
@@ -820,7 +974,7 @@ class JobProcessor:
                     next_range
                 )
 
-            windows = []
+            windows: list[SourceWindow] = []
             active_table_schema: tuple[int, ...] | None = None
             for page in ordered_pages:
                 page_ranges = page_scope.get(page.page_number)
@@ -834,14 +988,24 @@ class JobProcessor:
                 preamble_ranges = _technical_preamble_ranges(
                     page_text, included_ranges
                 )
+                schedule_leadin_ranges = _technical_schedule_leadin_ranges(
+                    page_text, included_ranges
+                )
                 section_title_ranges = _technical_section_title_ranges(
                     page_text,
-                    _subtract_source_range(included_ranges, preamble_ranges),
+                    _subtract_source_range(
+                        included_ranges, (*preamble_ranges, *schedule_leadin_ranges)
+                    ),
                 )
                 numbered_headings = _standalone_numbered_heading_ranges(
                     page_text,
                     _subtract_source_range(
-                        included_ranges, (*preamble_ranges, *section_title_ranges)
+                        included_ranges,
+                        (
+                            *preamble_ranges,
+                            *schedule_leadin_ranges,
+                            *section_title_ranges,
+                        ),
                     ),
                 )
                 sample_row_headings, nonrow_labels = _sample_heading_ranges(
@@ -850,6 +1014,7 @@ class JobProcessor:
                         included_ranges,
                         (
                             *preamble_ranges,
+                            *schedule_leadin_ranges,
                             *section_title_ranges,
                             *numbered_headings,
                         ),
@@ -879,6 +1044,7 @@ class JobProcessor:
                     included_ranges,
                     (
                         *preamble_ranges,
+                        *schedule_leadin_ranges,
                         *section_title_ranges,
                         *numbered_headings,
                         *sample_row_headings,
@@ -976,6 +1142,7 @@ class JobProcessor:
                     window.chunk_id,
                 )
             )
+            windows = _merge_blank_serial_table_rows(windows)
             if not windows:
                 await svc.complete_run(
                     auth,

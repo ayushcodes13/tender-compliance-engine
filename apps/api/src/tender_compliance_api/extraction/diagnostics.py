@@ -80,7 +80,8 @@ def compute_diagnostics(
             the deduped count and the reconcilation summary JSON.
 
     Counts:
-        - total_windows counts primary extraction calls; fallback validation
+        - total_windows counts every source window, including literal table
+          rows that do not require a primary model call. Fallback validation
           calls are included only in total_llm_calls.
         - accepted  = candidates that are valid AND persistable (promotable).
         - rejected  = candidates that failed source validation (fabrication guard).
@@ -125,8 +126,9 @@ def compute_diagnostics(
     )
 
     return ExtractionDiagnosticsSummary(
-        total_windows=sum(
-            1 for call in outcome.llm_calls if call.call_site == "extract_candidates"
+        total_windows=max(
+            len(outcome.window_results),
+            sum(1 for call in outcome.llm_calls if call.call_site == "extract_candidates"),
         ),
         total_llm_calls=len(outcome.llm_calls),
         total_candidates=total_candidates,

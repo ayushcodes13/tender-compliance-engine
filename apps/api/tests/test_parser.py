@@ -379,6 +379,44 @@ class TestPyMuPDFParserAdapter:
         assert result.pages[0].visual_verification_required is True
         assert any("chemical subscripts" in item for item in result.pages[0].warnings)
 
+    def test_positioned_cell_reader_reconstructs_subscripts_from_glyphs(self) -> None:
+        import pymupdf
+
+        from tender_compliance_api.parser.pymupdf import _positioned_cell_text
+
+        document = pymupdf.open()
+        page = document.new_page(width=612, height=792)
+        baseline = 72
+        prefix = "Both As"
+        page.insert_text((36, baseline), prefix, fontsize=11)
+        x = 36 + pymupdf.get_text_length(prefix, fontsize=11)
+        page.insert_text((x, baseline + 1), "2", fontsize=11)
+        middle = " and As"
+        x += pymupdf.get_text_length("2", fontsize=11)
+        page.insert_text((x, baseline), middle, fontsize=11)
+        x += pymupdf.get_text_length(middle, fontsize=11)
+        page.insert_text((x, baseline + 1), "4", fontsize=11)
+        phosphorus = " and P"
+        x += pymupdf.get_text_length("4", fontsize=11)
+        page.insert_text((x, baseline), phosphorus, fontsize=11)
+        x += pymupdf.get_text_length(phosphorus, fontsize=11)
+        page.insert_text((x, baseline + 1), "2", fontsize=11)
+        x += pymupdf.get_text_length("2", fontsize=11)
+        page.insert_text((x, baseline), "/P", fontsize=11)
+        x += pymupdf.get_text_length("/P", fontsize=11)
+        page.insert_text((x, baseline + 1), "4", fontsize=11)
+        page.insert_text((36, 96), "Ordinary baseline 2 and 4 remain ordinary digits.")
+        pdf_bytes = document.tobytes()
+        document.close()
+
+        document = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        positioned = _positioned_cell_text(document[0], (30, 50, 400, 110))
+        document.close()
+
+        assert positioned is not None
+        assert "Both As₂ and As₄ and P₂/P₄" in positioned
+        assert "Ordinary baseline 2 and 4" in positioned
+
     def test_extracts_native_hyphenated_text_without_pypdf_spacing_artifact(self) -> None:
         import pymupdf
 

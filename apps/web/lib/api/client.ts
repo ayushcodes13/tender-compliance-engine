@@ -1071,7 +1071,12 @@ export const api = {
     pageNumber: number,
     quote?: string
   ) => {
-    const query = quote ? `?quote=${encodeURIComponent(quote)}` : "";
+    // The API accepts a bounded quote filter. Long multi-page requirement
+    // text is resolved by its persisted anchor ID in the caller, so request
+    // all anchors on that page instead of sending an invalid oversized query.
+    const query = quote && quote.length <= 2048
+      ? `?quote=${encodeURIComponent(quote)}`
+      : "";
     return apiFetch(
       `/projects/${projectId}/documents/${documentId}/versions/${version}/pages/${pageNumber}/sources${query}`
     ).then((r) => expectJson<SourceAnchor[]>(r));

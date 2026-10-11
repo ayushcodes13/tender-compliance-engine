@@ -60,7 +60,11 @@ from tender_compliance_api.extraction.adapter import (
     LlmCallError,
     LlmCallResult,
 )
-from tender_compliance_api.extraction.chunking import SourceWindow, build_source_windows
+from tender_compliance_api.extraction.chunking import (
+    SourceWindow,
+    build_literal_source_window,
+    build_source_windows,
+)
 from tender_compliance_api.extraction.coverage_audit import (
     ImageCoverageQuote,
     ImageObligationCoverageResponse,
@@ -69,6 +73,7 @@ from tender_compliance_api.extraction.extractor import (
     CandidateRecord,
     ExtractionOutcome,
     WindowExtractionResult,
+    _to_record,
     extract_from_windows,
 )
 from tender_compliance_api.extraction.fake import FakeLlmAdapter
@@ -93,11 +98,13 @@ from tender_compliance_api.storage.keys import build_key
 from tender_compliance_worker.processor import (
     JobProcessor,
     _boundary_continuation_ranges,
+    _merge_blank_serial_table_rows,
     _sample_heading_ranges,
     _standalone_numbered_heading_ranges,
     _subtract_source_range,
     _table_cell_source_windows,
     _technical_preamble_ranges,
+    _technical_schedule_leadin_ranges,
     _technical_section_title_ranges,
 )
 
@@ -192,6 +199,26 @@ def test_technical_section_title_is_not_a_requirement_window() -> None:
     ]
 
 
+def test_response_table_leadin_excludes_only_instructions_and_equipment_title() -> None:
+    text = (
+        "अनुभाग-5 / SECTION- V\n"
+        "तकनीकी विशिष्टता / Technical Specification\n"
+        "(Bidder should submit compliance matrix along with Technical Bid)\n"
+        "Item details and technical specifications as mentioned below: Supply,\n"
+        "Installation and Commissioning of Geosynthetic Universal Testing Machine.\n"
+        "S.no | Technical Specification | Qty | Compliance (Yes/No) | Any Deviation\n"
+        "1 | Universal Testing Machine (300 kN) with 300 kN capacity. | 01 | |\n"
+    )
+    ranges = _technical_schedule_leadin_ranges(
+        text, (SourceTextRange(0, len(text)),)
+    )
+    assert [text[item.start : item.end] for item in ranges] == [
+        "(Bidder should submit compliance matrix along with Technical Bid)",
+        "Item details and technical specifications as mentioned below: Supply,",
+        "Installation and Commissioning of Geosynthetic Universal Testing Machine.",
+    ]
+
+
 def test_sample_heading_row_is_separated_from_nonrow_section_label() -> None:
     text = "Other important requirements:\nOptional Items\n"
     row_headings, section_labels = _sample_heading_ranges(
@@ -236,6 +263,144 @@ def test_table_rows_extract_only_the_technical_specification_cells() -> None:
         SourceTextRange(0, text.index("1 |")),
         SourceTextRange(text.index("1 |"), len(text)),
     )
+
+
+def test_blank_serial_specification_rows_continue_prior_row_across_pages() -> None:
+    version_id = uuid.uuid4()
+    organization_id = uuid.uuid4()
+    document_id = uuid.uuid4()
+    first_page_text = (
+        "S.no | Technical Specification | Qty | Compliance (Yes/No) | Any Deviation\n"
+        "1 | Main machine requirement. | 01 | |\n"
+    )
+    continuation_text = (
+        " | Keyboard entry and power supply requirements. | | |\n"
+        " | Accessories and attachments. | | |\n"
+        "2 | Second machine requirement. | 01 | |\n"
+    )
+    first_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=17,
+        extracted_text=first_page_text,
+        cleaned_text=first_page_text,
+        ocr_needed=0,
+    )
+    continuation_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=18,
+        extracted_text=continuation_text,
+        cleaned_text=continuation_text,
+        ocr_needed=0,
+    )
+    first_windows, _, schema = _table_cell_source_windows(
+        first_page,
+        organization_id=organization_id,
+        document_id=document_id,
+        included_ranges=(SourceTextRange(0, len(first_page_text)),),
+        schema=None,
+    )
+    continuation_windows, _, _ = _table_cell_source_windows(
+        continuation_page,
+        organization_id=organization_id,
+        document_id=document_id,
+        included_ranges=(SourceTextRange(0, len(continuation_text)),),
+        schema=schema,
+    )
+
+    merged = _merge_blank_serial_table_rows(first_windows + continuation_windows)
+
+    assert [window.text for window in merged] == [
+        "Main machine requirement.\nKeyboard entry and power supply requirements.\n"
+        "Accessories and attachments.",
+        "Second machine requirement.",
+    ]
+    assert [source.page_number for source in merged[0].sources] == [17, 18, 18]
+    for window in merged:
+        for source in window.sources:
+            assert (
+                window.text[source.window_char_start : source.window_char_end]
+                == source.page_source_text[
+                    source.char_start - source.page_source_char_start :
+                    source.char_end - source.page_source_char_start
+                ]
+            )
+
+
+def test_unlabelled_continuation_between_serial_rows_stays_with_prior_row() -> None:
+    organization_id, document_id, version_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    first_page_text = "S.no | Technical Specification | Qty\n1 | Main machine requirement. | 01\n"
+    continuation_text = (
+        "Keyboard entry of stiffness correction factor.\n"
+        "Accessories and Attachments: Wide Frame Option.\n"
+        "S.no | Technical Specification | Qty\n2 | Grips and fixtures. | 01\n"
+    )
+    first_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=17,
+        extracted_text=first_page_text,
+        cleaned_text=first_page_text,
+        ocr_needed=0,
+    )
+    continuation_page = DocumentPage(
+        document_version_id=version_id,
+        page_number=18,
+        extracted_text=continuation_text,
+        cleaned_text=continuation_text,
+        ocr_needed=0,
+    )
+    first_windows, _, schema = _table_cell_source_windows(
+        first_page,
+        organization_id=organization_id,
+        document_id=document_id,
+        included_ranges=(SourceTextRange(0, len(first_page_text)),),
+        schema=None,
+    )
+    continuation_windows, _, _ = _table_cell_source_windows(
+        continuation_page,
+        organization_id=organization_id,
+        document_id=document_id,
+        included_ranges=(SourceTextRange(0, len(continuation_text)),),
+        schema=schema,
+    )
+    plain_continuation = continuation_text.split("S.no")[0].rstrip()
+    plain_window = build_literal_source_window(
+        continuation_page,
+        organization_id=organization_id,
+        document_id=document_id,
+        char_start=0,
+        char_end=len(plain_continuation),
+    )
+
+    merged = _merge_blank_serial_table_rows(
+        first_windows + [plain_window] + continuation_windows
+    )
+
+    assert [window.text for window in merged] == [
+        "Main machine requirement.\nKeyboard entry of stiffness correction factor.\n"
+        "Accessories and Attachments: Wide Frame Option.",
+        "Grips and fixtures.",
+    ]
+    assert [source.page_number for source in merged[0].sources] == [17, 18]
+    record = _to_record(
+        merged[0],
+        RequirementCandidate(
+            normalized_text=merged[0].text,
+            raw_source=merged[0].text,
+            requirement_type=RequirementType.OBLIGATION,
+            uncertainty=UncertaintyLevel.CONFIRMED,
+        ),
+    )
+    assert record.is_valid is True
+    assert record.persistable is True
+    for window in merged:
+        for source in window.sources:
+            assert (
+                window.text[source.window_char_start : source.window_char_end]
+                == source.page_source_text[
+                    source.char_start - source.page_source_char_start :
+                    source.char_end - source.page_source_char_start
+                ]
+            )
 
 
 def test_parameter_tables_keep_the_name_and_required_specification() -> None:
