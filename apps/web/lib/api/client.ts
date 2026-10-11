@@ -349,6 +349,12 @@ export type ExportArtifactResponse = {
     checked_columns?: number;
     checked_cells?: number;
     issues?: { row_id: string; code: string; field?: string }[];
+    presentation_validation?: {
+      status: "passed" | "failed";
+      checked_headings: number;
+      checked_open_circle_markers: number;
+      issues: { code: string; detail: string }[];
+    };
     source_validation?: {
       status: "passed" | "needs_review";
       checked_rows: number;

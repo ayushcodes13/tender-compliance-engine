@@ -29,6 +29,9 @@ from tender_compliance_api.export.validation import (
     validate_generated_requirement_cells,
 )
 from tender_compliance_api.export.vendor_response_docx import build_vendor_response_docx
+from tender_compliance_api.export.vendor_response_presentation import (
+    validate_vendor_response_presentation,
+)
 from tender_compliance_api.export.vendor_response_rows import response_sheet_lines
 from tender_compliance_api.export.xlsx import build_matrix_workbook, save_matrix_workbook
 from tender_compliance_api.matrix.projection import FinalMatrixRow, MatrixRow
@@ -162,6 +165,65 @@ def test_vendor_response_splits_private_use_bullets_after_a_section_heading() ->
         ("1.1", "\uf0b7 Auto ranging force readout with ±0.5% accuracy", 1),
         ("1.2", "\uf0b7 Force sampling rate: 1000/s", 1),
     ]
+
+
+def test_vendor_response_keeps_accessory_headings_and_open_circle_rows_separate() -> None:
+    source = (
+        "Universal Testing Machine features:\n"
+        "\uf0b7 Power supply: 380V / 400V, 3 phase\n"
+        "Accessories and Attachments Wide Frame Option \uf0b7 WF850-300kN: "
+        "Wide frame option Dual Station Configuration \uf0b7 STS100: "
+        "Dual station configuration Load Cells \uf0b7 LC300kN: "
+        "o 3000 kgf load cell o Range: 0.400 kN to 300.00 kN"
+    )
+    row = replace(_row(), raw_source=source, tender_requirement=source)
+
+    lines = response_sheet_lines([row])
+
+    headings = [line for line in lines if line.is_section_heading]
+    assert [line.display_text for line in headings] == [
+        "Accessories and Attachments",
+        "Wide Frame Option",
+        "Dual Station Configuration",
+        "Load Cells",
+    ]
+    nested = [line for line in lines if line.level == 2]
+    assert [line.display_label for line in nested] == ["i)", "ii)"]
+    assert [line.display_text for line in nested] == [
+        "3000 kgf load cell",
+        "Range: 0.400 kN to 300.00 kN",
+    ]
+
+    artifact = build_vendor_response_docx([row])
+    report = validate_vendor_response_presentation([row], artifact)
+    assert report.status == "passed"
+    assert report.checked_headings == 4
+    assert report.checked_open_circle_markers == 2
+
+
+def test_vendor_response_presentation_validator_catches_flattened_headings_and_o_markers() -> None:
+    source = (
+        "Technical package. Accessories and Attachments Load Cells "
+        "\uf0b7 LC300kN: o 3000 kgf load cell"
+    )
+    row = replace(_row(), raw_source=source, tender_requirement=source)
+    document = Document(BytesIO(build_vendor_response_docx([row])))
+    table = document.tables[0]
+    heading_row = next(r for r in table.rows[1:] if r.cells[1].text == "Load Cells")
+    heading_row.cells[1].text = ""
+    table.rows[1].cells[1].text += " Load Cells"
+    nested_row = next(r for r in table.rows[1:] if "3000 kgf load cell" in r.cells[1].text)
+    nested_row.cells[1].text = "o 3000 kgf load cell"
+    buffer = BytesIO()
+    document.save(buffer)
+
+    report = validate_vendor_response_presentation([row], buffer.getvalue())
+
+    assert report.status == "failed"
+    assert {issue.code for issue in report.issues} == {
+        "section_heading_not_standalone",
+        "open_circle_marker_leaked",
+    }
 
 
 def test_export_integrity_catches_mutated_non_source_cell() -> None:

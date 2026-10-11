@@ -188,7 +188,9 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
             cell.width = Inches(width)
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
             _set_cell_margins(cell)
-            if line.level == 0:
+            if line.is_section_heading:
+                _set_cell_shading(cell, "DCE6F1")
+            elif line.level == 0:
                 _set_cell_shading(cell, "E8EEF6")
             elif row_index % 2:
                 _set_cell_shading(cell, "F3F6FA")
@@ -201,16 +203,18 @@ def build_vendor_response_docx(rows: Sequence[MatrixRow]) -> bytes:
             for paragraph in cell.paragraphs:
                 paragraph.paragraph_format.space_after = Pt(2)
                 if index == 1 and line.level > 0:
-                    paragraph.paragraph_format.left_indent = Inches(0.22)
+                    paragraph.paragraph_format.left_indent = Inches(
+                        0.4 if line.level == 2 else 0.22
+                    )
                 paragraph.alignment = (
                     WD_ALIGN_PARAGRAPH.CENTER
                     if index in (0, 2, 3)
                     else WD_ALIGN_PARAGRAPH.LEFT
                 )
                 for run in paragraph.runs:
-                    if line.level == 0:
+                    if line.level == 0 or line.is_section_heading:
                         run.bold = True
-                    run.font.size = Pt(9)
+                    run.font.size = Pt(10 if line.is_section_heading else 9)
                     run.font.color.rgb = RGBColor(31, 41, 55)
 
     _remove_table_borders(table)

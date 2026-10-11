@@ -861,6 +861,9 @@ class TestPromptVersioning:
             "never merge sibling lettered rows",
             "keep the full text belonging to one labeled row together",
             "preserve grouped bullets as one candidate",
+            "blank specification cell",
+            "retain the exact item label as a source-linked row",
+            "do not invent a specification for it",
             "grips and fixtures",
             "grouped \"other requirements\"",
             "utilities/spares",
@@ -870,7 +873,7 @@ class TestPromptVersioning:
             "diamond-scriber example",
         ):
             assert phrase in prompt
-        assert "1.12.0" == PROMPT_VERSION
+        assert "1.13.0" == PROMPT_VERSION
 
     def test_extraction_response_uses_candidate_schema(self) -> None:
         # The LLM response schema is bounded by the CP25 RequirementCandidate.

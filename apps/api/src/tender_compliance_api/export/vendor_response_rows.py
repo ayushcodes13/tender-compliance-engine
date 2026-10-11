@@ -10,9 +10,20 @@ from hashlib import sha256
 from tender_compliance_api.matrix.projection import MatrixRow
 
 _BULLET_MARKERS = r"[•●▪◦‣\uf0a7\uf0b7]"
+_OPEN_CIRCLE_MARKER = re.compile(r"(?<!\w)o(?=[ \t]+[A-Z0-9])")
+_SECTION_HEADINGS = (
+    "Accessories and Attachments",
+    "Wide Frame Option",
+    "Dual Station Configuration",
+    "Load Cells",
+    "Other requirements",
+)
+_SECTION_HEADING_MARKERS = "|".join(re.escape(value) for value in _SECTION_HEADINGS)
 _MARKER = re.compile(
     rf"(?m)(?:^[ \t]*(?P<line_marker>(?:\d+(?:\.\d+)*[.)]|[A-Za-z][.)]|"
-    rf"{_BULLET_MARKERS}))|(?<=\s)(?P<inline_bullet>{_BULLET_MARKERS}))[ \t]*"
+    rf"{_BULLET_MARKERS}))|(?<=\s)(?P<inline_bullet>{_BULLET_MARKERS})|"
+    rf"(?P<open_circle>(?<!\w)o(?=[ \t]+[A-Z0-9]))|"
+    rf"(?P<section_heading>(?<!\w)(?:{_SECTION_HEADING_MARKERS})(?!\w)))[ \t]*"
 )
 _NUMBER = re.compile(r"^(?P<number>\d+(?:\.\d+)*)(?:[.)])?[ \t]+")
 _INLINE_NUMBER = re.compile(
@@ -20,8 +31,10 @@ _INLINE_NUMBER = re.compile(
 )
 _LETTER = re.compile(r"^(?P<letter>[A-Za-z])[.)][ \t]+")
 _BULLET = re.compile(r"^(?P<bullet>[•●▪◦‣\uf0a7\uf0b7])[ \t]*")
+_OPEN_CIRCLE_BULLET = re.compile(r"^o(?=[ \t]+[A-Z0-9])")
 _DISPLAY_MARKER = re.compile(
-    rf"^(?:\d+(?:\.\d+)*[.)]|[A-Za-z][.)]|{_BULLET_MARKERS})[ \t]+"
+    rf"^(?:\d+(?:\.\d+)*[.)]|[A-Za-z][.)]|{_BULLET_MARKERS}|"
+    rf"o(?=[ \t]+[A-Z0-9]))[ \t]+"
 )
 
 
@@ -36,6 +49,7 @@ class VendorResponseLine:
     level: int
     parent_requirement_id: str
     display_label: str
+    is_section_heading: bool = False
 
     @property
     def display_source_text(self) -> str:
@@ -72,10 +86,18 @@ def _add_display_labels(lines: list[VendorResponseLine]) -> list[VendorResponseL
     labelled: list[VendorResponseLine] = []
     active_parent: str | None = None
     for line in lines:
+        if line.is_section_heading:
+            labelled.append(line)
+            continue
         if line.level == 0:
             active_parent = line.serial
             child_counts[active_parent] = 0
             label = f"{line.serial})"
+        elif line.level == 2:
+            key = f"{line.serial.rsplit('.nested.', maxsplit=1)[0]}:nested"
+            index = child_counts.get(key, 0)
+            child_counts[key] = index + 1
+            label = _roman_label(index)
         else:
             parent = active_parent or line.serial.split(".", maxsplit=1)[0]
             index = child_counts.get(parent, 0)
@@ -83,6 +105,23 @@ def _add_display_labels(lines: list[VendorResponseLine]) -> list[VendorResponseL
             label = _alphabetic_label(index)
         labelled.append(replace(line, display_label=label))
     return labelled
+
+
+def _roman_label(index: int) -> str:
+    numerals: tuple[tuple[int, str], ...] = (
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    )
+    remaining = index + 1
+    label = ""
+    for value, numeral in numerals:
+        while remaining >= value:
+            label += numeral
+            remaining -= value
+    return f"{label})"
 
 
 def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
@@ -105,7 +144,12 @@ def _marked_fragments(text: str) -> list[tuple[str | None, str]]:
             # field label and its value (for example, "Power supply: • 380V").
             # Keep that label/value pair together as one technical parameter.
             continue
-        marker = match.group("line_marker") or match.group("inline_bullet")
+        marker = (
+            match.group("line_marker")
+            or match.group("inline_bullet")
+            or match.group("open_circle")
+            or ("__section_heading__" if match.group("section_heading") else None)
+        )
         markers.append((match.start(), match.end(), marker))
 
     # Some PDF table cells flatten numbered entries onto one line. Split only
@@ -194,6 +238,8 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
         fragment: str,
         level: int,
         item_text: str = "",
+        *,
+        is_section_heading: bool = False,
     ) -> None:
         serial = unique_serial(proposed, row.serial, str(row.requirement_id))
         result.append(
@@ -205,6 +251,7 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                 level=level,
                 parent_requirement_id=str(row.requirement_id),
                 display_label="",
+                is_section_heading=is_section_heading,
             )
         )
 
@@ -219,7 +266,7 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
         first = fragments[0][1] if fragments else ""
         first_number = _NUMBER.match(first)
         first_letter = _LETTER.match(first)
-        first_bullet = _BULLET.match(first)
+        first_bullet = _BULLET.match(first) or _OPEN_CIRCLE_BULLET.match(first)
 
         if first_number:
             active_source_parent = first_number.group("number")
@@ -274,7 +321,30 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                 add(row, parent, "", 0, item_text)
                 active_source_parent = parent
             child_index = 0
+            last_level_one_serial: str | None = None
+            nested_index = 0
             for fragment_index, (marker, fragment) in enumerate(fragments):
+                if marker == "__section_heading__":
+                    add(
+                        row,
+                        f"{parent}.heading.{fragment_index}",
+                        fragment.strip(),
+                        0,
+                        is_section_heading=True,
+                    )
+                    continue
+
+                if _OPEN_CIRCLE_BULLET.match(fragment):
+                    nested_index += 1
+                    nested_parent = last_level_one_serial or parent
+                    add(
+                        row,
+                        f"{nested_parent}.nested.{nested_index}",
+                        fragment,
+                        2,
+                    )
+                    continue
+
                 bullet_heading = bool(
                     marker
                     and _BULLET.fullmatch(marker)
@@ -286,25 +356,34 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                     parent = serial
                     active_source_parent = parent
                     active_child_index = 0
+                    last_level_one_serial = None
+                    nested_index = 0
                     continue
 
                 if fragment_index == 0 and marker is None:
                     add(row, parent, fragment or item_text, 0, item_text)
                     active_source_parent = parent
                     active_child_index = 0
+                    last_level_one_serial = None
+                    nested_index = 0
                     continue
 
                 if marker is None:
                     add(row, parent, fragment or item_text, 0, item_text)
                     active_source_parent = parent
                     active_child_index = 0
+                    last_level_one_serial = None
+                    nested_index = 0
                     continue
 
                 letter = _LETTER.match(fragment)
                 numeric = _NUMBER.match(fragment)
                 if letter:
                     child_key = letter.group("letter").lower()
-                    add(row, f"{parent}.{child_key}", fragment, 1)
+                    serial = f"{parent}.{child_key}"
+                    add(row, serial, fragment, 1)
+                    last_level_one_serial = serial
+                    nested_index = 0
                 elif numeric:
                     group = numeric.group("number")
                     if has_heading_prefix:
@@ -314,15 +393,22 @@ def response_sheet_lines(rows: Sequence[MatrixRow]) -> list[VendorResponseLine]:
                             else f"{parent}.{group}"
                         )
                         add(row, child_serial, fragment, 1)
+                        last_level_one_serial = child_serial
+                        nested_index = 0
                         child_index += 1
                     else:
                         add(row, group, fragment, 0)
                         active_source_parent = group
                         parent = group
                         child_index = 0
+                        last_level_one_serial = None
+                        nested_index = 0
                 else:
                     child_index += 1
-                    add(row, f"{parent}.{child_index}", fragment, 1)
+                    serial = f"{parent}.{child_index}"
+                    add(row, serial, fragment, 1)
+                    last_level_one_serial = serial
+                    nested_index = 0
             active_child_index = child_index
             if item_text or first_bullet or fragments[0][0] is None:
                 active_source_parent = parent
