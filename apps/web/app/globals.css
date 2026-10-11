@@ -2024,33 +2024,37 @@ a {
 
 .technical-requirement-list {
   display: grid;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid #dfe4ea;
-  border-radius: 12px;
-  background: var(--color-surface);
+  gap: 14px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .technical-requirement-card {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 112px;
+  grid-template-columns: 42px minmax(0, 1fr) 126px;
   align-items: start;
   gap: 18px;
-  padding: 24px 26px;
+  padding: 20px 22px;
+  border: 1px solid #dfe5ed;
+  border-radius: 12px;
   background: var(--color-surface);
-}
-
-.technical-requirement-card + .technical-requirement-card {
-  border-top: 1px solid #e6eaf0;
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.035);
 }
 
 .technical-requirement-number {
-  display: block;
-  padding-top: 2px;
+  display: inline-flex;
+  min-width: 38px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #edf3ff;
   color: #2457d6;
-  font-size: 21px;
+  font-size: 17px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2062,15 +2066,15 @@ a {
 .technical-requirement-copy,
 .technical-requirement-introduction {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.68;
+  font-size: 15.5px;
+  line-height: 1.72;
   text-wrap: pretty;
 }
 
 .technical-requirement-introduction {
-  margin-bottom: 12px;
-  color: #1c293b;
-  font-size: 15.5px;
+  margin-bottom: 13px;
+  color: #172033;
+  font-size: 16px;
   font-weight: 650;
 }
 
@@ -2086,24 +2090,24 @@ a {
 .technical-specification-item,
 .technical-specification-nested li {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
-  padding: 11px 0;
-  color: #35445a;
-  font-size: 14.5px;
-  line-height: 1.7;
+  gap: 11px;
+  padding: 12px 10px;
+  color: #344256;
+  font-size: 15px;
+  line-height: 1.68;
   text-wrap: pretty;
 }
 
 .technical-specification-item + .technical-specification-item {
-  border-top: 1px solid #eef1f5;
+  border-top: 1px solid #edf0f4;
 }
 
 .technical-specification-section {
   grid-column: 1 / -1;
-  margin-top: 10px;
-  padding: 14px 0 5px;
+  margin-top: 9px;
+  padding: 13px 10px 5px;
   border-top: 1px solid #e3e8ef;
 }
 
@@ -2132,7 +2136,7 @@ a {
   font-size: 13.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1.8;
+  line-height: 1.68;
 }
 
 .technical-specification-nested {
@@ -2158,19 +2162,24 @@ a {
 
 .technical-requirement-source {
   display: grid;
-  min-height: 44px;
-  align-content: start;
-  justify-items: end;
-  gap: 4px;
-  padding: 2px 0 2px 8px;
+  min-height: 72px;
+  align-content: center;
+  justify-items: start;
+  gap: 3px;
+  padding: 9px 11px;
+  border: 1px solid #e2e7ef;
+  border-radius: 9px;
+  background: #f8fafc;
   color: #64748b;
   text-decoration: none;
-  text-align: right;
-  transition-property: color;
+  text-align: left;
+  transition-property: color, border-color, background-color;
   transition-duration: 140ms;
 }
 
 .technical-requirement-source:hover {
+  border-color: #b9c9e8;
+  background: #f4f7fd;
   color: var(--color-accent);
 }
 
@@ -2207,18 +2216,19 @@ a {
 
 @media (max-width: 760px) {
   .technical-requirement-list {
-    border-radius: 10px;
+    gap: 10px;
   }
 
   .technical-requirement-card {
     grid-template-columns: 34px minmax(0, 1fr);
     gap: 8px 12px;
-    padding: 20px 17px;
+    padding: 16px 14px;
   }
 
   .technical-requirement-number {
-    padding-top: 1px;
-    font-size: 18px;
+    min-width: 32px;
+    min-height: 30px;
+    font-size: 15px;
   }
 
   .technical-requirement-copy,
@@ -2229,9 +2239,9 @@ a {
 
   .technical-specification-item {
     grid-template-columns: 25px minmax(0, 1fr);
-    gap: 9px;
-    padding: 9px 0;
-    font-size: 14px;
+    gap: 8px;
+    padding: 10px 7px;
+    font-size: 14.5px;
   }
 
   .technical-specification-nested {

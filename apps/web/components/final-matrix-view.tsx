@@ -405,12 +405,22 @@ function splitTechnicalRequirement(text: string): TechnicalRequirementDisplay {
     }
 
     const nestedPositions = markerPositions(item, INLINE_O_BULLET);
+    const nestedParent = nestedPositions.length
+      ? item.slice(0, nestedPositions[0]).trim()
+      : "";
+    if (nestedPositions.length === 1 && /:$/.test(nestedParent)) {
+      specifications.push({
+        text: nestedParent,
+        nested: splitAtMarkers(item, nestedPositions),
+      });
+      continue;
+    }
     if (nestedPositions.length < 2) {
       specifications.push({ text: item });
       continue;
     }
     const nested = splitAtMarkers(item, nestedPositions);
-    const parentText = item.slice(0, nestedPositions[0]).trim();
+    const parentText = nestedParent;
     if (parentText) {
       specifications.push({ text: parentText, nested });
     } else {
