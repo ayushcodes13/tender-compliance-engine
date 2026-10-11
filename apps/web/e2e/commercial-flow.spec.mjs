@@ -765,6 +765,15 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   await expect(page.getByText(/This export is unavailable for download until it has a passing result\./)).toBeVisible();
   await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download", exact: true })).toHaveCount(0);
+  await page.getByText("View saved validation details", { exact: true }).click();
+  await expect(page.getByText(coverageQuote, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open page 9", exact: true })
+  ).toHaveAttribute(
+    "href",
+    `/projects/project-1/review?documentId=${tenderDocumentId}&version=1&page=9`
+  );
+  await page.getByText("View saved validation details", { exact: true }).click();
   const [vendorSheetDownload] = await Promise.all([
     page.waitForEvent("download"),
     page.getByRole("button", { name: "Download response sheet (DOCX)" }).click(),
