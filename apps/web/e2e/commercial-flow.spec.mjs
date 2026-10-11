@@ -710,7 +710,7 @@ test("buyer can upload a tender, review source-linked technical rows, and export
   const specificationRow = page.locator(".technical-specification-item").first();
   await expect(specificationRow).toHaveCSS("border-top-width", "0px");
   await expect(specificationRow).toHaveCSS("border-left-width", "0px");
-  await expect(specificationRow).toHaveCSS("font-size", "15.5px");
+  await expect(specificationRow).toHaveCSS("font-size", "16px");
   await expect(
     page.locator(".technical-specification-section h3").filter({
       hasText: "Dual Station Configuration",
