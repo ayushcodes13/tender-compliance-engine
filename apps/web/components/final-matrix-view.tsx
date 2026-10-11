@@ -496,7 +496,7 @@ function TechnicalRequirementText({ text }: { text: string }) {
           </li>
         ) : (
           <li className="technical-specification-item" key={`${index}-${specification.text.slice(0, 32)}`}>
-            <span className="technical-specification-label" aria-hidden="true">
+            <span className="technical-specification-label">
               {alphabeticLabel(content.specifications.slice(0, index).filter((item) => !item.headingLevel).length)}
             </span>
             <div className="technical-specification-detail">
@@ -505,7 +505,7 @@ function TechnicalRequirementText({ text }: { text: string }) {
                 <ol className="technical-specification-nested" aria-label="Nested specifications">
                   {specification.nested.map((item, nestedIndex) => (
                     <li key={`${nestedIndex}-${item.slice(0, 32)}`}>
-                      <span className="technical-specification-label" aria-hidden="true">
+                      <span className="technical-specification-label">
                         {romanLabel(nestedIndex)}
                       </span>
                       <span>{item}</span>
@@ -1307,8 +1307,7 @@ export function FinalMatrixView(props: {
           <div className="technical-requirement-list" aria-label="Tender technical specifications">
             <div className="technical-requirement-list-header" aria-hidden="true">
               <span>#</span>
-              <span>Technical specification from tender</span>
-              <span>Tender source</span>
+              <span>Technical specifications from the tender</span>
             </div>
             {rows.map((row) => {
               const sourcePage =
@@ -1345,7 +1344,7 @@ export function FinalMatrixView(props: {
                     >
                       <span>Source page</span>
                       <strong>{sourcePage}</strong>
-                      <span className="technical-source-action">Open cited page</span>
+                      <span className="technical-source-action">Open cited source</span>
                     </a>
                   ) : (
                     <span className="technical-requirement-source-unavailable">
