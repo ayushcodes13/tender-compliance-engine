@@ -2324,6 +2324,16 @@ class DocumentService:
             from tender_compliance_api.export.validation import (  # noqa: PLC0415
                 validate_generated_requirement_cells,
             )
+            presentation = None
+            if vendor_response_template:
+                from tender_compliance_api.export.vendor_response_presentation import (  # noqa: PLC0415
+                    validate_vendor_response_presentation,
+                )
+
+                assert vendor_rows is not None
+                presentation = validate_vendor_response_presentation(
+                    vendor_rows, artifact_bytes
+                )
 
             if vendor_response_template:
                 assert vendor_rows is not None
@@ -2355,9 +2365,22 @@ class DocumentService:
                     for issue in integrity.issues
                 ],
             }
+            if presentation is not None:
+                integrity_report["presentation_validation"] = {
+                    "status": presentation.status,
+                    "checked_headings": presentation.checked_headings,
+                    "checked_open_circle_markers": presentation.checked_open_circle_markers,
+                    "issues": [
+                        {"code": issue.code, "detail": issue.detail}
+                        for issue in presentation.issues
+                    ],
+                }
             if integrity.status != "passed":
                 validation_status = "failed"
                 raise ValueError("generated sheet failed content validation")
+            if presentation is not None and presentation.status != "passed":
+                validation_status = "failed"
+                raise ValueError("generated sheet failed presentation validation")
 
             extraction_report = await _extraction_window_coverage_report(
                 self._session, version.id
