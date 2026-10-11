@@ -2016,6 +2016,226 @@ a {
   color: var(--color-text-muted);
 }
 
+.technical-requirement-container {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+}
+
+.technical-requirement-list {
+  display: grid;
+  gap: 16px;
+}
+
+.technical-requirement-card {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 126px;
+  align-items: start;
+  gap: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(23, 32, 51, 0.04), 0 8px 22px rgba(23, 32, 51, 0.035);
+}
+
+.technical-requirement-number {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #d7e3fb;
+  border-radius: 12px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.technical-requirement-main {
+  min-width: 0;
+  color: var(--color-text);
+}
+
+.technical-requirement-copy,
+.technical-requirement-introduction {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.technical-requirement-introduction {
+  margin-bottom: 12px;
+  color: #26364d;
+  font-weight: 620;
+}
+
+.technical-specification-list,
+.technical-specification-nested {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.technical-specification-item,
+.technical-specification-nested li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 9px 0;
+  color: #34445b;
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.technical-specification-item + .technical-specification-item {
+  border-top: 1px solid #edf0f4;
+}
+
+.technical-specification-section {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 12px 0 4px;
+  border-top: 1px solid #e3e8ef;
+}
+
+.technical-specification-section h3 {
+  margin: 0;
+  color: #35445a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.technical-specification-section-2 {
+  margin: 0 0 0 40px;
+  padding: 5px 0 2px;
+  border-top: 0;
+}
+
+.technical-specification-section-2 h3 {
+  color: #5a687b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.technical-specification-label {
+  color: #3157a4;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.technical-specification-nested {
+  margin: 8px 0 0 2px;
+  padding-left: 12px;
+  border-left: 2px solid #e3eaf5;
+}
+
+.technical-specification-nested li {
+  grid-template-columns: 28px minmax(0, 1fr);
+  padding: 5px 0;
+  color: #536174;
+  font-size: 13px;
+}
+
+.technical-specification-nested .technical-specification-label {
+  color: #66758a;
+  font-weight: 600;
+}
+
+.technical-requirement-source {
+  display: grid;
+  min-height: 82px;
+  align-content: center;
+  justify-items: start;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--color-text);
+  text-decoration: none;
+  transition-property: background-color, border-color, box-shadow;
+  transition-duration: 140ms;
+}
+
+.technical-requirement-source:hover {
+  border-color: #b8c8e5;
+  background: #f1f5fc;
+  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.07);
+}
+
+.technical-requirement-source:focus-visible {
+  outline: 3px solid rgba(36, 87, 214, 0.28);
+  outline-offset: 2px;
+}
+
+.technical-requirement-source > span:first-child {
+  color: var(--color-text-subtle);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.technical-requirement-source strong {
+  color: var(--color-text);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.technical-requirement-source .technical-source-action {
+  color: var(--color-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.technical-requirement-source-unavailable {
+  align-self: center;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .technical-requirement-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px 14px;
+    padding: 17px 16px;
+  }
+
+  .technical-requirement-number {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    font-size: 17px;
+  }
+
+  .technical-requirement-source,
+  .technical-requirement-source-unavailable {
+    grid-column: 2;
+  }
+
+  .technical-requirement-source {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .technical-requirement-source strong {
+    font-size: 13px;
+  }
+}
+
 .matrix-loading {
   display: flex;
   align-items: center;
