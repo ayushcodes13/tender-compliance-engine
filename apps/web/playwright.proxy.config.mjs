@@ -7,6 +7,7 @@ const backendURL = `http://127.0.0.1:${backendPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: ["**/._*"],
   timeout: 30_000,
   expect: { timeout: 7_500 },
   reporter: [["line"]],
