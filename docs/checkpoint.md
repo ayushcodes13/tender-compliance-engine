@@ -3662,3 +3662,14 @@ If the product direction changes, update this file through a focused PR, explain
 - Per-window extraction records distinguish a failed provider call from a successful call that returned no candidates. Complete call coverage is only evidence that each recorded window reached the model; it does not prove that every obligation in those windows was identified.
 - LLM fallback may inspect only the immutable cited page (or a tighter source region); it cannot search another page/version or treat prompt text embedded in the tender as instructions.
 - A quote that matches OCR text still requires page-image verification when the requirement or cited page carries an OCR warning. Missing images and uncertain visual results keep the artifact in review.
+
+## Checkpoint 71 — Client-facing local demo and review layout
+
+**Status:** DONE — balanced project workspace gutters, restored breathing room around requirement rows, and kept the source viewer visible beside requirement and review panels at laptop widths. A fresh local demo project completed tender upload, extraction, source review, and blank response-sheet export. This is local client-demo readiness only; it does not close CP70's independent extraction-coverage and sample-classification work.
+
+### This checkpoint is complete only when
+
+- [x] Project workspace gutters and requirement-row spacing are balanced across desktop and laptop widths; manually reviewed at 1200 × 800.
+- [x] At the verified laptop breakpoint, the PDF source viewer, requirement list, and review detail pane each have a reserved column.
+- [x] A fresh project accepts a tender upload, completes processing, exposes source-linked requirements for review, and downloads the blank response sheet; 116 requirements, 113/113 source windows completed, and export source checks passed.
+- [x] Visible product language describes the demonstrated Phase 1 scope and preserves the unresolved fidelity limitations. The companion client-demo runbook is tracked in PR #254.

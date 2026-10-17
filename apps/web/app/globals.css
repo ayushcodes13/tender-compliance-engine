@@ -324,7 +324,7 @@ a {
 .app-main {
   min-width: 0;
   flex: 1;
-  padding: 12px 12px 12px 0;
+  padding: 12px;
 }
 
 .app-surface {
@@ -886,7 +886,7 @@ a {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 4px;
+  padding: 8px 12px;
 }
 
 .requirement-card {
@@ -895,7 +895,7 @@ a {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-  margin-bottom: 2px;
+  margin-bottom: 8px;
   transition: border-color 120ms ease, background 120ms ease;
 }
 
@@ -2523,7 +2523,20 @@ a {
    Responsive
    =========================================================================== */
 
-@media (max-width: 1360px) {
+@media (min-width: 1121px) and (max-width: 1360px) {
+  .review-layout {
+    grid-template-columns: minmax(240px, 28%) minmax(320px, 1fr) minmax(280px, 30%);
+  }
+
+  .evidence-pane {
+    position: static;
+    width: auto;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 1120px) {
   .review-layout {
     grid-template-columns: minmax(280px, 34%) 1fr;
   }
