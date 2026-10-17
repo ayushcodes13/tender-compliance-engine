@@ -13,6 +13,7 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16%2B-4169E1?logo=postgresql&logoColor=white">
+  <a href="#current-readiness"><img alt="Private pilot only; not publicly deployed" src="https://img.shields.io/badge/deployment-private%20pilot%20only-6B7280"></a>
   <img alt="License" src="https://img.shields.io/badge/license-proprietary-001742">
 </p>
 
@@ -68,6 +69,8 @@ Supported tender inputs include PDF and DOCX. The primary OEM response sheet is 
 Known sample-review work includes exact-wording differences, possible omitted requirements, blank response-sheet decisions, and unresolved coverage findings. These require review against the original pages and the supplied response sheets. The app must not infer a supplier decision from an empty cell or treat an unconfirmed possible omission as a fact.
 
 The private pilot has no user sign-in and is intended for local or trusted private-network use. Do not expose it directly to the public internet. Production use still needs client-specific identity, storage, malware-scanning, backup, and service-health configuration.
+
+**Vercel status:** The full application is not deployed to Vercel. It depends on the API, database, worker, queue, and upload scanner; the pilot web surface has no user sign-in. Keep it local or on a trusted private network until identity, storage, malware scanning, backups, service health, and client acceptance are configured and verified together.
 
 GitHub Actions verification is temporarily unavailable because the repository account has a billing/spending restriction. This README does not treat blocked jobs as passing checks. Restore billing and rerun the required workflows before release sign-off.
 
