@@ -68,6 +68,22 @@ function useRequirements(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const updateReviewState = (
+    requirementId: string,
+    reviewState: RequirementListResponse["items"][number]["review_state"],
+  ) => {
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            items: current.items.map((item) =>
+              item.id === requirementId ? { ...item, review_state: reviewState } : item,
+            ),
+          }
+        : current,
+    );
+  };
+
   useEffect(() => {
     void (async () => {
       setLoading(true);
@@ -100,7 +116,7 @@ function useRequirements(
     })();
   }, [projectId, documentId, version, search, filter]);
 
-  return { data, loading, error };
+  return { data, loading, error, updateReviewState };
 }
 
 /**
@@ -156,7 +172,7 @@ export function TenderReviewWorkspace(props: {
   }, [initialSourceId, initialSourcePage]);
 
   // Fetch requirements list from the real API.
-  const { data: reqList, loading, error } = useRequirements(
+  const { data: reqList, loading, error, updateReviewState } = useRequirements(
     projectId,
     documentId,
     version,
@@ -369,10 +385,9 @@ export function TenderReviewWorkspace(props: {
     if (!selectedId) return;
     setSaving(true);
     try {
-      await api.markReviewed(projectId, documentId, version, selectedId);
-      await api.fetchRequirement(projectId, documentId, version, selectedId)
-        .then(setSelectedDetail)
-        .catch(() => {});
+      const detail = await api.markReviewed(projectId, documentId, version, selectedId);
+      setSelectedDetail(detail);
+      updateReviewState(selectedId, detail.review_state);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to update");
     } finally {
@@ -384,10 +399,9 @@ export function TenderReviewWorkspace(props: {
     if (!selectedId) return;
     setSaving(true);
     try {
-      await api.reopenRequirement(projectId, documentId, version, selectedId);
-      await api.fetchRequirement(projectId, documentId, version, selectedId)
-        .then(setSelectedDetail)
-        .catch(() => {});
+      const detail = await api.reopenRequirement(projectId, documentId, version, selectedId);
+      setSelectedDetail(detail);
+      updateReviewState(selectedId, detail.review_state);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to update");
     } finally {
