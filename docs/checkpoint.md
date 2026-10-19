@@ -556,7 +556,7 @@ What already exists and the rules every later checkpoint must preserve.
 - [x] Keep source validation, reviewer state, and export gates intact; do not present extraction as a completeness guarantee.
 - [x] Verify a fresh PDF upload through processing, source-linked review, and DOCX export in the browser.
   - The fresh local Example 3 run used the configured OpenAI adapter (recorded as provider `openai`, model `gpt-6-luna`). All 13 source windows received extraction/audit calls; five had zero candidate rows. The export validator passed 110/110 expected content rows and all 440 cells, but `completeness_proven` remained false. Human review is still required.
-  - `make start` prepared/migrated SQLite and brought up API + web. API upload, embedded worker processing, source page/highlight, and DOCX download were verified. The app can use the deterministic development extractor when no key is configured, but that fallback is not represented by this live provider-backed run.
+  - `make start` prepared/migrated SQLite and brought up API + web. API upload, embedded worker processing, source page/highlight, and DOCX download were verified. A second fresh browser upload ran after removing the provider configuration; the deterministic local adapter completed extraction to 8 groups and exported a 110-row DOCX. Its status correctly remained “Rows checked; completeness unverified,” with 5 of 13 windows returning no candidate rows. This proves the local no-key walkthrough functions, not that its rule-based extraction is suitable for an unattended decision.
 - Status: DONE — local MVP path verified; this is local demonstration evidence, not deployment or tender-completeness qualification.
 
 ### Guardrail
