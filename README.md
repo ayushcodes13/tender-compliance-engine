@@ -37,7 +37,7 @@ The deployed product is one Next.js app. It has no separate FastAPI service, job
 - The hosted MVP accepts PDFs up to 4 MB, 120 pages, and 140,000 characters of selectable text per run. The single extraction call has a 48-second timeout.
 - Refreshing or closing the browser clears the current review. Download the DOCX before leaving the page.
 
-For Vercel, set the project root to `apps/web` and configure `OPENAI_API_KEY`, plus `OPENAI_BASE_URL` and `OPENAI_MODEL` for the selected provider. Do not put credentials in `NEXT_PUBLIC_*` variables. The requested hostname is `tender.devishot.me`; add it to the Vercel project after the deployment is ready, then point its Namecheap DNS record to the target Vercel supplies.
+For Vercel, set the project root to `apps/web` and configure `OPENAI_API_KEY`, plus `OPENAI_BASE_URL` and `OPENAI_MODEL` for the selected provider. Do not put credentials in `NEXT_PUBLIC_*` variables. The requested hostname is `tender.devayushrout.me`; add it to the Vercel project after the deployment is ready, then point its Namecheap DNS record to the target Vercel supplies.
 
 ## Checks
 
