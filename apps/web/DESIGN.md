@@ -12,6 +12,9 @@ engineering, procurement, and bid teams. It must not look like an AI demo.
 - one restrained cobalt primary accent;
 - amber only for review attention;
 - green/red only for real positive/negative states;
+- landing page uses an editorial two-column hero with a clearly labeled illustrative citation preview;
+- review workspace keeps requirement counts, source list, PDF page, quote, and human check action visible as one evidence flow;
+- generous outer margins and clear panel gutters at desktop sizes, with stacked panels on narrow screens;
 - no gradients, glassmorphism, neon, purple AI motifs, decorative chat bubbles,
   or unnecessary floating cards.
 
@@ -48,6 +51,7 @@ engineering, procurement, and bid teams. It must not look like an AI demo.
 
 Motion is functional only: small fades, loading, and navigation transitions.
 Do not use large hover lifts, scaling cards, glowing buttons, or perpetual decorative motion.
+Use local system font stacks so the interface does not depend on a third-party font request.
 
 ## Product test
 
