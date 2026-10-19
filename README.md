@@ -71,19 +71,19 @@ The private pilot has no user sign-in and is intended for local or trusted priva
 
 GitHub Actions verification is temporarily unavailable because the repository account has a billing/spending restriction. This README does not treat blocked jobs as passing checks. Restore billing and rerun the required workflows before release sign-off.
 
-## Start a private pilot
+## Start the local MVP
 
-Prerequisites: Docker with Compose support, and an OpenAI-compatible API credential configured for the selected model endpoint.
+The simplest walkthrough runs locally with one API process, an embedded document worker, SQLite, and files in `.local/mvp`. It does not need Docker, PostgreSQL, Redis, or a hosting account. Python 3.12+, `uv`, Node.js, and npm are required.
 
 ```bash
-cp .env.example .env
-# Add the required AI endpoint/key/model settings to .env
-make pilot-start
+make start
 ```
 
-The startup command validates configuration, starts the database, queue, scanner, API, processing worker, and web app, and waits for the readiness endpoint. Open [http://localhost:3000](http://localhost:3000). Keep `.env` private; never commit credentials.
+Open [http://127.0.0.1:3307](http://127.0.0.1:3307), create a tender, upload a PDF with a text layer, review the extracted source-linked requirements, then export the blank OEM response sheet. The command applies database migrations and starts both apps. Run `make stop` from another terminal, or press Ctrl+C in the startup terminal. Data stays in `.local/mvp`.
 
-For direct local development, see the Makefile targets and [the development notes](docs/ARCHITECTURE.md). The bundled pilot creates one workspace and is not a multi-tenant SaaS deployment.
+If a root `.env` file contains `OPENAI_API_KEY` and the optional model settings, the local worker uses that configured provider. Without a key it uses the deterministic development extractor; that mode demonstrates the flow but is not a substitute for validating extraction quality on a real tender. Scanned PDFs still depend on a local Tesseract installation. Keep any `.env` file private and never commit credentials.
+
+The app has no user sign-in and should stay on the local machine or a trusted private network.
 
 ## How source and review states work
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from tender_compliance_api.config import get_settings
 from tender_compliance_api.db.session import close_engine, init_engine
 from tender_compliance_api.logs import get_logger, log_event, set_correlation_id
+from tender_compliance_api.queue.fake import FakeQueueAdapter
 from tender_compliance_api.routes.compliance import router as compliance_router
 from tender_compliance_api.routes.conflicts import router as conflicts_router
 from tender_compliance_api.routes.evidence import router as evidence_router
@@ -40,8 +42,52 @@ async def lifespan(app: FastAPI) -> Any:
     if not hasattr(app.state, "storage_adapter"):
         app.state.storage_adapter = await initialize_storage_adapter(settings)
 
-    yield
-    await close_engine()
+    worker: Any = None
+    worker_task: asyncio.Task[None] | None = None
+    queue: FakeQueueAdapter | None = None
+    if settings.local_mvp_mode:
+        if settings.redis_url:
+            raise RuntimeError(
+                "LOCAL_MVP_MODE uses a shared in-process queue; leave REDIS_URL unset."
+            )
+        if not settings.database_url.startswith("sqlite+aiosqlite:"):
+            raise RuntimeError(
+                "LOCAL_MVP_MODE requires a local SQLite DATABASE_URL."
+            )
+        if not settings.object_storage_local_path:
+            raise RuntimeError(
+                "LOCAL_MVP_MODE requires OBJECT_STORAGE_LOCAL_PATH."
+            )
+
+        from tender_compliance_worker import create_worker
+
+        queue = FakeQueueAdapter()
+        app.state.local_mvp_queue = queue
+        worker = create_worker(
+            queue=queue,
+            storage=app.state.storage_adapter,
+            max_concurrency=1,
+        )
+        worker_task = asyncio.create_task(worker.run())
+        logger.info("Local MVP processing worker started in API process")
+
+    try:
+        yield
+    finally:
+        if worker is not None:
+            worker.stop()
+        if worker_task is not None:
+            try:
+                await asyncio.wait_for(worker_task, timeout=5)
+            except TimeoutError:
+                worker_task.cancel()
+                try:
+                    await worker_task
+                except asyncio.CancelledError:
+                    pass
+        if queue is not None:
+            await queue.close()
+        await close_engine()
 
 
 async def correlation_id_middleware(

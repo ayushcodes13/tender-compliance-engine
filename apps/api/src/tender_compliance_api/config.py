@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     database_url: str = ""
+    local_mvp_mode: bool = False
 
     # Authentication. single_workspace is intentionally simple: it is for
     # a private pilot / one-customer deployment and automatically bootstraps

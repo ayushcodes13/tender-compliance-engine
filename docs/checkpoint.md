@@ -540,13 +540,24 @@ What already exists and the rules every later checkpoint must preserve.
 
 **Deterministic example-row extraction and native-text fidelity follow-up (2026-10-11):** Recognized technical table rows, dense lettered rows, and standalone numbered headings are now emitted from their exact selected source spans without model rewriting. Sample-specific table lead-ins and the non-row “Optional Items” label are kept out of requirement cells; “Other important requirements” remains its own row where the supplied sheet shows it. A live parser → technical-section selection → extraction run against the three supplied input PDFs produced 8, 116, and 10 valid candidates. The strict image validator was also run against Example 2 page 10: the native PDF text omitted the visible `₂`/`₄` subscripts in the Arsenic cracker row, and the validator returned `not_exact`. The parser now flags this detectable subscript-order pattern, and source-window review is limited to the affected row; after the real image gate, 8, 115, and 10 rows were persistable, with the Example 2 row withheld from export and unresolved instead of silently repaired. A local API upload/worker pass on Example 1 reached extraction, but the matrix export was correctly held because independent obligation coverage was disabled for that isolated run. Backend suite: 1,320 passed, 2 skipped. The supplied DOCX files contain clipped or altered values in some cells, so source-faithful output intentionally follows the tender PDF when they conflict. Checkpoint 70 remains IN PROGRESS: tender-wide coverage, OCR/reviewer resolution for the held Example 2 row, and a production-like full export/review acceptance run remain open.
 
-### CP71 — Single-operator pilot entry and scope
+### ✅ ~~CP71 — Single-operator pilot entry and scope~~
 
-- [ ] Make the local/private-pilot URL open directly into the real tender workspace.
-- [ ] Use single-operator language in the visible shell and tender list; keep the existing upload, source-linked review, and response-sheet workflow.
-- [ ] Keep tenant authorization and data boundaries intact; this checkpoint is a presentation/entry-point simplification, not an auth rewrite.
-- [ ] Verify the root redirect, dashboard rendering, and the existing tender upload/review/export routes with the smallest relevant checks.
-- Status: IN PROGRESS — focused demo usability follow-up.
+- [x] Make the local URL open directly into the real tender workspace.
+- [x] Use single-operator language in the visible shell and tender list; retain the upload, source-linked review, and response-sheet workflow.
+- [x] Keep tenant authorization and data boundaries intact; this checkpoint is a presentation/entry-point simplification, not an auth rewrite.
+- [x] Verify the root redirect, dashboard rendering, and the existing tender upload/review/export routes in a real browser.
+  - Local Example 3 browser walkthrough: root redirected to `/dashboard`; a fresh project and PDF upload produced 8 reviewable requirement groups; page-17 citation opened with the source highlight aligned; the OEM response sheet exported with 110 validated rows, 4 columns, and blank compliance/deviation cells. All eight groups remained unreviewed, and the export correctly reported that completeness was not proven.
+- Status: DONE — local MVP flow verified in PR #261.
+
+### ✅ ~~CP72 — One-command local end-to-end MVP~~
+
+- [x] Start the single-operator web app, API, and processing worker locally without Docker or external database/queue services.
+- [x] Persist local pilot data in SQLite and the filesystem; run the worker beside the API and share its in-memory queue only in explicit local MVP mode.
+- [x] Keep source validation, reviewer state, and export gates intact; do not present extraction as a completeness guarantee.
+- [x] Verify a fresh PDF upload through processing, source-linked review, and DOCX export in the browser.
+  - The fresh local Example 3 run used the configured OpenAI adapter (recorded as provider `openai`, model `gpt-6-luna`). All 13 source windows received extraction/audit calls; five had zero candidate rows. The export validator passed 110/110 expected content rows and all 440 cells, but `completeness_proven` remained false. Human review is still required.
+  - `make start` prepared/migrated SQLite and brought up API + web. API upload, embedded worker processing, source page/highlight, and DOCX download were verified. The app can use the deterministic development extractor when no key is configured, but that fallback is not represented by this live provider-backed run.
+- Status: DONE — local MVP path verified; this is local demonstration evidence, not deployment or tender-completeness qualification.
 
 ### Guardrail
 

@@ -1,30 +1,20 @@
-.PHONY: help start stop pilot-start pilot-stop pilot-status infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
+.PHONY: help mvp-start start stop pilot-start pilot-stop pilot-status infra-up infra-down api-install api-dev api-test api-lint api-migrate api-migrate-down api-migrate-new web-install web-dev web-typecheck docker-build docker-worker-build deploy-smoke
 
 help:
 	@echo "Tender Compliance Engine"
-	@echo "  make pilot-start    One-command private pilot start (requires OPENAI_API_KEY)"
-	@echo "  make pilot-stop     Stop the pilot while keeping customer data"
-	@echo "  make pilot-status   Show containers + same-origin readiness"
-	@echo "  make start          Alias for pilot-start"
-	@echo "  make stop           Alias for pilot-stop"
-	@echo "  make infra-up       Start Postgres, Redis and MinIO"
-	@echo "  make infra-down     Stop local infrastructure"
-	@echo "  make api-install    Install API package + dev dependencies"
-	@echo "  make api-dev        Run FastAPI with reload"
-	@echo "  make api-test       Run backend tests"
-	@echo "  make api-lint       Run Ruff"
-	@echo "  make api-migrate    Apply Alembic migrations (alembic upgrade head)"
-	@echo "  make api-migrate-down  Rollback one migration (alembic downgrade -1)"
-	@echo "  make api-migrate-new  Create a new migration (message=...)"
-	@echo "  make web-install    Install frontend dependencies"
-	@echo "  make web-dev        Run Next.js development server"
-	@echo "  make web-typecheck  Run TypeScript type checking"
-	@echo "  make docker-build   Build API Docker image"
-	@echo "  make docker-worker-build  Build worker Docker image"
-	@echo "  make deploy-smoke   Run deployment smoke tests"
+	@echo "  make start          Start the local SQLite + filesystem MVP at http://127.0.0.1:3307"
+	@echo "  make stop           Stop the local MVP"
+	@echo "  make api-test       Run backend checks"
+	@echo "  make web-typecheck  Run web type checking"
 
 pilot-start:
 	@./scripts/pilot-start.sh
+
+mvp-start:
+	@$(CURDIR)/scripts/mvp-start.sh
+
+mvp-stop:
+	@$(CURDIR)/scripts/mvp-stop.sh
 
 pilot-stop:
 	@docker compose down
@@ -34,9 +24,9 @@ pilot-status:
 	@curl -fsS http://localhost:3000/api/backend/ready || true
 	@echo
 
-start: pilot-start
+start: mvp-start
 
-stop: pilot-stop
+stop: mvp-stop
 
 infra-up:
 	docker compose -f infra/docker-compose.yml up -d

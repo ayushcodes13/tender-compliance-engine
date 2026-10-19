@@ -29,12 +29,14 @@ import hashlib
 import re
 import uuid
 from datetime import datetime
+from typing import cast
 
 from fastapi import (
     APIRouter,
     Depends,
     File,
     HTTPException,
+    Request,
     UploadFile,
 )
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -119,7 +121,7 @@ def get_scanner() -> MalwareScanner:
     )
 
 
-def get_queue_adapter() -> QueueAdapter:
+def get_queue_adapter(request: Request) -> QueueAdapter:
     """Return the configured queue adapter (FakeQueueAdapter by default).
 
     In production, when ``REDIS_URL`` is set, this returns a
@@ -127,6 +129,13 @@ def get_queue_adapter() -> QueueAdapter:
     in-memory :class:`FakeQueueAdapter` for development and CI.
     """
     settings = get_settings()
+    if settings.local_mvp_mode:
+        queue = getattr(request.app.state, "local_mvp_queue", None)
+        if queue is None:
+            raise RuntimeConfigurationError(
+                "The local MVP processing queue has not been initialized."
+            )
+        return cast(QueueAdapter, queue)
     if settings.redis_url:
         return RedisQueueAdapter(settings.redis_url)
     return FakeQueueAdapter()
