@@ -4,11 +4,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Tender Compliance Engine",
-    template: "%s · Tender Compliance Engine",
+    default: "Tender Review",
+    template: "%s · Tender Review",
   },
-  description:
-    "Turn tender requirements and OEM evidence into a source-linked, reviewable compliance sheet.",
+  description: "Extract technical requirements from a tender and review each one against its cited page.",
   icons: {
     icon: "/tce-mark.svg",
   },

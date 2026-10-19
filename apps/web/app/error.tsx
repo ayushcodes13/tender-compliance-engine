@@ -1,34 +1,11 @@
 "use client";
 
-import { AlertTriangle, RefreshCw } from "lucide-react";
-import Link from "next/link";
-
-import { AppShell } from "@/components/app-shell";
-
-export default function ErrorPage({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function ErrorPage({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <AppShell>
-      <div className="page-scroll">
-        <div className="page-container">
-          <div className="product-error">
-            <AlertTriangle size={30} aria-hidden="true" />
-            <h1>We could not load this workspace.</h1>
-            <p>{error.message || "The request failed unexpectedly."}</p>
-            <div className="inline-actions">
-              <button className="button button-primary" type="button" onClick={reset}>
-                <RefreshCw size={14} aria-hidden="true" /> Try again
-              </button>
-              <Link href="/dashboard" className="button button-secondary">Back to projects</Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    </AppShell>
+    <main className="mvp-fatal-error">
+      <h1>Tender Review could not load.</h1>
+      <p>Retry the page. The app does not store the current tender.</p>
+      <button type="button" onClick={reset}>Try again</button>
+    </main>
   );
 }

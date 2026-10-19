@@ -1,7 +1,0 @@
-Section 4.3.1
-The equipment shall be constructed of non-corrosive materials as specified
-in Section 4.3.1 and shall operate at a maximum voltage of 24 V.
-Section 4.3.1 (Continued)
-Non-corrosive construction is defined in Table 4-1 as either stainless steel
-grade 316L or aluminum alloy 6061-T6. The voltage rating shall not exceed
-24 V under all operating conditions.

@@ -1,3 +1,0 @@
-The equipment shall fit within dimensions of 200 mm × 150 mm × 50 mm (length
-× width × height) and shall operate within a temperature range of -10 °C
-to +55 °C during normal operation.

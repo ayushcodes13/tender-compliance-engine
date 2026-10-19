@@ -1,2 +1,0 @@
-The Supplier shall ensure that the maximum operating temperature of the
-equipment does not exceed 85 °C during normal operation.

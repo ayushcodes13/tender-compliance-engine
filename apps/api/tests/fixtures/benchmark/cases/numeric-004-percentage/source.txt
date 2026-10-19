@@ -1,2 +1,0 @@
-The response time of the system shall be less than 95 % of requests
-completing within 200 ms.

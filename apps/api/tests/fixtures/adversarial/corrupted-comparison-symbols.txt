@@ -1,4 +1,0 @@
-The equipment shall maintain an operating temperature ≤ 85 °C during normal operation.
-The minimum storage temperature shall be ≥ -20 °C.
-The tolerance shall be ± 2.5 °C unless otherwise specified.
-The output voltage shall not be ≠ 12 V under load.

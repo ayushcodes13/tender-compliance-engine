@@ -1,1 +1,0 @@
-"""Tender Compliance Engine API."""

@@ -12,22 +12,16 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+  // PDF.js resolves its Node fake worker relative to the installed module.
+  // Bundling it into a Server Action breaks that dynamic worker import.
+  serverExternalPackages: ["pdfjs-dist"],
+  experimental: { serverActions: { bodySizeLimit: "4.5mb" } },
   async headers() {
     return [
       {
         source: "/:path*",
         headers: securityHeaders,
       },
-    ];
-  },
-  async redirects() {
-    // The simulated sign-in/sign-up forms were removed. Keep the old URLs
-    // resolving so existing bookmarks and links land on the access page
-    // instead of a 404.
-    return [
-      { source: "/sign-in", destination: "/access", permanent: true },
-      { source: "/sign-up", destination: "/access", permanent: true },
     ];
   },
 };

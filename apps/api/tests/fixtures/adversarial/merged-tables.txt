@@ -1,6 +1,0 @@
-| Parameter        | Minimum  | Maximum  | Unit   |
-| Temperature      | -10      | 55       | °C     |
-| Humidity         | 5        | 85       | %      |
-| Pressure         | 0.9      | 1.1      | bar    |
-| Voltage          | 220      | 240      | V      |
-| Frequency        | 47       | 52       | Hz     |

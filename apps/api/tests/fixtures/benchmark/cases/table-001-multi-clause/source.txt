@@ -1,6 +1,0 @@
-Table 1-1. Technical Specifications
-Parameter              Min       Max       Unit
-Supply Voltage          20.0      28.0      V
-Ambient Temperature    -20       55        °C
-Relative Humidity        10       80        %
-Storage Temperature    -40       70        °C

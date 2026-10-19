@@ -3,72 +3,42 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+mkdir -p .local/logs .local/npm-cache
 
-fail() {
-  printf 'Tender Compliance Engine pilot start failed: %s\n' "$1" >&2
-  exit 1
-}
-
-command -v docker >/dev/null 2>&1 || fail "Docker is not installed or not on PATH."
-docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required."
-command -v curl >/dev/null 2>&1 || fail "curl is required for the readiness check."
-
-if ! docker info >/dev/null 2>&1; then
-  fail "Docker is installed but the Docker daemon is not reachable."
+if [[ -f .env.local ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env.local
+  set +a
 fi
 
-if ! docker compose config >/dev/null 2>/tmp/tce-compose-config.err; then
-  if grep -q "OPENAI_API_KEY" /tmp/tce-compose-config.err; then
-    cat >&2 <<'EOF'
-OPENAI_API_KEY is the only external secret required for the bundled pilot.
-
-Start with either:
-
-  OPENAI_API_KEY=sk-... make pilot-start
-
-or put OPENAI_API_KEY in a local .env file and run:
-
-  make pilot-start
-EOF
-  else
-    cat /tmp/tce-compose-config.err >&2
-  fi
+command -v node >/dev/null || { echo "Install Node.js 20+ first." >&2; exit 1; }
+command -v npm >/dev/null || { echo "Install npm first." >&2; exit 1; }
+if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+  echo "Add OPENAI_API_KEY to .env.local before starting the extraction demo." >&2
   exit 1
 fi
 
-printf 'Starting Tender Compliance Engine...\n'
-docker compose up -d --build
+if [[ ! -f apps/web/node_modules/next/package.json ]]; then
+  npm_config_cache="$ROOT_DIR/.local/npm-cache" npm ci --prefix apps/web --no-audit --no-fund --prefer-offline
+fi
 
-ready_file="$(mktemp)"
-trap 'rm -f "$ready_file" /tmp/tce-compose-config.err' EXIT
+if [[ -f .local/web.pid ]] && kill -0 "$(cat .local/web.pid)" 2>/dev/null; then
+  echo "Tender Review is already running: http://127.0.0.1:3307"
+  exit 0
+fi
 
-for attempt in $(seq 1 72); do
-  if curl --fail --silent --show-error \
-    http://localhost:3000/api/backend/ready \
-    -o "$ready_file" 2>/dev/null; then
-    if python3 - "$ready_file" <<'PY' 2>/dev/null
-import json
-import sys
-from pathlib import Path
+node apps/web/node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3307 >.local/logs/web.log 2>&1 &
+echo "$!" > .local/web.pid
 
-payload = json.loads(Path(sys.argv[1]).read_text())
-assert payload["status"] == "ready", payload
-PY
-    then
-      printf '\nTender Compliance Engine is ready.\n'
-      printf 'Open: http://localhost:3000\n'
-      printf 'Readiness: http://localhost:3000/api/backend/ready\n'
-      exit 0
-    fi
+for attempt in $(seq 1 60); do
+  if curl -fsS http://127.0.0.1:3307/ >/dev/null 2>&1; then
+    echo "Tender Review is ready: http://127.0.0.1:3307"
+    exit 0
   fi
-
-  if (( attempt % 12 == 0 )); then
-    printf 'Still starting (%s/72)...\n' "$attempt"
-  fi
-  sleep 5
+  sleep 1
 done
 
-printf '\nThe stack started but did not become ready in time.\n' >&2
-docker compose ps >&2 || true
-docker compose logs --no-color --tail=200 >&2 || true
+echo "The app did not become ready. Recent log:" >&2
+tail -n 100 .local/logs/web.log >&2 || true
 exit 1

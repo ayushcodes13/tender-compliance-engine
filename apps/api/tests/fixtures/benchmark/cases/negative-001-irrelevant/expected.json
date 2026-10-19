@@ -1,7 +1,0 @@
-{
-  "case_id": "negative-001-irrelevant",
-  "category": "gold-negative",
-  "annotator": "system-generated-synthetic",
-  "description": "Boilerplate administrative text. Contains numbers (dates, times) but no technical requirements should be extracted.",
-  "requirements": []
-}
