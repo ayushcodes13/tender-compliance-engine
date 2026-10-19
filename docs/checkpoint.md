@@ -540,6 +540,14 @@ What already exists and the rules every later checkpoint must preserve.
 
 **Deterministic example-row extraction and native-text fidelity follow-up (2026-10-11):** Recognized technical table rows, dense lettered rows, and standalone numbered headings are now emitted from their exact selected source spans without model rewriting. Sample-specific table lead-ins and the non-row “Optional Items” label are kept out of requirement cells; “Other important requirements” remains its own row where the supplied sheet shows it. A live parser → technical-section selection → extraction run against the three supplied input PDFs produced 8, 116, and 10 valid candidates. The strict image validator was also run against Example 2 page 10: the native PDF text omitted the visible `₂`/`₄` subscripts in the Arsenic cracker row, and the validator returned `not_exact`. The parser now flags this detectable subscript-order pattern, and source-window review is limited to the affected row; after the real image gate, 8, 115, and 10 rows were persistable, with the Example 2 row withheld from export and unresolved instead of silently repaired. A local API upload/worker pass on Example 1 reached extraction, but the matrix export was correctly held because independent obligation coverage was disabled for that isolated run. Backend suite: 1,320 passed, 2 skipped. The supplied DOCX files contain clipped or altered values in some cells, so source-faithful output intentionally follows the tender PDF when they conflict. Checkpoint 70 remains IN PROGRESS: tender-wide coverage, OCR/reviewer resolution for the held Example 2 row, and a production-like full export/review acceptance run remain open.
 
+### CP71 — Single-operator pilot entry and scope
+
+- [ ] Make the local/private-pilot URL open directly into the real tender workspace.
+- [ ] Use single-operator language in the visible shell and tender list; keep the existing upload, source-linked review, and response-sheet workflow.
+- [ ] Keep tenant authorization and data boundaries intact; this checkpoint is a presentation/entry-point simplification, not an auth rewrite.
+- [ ] Verify the root redirect, dashboard rendering, and the existing tender upload/review/export routes with the smallest relevant checks.
+- Status: IN PROGRESS — focused demo usability follow-up.
+
 ### Guardrail
 
 - Planning text is not proof that a capability is implemented.

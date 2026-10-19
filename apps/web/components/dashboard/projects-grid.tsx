@@ -167,7 +167,7 @@ export function ProjectsGrid() {
             Tender workspace
           </div>
           <h1 className="font-display text-[2rem] font-bold leading-tight tracking-[-0.035em] text-text-primary">
-            Projects
+            Your tenders
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
             Keep each tender, its source documents, review, and export together.
@@ -193,7 +193,7 @@ export function ProjectsGrid() {
           <p className="mt-1 max-w-xl text-sm text-text-secondary">
             {projects.length === 0
               ? "Create a project to upload a tender and start a source-linked review."
-              : "Pick up where your team left off, or create a workspace for a new bid."}
+              : "Continue a tender review or start with another tender."}
           </p>
         </div>
         <div className="grid grid-cols-2 border-t border-border sm:border-l sm:border-t-0">
@@ -204,7 +204,7 @@ export function ProjectsGrid() {
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-text-primary">All tenders</h2>
+          <h2 className="text-base font-semibold text-text-primary">Your tenders</h2>
           <p className="mt-0.5 text-xs text-text-tertiary">Sorted by most recently updated</p>
         </div>
         {projects.length > 0 && (

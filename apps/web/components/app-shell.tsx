@@ -29,7 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <span className="product-brand-copy">
             <strong>Tender Compliance</strong>
-            <small>Source-linked review</small>
+            <small>Single-user tender pilot</small>
           </span>
         </Link>
 
@@ -65,8 +65,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <div className="profile-dot">TC</div>
             <div>
-              <strong>Private workspace</strong>
-              <span>Single-customer pilot</span>
+              <strong>Your private workspace</strong>
+              <span>Single-operator pilot</span>
             </div>
           </div>
         </div>
