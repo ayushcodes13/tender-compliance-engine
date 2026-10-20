@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+<title id="title">Tender Review workflow</title>
+<desc id="desc">A text-based tender PDF is analyzed for source-linked requirements, checked against page citations and bounding boxes, then exported to a response sheet.</desc>
+<rect width="1200" height="600" rx="28" fill="#f5f3ee"/>
+<rect x="24" y="24" width="1152" height="552" rx="22" fill="#fbfaf7" stroke="#dedbd2" stroke-width="2"/>
+<text x="72" y="98" fill="#183b36" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="3">TENDER REVIEW · SINGLE-USER MVP</text>
+<text x="72" y="160" fill="#1d2c29" font-family="Georgia, serif" font-size="48">From tender PDF to</text>
+<text x="72" y="216" fill="#1d2c29" font-family="Georgia, serif" font-size="48">source-linked response sheet.</text>
+<text x="72" y="262" fill="#5c6965" font-family="Arial, sans-serif" font-size="20">A focused review flow with citations, page boxes, and human checks.</text>
+<g font-family="Arial, sans-serif">
+<rect x="72" y="322" width="242" height="174" rx="16" fill="#fff" stroke="#d8d8cf" stroke-width="2"/>
+<rect x="94" y="346" width="45" height="54" rx="7" fill="#f3e8e4" stroke="#b64b35" stroke-width="2"/>
+<path d="M105 362h23M105 371h23M105 380h17" stroke="#b64b35" stroke-width="2"/>
+<text x="94" y="434" fill="#203631" font-size="19" font-weight="700">1 · Upload tender</text>
+<text x="94" y="464" fill="#68736f" font-size="16">Text-based PDF</text>
+<path d="M324 410h30m-9-9 9 9-9 9" fill="none" stroke="#9ba7a1" stroke-width="3"/>
+<rect x="366" y="322" width="242" height="174" rx="16" fill="#fff" stroke="#d8d8cf" stroke-width="2"/>
+<circle cx="402" cy="373" r="22" fill="#e7efeb"/>
+<path d="m392 373 7 7 14-16" fill="none" stroke="#286c5a" stroke-width="3"/>
+<text x="388" y="434" fill="#203631" font-size="19" font-weight="700">2 · Match evidence</text>
+<text x="388" y="464" fill="#68736f" font-size="16">Literal page quotes</text>
+<path d="M618 410h30m-9-9 9 9-9 9" fill="none" stroke="#9ba7a1" stroke-width="3"/>
+<rect x="660" y="322" width="242" height="174" rx="16" fill="#fff" stroke="#d8d8cf" stroke-width="2"/>
+<rect x="686" y="349" width="44" height="48" rx="4" fill="#f6f2e7" stroke="#c5a34d" stroke-width="2"/>
+<rect x="694" y="359" width="27" height="12" fill="none" stroke="#b64b35" stroke-width="2"/>
+<path d="M695 379h25M695 386h19" stroke="#aaa28d" stroke-width="2"/>
+<text x="682" y="434" fill="#203631" font-size="19" font-weight="700">3 · Review citation</text>
+<text x="682" y="464" fill="#68736f" font-size="16">Page + bounding box</text>
+<path d="M912 410h30m-9-9 9 9-9 9" fill="none" stroke="#9ba7a1" stroke-width="3"/>
+<rect x="954" y="322" width="174" height="174" rx="16" fill="#183b36"/>
+<path d="M1002 353h72v46h-72zM1012 365h50M1012 376h50M1012 387h31" fill="none" stroke="#e8eee9" stroke-width="3"/>
+<text x="978" y="434" fill="#fff" font-size="19" font-weight="700">4 · Export</text>
+<text x="978" y="464" fill="#c8d6cf" font-size="16">OEM response DOCX</text>
+</g>
+<text x="72" y="544" fill="#75807b" font-family="Arial, sans-serif" font-size="15">Illustrated workflow · Verify every requirement against the original tender.</text>
+</svg>
