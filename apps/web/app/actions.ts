@@ -179,12 +179,13 @@ export async function analyzeTender(form: FormData) {
       const requirements: Requirement[] = [];
       const seen = new Set<string>();
       const obligationPattern = /\b(shall|must|should|required|minimum|maximum|not less than|not more than|at least|at most|comply with|conform to|provide|submit|maintain|achieve|withstand|operate)\b/i;
+      const administrativePattern = /\b(bid security|e-procurement|cpp portal|tender documents|financial bid|financial offer|online bids?|bid submission|digital signature|registration|eprocure|emd|contract value|quotation|downloaded from|enroll|enrolled|annexure)\b/i;
 
       for (const sourcePage of pages) {
         const candidates = sourcePage.rawText
           .split(/\n+|(?<=[.!?])\s+|;\s+/)
           .map((candidate) => normalize(candidate))
-          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && obligationPattern.test(candidate));
+          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && obligationPattern.test(candidate) && !administrativePattern.test(candidate));
 
         for (const quote of candidates) {
           const key = `${sourcePage.page}:${quote.toLocaleLowerCase()}`;
@@ -232,7 +233,7 @@ export async function analyzeTender(form: FormData) {
         requirements,
         rejectedCandidates: 0,
         extractionMode: "rule-based-preview" as const,
-        reviewNote: "Rule-based preview: candidate sentences were selected using obligation keywords and matched to selectable source text. It can miss requirements; check every citation and do not treat this list as complete.",
+        reviewNote: "Rule-based preview: technical-looking candidate sentences were selected using obligation keywords, common bid-process wording was filtered out, and each quote was matched to selectable source text. It can miss requirements; check every citation and do not treat this list as complete.",
       } };
     }
     const model = process.env.OPENAI_MODEL || "gpt-4o";
