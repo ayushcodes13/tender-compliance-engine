@@ -183,7 +183,7 @@ export async function analyzeTender(form: FormData) {
           .filter((candidate) => candidate.length >= 35 && candidate.length <= 2_000 && obligationPattern.test(candidate));
 
         for (const quote of candidates) {
-          const key = \`${sourcePage.page}:${quote.toLocaleLowerCase()}\`;
+          const key = `${sourcePage.page}:${quote.toLocaleLowerCase()}`;
           if (seen.has(key)) continue;
           seen.add(key);
           const bbox = locateQuote(quote, sourcePage.rawText, sourcePage.rawItemMap, sourcePage.positioned);
@@ -198,7 +198,7 @@ export async function analyzeTender(form: FormData) {
                     : /capacity|efficiency|performance|output/i.test(lowered) ? "Performance" : "Other";
 
           requirements.push({
-            id: \`req-${requirements.length + 1}\`,
+            id: `req-${requirements.length + 1}`,
             text: quote,
             category,
             page: sourcePage.page,
