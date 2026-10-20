@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // PDF.js resolves its Node fake worker relative to the installed module.
   // Bundling it into a Server Action breaks that dynamic worker import.
-  serverExternalPackages: ["pdfjs-dist"],
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
   experimental: { serverActions: { bodySizeLimit: "4.5mb" } },
   async headers() {
     return [
