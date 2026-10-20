@@ -109,6 +109,7 @@ function parseJson(content: string): unknown {
 }
 
 export async function analyzeTender(form: FormData) {
+  let stage = "file validation";
   try {
     const file = form.get("file");
     if (!(file instanceof File)) return { ok: false as const, error: "Choose a tender PDF to upload." };
@@ -121,6 +122,7 @@ export async function analyzeTender(form: FormData) {
       return { ok: false as const, error: "This file does not appear to be a valid PDF." };
     }
 
+    stage = "opening PDF";
     const task = getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: true });
     const pdf = await task.promise;
     if (pdf.numPages > MAX_PAGES) {
@@ -130,6 +132,7 @@ export async function analyzeTender(form: FormData) {
 
     const pages: Array<{ page: number; text: string; width: number; height: number; rawText: string; rawItemMap: number[]; positioned: PositionedItem[] }> = [];
     let totalText = 0;
+    stage = "reading PDF text and page positions";
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1 });
@@ -194,6 +197,7 @@ export async function analyzeTender(form: FormData) {
       },
     };
 
+    stage = "connecting to the extraction model";
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -214,6 +218,7 @@ export async function analyzeTender(form: FormData) {
     if (!response.ok) {
       return { ok: false as const, error: response.status === 401 ? "The configured model credential was rejected." : `The model request failed (${response.status}).` };
     }
+    stage = "reading the model response";
     const payload = await response.json();
     const content = payload.choices?.[0]?.message?.content;
     if (typeof content !== "string") return { ok: false as const, error: "The model returned an empty result." };
@@ -272,20 +277,20 @@ export async function analyzeTender(form: FormData) {
       reviewNote: "Review every extracted row against the tender. This list is not a completeness guarantee.",
     } };
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      const category = error instanceof Error && error.message === "The model response was not valid JSON."
-        ? "invalid model JSON"
-        : error instanceof SyntaxError
-          ? "invalid JSON payload"
-          : error instanceof Error
-            ? error.name
-            : "unknown error";
-      const frames = error instanceof Error ? error.stack?.split("\n").slice(1, 4).join(" | ") : "";
-      console.error("Tender analysis failed:", category, frames);
-    }
+    const errorName = error instanceof Error ? error.name : "UnknownError";
+    // Keep diagnostics useful in Vercel without logging tender text, filenames, model
+    // responses, credentials, or exception messages.
+    console.error("Tender analysis failed", { stage, errorName });
     if (error instanceof Error && error.name === "TimeoutError") {
       return { ok: false as const, error: "Extraction exceeded the MVP time limit. Try a shorter PDF or technical-section extract." };
     }
-    return { ok: false as const, error: "The tender could not be processed. Check that it is a readable, text-based PDF and try again." };
+    if (stage === "opening PDF" || stage === "reading PDF text and page positions") {
+      return { ok: false as const, error: "The hosted PDF reader could not open this file. Re-save it as a standard text-based PDF and try again. If that still fails, send us the file name and the time of the attempt." };
+    }
+    if (stage === "connecting to the extraction model" || stage === "reading the model response") {
+      return { ok: false as const, error: "The extraction service could not complete this request. Please retry in a moment." };
+    }
+    return { ok: false as const, error: "The upload could not be processed. Please choose a readable text-based PDF and try again." };
+
   }
 }
