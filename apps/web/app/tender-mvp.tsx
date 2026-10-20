@@ -124,69 +124,101 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     }
   }
 
-  if (!analysis) {
+  if (!analysis && !startAtUpload) {
     return (
       <main className={`tender-mvp-root mvp-landing ${startAtUpload ? "mvp-new-page" : ""}`}>
         <header className="mvp-topbar mvp-landing-topbar">
-          <a className="mvp-brand" href="/dashboard" aria-label="Tender Review dashboard"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
-          <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="/dashboard">Overview</a><a href="/method">How it works</a><a href="/">Product</a></nav>
-          <a className="mvp-topbar-cta" href="/new#upload">Start a review <ArrowUpRight size={15} /></a>
+          <a className="mvp-brand" href="#top" aria-label="Tender Review home"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
+          <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="#product">The product</a><a href="#how-it-works">How it works</a><a href="#limits">What to expect</a></nav>
+          <a className="mvp-topbar-cta" href="/new">Start a review <ArrowUpRight size={15} /></a>
         </header>
         <section className="mvp-landing-hero" id="top">
           <div className="mvp-hero-copy">
-            <div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> TENDER REVIEW WORKSPACE</div>
-            <h1>{startAtUpload ? <>Start with your<br /><em>tender document.</em></> : <>Every requirement.<br /><em>Right back to its source.</em></>}</h1>
-            <p className="mvp-lede">Turn a technical tender into a response sheet your team can review with the original wording, cited page, and highlight all in view.</p>
-            <div className="mvp-hero-links"><a className="mvp-primary mvp-hero-primary" href="#upload">Review a tender <ArrowRight size={17} /></a><a className="mvp-secondary-link" href="#how-it-works">See the workflow <ArrowDownToLine size={15} /></a></div>
-            <div className="mvp-hero-note"><ShieldCheck size={17} /><span><strong>Source first, human checked.</strong><small>Every extracted row starts in review.</small></span></div>
+            <div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> A CLEARER WAY TO REVIEW TECHNICAL TENDERS</div>
+            <h1>Turn a tender into a response sheet you can <em>verify.</em></h1>
+            <p className="mvp-lede">Tender Review finds technical requirement quotes in a text-based PDF, shows each quote on its cited page, and highlights where it came from. You check the evidence before exporting a response sheet.</p>
+            <div className="mvp-hero-links"><a className="mvp-primary mvp-hero-primary" href="/new">Start with a tender PDF <ArrowRight size={17} /></a><a className="mvp-secondary-link" href="#how-it-works">See how it works <ArrowDownToLine size={15} /></a></div>
+            <div className="mvp-hero-note"><ShieldCheck size={17} /><span><strong>You stay in control of every row.</strong><small>Nothing is marked reviewed automatically.</small></span></div>
           </div>
-          <div className="mvp-preview-card" id="evidence" aria-label="Illustrative source evidence preview">
-            <div className="mvp-preview-head"><span className="mvp-preview-file"><FileText size={15} /> TENDER SPECIFICATION</span><span className="mvp-preview-sample">ILLUSTRATIVE PREVIEW</span></div>
-            <div className="mvp-preview-page">
-              <div className="mvp-preview-pagehead"><span>TECHNICAL SPECIFICATION</span><span>PAGE 08</span></div>
-              <div className="mvp-preview-rule" />
-              <div className="mvp-preview-line short" /><div className="mvp-preview-line" />
-              <div className="mvp-preview-citation"><span className="mvp-preview-bbox" /><span>Minimum operating pressure shall be maintained across the full substrate area.</span></div>
-              <div className="mvp-preview-line medium" /><div className="mvp-preview-line short" />
-              <div className="mvp-preview-table"><span /><span /><span /><span /><span /><span /></div>
-            </div>
-            <div className="mvp-preview-foot"><span className="mvp-preview-foot-icon"><ScanSearch size={16} /></span><span><strong>Page-level evidence</strong><small>Quote and location stay together</small></span><span className="mvp-preview-page-tag">08 <ArrowUpRight size={12} /></span></div>
+          <div className="mvp-product-shot" id="product">
+            <div className="mvp-product-shot-label"><span><span className="mvp-live-dot" /> REAL REVIEW WORKSPACE</span><span>Source citation + page highlight</span></div>
+            <img src="/images/review-workspace.png" alt="Tender Review workspace showing extracted requirements beside the cited tender page, with a bounding box highlighting the source text" />
+            <div className="mvp-shot-caption"><FileText size={16} /><span><strong>One requirement, tied to its evidence.</strong><small>Review the quote and highlighted location together.</small></span></div>
           </div>
         </section>
-        <section className="mvp-proof-strip" aria-label="Review principles">
-          <div><span className="mvp-proof-index">01</span><span><strong>Exact wording</strong><small>Quotes checked against page text</small></span></div>
-          <div><span className="mvp-proof-index">02</span><span><strong>Visible evidence</strong><small>Open the page and see the highlight</small></span></div>
-          <div><span className="mvp-proof-index">03</span><span><strong>Human review</strong><small>Nothing is marked checked for you</small></span></div>
+        <section className="mvp-proof-strip" aria-label="What you can verify">
+          <div><span className="mvp-proof-index">01</span><span><strong>The quoted requirement</strong><small>Matched to selectable text in the PDF</small></span></div>
+          <div><span className="mvp-proof-index">02</span><span><strong>The cited page</strong><small>With a bounding-box highlight when available</small></span></div>
+          <div><span className="mvp-proof-index">03</span><span><strong>Your review decision</strong><small>Checked only after you confirm it</small></span></div>
         </section>
-        {startAtUpload && <section className="mvp-new-heading"><div className="mvp-eyebrow">NEW TENDER REVIEW</div><h1>Start with the tender document.</h1><p>Upload the original PDF, then verify each extracted requirement against its page and highlighted source.</p></section>}
-        <section className="mvp-start-section" id="upload">
-          <div className="mvp-start-copy" id="how-it-works">
-            <div className="mvp-eyebrow">A SHORT, TRACEABLE WORKFLOW</div>
-            <h2>From tender PDF<br />to a reviewable sheet.</h2>
+        <section className="mvp-evidence-showcase" id="evidence">
+          <div className="mvp-evidence-showcase-copy">
+            <div className="mvp-eyebrow">SOURCE EVIDENCE, IN CONTEXT</div>
+            <h2>See where each requirement came from.</h2>
+            <p>Select a row to open its cited page. When the PDF text gives an exact location, a bounding box marks the matching words. The source quote stays visible while you check it.</p>
+            <div className="mvp-evidence-points"><span><Check size={15} /> Cited page shown beside the review list</span><span><Check size={15} /> Quote and page highlight stay together</span><span><Check size={15} /> You decide when a row is checked</span></div>
+          </div>
+          <figure className="mvp-detail-shot">
+            <figcaption><span>Example review · page 8</span><span><span className="mvp-detail-dot" /> Source highlight</span></figcaption>
+            <img src="/images/source-evidence-detail.png" alt="Example Tender Review citation detail: page 8 of the original tender, the selected requirement highlighted on the page, and the exact source quote below" />
+          </figure>
+        </section>
+        <section className="mvp-start-section" id="how-it-works">
+          <div className="mvp-start-copy">
+            <div className="mvp-eyebrow">A SIMPLE, REVIEWABLE FLOW</div>
+            <h2>From tender PDF<br />to a checked response sheet.</h2>
             <div className="mvp-step-list">
-              <div><span>01</span><p><strong>Upload a text-based PDF</strong><small>Start with a tender up to 4 MB and 120 pages.</small></p></div>
-              <div><span>02</span><p><strong>Check every source match</strong><small>Inspect the original page and its quote highlight.</small></p></div>
-              <div><span>03</span><p><strong>Export the response sheet</strong><small>Share tender wording with blank OEM response fields.</small></p></div>
+              <div><span>01</span><p><strong>Choose a tender PDF</strong><small>Use a text-based PDF up to 4 MB and 120 pages.</small></p></div>
+              <div><span>02</span><p><strong>Verify the citations</strong><small>Open the cited page and check the quote and highlight.</small></p></div>
+              <div><span>03</span><p><strong>Mark rows you checked</strong><small>Keep review decisions visible as you work.</small></p></div>
+              <div><span>04</span><p><strong>Download your response sheet</strong><small>Get a DOCX with source pages and blank OEM response fields.</small></p></div>
             </div>
           </div>
+          <div className="mvp-feature-card">
+            <h3>What you get</h3>
+            <div><FileCheck2 size={18} /><span><strong>Source-linked requirement list</strong><small>Open each row at its cited tender page.</small></span></div>
+            <div><ScanSearch size={18} /><span><strong>Visible text highlights</strong><small>Bounding boxes appear when an exact location is available.</small></span></div>
+            <div><ArrowDownToLine size={18} /><span><strong>Editable response sheet</strong><small>DOCX keeps OEM response cells blank for your team.</small></span></div>
+            <a className="mvp-primary mvp-feature-cta" href="/new">Start a review <ArrowRight size={16} /></a>
+          </div>
+        </section>
+        <section className="mvp-limits" id="limits">
+          <div><span className="mvp-eyebrow">MADE FOR A FOCUSED PILOT</span><h2>Know what this version can do.</h2></div>
+          <p>It processes text-based PDFs in this browser session. Scanned PDFs need OCR, which is not included. The extracted rows are a review starting point, not a guarantee that every tender requirement was found. Always check the tender source before relying on the response sheet.</p>
+        </section>
+        <section className="mvp-bottom-cta"><div><span className="mvp-eyebrow">READY TO SEE YOUR TENDER AS A REVIEW?</span><h2>Start with one PDF.</h2></div><a className="mvp-primary" href="/new">Start a review <ArrowRight size={17} /></a></section>
+        <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> Single-user pilot</span><span>Your document and review marks stay in this browser session and are not saved as project history.</span></footer>
+      </main>
+    );
+  }
+
+  if (!analysis) {
+    return (
+      <main className="tender-mvp-root mvp-upload-screen">
+        <header className="mvp-topbar mvp-review-topbar">
+          <a className="mvp-brand" href="/" aria-label="Return to Tender Review home"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Start a review</small></span></a>
+          <a className="mvp-upload-back" href="/">Back to overview</a>
+        </header>
+        <section className="mvp-upload-page">
+          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a text-based PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum 4 MB</li><li>Up to 120 pages</li><li>Scanned PDFs are not supported yet</li></ul></div>
           <div className="mvp-upload-card">
-            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">{startAtUpload ? "NEW REVIEW" : "START A REVIEW"}</span><span className="mvp-upload-private"><span /> This browser session</span></div>
+            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span><span className="mvp-upload-private"><span /> Single browser session</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
                 <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} />
                 <span className="mvp-upload-icon"><Upload size={20} /></span>
-                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>Choose a tender PDF</strong><span>Browse your files to begin</span></>}
-                <span className="mvp-browse-link">Browse files <ArrowUpRight size={14} /></span>
+                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>Choose a tender PDF</strong><span>PDF files up to 4 MB</span></>}
+                <span className="mvp-browse-link">Select PDF <ArrowUpRight size={14} /></span>
               </label>
               <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
-                {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Reading and checking sources…</> : <>Extract requirements <ArrowRight size={17} /></>}
+                {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Reading the PDF…</> : <>Find requirements <ArrowRight size={17} /></>}
               </button>
               {error && <p className="mvp-error" role="alert">{error}</p>}
             </form>
-            <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Text-based PDF only</span><span><ShieldCheck size={15} /> No file history saved</span></div>
+            <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Review every quote</span><span><ShieldCheck size={15} /> Nothing marked checked for you</span></div>
           </div>
         </section>
-        <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> A focused single-user demo</span><span>Scanned PDFs need OCR and are not supported. Review the source before relying on any extracted requirement.</span></footer>
+        <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> Single-user pilot</span><span>Review the cited source before relying on any extracted requirement.</span></footer>
       </main>
     );
   }
@@ -199,7 +231,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span><span className="mvp-private"><span /> Single-user demo</span></div>
       </header>
       <section className="mvp-review-summarybar">
-        <div className="mvp-review-title"><div className="mvp-eyebrow">{analysis.extractionMode === "rule-based-preview" ? "RULE-BASED PREVIEW · CHECK EVERY SOURCE" : "TENDER REVIEW"}</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p></div>
+        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p></div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
           <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{analysis.requirements.length}</strong><small>Source matched</small></span></div>
           <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {analysis.requirements.length}</i></strong><small>Checked by you</small></span></div>
