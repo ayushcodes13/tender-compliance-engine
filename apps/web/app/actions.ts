@@ -1,6 +1,7 @@
 "use server";
 
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { isTechnicalRequirementCandidate, splitTechnicalCandidates } from "./extraction-rules";
 
 type Box = { x: number; y: number; width: number; height: number };
 type TextItem = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean };
@@ -178,14 +179,12 @@ export async function analyzeTender(form: FormData) {
     if (!apiKey) {
       const requirements: Requirement[] = [];
       const seen = new Set<string>();
-      const obligationPattern = /\b(shall|must|should|required|minimum|maximum|not less than|not more than|at least|at most|comply with|conform to|provide|submit|maintain|achieve|withstand|operate)\b/i;
       const administrativePattern = /\b(bid|bids|bidder|bidders|e-procurement|cpp portal|tender documents|financial|online bids?|digital signature|certificate|registration|eprocure|emd|contract value|quotation|downloaded from|enroll|enrolled|annexure|dsc)\b/i;
 
       for (const sourcePage of pages) {
-        const candidates = sourcePage.rawText
-          .split(/\n+|(?<=[.!?])\s+|;\s+/)
+        const candidates = splitTechnicalCandidates(sourcePage.rawText)
           .map((candidate) => normalize(candidate))
-          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && obligationPattern.test(candidate) && !administrativePattern.test(candidate) && candidate.replace(/[^\x00-\x7F]/g, "").length / candidate.length >= 0.95);
+          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && isTechnicalRequirementCandidate(candidate) && !administrativePattern.test(candidate));
 
         for (const quote of candidates) {
           const key = `${sourcePage.page}:${quote.toLocaleLowerCase()}`;
@@ -223,7 +222,7 @@ export async function analyzeTender(form: FormData) {
       }
 
       if (requirements.length === 0) {
-        return { ok: false as const, error: "The PDF text was read, but no requirement-shaped sentences matched the preview rules. Try a technical section with explicit obligations such as shall, must, or minimum." };
+        return { ok: false as const, error: "The PDF text was read, but no technical requirement clauses matched the preview rules. Try a technical section with explicit requirement wording or measurable product specifications." };
       }
 
       return { ok: true as const, analysis: {
@@ -233,7 +232,7 @@ export async function analyzeTender(form: FormData) {
         requirements,
         rejectedCandidates: 0,
         extractionMode: "rule-based-preview" as const,
-        reviewNote: "Rule-based preview: technical-looking candidate sentences were selected using obligation keywords, common bid-process wording was filtered out, and each quote was matched to selectable source text. It can miss requirements; check every citation and do not treat this list as complete.",
+        reviewNote: "Technical-only preview: requirement wording and quantified product specifications are shown; pricing, delivery, and bid-process clauses are filtered out. This rule-based screen can miss technical requirements. Check every citation; this list is not complete.",
       } };
     }
     const model = process.env.OPENAI_MODEL || "gpt-4o";
@@ -296,7 +295,7 @@ export async function analyzeTender(form: FormData) {
       const pageNumber = Number(candidate.page);
       const quote = typeof candidate.quote === "string" ? candidate.quote.trim() : "";
       const sourcePage = pages.find((page) => page.page === pageNumber);
-      if (!sourcePage || !quote || quote.length > 2_000) {
+      if (!sourcePage || !quote || quote.length > 2_000 || !isTechnicalRequirementCandidate(quote)) {
         rejected += 1;
         continue;
       }
