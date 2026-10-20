@@ -3,7 +3,7 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 type Box = { x: number; y: number; width: number; height: number };
-type TextItem = { str: string; transform: number[]; width: number; height: number };
+type TextItem = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean };
 type PositionedItem = { start: number; end: number; box: Box };
 type Requirement = {
   id: string;
@@ -142,7 +142,7 @@ export async function analyzeTender(form: FormData) {
       const positioned: PositionedItem[] = [];
       for (const rawItem of content.items) {
         if (!("str" in rawItem) || !rawItem.str) continue;
-        if (rawText) {
+        if (rawText && !rawText.endsWith("\n")) {
           rawText += " ";
           rawItemMap.push(-1);
         }
@@ -154,6 +154,10 @@ export async function analyzeTender(form: FormData) {
         const box = boxForItem(item, viewport);
         if (box) positioned.push({ start, end: rawText.length, box });
         else positioned.push({ start, end: rawText.length, box: { x: 0, y: 0, width: 0, height: 0 } });
+        if (item.hasEOL) {
+          rawText += "\n";
+          rawItemMap.push(-1);
+        }
       }
       const text = normalize(rawText);
       totalText += text.length;
@@ -178,9 +182,9 @@ export async function analyzeTender(form: FormData) {
 
       for (const sourcePage of pages) {
         const candidates = sourcePage.rawText
-          .split(/(?<=[.!?])\s+|;\s+/)
+          .split(/\n+|(?<=[.!?])\s+|;\s+/)
           .map((candidate) => normalize(candidate))
-          .filter((candidate) => candidate.length >= 35 && candidate.length <= 2_000 && obligationPattern.test(candidate));
+          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && obligationPattern.test(candidate));
 
         for (const quote of candidates) {
           const key = `${sourcePage.page}:${quote.toLocaleLowerCase()}`;
