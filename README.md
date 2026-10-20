@@ -82,6 +82,10 @@ make pilot-stop
 
 The hosted MVP is one Next.js app deployed on Vercel. A server-side route handles PDF analysis and any configured model request; the browser renders the original PDF, shows source highlights, holds the active review, and creates the DOCX.
 
+<p align="center">
+  <img src="docs/screenshots/architecture.svg" alt="Tender Review flow from selectable PDF text through candidate finding, page-matched quote geometry, human review, and a DOCX with blank OEM response fields." width="100%" />
+</p>
+
 There is no separate API service, worker, database, job queue, or Docker stack in the deployed MVP. Uploaded files and review results are not saved as a project history. The hosted site has no sign-in, so use a non-confidential sample document.
 
 ## Limits
