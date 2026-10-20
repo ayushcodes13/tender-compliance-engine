@@ -25,7 +25,7 @@ type Analysis = {
   reviewNote: string;
 };
 
-export default function TenderMvpPage() {
+export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload?: boolean } = {}) {
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -125,16 +125,16 @@ export default function TenderMvpPage() {
 
   if (!analysis) {
     return (
-      <main className="tender-mvp-root mvp-landing">
+      <main className={`tender-mvp-root mvp-landing ${startAtUpload ? "mvp-new-page" : ""}`}>
         <header className="mvp-topbar mvp-landing-topbar">
-          <a className="mvp-brand" href="#top" aria-label="Tender Review home"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
-          <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#evidence">Source evidence</a></nav>
-          <a className="mvp-topbar-cta" href="#upload">Start a review <ArrowUpRight size={15} /></a>
+          <a className="mvp-brand" href="/dashboard" aria-label="Tender Review dashboard"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
+          <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="/dashboard">Overview</a><a href="/method">How it works</a><a href="/">Product</a></nav>
+          <a className="mvp-topbar-cta" href="/new#upload">Start a review <ArrowUpRight size={15} /></a>
         </header>
         <section className="mvp-landing-hero" id="top">
           <div className="mvp-hero-copy">
             <div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> TENDER REVIEW WORKSPACE</div>
-            <h1>Every requirement.<br /><em>Right back to its source.</em></h1>
+            <h1>{startAtUpload ? <>Start with your<br /><em>tender document.</em></> : <>Every requirement.<br /><em>Right back to its source.</em></>}</h1>
             <p className="mvp-lede">Turn a technical tender into a response sheet your team can review with the original wording, cited page, and highlight all in view.</p>
             <div className="mvp-hero-links"><a className="mvp-primary mvp-hero-primary" href="#upload">Review a tender <ArrowRight size={17} /></a><a className="mvp-secondary-link" href="#how-it-works">See the workflow <ArrowDownToLine size={15} /></a></div>
             <div className="mvp-hero-note"><ShieldCheck size={17} /><span><strong>Source first, human checked.</strong><small>Every extracted row starts in review.</small></span></div>
@@ -168,7 +168,7 @@ export default function TenderMvpPage() {
             </div>
           </div>
           <div className="mvp-upload-card">
-            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">START A REVIEW</span><span className="mvp-upload-private"><span /> This browser session</span></div>
+            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">{startAtUpload ? "NEW REVIEW" : "START A REVIEW"}</span><span className="mvp-upload-private"><span /> This browser session</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
                 <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} />
