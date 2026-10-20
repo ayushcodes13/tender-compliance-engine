@@ -278,9 +278,14 @@ export async function analyzeTender(form: FormData) {
     } };
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
-    // Keep diagnostics useful in Vercel without logging tender text, filenames, model
-    // responses, credentials, or exception messages.
-    console.error("Tender analysis failed", { stage, errorName });
+    const errorMessage = error instanceof Error ? error.message : "";
+    const errorHint = /fake worker|worker/i.test(errorMessage) ? "pdfjs-worker"
+      : /DOMMatrix|ImageData|Path2D|canvas/i.test(errorMessage) ? "node-canvas"
+        : /invalid pdf|pdf structure|xref|cross-reference/i.test(errorMessage) ? "pdf-structure"
+          : /password|encrypted/i.test(errorMessage) ? "encrypted-pdf"
+            : "unclassified";
+    // Do not log tender text, filenames, model responses, credentials, or exception messages.
+    console.error("Tender analysis failed", { stage, errorName, errorHint });
     if (error instanceof Error && error.name === "TimeoutError") {
       return { ok: false as const, error: "Extraction exceeded the MVP time limit. Try a shorter PDF or technical-section extract." };
     }
