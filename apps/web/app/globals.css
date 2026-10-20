@@ -16,6 +16,7 @@
   --green: #287151;
   --red: #a63d36;
   --shadow-soft: 0 20px 60px rgba(23, 35, 54, .08), 0 2px 8px rgba(23, 35, 54, .04);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 * { box-sizing: border-box; }
@@ -37,14 +38,15 @@ a { color: inherit; }
 /* Shared masthead */
 .mvp-topbar { min-height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 max(36px, calc((100vw - 1320px) / 2)); background: rgba(255,255,255,.92); border-bottom: 1px solid var(--line); }
 .mvp-brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); text-decoration: none; }
-.mvp-brand-mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: var(--ink); color: white; font: 800 17px/1 Inter, 'Avenir Next', sans-serif; }
+.mvp-brand-mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: var(--ink); }
+.mvp-brand-symbol { display: block; width: 25px; height: 25px; }
 .mvp-brand-copy { display: flex; flex-direction: column; gap: 1px; }
 .mvp-brand-copy strong { font: 750 14px/1.25 Inter, 'Avenir Next', sans-serif; letter-spacing: -.02em; }
 .mvp-brand-copy small { color: var(--quiet); font-size: 10px; letter-spacing: .02em; }
 .mvp-landing-nav { display: flex; align-items: center; gap: 38px; margin-left: auto; margin-right: 38px; }
 .mvp-landing-nav a { color: var(--muted); font-size: 12px; text-decoration: none; transition: color 140ms ease; }
 .mvp-landing-nav a:hover { color: var(--blue); }
-.mvp-topbar-cta { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 15px; border: 1px solid var(--ink); border-radius: 5px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 650; text-decoration: none; transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease; }
+.mvp-topbar-cta { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 0 15px; border: 1px solid var(--ink); border-radius: 5px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 650; text-decoration: none; transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out); }
 .mvp-topbar-cta:hover { background: #30415b; border-color: #30415b; }
 .mvp-topbar-cta:active, .mvp-primary:active, .mvp-export:active { transform: scale(.98); }
 
@@ -60,7 +62,7 @@ a { color: inherit; }
 .mvp-hero-copy h1 em { color: var(--blue); font-style: normal; }
 .mvp-lede { max-width: 520px; margin: 0; color: #4d5a6d; font-size: 17px; line-height: 1.72; text-wrap: pretty; }
 .mvp-hero-links { display: flex; align-items: center; gap: 25px; margin-top: 29px; }
-.mvp-primary { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 13px; padding: 0 17px; border: 1px solid var(--blue); border-radius: 5px; background: var(--blue); color: white; font-size: 12px; font-weight: 650; text-decoration: none; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease; }
+.mvp-primary { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 13px; padding: 0 17px; border: 1px solid var(--blue); border-radius: 5px; background: var(--blue); color: white; font-size: 12px; font-weight: 650; text-decoration: none; cursor: pointer; transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out); }
 .mvp-primary:hover:not(:disabled) { border-color: var(--blue-hover); background: var(--blue-hover); }
 .mvp-secondary-link { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: #536176; font-size: 11px; font-weight: 600; text-decoration: none; transition: color 140ms ease; }
 .mvp-secondary-link:hover { color: var(--blue); }
@@ -341,7 +343,6 @@ a { color: inherit; }
 .mvp-landing { background: #f8f8f6; }
 .mvp-landing-topbar { min-height: 82px; }
 .mvp-landing-topbar { border-bottom: 0; }
-.mvp-landing .mvp-brand-mark { font-family: "Plus Jakarta Sans", sans-serif; }
 .mvp-landing-topbar .mvp-brand-copy strong { font-family: "Plus Jakarta Sans", sans-serif; font-size: 15px; }
 .mvp-landing-topbar .mvp-brand-copy small { color: #536176; font-size: 13px; }
 .mvp-landing-nav a { font-size: 14px; }
@@ -406,9 +407,16 @@ a { color: inherit; }
 .mvp-landing-footer { width: min(1320px, calc(100% - 112px)); margin-top: 0; padding: 22px 0 30px; border: 0; color: #435268; font-size: 13px; }
 .mvp-landing-footer > span:first-child { color: #344359; }
 .mvp-landing-footer > span:last-child { max-width: 680px; }
-.mvp-landing .mvp-motion-section { transition: opacity 420ms ease, transform 420ms ease; }
-.mvp-landing.motion-ready .mvp-motion-section:not(.is-in-view) { opacity: 0; transform: translateY(14px); }
-.mvp-landing .mvp-motion-section.is-in-view { opacity: 1; transform: translateY(0); }
+.mvp-shot-switch button { transition: background-color 160ms var(--ease-out), color 160ms var(--ease-out); }
+.mvp-requirement { transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out); }
+.mvp-check-button { transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out), color 160ms var(--ease-out); }
+.mvp-brand:focus-visible, .mvp-topbar-cta:focus-visible, .mvp-primary:focus-visible, .mvp-upload-back:focus-visible { outline: 3px solid rgba(36,79,187,.28); outline-offset: 3px; }
+@media (hover: hover) and (pointer: fine) {
+  .mvp-brand-mark { transition: transform 180ms var(--ease-out); }
+  .mvp-brand:hover .mvp-brand-mark { transform: translateY(-1px); }
+  .mvp-topbar-cta:hover, .mvp-primary:hover:not(:disabled) { transform: translateY(-1px); }
+  .mvp-shot-switch button:hover { filter: brightness(.97); }
+}
 @media (max-width: 1000px) {
   .mvp-landing-hero, .mvp-proof-strip, .mvp-evidence-showcase, .mvp-landing-footer { width: calc(100% - 64px); }
   .mvp-evidence-showcase { grid-template-columns: 1fr; gap: 35px; }
@@ -438,7 +446,7 @@ a { color: inherit; }
 }
 @media (prefers-reduced-motion: reduce) {
   .mvp-product-shot > img { animation: none; }
-  .mvp-landing .mvp-motion-section { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .mvp-topbar-cta, .mvp-primary, .mvp-check-button, .mvp-requirement, .mvp-brand-mark, .mvp-shot-switch button { transition: none; }
 }
 
 
