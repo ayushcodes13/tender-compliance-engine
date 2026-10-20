@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileText, LoaderCircle, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
+
+gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 type BoundingBox = { x: number; y: number; width: number; height: number };
 type Requirement = {
@@ -26,7 +31,20 @@ type Analysis = {
   reviewNote: string;
 };
 
+function TenderReviewMark() {
+  return (
+    <svg className="mvp-brand-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
+      <path d="M8.5 4.5h10l6 6v16a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 7.5 26V6a1.5 1.5 0 0 1 1-1.5Z" fill="#fff" />
+      <path d="M18.5 4.5v6h6" stroke="#9BB8FF" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M11.5 14h8M11.5 18.5h4" stroke="#9AA8BD" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M10 22h11v3H10z" fill="#9BB8FF" />
+      <path d="M10 21v-1.5h2M21 21v-1.5h-2M10 26v1.5h2M21 26v1.5h-2" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload?: boolean } = {}) {
+  const motionRoot = useRef<HTMLElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -35,26 +53,60 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
-  const [motionReady, setMotionReady] = useState(false);
 
-  useEffect(() => {
-    const sections = document.querySelectorAll<HTMLElement>(".mvp-landing .mvp-motion-section");
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window)) {
-      sections.forEach((section) => section.classList.add("is-in-view"));
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-in-view");
-          observer.unobserve(entry.target);
+  useGSAP(() => {
+    const root = motionRoot.current;
+    if (!root) return;
+
+    const media = gsap.matchMedia();
+    media.add("(prefers-reduced-motion: no-preference)", () => {
+      if (root.classList.contains("mvp-landing")) {
+        const entrance = gsap.timeline({ defaults: { ease: "power3.out" } });
+        const topbar = root.querySelector(".mvp-landing-topbar");
+        const brand = root.querySelector(".mvp-brand-mark");
+        const headline = root.querySelector(".mvp-hero-copy h1");
+        const supportingCopy = Array.from(root.querySelectorAll(".mvp-lede, .mvp-hero-links, .mvp-hero-note"));
+        const productShot = root.querySelector(".mvp-product-shot");
+
+        if (topbar && brand && headline && productShot) {
+          entrance
+            .fromTo(topbar, { autoAlpha: 0, y: -8 }, { autoAlpha: 1, y: 0, duration: 0.38 })
+            .fromTo(brand, { scale: 0.94, rotation: -4 }, { scale: 1, rotation: 0, duration: 0.36 }, "<+0.04")
+            .fromTo(headline, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.48 }, "<+0.08")
+            .fromTo(supportingCopy, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.38, stagger: 0.07 }, "<+0.04")
+            .fromTo(productShot, { autoAlpha: 0, y: 16, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.56 }, "<+0.08");
         }
-      });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-    sections.forEach((section) => observer.observe(section));
-    setMotionReady(true);
-    return () => observer.disconnect();
-  }, []);
+
+        root.querySelectorAll<HTMLElement>(".mvp-motion-section:not(.mvp-landing-hero)").forEach((section) => {
+          gsap.fromTo(section, { autoAlpha: 0, y: 16 }, {
+            autoAlpha: 1,
+            y: 0,
+            duration: 0.48,
+            ease: "power3.out",
+            scrollTrigger: { trigger: section, scroller: root, start: "top 88%", once: true },
+          });
+        });
+      } else if (root.classList.contains("mvp-upload-screen")) {
+        gsap.fromTo(".mvp-upload-intro, .mvp-upload-card", { autoAlpha: 0, y: 12 }, {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.42,
+          ease: "power3.out",
+          stagger: 0.09,
+        });
+      } else if (root.classList.contains("mvp-review-screen")) {
+        gsap.fromTo(".mvp-review-topbar, .mvp-review-summarybar, .mvp-workspace", { autoAlpha: 0, y: 10 }, {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.36,
+          ease: "power3.out",
+          stagger: 0.07,
+        });
+      }
+    });
+
+    return () => media.revert();
+  }, { scope: motionRoot, dependencies: [analysis?.filename, startAtUpload], revertOnUpdate: true });
 
   const active = useMemo(
     () => analysis?.requirements.find((item) => item.id === activeId) ?? analysis?.requirements[0] ?? null,
@@ -147,9 +199,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   if (!analysis && !startAtUpload) {
     return (
-      <main className={`tender-mvp-root mvp-landing ${startAtUpload ? "mvp-new-page" : ""} ${motionReady ? "motion-ready" : ""}`}>
+      <main ref={motionRoot} className={`tender-mvp-root mvp-landing ${startAtUpload ? "mvp-new-page" : ""}`}>
         <header className="mvp-topbar mvp-landing-topbar">
-          <a className="mvp-brand" href="#top" aria-label="Tender Review home"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
+          <a className="mvp-brand" href="#top" aria-label="Tender Review home"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
           <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="#product">The product</a><a href="#how-it-works">How it works</a><a href="#limits">What to expect</a></nav>
           <a className="mvp-topbar-cta" href="/new">Start a review <ArrowUpRight size={15} /></a>
         </header>
@@ -212,9 +264,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   if (!analysis) {
     return (
-      <main className="tender-mvp-root mvp-upload-screen">
+      <main ref={motionRoot} className="tender-mvp-root mvp-upload-screen">
         <header className="mvp-topbar mvp-review-topbar">
-          <a className="mvp-brand" href="/" aria-label="Return to Tender Review home"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Start a review</small></span></a>
+          <a className="mvp-brand" href="/" aria-label="Return to Tender Review home"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Start a review</small></span></a>
           <a className="mvp-upload-back" href="/">Back to overview</a>
         </header>
         <section className="mvp-upload-page">
@@ -243,9 +295,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   const checkedCount = analysis.requirements.filter((item) => item.reviewed).length;
   return (
-    <main className="tender-mvp-root mvp-review-screen">
+    <main ref={motionRoot} className="tender-mvp-root mvp-review-screen">
       <header className="mvp-topbar mvp-review-topbar">
-        <a className="mvp-brand" href="/" aria-label="Start a new tender"><span className="mvp-brand-mark">T</span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Review workspace</small></span></a>
+        <a className="mvp-brand" href="/" aria-label="Start a new tender"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Review workspace</small></span></a>
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span><span className="mvp-private"><span /> Single-user demo</span></div>
       </header>
       <section className="mvp-review-summarybar">
