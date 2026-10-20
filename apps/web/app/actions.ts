@@ -179,13 +179,13 @@ export async function analyzeTender(form: FormData) {
       const requirements: Requirement[] = [];
       const seen = new Set<string>();
       const obligationPattern = /\b(shall|must|should|required|minimum|maximum|not less than|not more than|at least|at most|comply with|conform to|provide|submit|maintain|achieve|withstand|operate)\b/i;
-      const administrativePattern = /\b(bid security|e-procurement|cpp portal|tender documents|financial bid|financial offer|online bids?|bid submission|digital signature|registration|eprocure|emd|contract value|quotation|downloaded from|enroll|enrolled|annexure)\b/i;
+      const administrativePattern = /\b(bid|bids|bidder|bidders|e-procurement|cpp portal|tender documents|financial|online bids?|digital signature|certificate|registration|eprocure|emd|contract value|quotation|downloaded from|enroll|enrolled|annexure|dsc)\b/i;
 
       for (const sourcePage of pages) {
         const candidates = sourcePage.rawText
           .split(/\n+|(?<=[.!?])\s+|;\s+/)
           .map((candidate) => normalize(candidate))
-          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && obligationPattern.test(candidate) && !administrativePattern.test(candidate));
+          .filter((candidate) => candidate.length >= 35 && candidate.length <= 700 && obligationPattern.test(candidate) && !administrativePattern.test(candidate) && candidate.replace(/[^\x00-\x7F]/g, "").length / candidate.length >= 0.95);
 
         for (const quote of candidates) {
           const key = `${sourcePage.page}:${quote.toLocaleLowerCase()}`;
