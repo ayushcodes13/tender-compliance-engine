@@ -2,6 +2,10 @@
 
 A small single-user demo that turns a text-based tender PDF into a source-linked technical response sheet. A reviewer can open each citation, see the cited page and its bounding box, mark the quote checked, and download a DOCX with blank OEM response fields.
 
+[![Tender Review workflow](apps/web/public/tender-review-workflow.svg)](https://tender-compliance-engine.vercel.app)
+
+**Portfolio:** [devayushrout.me](https://www.devayushrout.me/) · **Live MVP:** [tender-compliance-engine.vercel.app](https://tender-compliance-engine.vercel.app)
+
 ## Run locally
 
 Prerequisites: Node.js 20+, npm, and an OpenAI-compatible chat-completions credential.
