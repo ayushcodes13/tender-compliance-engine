@@ -157,6 +157,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <div><span className="mvp-proof-index">02</span><span><strong>Visible evidence</strong><small>Open the page and see the highlight</small></span></div>
           <div><span className="mvp-proof-index">03</span><span><strong>Human review</strong><small>Nothing is marked checked for you</small></span></div>
         </section>
+        {startAtUpload && <section className="mvp-new-heading"><div className="mvp-eyebrow">NEW TENDER REVIEW</div><h1>Start with the tender document.</h1><p>Upload the original PDF, then verify each extracted requirement against its page and highlighted source.</p></section>}
         <section className="mvp-start-section" id="upload">
           <div className="mvp-start-copy" id="how-it-works">
             <div className="mvp-eyebrow">A SHORT, TRACEABLE WORKFLOW</div>
