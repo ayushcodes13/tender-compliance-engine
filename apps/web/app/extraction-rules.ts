@@ -7,6 +7,15 @@ const nonTechnicalPattern = /\b(?:price|prices|pricing|cost|costs|charges|quotat
 const technicalPattern = /\b(?:technical specification|specification|specifications|equipment|instrument|device|machine|system|assembly|module|component|subsystem|motor|pump|valve|sensor|controller|processor|camera|lens|microscope|load cell|material|stainless steel|alloy|wavelength|frequency|voltage|current|power supply|power input|resolution|accuracy|precision|repeatability|measurement|measuring|range|capacity|throughput|sample rate|flow rate|pressure|temperature|humidity|tolerance|dimension|dimensions|size|weight|strength|interface|connector|protocol|signal|software|firmware|test(?:ing)?|calibration|performance|operating|operational|runtime|battery|enclosure|ip\s?\d{2}|emission|vibration|noise level|compatib(?:le|ility)|environmental|cooling|heating|load capacity|rated|kva|kw|kwh|rpm|mm|cm|inch(?:es)?|micron|µm|hz|mhz|ghz|vdc|vac|amp(?:s|ere)?|°c|°f|bar|pa|mpa|l\/min|ml\/min|gb|mbps|db)\b/i;
 const quantifiedTechnicalPattern = /(?:\b\d+(?:[.,]\d+)?\s*%|\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m|inch(?:es)?|micron|µm|nm|hz|khz|mhz|ghz|vdc|vac|kw|kva|w|mw|a|ma|rpm|°c|°f|bar|pa|kpa|mpa|n|kn|n\/mm|kn\/mm|kg|g|l\/min|ml\/min|gb|mbps|db|cycles?)\b)/i;
 
+// The model path already performs semantic technical classification. Only reject
+// clauses that are unmistakably about procurement/commercial administration;
+// do not require a known equipment keyword, which hid valid technical rows.
+const clearlyAdministrativePattern = /\b(?:financial bid|price bid|price quotation|quoted price|contract value|earnest money deposit|\bemd\b|bid security|bank guarantee|turnover|net worth|eligible bidder|bidder qualification|tender submission deadline|bid opening|e-procurement portal|cpp portal|payment terms|invoice|gst|liquidated damages|penalty|delivery schedule|delivery location|shipping|freight|packing material|packing and dispatch|commercial offer|financial offer|blacklist(?:ed|ing)?|pre[- ]?dispatch inspection|inspection prior to packing|original images|catalog(?:ue)?|demonstration\/catalog(?:ue)?|best quality|as per the requirement of the institution|undertake that the items supplied|spares column|availability of stock after|statutory valid certificates|statutory certificates|permissions\/licen[cs]e|test reports compliances|will be submitted by us if required|pre-requisite installation requirement|prerequisite installation requirement)\b/i;
+
+export function isClearlyAdministrativeClause(value: string): boolean {
+  return clearlyAdministrativePattern.test(value);
+}
+
 /**
  * Keep obligation-shaped text or quantified product specs. Reject commercial,
  * logistics, and tender-process clauses.
