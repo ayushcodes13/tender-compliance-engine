@@ -27,6 +27,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 - [x] Displayed requirements use unique literal quotes matched to selectable text on their cited pages; all start unreviewed. The PDF page and bounding-box overlay render in the browser.
 - [x] A DOCX downloaded and was inspected: 102 tender rows, 102 page references, and 102 blank OEM response cells.
 - [x] Desktop review layout was visually inspected; a reviewer mark changed the checked count from 0 to 1. Narrow layout rules are present; narrow-screen visual QA remains to be completed.
+- [x] Extraction is scoped to technical requirement wording and quantified product specifications; commercial, delivery, procurement, and bid-response clauses are filtered out by a conservative rule screen.
 - [ ] Vercel uses `apps/web`, server-only model settings, and `tender.devayushrout.me` is configured through Namecheap DNS and verified over HTTPS.
 - [x] README and deployment runbook give accurate local steps and limits; hosted steps are documented but not yet verified against an authenticated account.
 
@@ -35,5 +36,6 @@ This is a deliberate simplification requested by the user. The deployed product 
 - Text-based PDFs only; OCR is not included.
 - One bounded synchronous extraction call; no background jobs or persistence.
 - A validated quote and bounding box prove the displayed citation only, not exhaustive tender coverage.
+- The technical-only rule screen can miss technical requirements and is not proof of complete coverage; review every source citation.
 - Requirements remain in human review until the user checks them.
 - The hosted workflow is not complete until a fresh hosted upload and DOCX export are inspected.
