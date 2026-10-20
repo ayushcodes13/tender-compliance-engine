@@ -171,7 +171,66 @@ export async function analyzeTender(form: FormData) {
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return { ok: false as const, error: "The server model key is not configured." };
+    if (!apiKey) {
+      const requirements: Requirement[] = [];
+      const seen = new Set<string>();
+      const obligationPattern = /\b(shall|must|should|required|minimum|maximum|not less than|not more than|at least|at most|comply with|conform to|provide|submit|maintain|achieve|withstand|operate)\b/i;
+
+      for (const sourcePage of pages) {
+        const candidates = sourcePage.rawText
+          .split(/(?<=[.!?])\s+|;\s+/)
+          .map((candidate) => normalize(candidate))
+          .filter((candidate) => candidate.length >= 35 && candidate.length <= 2_000 && obligationPattern.test(candidate));
+
+        for (const quote of candidates) {
+          const key = \`${sourcePage.page}:${quote.toLocaleLowerCase()}\`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const bbox = locateQuote(quote, sourcePage.rawText, sourcePage.rawItemMap, sourcePage.positioned);
+          if (!bbox) continue;
+
+          const lowered = quote.toLocaleLowerCase();
+          const category = /voltage|current|electrical|power supply|earthing|cable/i.test(lowered) ? "Electrical"
+            : /motor|pump|pressure|flow|valve|mechanical|dimension/i.test(lowered) ? "Mechanical"
+              : /temperature|humidity|environment|ip rating|emission/i.test(lowered) ? "Environmental"
+                : /test|inspect|witness|factory acceptance/i.test(lowered) ? "Testing"
+                  : /document|manual|datasheet|certificate|drawing/i.test(lowered) ? "Documentation"
+                    : /capacity|efficiency|performance|output/i.test(lowered) ? "Performance" : "Other";
+
+          requirements.push({
+            id: \`req-${requirements.length + 1}\`,
+            text: quote,
+            category,
+            page: sourcePage.page,
+            quote,
+            bbox: {
+              x: (bbox.x / sourcePage.width) * 100,
+              y: (bbox.y / sourcePage.height) * 100,
+              width: (bbox.width / sourcePage.width) * 100,
+              height: (bbox.height / sourcePage.height) * 100,
+            },
+            precision: "exact",
+            reviewed: false,
+          });
+          if (requirements.length >= MAX_REQUIREMENTS) break;
+        }
+        if (requirements.length >= MAX_REQUIREMENTS) break;
+      }
+
+      if (requirements.length === 0) {
+        return { ok: false as const, error: "The PDF text was read, but no requirement-shaped sentences matched the preview rules. Try a technical section with explicit obligations such as shall, must, or minimum." };
+      }
+
+      return { ok: true as const, analysis: {
+        filename: file.name,
+        pageCount: pdf.numPages,
+        textPages: pages.length,
+        requirements,
+        rejectedCandidates: 0,
+        extractionMode: "rule-based-preview" as const,
+        reviewNote: "Rule-based preview: candidate sentences were selected using obligation keywords and matched to selectable source text. It can miss requirements; check every citation and do not treat this list as complete.",
+      } };
+    }
     const model = process.env.OPENAI_MODEL || "gpt-4o";
     const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
     const pageInput = pages.map(({ page, text }) => `PAGE ${page}\n${text}`).join("\n\n");
