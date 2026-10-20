@@ -285,7 +285,7 @@ export async function analyzeTender(form: FormData) {
       return { ok: false as const, error: "Extraction exceeded the MVP time limit. Try a shorter PDF or technical-section extract." };
     }
     if (stage === "opening PDF" || stage === "reading PDF text and page positions") {
-      return { ok: false as const, error: "The hosted PDF reader could not open this file. Re-save it as a standard text-based PDF and try again. If that still fails, send us the file name and the time of the attempt." };
+      return { ok: false as const, error: `The hosted PDF reader failed during ${stage} (${errorName}). Re-save the PDF as a standard text-based file and retry. If it fails again, share that error code and the time of the attempt.` };
     }
     if (stage === "connecting to the extraction model" || stage === "reading the model response") {
       return { ok: false as const, error: "The extraction service could not complete this request. Please retry in a moment." };
