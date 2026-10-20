@@ -22,6 +22,7 @@ type Analysis = {
   textPages: number;
   requirements: Requirement[];
   rejectedCandidates: number;
+  extractionMode?: "rule-based-preview";
   reviewNote: string;
 };
 
@@ -104,7 +105,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             new Paragraph({ text: "Tender Technical Requirements", heading: HeadingLevel.TITLE }),
             new Paragraph({ text: `Source tender: ${analysis.filename}` }),
             new Paragraph({ text: `${analysis.requirements.length} source-matched requirements · ${analysis.requirements.filter((item) => item.reviewed).length} checked by reviewer` }),
-            new Paragraph({ text: "AI-assisted draft for human review. This document does not guarantee tender completeness." }),
+            new Paragraph({ text: analysis.extractionMode === "rule-based-preview" ? "Rule-based preview for human review. Candidate extraction may miss requirements and does not guarantee tender completeness." : "AI-assisted draft for human review. This document does not guarantee tender completeness." }),
             new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [5800, 2300, 1200] }),
           ],
         }],
@@ -198,7 +199,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span><span className="mvp-private"><span /> Single-user demo</span></div>
       </header>
       <section className="mvp-review-summarybar">
-        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p></div>
+        <div className="mvp-review-title"><div className="mvp-eyebrow">{analysis.extractionMode === "rule-based-preview" ? "RULE-BASED PREVIEW · CHECK EVERY SOURCE" : "TENDER REVIEW"}</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p></div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
           <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{analysis.requirements.length}</strong><small>Source matched</small></span></div>
           <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {analysis.requirements.length}</i></strong><small>Checked by you</small></span></div>
