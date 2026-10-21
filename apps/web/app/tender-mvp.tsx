@@ -168,24 +168,57 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const { AlignmentType, Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } = await import("docx");
+      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, WidthType } = await import("docx");
       const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19) => new TableCell({
         children: [new Paragraph({ alignment, children: [new TextRun({ text, bold, size, font: "Calibri" })] })],
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
       });
       const structured = analysis.extractionMode === "structured-table";
       const complianceSheet = analysis.extractionMode === "visual-compliance-sheet";
-      const complianceHeader = new TableRow({ tableHeader: true, children: [
-        cell("Technical Parameters NIQ", true, AlignmentType.CENTER, 20),
-        cell("Remark", true, AlignmentType.CENTER, 20),
-        cell("Compliance Y/N", true, AlignmentType.CENTER, 20),
+      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"]) => {
+        const letterRow = /^[a-z]\)/i.test(text);
+        return new TableCell({
+        children: [new Paragraph({
+          style: "TableParagraph",
+          alignment: letterRow && !text.includes("\n") ? AlignmentType.JUSTIFIED : alignment,
+          ...(rowType === "section" ? { indent: { left: 102 } } : letterRow ? { indent: { left: 801, hanging: 348 } } : {}),
+          children: text.split("\n").flatMap((line, index) => [
+            ...(index > 0 ? [new TextRun({ break: 1 })] : []),
+            new TextRun({ text: line, bold, size }),
+          ]),
+        })],
+        margins: { left: 0, right: 0 },
+        borders: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 0, color: "000000" } },
+      });
+      };
+      const complianceTable = (tableRows: Array<InstanceType<typeof TableRow>>) => new Table({
+        rows: tableRows,
+        width: { size: 11_199, type: WidthType.DXA },
+        columnWidths: [8_162, 1_620, 1_417],
+        layout: TableLayoutType.FIXED,
+        indent: { size: -418, type: WidthType.DXA },
+        margins: { left: 0, right: 0 },
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
+          left: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
+          bottom: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
+          right: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
+        },
+      });
+      const complianceHeader = new TableRow({ tableHeader: true, height: { value: 670, rule: HeightRule.ATLEAST }, children: [
+        complianceCell("Technical Parameters NIQ", true, 19, AlignmentType.CENTER),
+        complianceCell("Remark", true, 19, AlignmentType.CENTER),
+        complianceCell("Compliance Y/N", true, 19, AlignmentType.CENTER),
       ] });
-      const complianceSpacer = new TableRow({ children: [cell(""), cell(""), cell("")] });
+      const complianceSpacer = new TableRow({ height: { value: 226, rule: HeightRule.ATLEAST }, children: [complianceCell("", false, 16), complianceCell("", false, 16), complianceCell("", false, 16)] });
       const complianceRow = (item: Requirement) => new TableRow({
+        height: { value: item.rowType === "section" ? 236 : 443, rule: HeightRule.ATLEAST },
         children: [
-          cell(item.text, item.rowType === "section", undefined, 20),
-          cell(item.remark ?? "", false, undefined, 20),
-          cell("", false, undefined, 20),
+          complianceCell(item.text, item.rowType === "section", 19, undefined, item.rowType),
+          complianceCell(item.remark ?? "", false, 16),
+          complianceCell("", false, 16),
         ],
       });
       const optionalHeadingIndex = analysis.requirements.findIndex((item) => item.rowType === "optional_heading");
@@ -235,28 +268,29 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         ];
       const complianceContent = [
         new Paragraph({
-          children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 26, font: "Times New Roman" })],
+          children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 23 })],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 220 },
+          indent: { right: 55 },
+          spacing: { before: 180, after: 520 },
         }),
         ...(analysis.sheetHeading ? [new Paragraph({
           children: [
-            new TextRun({ text: analysis.sheetHeading, bold: true, size: 22, font: "Times New Roman" }),
-            ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, size: 22, font: "Times New Roman" })] : []),
+            new TextRun({ text: analysis.sheetHeading, bold: true, size: 21 }),
+            ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, size: 21 })] : []),
           ],
-          spacing: { after: 160 },
+          style: "BodyText",
         })] : []),
-        ...mainComplianceGroups.flatMap((group, index) => [new Table({
-          rows: index === 0 ? [complianceHeader, complianceSpacer, ...group] : group,
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          columnWidths: [6700, 1320, 1320],
-        }), ...(index < mainComplianceGroups.length - 1 ? [new Paragraph("")] : [])]),
+        ...mainComplianceGroups.flatMap((group, index) => [
+          complianceTable(index === 0 ? [complianceHeader, complianceSpacer, ...group] : group),
+          ...(index < mainComplianceGroups.length - 1 ? [new Paragraph("")] : []),
+        ]),
         ...(optionalHeadingIndex >= 0 ? [
           new Paragraph({
-            children: [new TextRun({ text: analysis.requirements[optionalHeadingIndex].text, bold: true, underline: {}, size: 20, font: "Times New Roman" })],
-            spacing: { before: 180, after: 100 },
+            children: [new TextRun({ text: analysis.requirements[optionalHeadingIndex].text, bold: true, underline: {}, size: 21 })],
+            style: "BodyText",
+            spacing: { before: 120 },
           }),
-          new Table({ rows: optionalComplianceRows, width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [6700, 1320, 1320] }),
+          complianceTable(optionalComplianceRows),
         ] : []),
       ];
       const commonContent = complianceSheet ? complianceContent : [
@@ -285,8 +319,20 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           columnWidths: structured ? [2340, 2340, 2340, 2340] : [5800, 2300, 1200],
         }),
       ];
-      const doc = new Document({ sections: [{
-        properties: structured || complianceSheet ? { page: { size: { width: 12240, height: 15840 } } } : {},
+      const doc = new Document({
+        ...(complianceSheet ? { styles: {
+          default: { document: { run: { font: "Times New Roman", size: 22 } } },
+          paragraphStyles: [{
+            id: "TableParagraph",
+            name: "Table Paragraph",
+            basedOn: "Normal",
+            paragraph: { spacing: { line: 224, lineRule: "exact" } },
+          }],
+        } } : {}),
+        sections: [{
+        properties: complianceSheet
+          ? { page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_120, right: 425, bottom: 1_880, left: 850, header: 0, footer: 1_618 } } }
+          : structured ? { page: { size: { width: 12_240, height: 15_840 } } } : {},
         children: commonContent,
       }] });
       const blob = await Packer.toBlob(doc);
