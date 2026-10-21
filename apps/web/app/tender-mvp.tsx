@@ -7,6 +7,8 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
+import { groupVisualRowsByPage, mergeVisualHeadingRows, mergeVisualRowContinuations } from "./visual-table";
+import { splitHeadingPrefix } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -18,6 +20,9 @@ type Requirement = {
   specifications?: string[];
   remark?: string;
   rowType?: "section" | "requirement" | "optional_heading";
+  headingPrefix?: string;
+  mergeWithNext?: boolean;
+  continuationOfPrevious?: boolean;
   category: string;
   page: number;
   quote: string;
@@ -175,17 +180,22 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       });
       const structured = analysis.extractionMode === "structured-table";
       const complianceSheet = analysis.extractionMode === "visual-compliance-sheet";
-      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"]) => {
+      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"], headingPrefix?: string) => {
         const letterRow = /^[a-z]\)/i.test(text);
         return new TableCell({
         children: [new Paragraph({
           style: "TableParagraph",
           alignment: letterRow && !text.includes("\n") ? AlignmentType.JUSTIFIED : alignment,
           ...(rowType === "section" ? { indent: { left: 102 } } : letterRow ? { indent: { left: 801, hanging: 348 } } : {}),
-          children: text.split("\n").flatMap((line, index) => [
-            ...(index > 0 ? [new TextRun({ break: 1 })] : []),
-            new TextRun({ text: line, bold, size }),
-          ]),
+          children: text.split("\n").flatMap((line, index) => {
+            const headingParts = index === 0 ? splitHeadingPrefix(line, headingPrefix) : null;
+            return [
+              ...(index > 0 ? [new TextRun({ break: 1 })] : []),
+              ...(headingParts
+                ? [new TextRun({ text: headingParts.heading, bold: true, size }), new TextRun({ text: headingParts.remainder, bold, size })]
+                : [new TextRun({ text: line, bold, size })]),
+            ];
+          }),
         })],
         margins: { left: 0, right: 0 },
         borders: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 0, color: "000000" } },
@@ -207,7 +217,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           insideVertical: { style: BorderStyle.SINGLE, size: 6, space: 0, color: "000000" },
         },
       });
-      const complianceHeader = new TableRow({ tableHeader: true, height: { value: 670, rule: HeightRule.ATLEAST }, children: [
+      const complianceHeader = new TableRow({ height: { value: 670, rule: HeightRule.ATLEAST }, children: [
         complianceCell("Technical Parameters NIQ", true, 19, AlignmentType.CENTER),
         complianceCell("Remark", true, 19, AlignmentType.CENTER),
         complianceCell("Compliance Y/N", true, 19, AlignmentType.CENTER),
@@ -216,20 +226,17 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const complianceRow = (item: Requirement) => new TableRow({
         height: { value: item.rowType === "section" ? 236 : 443, rule: HeightRule.ATLEAST },
         children: [
-          complianceCell(item.text, item.rowType === "section", 19, undefined, item.rowType),
-          complianceCell(item.remark ?? "", false, 16),
+          complianceCell(item.text, item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix),
+          complianceCell(item.remark ?? "", false, 16, AlignmentType.CENTER),
           complianceCell("", false, 16),
         ],
       });
       const optionalHeadingIndex = analysis.requirements.findIndex((item) => item.rowType === "optional_heading");
       const mainComplianceItems = (optionalHeadingIndex < 0 ? analysis.requirements : analysis.requirements.slice(0, optionalHeadingIndex))
         .filter((item) => item.rowType !== "optional_heading")
-      const mainComplianceGroups = [...mainComplianceItems.reduce((groups, item) => {
-        const group = groups.get(item.page) ?? [];
-        group.push(complianceRow(item));
-        groups.set(item.page, group);
-        return groups;
-      }, new Map<number, ReturnType<typeof complianceRow>[]>()).values()];
+      const mainComplianceExportGroups = groupVisualRowsByPage(
+        mergeVisualHeadingRows(mergeVisualRowContinuations(mainComplianceItems)),
+      );
       const optionalComplianceRows = (optionalHeadingIndex < 0 ? [] : analysis.requirements.slice(optionalHeadingIndex + 1))
         .map(complianceRow);
       const rows = structured
@@ -280,10 +287,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           ],
           style: "BodyText",
         })] : []),
-        ...mainComplianceGroups.flatMap((group, index) => [
-          complianceTable(index === 0 ? [complianceHeader, complianceSpacer, ...group] : group),
-          ...(index < mainComplianceGroups.length - 1 ? [new Paragraph("")] : []),
-        ]),
+        ...mainComplianceExportGroups.map((group, index) => complianceTable([
+          ...(index === 0 ? [complianceHeader, complianceSpacer] : []),
+          ...group.map(complianceRow),
+        ])),
         ...(optionalHeadingIndex >= 0 ? [
           new Paragraph({
             children: [new TextRun({ text: analysis.requirements[optionalHeadingIndex].text, bold: true, underline: {}, size: 21 })],

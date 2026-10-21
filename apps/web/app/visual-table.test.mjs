@@ -1,0 +1,77 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { discardContainedSuggestions, groupVisualRowsByPage, mergeVisualHeadingRows, mergeVisualRowContinuations, splitSourceQuote } from "./visual-table.ts";
+
+test("groups adjacent exported rows by their source PDF page", () => {
+  const rows = [
+    { text: "page 8 row 1", page: 8 },
+    { text: "page 8 row 2", page: 8 },
+    { text: "page 9 row 1", page: 9 },
+    { text: "page 10 row 1", page: 10 },
+  ];
+  assert.deepEqual(groupVisualRowsByPage(rows), [rows.slice(0, 2), rows.slice(2, 3), rows.slice(3)]);
+});
+
+test("joins a heading row only when the visual model marks its adjacent descriptor", () => {
+  const rows = [
+    { text: "4. MBE sources", page: 9, headingPrefix: "4. MBE sources", mergeWithNext: true },
+    { text: "Vendor to provide flux isolation geometry.", page: 9, remark: "" },
+    { text: "5. Source shutter assembly", page: 9, mergeWithNext: false },
+  ];
+  assert.deepEqual(mergeVisualHeadingRows(rows), [
+    { text: "4. MBE sources Vendor to provide flux isolation geometry.", page: 9, headingPrefix: "4. MBE sources", mergeWithNext: false, remark: "" },
+    { text: "5. Source shutter assembly", page: 9, mergeWithNext: false },
+  ]);
+});
+
+test("does not merge a visual heading decision across pages or through a populated remark cell", () => {
+  assert.equal(mergeVisualHeadingRows([
+    { text: "4. MBE sources", page: 9, mergeWithNext: true },
+    { text: "Vendor to provide flux isolation geometry.", page: 10 },
+  ]).length, 2);
+  assert.equal(mergeVisualHeadingRows([
+    { text: "4. MBE sources", page: 9, remark: "1 no.", mergeWithNext: true },
+    { text: "Vendor to provide flux isolation geometry.", page: 9 },
+  ]).length, 2);
+});
+
+test("joins an AI-identified page continuation into the prior export row", () => {
+  const rows = [
+    { text: "m) RHEED system description", page: 8, id: "first" },
+    { text: "The analysis software shall be integrated.", page: 9, id: "continuation", continuationOfPrevious: true },
+    { text: "n) Optical pyrometer", page: 9, id: "next" },
+  ];
+
+  assert.deepEqual(mergeVisualRowContinuations(rows), [
+    { text: "m) RHEED system description\nThe analysis software shall be integrated.", page: 8, id: "first" },
+    { text: "n) Optical pyrometer", page: 9, id: "next" },
+  ]);
+});
+
+test("keeps a row separate unless vision marks it as an adjacent-page continuation", () => {
+  const rows = [
+    { text: "Section heading", page: 8 },
+    { text: "a) New requirement", page: 9, continuationOfPrevious: false },
+    { text: "another segment", page: 11, continuationOfPrevious: true },
+  ];
+
+  assert.deepEqual(mergeVisualRowContinuations(rows), rows);
+});
+
+test("drops a partial visual suggestion when a longer accepted quote already covers it", () => {
+  const kept = discardContainedSuggestions(
+    ["c) Effusion cells: Capacity ≥85 cm3, proper design for Ga."],
+    [{ quote: "c) Effusion cells: Capacity" }, { quote: "a) Motorized phosphorus cracker source" }],
+  );
+  assert.deepEqual(kept, [{ quote: "a) Motorized phosphorus cracker source" }]);
+});
+
+test("accepts AI row splits only when the literal parts cover the full source cell", () => {
+  const source = "6. Control system Cabinets are included. Logging is provided.";
+  assert.deepEqual(splitSourceQuote(source, ["6. Control system Cabinets are included.", "Logging is provided."]), [
+    "6. Control system Cabinets are included.",
+    "Logging is provided.",
+  ]);
+  assert.deepEqual(splitSourceQuote(source, ["6. Control system Cabinets are included."]), [source]);
+  assert.deepEqual(splitSourceQuote(source, ["6. Control system Cabinets are included.", "Logging"]), [source]);
+});
