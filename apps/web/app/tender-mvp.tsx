@@ -8,7 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
 import { groupVisualRowsByPage, mergeVisualHeadingRows, mergeVisualRowContinuations } from "./visual-table";
-import { splitHeadingPrefix } from "./compliance-format";
+import { reflowComplianceText, splitHeadingPrefix } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -223,11 +223,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         complianceCell("Compliance Y/N", true, 19, AlignmentType.CENTER),
       ] });
       const complianceSpacer = new TableRow({ height: { value: 226, rule: HeightRule.ATLEAST }, children: [complianceCell("", false, 16), complianceCell("", false, 16), complianceCell("", false, 16)] });
-      const complianceRow = (item: Requirement) => new TableRow({
+      const complianceRow = (item: Requirement, preserveLineItems = false) => new TableRow({
         height: { value: item.rowType === "section" ? 236 : 443, rule: HeightRule.ATLEAST },
         children: [
-          complianceCell(item.text, item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix),
-          complianceCell(item.remark ?? "", false, 16, AlignmentType.CENTER),
+          complianceCell(reflowComplianceText(item.text, preserveLineItems), item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix),
+          complianceCell(reflowComplianceText(item.remark ?? ""), false, 16, AlignmentType.CENTER),
           complianceCell("", false, 16),
         ],
       });
@@ -238,7 +238,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         mergeVisualHeadingRows(mergeVisualRowContinuations(mainComplianceItems)),
       );
       const optionalComplianceRows = (optionalHeadingIndex < 0 ? [] : analysis.requirements.slice(optionalHeadingIndex + 1))
-        .map(complianceRow);
+        .map((item) => complianceRow(item, true));
       const rows = structured
         ? [
           new TableRow({ tableHeader: true, children: [
@@ -289,7 +289,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         })] : []),
         ...mainComplianceExportGroups.map((group, index) => complianceTable([
           ...(index === 0 ? [complianceHeader, complianceSpacer] : []),
-          ...group.map(complianceRow),
+          ...group.map((item) => complianceRow(item)),
         ])),
         ...(optionalHeadingIndex >= 0 ? [
           new Paragraph({
@@ -338,7 +338,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         } } : {}),
         sections: [{
         properties: complianceSheet
-          ? { page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_120, right: 425, bottom: 1_880, left: 850, header: 0, footer: 1_618 } } }
+          ? { page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_060, right: 425, bottom: 2_048, left: 850, header: 0, footer: 1_618 } } }
           : structured ? { page: { size: { width: 12_240, height: 15_840 } } } : {},
         children: commonContent,
       }] });
