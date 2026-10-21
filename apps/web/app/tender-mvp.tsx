@@ -180,6 +180,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         cell("Remark", true, AlignmentType.CENTER, 20),
         cell("Compliance Y/N", true, AlignmentType.CENTER, 20),
       ] });
+      const complianceSpacer = new TableRow({ children: [cell(""), cell(""), cell("")] });
       const complianceRow = (item: Requirement) => new TableRow({
         children: [
           cell(item.text, item.rowType === "section", undefined, 20),
@@ -246,7 +247,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           spacing: { after: 160 },
         })] : []),
         ...mainComplianceGroups.flatMap((group, index) => [new Table({
-          rows: index === 0 ? [complianceHeader, ...group] : group,
+          rows: index === 0 ? [complianceHeader, complianceSpacer, ...group] : group,
           width: { size: 100, type: WidthType.PERCENTAGE },
           columnWidths: [6700, 1320, 1320],
         }), ...(index < mainComplianceGroups.length - 1 ? [new Paragraph("")] : [])]),
