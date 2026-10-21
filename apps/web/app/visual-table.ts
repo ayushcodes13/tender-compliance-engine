@@ -1,12 +1,12 @@
 export type VisualTableRow = {
   text: string;
   page: number;
+  sourceRowHeight?: number;
+  sourceTextHeight?: number;
   continuationOfPrevious?: boolean;
 };
 
-export type VisualHeadingRow = {
-  text: string;
-  page: number;
+export type VisualHeadingRow = VisualTableRow & {
   headingPrefix?: string;
   remark?: string;
   mergeWithNext?: boolean;
@@ -29,6 +29,11 @@ export function mergeVisualRowContinuations<T extends VisualTableRow>(rows: T[])
     const previous = merged.at(-1);
     if (row.continuationOfPrevious && previous && row.page === previous.page + 1) {
       merged[merged.length - 1] = { ...previous, text: `${previous.text}\n${row.text}` };
+      if (previous.sourceTextHeight !== undefined && row.sourceTextHeight !== undefined) {
+        merged[merged.length - 1].sourceRowHeight = previous.sourceTextHeight + row.sourceTextHeight;
+      } else if (previous.sourceRowHeight !== undefined && row.sourceRowHeight !== undefined) {
+        merged[merged.length - 1].sourceRowHeight = previous.sourceRowHeight + row.sourceRowHeight;
+      }
     } else {
       merged.push(row);
     }
@@ -46,6 +51,11 @@ export function mergeVisualHeadingRows<T extends VisualHeadingRow>(rows: T[]): T
       merged.push({
         ...current,
         text: `${current.text} ${next.text}`,
+        ...(current.sourceRowHeight !== undefined || next.sourceRowHeight !== undefined
+          ? { sourceRowHeight: current.sourceRowHeight !== undefined && next.sourceRowHeight !== undefined
+            ? current.sourceRowHeight + next.sourceRowHeight
+            : current.sourceRowHeight ?? next.sourceRowHeight }
+          : {}),
         remark: next.remark ?? current.remark,
         mergeWithNext: false,
       } as T);

@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { reflowComplianceText, splitHeadingPrefix } from "./compliance-format.ts";
+import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format.ts";
+
+test("scales PDF cell heights to DOCX row heights and enforces compact minimums", () => {
+  assert.equal(complianceRowHeightTwips(46.1, false), 889);
+  assert.equal(complianceRowHeightTwips(23, false), 443);
+  assert.equal(complianceRowHeightTwips(8, true), 236);
+  assert.equal(complianceRowHeightTwips(undefined, false), 443);
+});
 
 test("reflows visual line wraps into a Word paragraph without changing words", () => {
   assert.equal(reflowComplianceText("The control system shall provide\nautomatic long-term logging."), "The control system shall provide automatic long-term logging.");

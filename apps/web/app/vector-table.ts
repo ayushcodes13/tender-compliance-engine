@@ -10,6 +10,7 @@ export type VectorRectangle = { x: number; y: number; width: number; height: num
 export type VectorTableRow = {
   quote: string;
   remark?: string;
+  rowHeight: number;
   bbox: { x: number; y: number; width: number; height: number };
   remarkBox?: { x: number; y: number; width: number; height: number };
 };
@@ -85,7 +86,7 @@ export function extractVectorTableRows(
       width: Math.max(...remarkBoxes.map((box) => box.x + box.width)) - Math.min(...remarkBoxes.map((box) => box.x)),
       height: Math.max(...remarkBoxes.map((box) => box.y + box.height)) - Math.min(...remarkBoxes.map((box) => box.y)),
     } : undefined;
-    output.push({ quote: leftContent.text, ...(remark ? { remark } : {}), bbox: leftContent.bbox, ...(remarkBox ? { remarkBox } : {}) });
+    output.push({ quote: leftContent.text, ...(remark ? { remark } : {}), rowHeight: left.height, bbox: leftContent.bbox, ...(remarkBox ? { remarkBox } : {}) });
   }
 
   return output;

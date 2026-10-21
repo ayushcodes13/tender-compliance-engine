@@ -24,6 +24,8 @@ type Requirement = {
   headingPrefix?: string;
   mergeWithNext?: boolean;
   continuationOfPrevious?: boolean;
+  sourceRowHeight?: number;
+  sourceTextHeight?: number;
   category: string;
   page: number;
   quote: string;
@@ -463,7 +465,7 @@ export async function analyzeTender(form: FormData) {
       },
     };
 
-    type Candidate = { page?: number; quote?: string; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box };
+    type Candidate = { page?: number; quote?: string; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number };
     type ParsedExtraction = { requirements?: Candidate[] };
     let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number }>;
     let coverageCheckIncomplete = false;
@@ -583,6 +585,10 @@ export async function analyzeTender(form: FormData) {
               continues_previous: index === 0 && splitIndex === 0 && label?.continues_previous === true,
               sourceBox: splitQuotes.length === 1 ? row.bbox : quoteBox ?? row.bbox,
               remarkBox: splitQuotes.length === 1 ? row.remarkBox : undefined,
+              sourceRowHeight: splitQuotes.length === 1
+                ? (label?.continues_previous ? quoteBox?.height ?? row.rowHeight : row.rowHeight)
+                : quoteBox?.height,
+              sourceTextHeight: splitQuotes.length === 1 ? row.bbox.height : quoteBox?.height,
             };
           });
         });
@@ -797,6 +803,12 @@ export async function analyzeTender(form: FormData) {
           ? candidate.heading_prefix.trim()
           : undefined,
         mergeWithNext: visualSheetType === "compliance-sheet" && candidate.merge_with_next === true,
+        sourceRowHeight: typeof candidate.sourceRowHeight === "number" && Number.isFinite(candidate.sourceRowHeight)
+          ? candidate.sourceRowHeight
+          : undefined,
+        sourceTextHeight: typeof candidate.sourceTextHeight === "number" && Number.isFinite(candidate.sourceTextHeight)
+          ? candidate.sourceTextHeight
+          : undefined,
         rowType: visualSheetType === "compliance-sheet" && ["section", "requirement", "optional_heading"].includes(candidate.row_type || "")
           ? candidate.row_type as Requirement["rowType"]
           : "requirement",

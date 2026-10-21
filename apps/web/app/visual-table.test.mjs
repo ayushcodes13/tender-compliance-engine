@@ -24,6 +24,17 @@ test("joins a heading row only when the visual model marks its adjacent descript
   ]);
 });
 
+test("carries source row height when continuations or headings merge", () => {
+  assert.equal(mergeVisualRowContinuations([
+    { text: "first page", page: 8, sourceRowHeight: 24 },
+    { text: "continued", page: 9, sourceRowHeight: 18, continuationOfPrevious: true },
+  ])[0].sourceRowHeight, 42);
+  assert.equal(mergeVisualHeadingRows([
+    { text: "4. Sources", page: 8, sourceRowHeight: 14, mergeWithNext: true },
+    { text: "Supplier details", page: 8, sourceRowHeight: 23 },
+  ])[0].sourceRowHeight, 37);
+});
+
 test("does not merge a visual heading decision across pages or through a populated remark cell", () => {
   assert.equal(mergeVisualHeadingRows([
     { text: "4. MBE sources", page: 9, mergeWithNext: true },

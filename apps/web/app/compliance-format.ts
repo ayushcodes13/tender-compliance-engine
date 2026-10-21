@@ -1,5 +1,12 @@
 export type HeadingTextParts = { heading: string; remainder: string };
 
+/** Scales measured PDF cell heights into DOCX twips, with reference-sized minimums. */
+export function complianceRowHeightTwips(sourceRowHeight: number | undefined, isSection: boolean): number {
+  const minimum = isSection ? 236 : 217;
+  if (!Number.isFinite(sourceRowHeight) || !sourceRowHeight || sourceRowHeight <= 0) return isSection ? minimum : 443;
+  return Math.max(minimum, Math.round(sourceRowHeight * 19.28));
+}
+
 /** Reflows PDF visual wraps for Word while retaining actual list items on separate lines. */
 export function reflowComplianceText(text: string, preserveLineItems = false): string {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);

@@ -17,7 +17,7 @@ test("extracts source text from paired vector table cells without joining adjace
     { str: "Arsenic source", x: 80, y: 92, box: { x: 80, y: 704, width: 100, height: 12 } },
   ];
   assert.deepEqual(extractVectorTableRows(items, rectangles, 612, 792), [
-    { quote: "a) Cracker source", remark: "1 no.", bbox: { x: 60, y: 680, width: 110, height: 12 }, remarkBox: { x: 450, y: 680, width: 30, height: 12 } },
-    { quote: "b) Arsenic source", bbox: { x: 60, y: 704, width: 120, height: 12 } },
+    { quote: "a) Cracker source", remark: "1 no.", rowHeight: 24, bbox: { x: 60, y: 680, width: 110, height: 12 }, remarkBox: { x: 450, y: 680, width: 30, height: 12 } },
+    { quote: "b) Arsenic source", rowHeight: 24, bbox: { x: 60, y: 704, width: 120, height: 12 } },
   ]);
 });
