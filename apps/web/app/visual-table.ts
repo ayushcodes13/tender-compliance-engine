@@ -12,17 +12,6 @@ export type VisualHeadingRow = VisualTableRow & {
   mergeWithNext?: boolean;
 };
 
-/** Keeps DOCX table chunks aligned with the source PDF pages they came from. */
-export function groupVisualRowsByPage<T extends VisualTableRow>(rows: T[]): T[][] {
-  const groups: T[][] = [];
-  for (const row of rows) {
-    const current = groups.at(-1);
-    if (current && current[0].page === row.page) current.push(row);
-    else groups.push([row]);
-  }
-  return groups;
-}
-
 export function mergeVisualRowContinuations<T extends VisualTableRow>(rows: T[]): T[] {
   const merged: T[] = [];
   for (const row of rows) {
@@ -39,6 +28,11 @@ export function mergeVisualRowContinuations<T extends VisualTableRow>(rows: T[])
     }
   }
   return merged;
+}
+
+/** Preserves source order while allowing Word to paginate the response table naturally. */
+export function prepareVisualComplianceRows<T extends VisualHeadingRow>(rows: T[]): T[] {
+  return mergeVisualHeadingRows(mergeVisualRowContinuations(rows));
 }
 
 /** Applies only an explicit visual-model decision to join a standalone title row with its descriptor. */

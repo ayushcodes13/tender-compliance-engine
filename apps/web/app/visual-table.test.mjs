@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { discardContainedSuggestions, groupVisualRowsByPage, mergeVisualHeadingRows, mergeVisualRowContinuations, splitSourceQuote } from "./visual-table.ts";
+import { discardContainedSuggestions, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, splitSourceQuote } from "./visual-table.ts";
 
-test("groups adjacent exported rows by their source PDF page", () => {
+test("keeps the compliance response rows in source order across source-page boundaries", () => {
   const rows = [
     { text: "page 8 row 1", page: 8 },
     { text: "page 8 row 2", page: 8 },
     { text: "page 9 row 1", page: 9 },
     { text: "page 10 row 1", page: 10 },
   ];
-  assert.deepEqual(groupVisualRowsByPage(rows), [rows.slice(0, 2), rows.slice(2, 3), rows.slice(3)]);
+  assert.deepEqual(prepareVisualComplianceRows(rows), rows);
 });
 
 test("joins a heading row only when the visual model marks its adjacent descriptor", () => {
@@ -85,4 +85,18 @@ test("accepts AI row splits only when the literal parts cover the full source ce
   ]);
   assert.deepEqual(splitSourceQuote(source, ["6. Control system Cabinets are included."]), [source]);
   assert.deepEqual(splitSourceQuote(source, ["6. Control system Cabinets are included.", "Logging"]), [source]);
+});
+
+test("accepts separate lettered checks only when all source text is retained in order", () => {
+  const source = "c) Check uniformity by XRD. d) Check Hall mobility. e) Show cracker efficiency.";
+  assert.deepEqual(splitSourceQuote(source, [
+    "c) Check uniformity by XRD.",
+    "d) Check Hall mobility.",
+    "e) Show cracker efficiency.",
+  ]), [
+    "c) Check uniformity by XRD.",
+    "d) Check Hall mobility.",
+    "e) Show cracker efficiency.",
+  ]);
+  assert.deepEqual(splitSourceQuote(source, ["c) Check uniformity by XRD.", "e) Show cracker efficiency."]), [source]);
 });

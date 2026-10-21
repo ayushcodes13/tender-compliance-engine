@@ -7,7 +7,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
-import { groupVisualRowsByPage, mergeVisualHeadingRows, mergeVisualRowContinuations } from "./visual-table";
+import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -226,6 +226,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       ] });
       const complianceSpacer = new TableRow({ height: { value: 226, rule: HeightRule.ATLEAST }, children: [complianceCell("", false, 16), complianceCell("", false, 16), complianceCell("", false, 16)] });
       const complianceRow = (item: Requirement, preserveLineItems = false) => new TableRow({
+        cantSplit: true,
         height: { value: complianceRowHeightTwips(item.sourceRowHeight, item.rowType === "section" || item.rowType === "optional_heading"), rule: HeightRule.ATLEAST },
         children: [
           complianceCell(reflowComplianceText(item.text, preserveLineItems), item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix),
@@ -236,9 +237,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const optionalHeadingIndex = analysis.requirements.findIndex((item) => item.rowType === "optional_heading");
       const mainComplianceItems = (optionalHeadingIndex < 0 ? analysis.requirements : analysis.requirements.slice(0, optionalHeadingIndex))
         .filter((item) => item.rowType !== "optional_heading")
-      const mainComplianceExportGroups = groupVisualRowsByPage(
-        mergeVisualHeadingRows(mergeVisualRowContinuations(mainComplianceItems)),
-      );
+      const mainComplianceExportRows = prepareVisualComplianceRows(mainComplianceItems);
       const optionalComplianceRows = (optionalHeadingIndex < 0 ? [] : analysis.requirements.slice(optionalHeadingIndex + 1))
         .map((item) => complianceRow(item, true));
       const rows = structured
@@ -289,10 +288,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           ],
           style: "BodyText",
         })] : []),
-        ...mainComplianceExportGroups.map((group, index) => complianceTable([
-          ...(index === 0 ? [complianceHeader, complianceSpacer] : []),
-          ...group.map((item) => complianceRow(item)),
-        ])),
+        ...(mainComplianceExportRows.length ? [complianceTable([
+          complianceHeader,
+          complianceSpacer,
+          ...mainComplianceExportRows.map((item) => complianceRow(item)),
+        ])] : []),
         ...(optionalHeadingIndex >= 0 ? [
           new Paragraph({
             children: [new TextRun({ text: analysis.requirements[optionalHeadingIndex].text, bold: true, underline: {}, size: 21 })],
