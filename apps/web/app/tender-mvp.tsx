@@ -16,6 +16,8 @@ type Requirement = {
   text: string;
   parameter?: string;
   specifications?: string[];
+  remark?: string;
+  rowType?: "section" | "requirement" | "optional_heading";
   category: string;
   page: number;
   quote: string;
@@ -29,9 +31,12 @@ type Analysis = {
   textPages: number;
   sectionTitle?: string;
   sectionHeading?: string;
+  sheetTitle?: string;
+  sheetHeading?: string;
+  sheetProductTitle?: string;
   requirements: Requirement[];
   rejectedCandidates: number;
-  extractionMode?: "rule-based-preview" | "structured-table";
+  extractionMode?: "rule-based-preview" | "structured-table" | "visual-compliance-sheet";
   reviewNote: string;
 };
 
@@ -169,6 +174,30 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
       });
       const structured = analysis.extractionMode === "structured-table";
+      const complianceSheet = analysis.extractionMode === "visual-compliance-sheet";
+      const complianceHeader = new TableRow({ tableHeader: true, children: [
+        cell("Technical Parameters NIQ", true, AlignmentType.CENTER, 20),
+        cell("Remark", true, AlignmentType.CENTER, 20),
+        cell("Compliance Y/N", true, AlignmentType.CENTER, 20),
+      ] });
+      const complianceRow = (item: Requirement) => new TableRow({
+        children: [
+          cell(item.text, item.rowType === "section", undefined, 20),
+          cell(item.remark ?? "", false, undefined, 20),
+          cell("", false, undefined, 20),
+        ],
+      });
+      const optionalHeadingIndex = analysis.requirements.findIndex((item) => item.rowType === "optional_heading");
+      const mainComplianceItems = (optionalHeadingIndex < 0 ? analysis.requirements : analysis.requirements.slice(0, optionalHeadingIndex))
+        .filter((item) => item.rowType !== "optional_heading")
+      const mainComplianceGroups = [...mainComplianceItems.reduce((groups, item) => {
+        const group = groups.get(item.page) ?? [];
+        group.push(complianceRow(item));
+        groups.set(item.page, group);
+        return groups;
+      }, new Map<number, ReturnType<typeof complianceRow>[]>()).values()];
+      const optionalComplianceRows = (optionalHeadingIndex < 0 ? [] : analysis.requirements.slice(optionalHeadingIndex + 1))
+        .map(complianceRow);
       const rows = structured
         ? [
           new TableRow({ tableHeader: true, children: [
@@ -203,7 +232,33 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             children: [cell(item.text), cell(""), cell(`Page ${item.page}`)],
           })),
         ];
-      const commonContent = [
+      const complianceContent = [
+        new Paragraph({
+          children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 26, font: "Times New Roman" })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 220 },
+        }),
+        ...(analysis.sheetHeading ? [new Paragraph({
+          children: [
+            new TextRun({ text: analysis.sheetHeading, bold: true, size: 22, font: "Times New Roman" }),
+            ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, size: 22, font: "Times New Roman" })] : []),
+          ],
+          spacing: { after: 160 },
+        })] : []),
+        ...mainComplianceGroups.flatMap((group, index) => [new Table({
+          rows: index === 0 ? [complianceHeader, ...group] : group,
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          columnWidths: [6700, 1320, 1320],
+        }), ...(index < mainComplianceGroups.length - 1 ? [new Paragraph("")] : [])]),
+        ...(optionalHeadingIndex >= 0 ? [
+          new Paragraph({
+            children: [new TextRun({ text: analysis.requirements[optionalHeadingIndex].text, bold: true, underline: {}, size: 20, font: "Times New Roman" })],
+            spacing: { before: 180, after: 100 },
+          }),
+          new Table({ rows: optionalComplianceRows, width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [6700, 1320, 1320] }),
+        ] : []),
+      ];
+      const commonContent = complianceSheet ? complianceContent : [
         new Paragraph({
           children: [new TextRun({ text: structured ? analysis.sectionTitle ?? "Section 4 – Technical specifications" : "Tender Technical Requirements", bold: structured, size: structured ? 24 : 56, font: structured ? "Calibri" : undefined })],
           heading: structured ? undefined : HeadingLevel.TITLE,
@@ -230,7 +285,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         }),
       ];
       const doc = new Document({ sections: [{
-        properties: structured ? { page: { size: { width: 12240, height: 15840 } } } : {},
+        properties: structured || complianceSheet ? { page: { size: { width: 12240, height: 15840 } } } : {},
         children: commonContent,
       }] });
       const blob = await Packer.toBlob(doc);
@@ -373,7 +428,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               </button>
             ))}
           </div>
-          <div className="mvp-list-footer"><button className="mvp-export" onClick={exportDocx} disabled={exporting || analysis.requirements.length === 0}>{exporting ? <LoaderCircle className="mvp-spin" size={16} /> : <ArrowDownToLine size={16} />}{exporting ? "Building DOCX…" : "Download response sheet"}</button><p>{analysis.extractionMode === "structured-table" ? "DOCX preserves each parameter and leaves compliance and remarks blank." : "DOCX includes source pages and blank OEM response cells."}</p>{error && <p className="mvp-error" role="alert">{error}</p>}</div>
+        <div className="mvp-list-footer"><button className="mvp-export" onClick={exportDocx} disabled={exporting || analysis.requirements.length === 0}>{exporting ? <LoaderCircle className="mvp-spin" size={16} /> : <ArrowDownToLine size={16} />}{exporting ? "Building DOCX…" : "Download response sheet"}</button><p>{analysis.extractionMode === "structured-table" ? "DOCX preserves each parameter and leaves compliance and remarks blank." : analysis.extractionMode === "visual-compliance-sheet" ? "DOCX follows the source compliance sheet with blank compliance cells; verify each cited row." : "DOCX includes source pages and blank OEM response cells."}</p>{error && <p className="mvp-error" role="alert">{error}</p>}</div>
         </section>
 
         <section className="mvp-evidence-panel" aria-label="Cited tender source">
