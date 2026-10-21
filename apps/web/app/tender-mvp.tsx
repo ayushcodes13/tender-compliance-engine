@@ -25,6 +25,7 @@ type Requirement = {
   continuationOfPrevious?: boolean;
   sourceRowHeight?: number;
   sourceTextHeight?: number;
+  exportGroupId?: string;
   category: string;
   page: number;
   quote: string;

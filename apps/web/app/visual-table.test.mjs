@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { discardContainedSuggestions, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, splitSourceQuote } from "./visual-table.ts";
+import { discardContainedSuggestions, mergeVisualExportGroups, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, splitSourceQuote } from "./visual-table.ts";
 
 test("keeps the compliance response rows in source order across source-page boundaries", () => {
   const rows = [
@@ -14,13 +14,39 @@ test("keeps the compliance response rows in source order across source-page boun
 
 test("joins a heading row only when the visual model marks its adjacent descriptor", () => {
   const rows = [
-    { text: "4. MBE sources", page: 9, headingPrefix: "4. MBE sources", mergeWithNext: true },
+    { text: "4. MBE sources", page: 9, rowType: "section", headingPrefix: "4. MBE sources", mergeWithNext: true },
     { text: "Vendor to provide flux isolation geometry.", page: 9, remark: "" },
-    { text: "5. Source shutter assembly", page: 9, mergeWithNext: false },
+    { text: "5. Source shutter assembly", page: 9, rowType: "section", mergeWithNext: false },
   ];
   assert.deepEqual(mergeVisualHeadingRows(rows), [
-    { text: "4. MBE sources Vendor to provide flux isolation geometry.", page: 9, headingPrefix: "4. MBE sources", mergeWithNext: false, remark: "" },
-    { text: "5. Source shutter assembly", page: 9, mergeWithNext: false },
+    { text: "4. MBE sources Vendor to provide flux isolation geometry.", page: 9, rowType: "section", headingPrefix: "4. MBE sources", mergeWithNext: false, remark: "" },
+    { text: "5. Source shutter assembly", page: 9, rowType: "section", mergeWithNext: false },
+  ]);
+});
+
+test("does not merge a lettered requirement even if visual metadata flags merge_with_next", () => {
+  const rows = [
+    { text: "c) Check layer uniformity.", page: 12, rowType: "requirement", mergeWithNext: true },
+    { text: "d) Check Hall mobility.", page: 12, rowType: "requirement" },
+    { text: "e) Show cracker efficiency.", page: 12, rowType: "requirement" },
+  ];
+  assert.deepEqual(mergeVisualHeadingRows(rows), rows);
+});
+
+test("reassembles AI-split items from the same source cell for DOCX export", () => {
+  const rows = [
+    { text: "c) Check uniformity.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
+    { text: "d) Check Hall mobility.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
+    { text: "e) Show cracker efficiency.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
+    { text: "f) Different source cell.", page: 12 },
+  ];
+  assert.deepEqual(mergeVisualExportGroups(rows), [
+    { text: "c) Check uniformity. d) Check Hall mobility. e) Show cracker efficiency.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
+    { text: "f) Different source cell.", page: 12 },
+  ]);
+  assert.deepEqual(prepareVisualComplianceRows(rows).map((row) => row.text), [
+    "c) Check uniformity. d) Check Hall mobility. e) Show cracker efficiency.",
+    "f) Different source cell.",
   ]);
 });
 
@@ -30,18 +56,18 @@ test("carries source row height when continuations or headings merge", () => {
     { text: "continued", page: 9, sourceRowHeight: 18, continuationOfPrevious: true },
   ])[0].sourceRowHeight, 42);
   assert.equal(mergeVisualHeadingRows([
-    { text: "4. Sources", page: 8, sourceRowHeight: 14, mergeWithNext: true },
+    { text: "4. Sources", page: 8, rowType: "section", sourceRowHeight: 14, mergeWithNext: true },
     { text: "Supplier details", page: 8, sourceRowHeight: 23 },
   ])[0].sourceRowHeight, 37);
 });
 
 test("does not merge a visual heading decision across pages or through a populated remark cell", () => {
   assert.equal(mergeVisualHeadingRows([
-    { text: "4. MBE sources", page: 9, mergeWithNext: true },
+    { text: "4. MBE sources", page: 9, rowType: "section", mergeWithNext: true },
     { text: "Vendor to provide flux isolation geometry.", page: 10 },
   ]).length, 2);
   assert.equal(mergeVisualHeadingRows([
-    { text: "4. MBE sources", page: 9, remark: "1 no.", mergeWithNext: true },
+    { text: "4. MBE sources", page: 9, rowType: "section", remark: "1 no.", mergeWithNext: true },
     { text: "Vendor to provide flux isolation geometry.", page: 9 },
   ]).length, 2);
 });

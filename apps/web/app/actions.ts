@@ -27,6 +27,7 @@ type Requirement = {
   continuationOfPrevious?: boolean;
   sourceRowHeight?: number;
   sourceTextHeight?: number;
+  exportGroupId?: string;
   category: string;
   page: number;
   quote: string;
@@ -470,7 +471,7 @@ export async function analyzeTender(form: FormData) {
       },
     };
 
-    type Candidate = { page?: number; quote?: string; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number };
+    type Candidate = { page?: number; quote?: string; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string };
     type ParsedExtraction = { requirements?: Candidate[] };
     let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number }>;
     let coverageCheckIncomplete = false;
@@ -573,6 +574,9 @@ export async function analyzeTender(form: FormData) {
           const splitQuotes = row.remark || !suggestedSplit?.kind
             ? [row.quote]
             : splitSourceQuote(row.quote, suggestedSegments.map((segment) => segment.quote ?? ""));
+          const exportAsSourceCell = suggestedSegments.length > 1
+            && suggestedSegments.every((segment) => segment.row_type === "requirement")
+            && splitQuotes.length > 1;
           const segments = splitQuotes.length > 1 ? splitQuotes.map((quote, splitIndex) => ({ quote, rowType: suggestedSegments[splitIndex]?.row_type, category: suggestedSegments[splitIndex]?.category })) : [{ quote: row.quote, rowType: label?.row_type, category: label?.category }];
           return segments.map((segment, splitIndex) => {
             const quote = segment.quote;
@@ -590,10 +594,15 @@ export async function analyzeTender(form: FormData) {
               continues_previous: index === 0 && splitIndex === 0 && label?.continues_previous === true,
               sourceBox: splitQuotes.length === 1 ? row.bbox : quoteBox ?? row.bbox,
               remarkBox: splitQuotes.length === 1 ? row.remarkBox : undefined,
-              sourceRowHeight: splitQuotes.length === 1
+              sourceRowHeight: exportAsSourceCell
+                ? row.rowHeight
+                : splitQuotes.length === 1
                 ? (label?.continues_previous ? quoteBox?.height ?? row.rowHeight : row.rowHeight)
                 : quoteBox?.height,
-              sourceTextHeight: splitQuotes.length === 1 ? row.bbox.height : quoteBox?.height,
+              sourceTextHeight: exportAsSourceCell || splitQuotes.length === 1 ? row.bbox.height : quoteBox?.height,
+              exportGroupId: exportAsSourceCell
+                ? `visual-cell-${page.page}-${index}`
+                : undefined,
             };
           });
         });
@@ -814,6 +823,7 @@ export async function analyzeTender(form: FormData) {
         sourceTextHeight: typeof candidate.sourceTextHeight === "number" && Number.isFinite(candidate.sourceTextHeight)
           ? candidate.sourceTextHeight
           : undefined,
+        exportGroupId: typeof candidate.exportGroupId === "string" ? candidate.exportGroupId : undefined,
         rowType: visualSheetType === "compliance-sheet" && ["section", "requirement", "optional_heading"].includes(candidate.row_type || "")
           ? candidate.row_type as Requirement["rowType"]
           : "requirement",
@@ -849,7 +859,6 @@ export async function analyzeTender(form: FormData) {
         item.id = `req-${index + 1}`;
       }
     }
-
     return { ok: true as const, analysis: {
       filename: file.name,
       pageCount: pdf.numPages,

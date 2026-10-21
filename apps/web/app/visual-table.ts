@@ -3,6 +3,7 @@ export type VisualTableRow = {
   page: number;
   sourceRowHeight?: number;
   sourceTextHeight?: number;
+  exportGroupId?: string;
   continuationOfPrevious?: boolean;
 };
 
@@ -10,6 +11,7 @@ export type VisualHeadingRow = VisualTableRow & {
   headingPrefix?: string;
   remark?: string;
   mergeWithNext?: boolean;
+  rowType?: "section" | "requirement" | "optional_heading";
 };
 
 export function mergeVisualRowContinuations<T extends VisualTableRow>(rows: T[]): T[] {
@@ -30,9 +32,26 @@ export function mergeVisualRowContinuations<T extends VisualTableRow>(rows: T[])
   return merged;
 }
 
+/** Reassembles AI-split review requirements only when they came from one source cell. */
+export function mergeVisualExportGroups<T extends VisualTableRow>(rows: T[]): T[] {
+  const merged: T[] = [];
+  for (const row of rows) {
+    const previous = merged.at(-1);
+    if (row.exportGroupId && previous?.exportGroupId === row.exportGroupId) {
+      merged[merged.length - 1] = {
+        ...previous,
+        text: `${previous.text} ${row.text}`,
+      };
+    } else {
+      merged.push(row);
+    }
+  }
+  return merged;
+}
+
 /** Preserves source order while allowing Word to paginate the response table naturally. */
 export function prepareVisualComplianceRows<T extends VisualHeadingRow>(rows: T[]): T[] {
-  return mergeVisualHeadingRows(mergeVisualRowContinuations(rows));
+  return mergeVisualHeadingRows(mergeVisualRowContinuations(mergeVisualExportGroups(rows)));
 }
 
 /** Applies only an explicit visual-model decision to join a standalone title row with its descriptor. */
@@ -41,7 +60,7 @@ export function mergeVisualHeadingRows<T extends VisualHeadingRow>(rows: T[]): T
   for (let index = 0; index < rows.length; index += 1) {
     const current = rows[index];
     const next = rows[index + 1];
-    if (current.mergeWithNext && next && current.page === next.page && !current.remark) {
+    if (current.rowType === "section" && current.mergeWithNext && next && current.page === next.page && !current.remark) {
       merged.push({
         ...current,
         text: `${current.text} ${next.text}`,
