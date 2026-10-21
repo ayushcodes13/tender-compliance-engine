@@ -22,6 +22,8 @@
 
 Tender Review is a focused single-user demo for preparing a technical response sheet from a text-based tender PDF. It finds candidate clauses, links each candidate to selectable text on its cited page, displays a page highlight, and exports a DOCX with blank OEM response fields.
 
+When a technical page contains a selectable two-column table headed **Parameter** and **Required Specification**, the app uses PDF cell geometry to keep each parameter with its full specification cell. It also preserves blank specification rows and a following **Other requirements** bullet list. The DOCX uses the four-column response layout shown in the reference, with compliance and remarks left blank. Other document layouts use the configured model path or the limited rule-based preview.
+
 The app does not decide whether a supplier complies. Every candidate starts in **Needs review** and should be checked against the original tender.
 
 ## Screenshots
@@ -45,15 +47,15 @@ The current hosted run used the rule-based preview. It filters for technical-loo
 ```text
 Tender PDF
    ↓
-Read selectable text page by page
+Read selectable text and PDF page geometry
    ↓
-Choose a candidate sentence (rule-based preview or configured model)
+Group supported technical table cells, or choose candidate quotes
    ↓
-Match the quote back to the cited page and locate its PDF text geometry
+Tie each row or quote to its cited page and geometry
    ↓
-Show the quote, page number, and bounding-box highlight for human review
+Show the source row or quote and highlight for human review
    ↓
-Export the source wording and blank OEM response cells to DOCX
+Export source wording and blank compliance/remarks fields to DOCX
 ```
 
 PDF.js reads the PDF text and provides the page-coordinate geometry used by the highlight overlay. Quotes that cannot be matched to the cited page with usable geometry are not presented as verified citations. A visible source match still does not prove that the whole tender has been covered.
@@ -87,6 +89,7 @@ There is no separate API service, worker, database, job queue, or Docker stack i
 ## Limits
 
 - The rule-based preview is a candidate finder, not an exhaustive extraction system. It can include irrelevant clauses and miss technical requirements.
+- Structured table grouping currently requires selectable text, vector cell rectangles, a technical section heading, and the `Parameter` / `Required Specification` headers. Other table layouts use the configured model path or rule-based preview.
 - Scanned PDFs and OCR-heavy files are not supported by the current demo.
 - Review each candidate and check the original tender for omissions before using the exported sheet.
 - Refreshing or closing the browser clears the current review. Download the DOCX before leaving the page.

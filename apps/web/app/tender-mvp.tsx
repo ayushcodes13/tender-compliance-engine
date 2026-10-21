@@ -14,6 +14,8 @@ type BoundingBox = { x: number; y: number; width: number; height: number };
 type Requirement = {
   id: string;
   text: string;
+  parameter?: string;
+  specifications?: string[];
   category: string;
   page: number;
   quote: string;
@@ -25,9 +27,11 @@ type Analysis = {
   filename: string;
   pageCount: number;
   textPages: number;
+  sectionTitle?: string;
+  sectionHeading?: string;
   requirements: Requirement[];
   rejectedCandidates: number;
-  extractionMode?: "rule-based-preview";
+  extractionMode?: "rule-based-preview" | "structured-table";
   reviewNote: string;
 };
 
@@ -159,30 +163,76 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const { Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } = await import("docx");
-      const cell = (text: string, bold = false) => new TableCell({
-        children: [new Paragraph({ children: [new TextRun({ text, bold })] })],
+      const { AlignmentType, Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } = await import("docx");
+      const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19) => new TableCell({
+        children: [new Paragraph({ alignment, children: [new TextRun({ text, bold, size, font: "Calibri" })] })],
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
       });
-      const rows = [
-        new TableRow({ tableHeader: true, children: [cell("Tender requirement", true), cell("OEM response", true), cell("Source", true)] }),
-        ...analysis.requirements.map((item) => new TableRow({
-          cantSplit: true,
-          children: [cell(item.text), cell(""), cell(`Page ${item.page}`)],
-        })),
+      const structured = analysis.extractionMode === "structured-table";
+      const rows = structured
+        ? [
+          new TableRow({ tableHeader: true, children: [
+            cell("Parameter", true, AlignmentType.CENTER, 19),
+            cell("Required Specification", true, AlignmentType.CENTER, 19),
+            cell("Compliance (Yes / No)", true, AlignmentType.CENTER, 19),
+            cell("Any remarks", true, AlignmentType.CENTER, 19),
+          ] }),
+          ...analysis.requirements.map((item) => {
+            const specificationParagraphs = (item.specifications ?? []).map((specification) => new Paragraph({
+              children: [new TextRun({ text: item.quote.startsWith("•") ? `• ${specification}` : specification, size: 19, font: "Calibri" })],
+              spacing: { after: 40 },
+            }));
+            return new TableRow({
+              cantSplit: true,
+              children: [
+                cell(item.parameter ?? item.text, true, undefined, 19),
+                new TableCell({
+                  children: specificationParagraphs.length ? specificationParagraphs : [new Paragraph("")],
+                  margins: { top: 100, bottom: 100, left: 120, right: 120 },
+                }),
+                cell(""),
+                cell(""),
+              ],
+            });
+          }),
+        ]
+        : [
+          new TableRow({ tableHeader: true, children: [cell("Tender requirement", true), cell("OEM response", true), cell("Source", true)] }),
+          ...analysis.requirements.map((item) => new TableRow({
+            cantSplit: true,
+            children: [cell(item.text), cell(""), cell(`Page ${item.page}`)],
+          })),
+        ];
+      const commonContent = [
+        new Paragraph({
+          children: [new TextRun({ text: structured ? analysis.sectionTitle ?? "Section 4 – Technical specifications" : "Tender Technical Requirements", bold: structured, size: structured ? 24 : 56, font: structured ? "Calibri" : undefined })],
+          heading: structured ? undefined : HeadingLevel.TITLE,
+          alignment: structured ? AlignmentType.CENTER : undefined,
+          spacing: { after: 80 },
+        }),
+        ...(structured && analysis.sectionHeading ? [new Paragraph({
+          children: [new TextRun({ text: analysis.sectionHeading, bold: true, size: 22, font: "Calibri" })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 180 },
+        })] : []),
+        ...(structured ? [new Paragraph({
+          children: [new TextRun({ text: `Source tender: ${analysis.filename} · page ${[...new Set(analysis.requirements.map((item) => item.page))].join(", ")}`, size: 18, font: "Calibri" })],
+          spacing: { after: 100 },
+        })] : [
+          new Paragraph({ text: `Source tender: ${analysis.filename}` }),
+          new Paragraph({ text: `${analysis.requirements.length} source-matched requirements · ${analysis.requirements.filter((item) => item.reviewed).length} checked by reviewer` }),
+          new Paragraph({ text: analysis.extractionMode === "rule-based-preview" ? "Rule-based preview for human review. Candidate extraction may miss requirements and does not guarantee tender completeness." : "AI-assisted draft for human review. This document does not guarantee tender completeness." }),
+        ]),
+        new Table({
+          rows,
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          columnWidths: structured ? [2340, 2340, 2340, 2340] : [5800, 2300, 1200],
+        }),
       ];
-      const doc = new Document({
-        sections: [{
-          properties: {},
-          children: [
-            new Paragraph({ text: "Tender Technical Requirements", heading: HeadingLevel.TITLE }),
-            new Paragraph({ text: `Source tender: ${analysis.filename}` }),
-            new Paragraph({ text: `${analysis.requirements.length} source-matched requirements · ${analysis.requirements.filter((item) => item.reviewed).length} checked by reviewer` }),
-            new Paragraph({ text: analysis.extractionMode === "rule-based-preview" ? "Rule-based preview for human review. Candidate extraction may miss requirements and does not guarantee tender completeness." : "AI-assisted draft for human review. This document does not guarantee tender completeness." }),
-            new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, columnWidths: [5800, 2300, 1200] }),
-          ],
-        }],
-      });
+      const doc = new Document({ sections: [{
+        properties: structured ? { page: { size: { width: 12240, height: 15840 } } } : {},
+        children: commonContent,
+      }] });
       const blob = await Packer.toBlob(doc);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
@@ -311,24 +361,26 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       <div className="mvp-workspace">
         <section className="mvp-list-panel" aria-label="Extracted requirements">
           <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setFile(null); setError(null); }}><X size={15} /> New tender</button></div>
-          <p className="mvp-review-note">{analysis.reviewNote} {analysis.rejectedCandidates ? `${analysis.rejectedCandidates} unmatched model suggestions were left out.` : "Unmatched suggestions are left out."}</p>
+          <p className="mvp-review-note">{analysis.reviewNote}{analysis.extractionMode === "structured-table" ? "" : ` ${analysis.rejectedCandidates ? `${analysis.rejectedCandidates} unmatched model suggestions were left out.` : "Unmatched suggestions are left out."}`}</p>
           <div className="mvp-requirement-list">
             {analysis.requirements.map((item, index) => (
               <button className={`mvp-requirement ${active?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => openRequirement(item)}>
                 <span className="mvp-req-topline"><span>REQ {String(index + 1).padStart(3, "0")}</span><span className="mvp-citation-tag">Page {item.page} · exact</span></span>
-                <span className="mvp-req-text">{item.text}</span>
+                <span className={`mvp-req-text ${item.parameter ? "mvp-req-structured" : ""}`}>
+                  {item.parameter ? <><strong className="mvp-req-parameter">{item.parameter}</strong>{item.specifications?.map((specification, specIndex) => <span className={`mvp-req-spec ${item.quote.startsWith("•") ? "is-bullet" : ""}`} key={`${item.id}-spec-${specIndex}`}>{specification}</span>)}</> : item.text}
+                </span>
                 <span className="mvp-req-bottom"><span>{item.category}</span><span className={item.reviewed ? "mvp-reviewed" : "mvp-unreviewed"}>{item.reviewed ? "Checked" : "Needs review"}</span></span>
               </button>
             ))}
           </div>
-          <div className="mvp-list-footer"><button className="mvp-export" onClick={exportDocx} disabled={exporting || analysis.requirements.length === 0}>{exporting ? <LoaderCircle className="mvp-spin" size={16} /> : <ArrowDownToLine size={16} />}{exporting ? "Building DOCX…" : "Download response sheet"}</button><p>DOCX includes source pages and blank OEM response cells.</p>{error && <p className="mvp-error" role="alert">{error}</p>}</div>
+          <div className="mvp-list-footer"><button className="mvp-export" onClick={exportDocx} disabled={exporting || analysis.requirements.length === 0}>{exporting ? <LoaderCircle className="mvp-spin" size={16} /> : <ArrowDownToLine size={16} />}{exporting ? "Building DOCX…" : "Download response sheet"}</button><p>{analysis.extractionMode === "structured-table" ? "DOCX preserves each parameter and leaves compliance and remarks blank." : "DOCX includes source pages and blank OEM response cells."}</p>{error && <p className="mvp-error" role="alert">{error}</p>}</div>
         </section>
 
         <section className="mvp-evidence-panel" aria-label="Cited tender source">
           <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2>{active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => setPage((current) => Math.max(1, current - 1))} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => setPage((current) => Math.min(analysis.pageCount, current + 1))} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button></div></div>
           {file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={active?.page === page ? active.bbox : null} />}
           <div className="mvp-citation-detail">
-            <div className="mvp-citation-label"><span className="mvp-exact-dot" /> EXACT SOURCE QUOTE <span>·</span> PAGE {String(active?.page ?? page).padStart(2, "0")}</div>
+            <div className="mvp-citation-label"><span className="mvp-exact-dot" /> {active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(active?.page ?? page).padStart(2, "0")}</div>
             <blockquote>{active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
             <div className="mvp-review-actions"><span>{active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={!active || page !== active.page || !active.bbox} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
           </div>

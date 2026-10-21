@@ -1,7 +1,8 @@
 "use server";
 
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { isTechnicalRequirementCandidate, splitTechnicalCandidates } from "./extraction-rules";
+import { extractStructuredTechnicalSection, type PdfRectangle, type SourceTextItem, type StructuredSection } from "./pdf-structure";
 
 type Box = { x: number; y: number; width: number; height: number };
 type TextItem = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean };
@@ -9,6 +10,8 @@ type PositionedItem = { start: number; end: number; box: Box };
 type Requirement = {
   id: string;
   text: string;
+  parameter?: string;
+  specifications?: string[];
   category: string;
   page: number;
   quote: string;
@@ -131,7 +134,16 @@ export async function analyzeTender(form: FormData) {
       return { ok: false as const, error: `This MVP accepts up to ${MAX_PAGES} pages per tender.` };
     }
 
-    const pages: Array<{ page: number; text: string; width: number; height: number; rawText: string; rawItemMap: number[]; positioned: PositionedItem[] }> = [];
+    const pages: Array<{
+      page: number;
+      text: string;
+      width: number;
+      height: number;
+      rawText: string;
+      rawItemMap: number[];
+      positioned: PositionedItem[];
+      structuredSection?: StructuredSection;
+    }> = [];
     let totalText = 0;
     stage = "reading PDF text and page positions";
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -141,6 +153,7 @@ export async function analyzeTender(form: FormData) {
       let rawText = "";
       const rawItemMap: number[] = [];
       const positioned: PositionedItem[] = [];
+      const sourceItems: SourceTextItem[] = [];
       for (const rawItem of content.items) {
         if (!("str" in rawItem) || !rawItem.str) continue;
         if (rawText && !rawText.endsWith("\n")) {
@@ -153,6 +166,8 @@ export async function analyzeTender(form: FormData) {
         const itemIndex = positioned.length;
         for (let i = start; i < rawText.length; i += 1) rawItemMap.push(itemIndex);
         const box = boxForItem(item, viewport);
+        const [, , , , x, y] = item.transform;
+        sourceItems.push({ str: item.str, x, y, box });
         if (box) positioned.push({ start, end: rawText.length, box });
         else positioned.push({ start, end: rawText.length, box: { x: 0, y: 0, width: 0, height: 0 } });
         if (item.hasEOL) {
@@ -162,7 +177,26 @@ export async function analyzeTender(form: FormData) {
       }
       const text = normalize(rawText);
       totalText += text.length;
-      pages.push({ page: pageNumber, text, width: viewport.width, height: viewport.height, rawText, rawItemMap, positioned });
+      let structuredSection: StructuredSection | undefined;
+      if (/\bParameter\b/i.test(rawText) && /\bRequired\s+Specification\b/i.test(rawText)) {
+        const operators = await page.getOperatorList();
+        const rectangles: PdfRectangle[] = [];
+        for (let index = 0; index < operators.fnArray.length; index += 1) {
+          if (operators.fnArray[index] !== OPS.constructPath) continue;
+          const [commands, coordinates] = operators.argsArray[index] as [number[], number[]];
+          if (commands.length !== 1 || commands[0] !== OPS.rectangle || coordinates.length < 4) continue;
+          const [x, y, width, height] = coordinates;
+          if (width <= 30 || height <= 5) continue;
+          const rectangle = { x, y, width, height };
+          if (!rectangles.some((seen) => Math.abs(seen.x - x) < 0.2
+            && Math.abs(seen.y - y) < 0.2
+            && Math.abs(seen.width - width) < 0.2
+            && Math.abs(seen.height - height) < 0.2)) rectangles.push(rectangle);
+        }
+        const result = extractStructuredTechnicalSection(sourceItems, rectangles, viewport.height);
+        if (result) structuredSection = result;
+      }
+      pages.push({ page: pageNumber, text, width: viewport.width, height: viewport.height, rawText, rawItemMap, positioned, structuredSection });
       page.cleanup();
       if (totalText > MAX_TEXT_CHARS) break;
     }
@@ -173,6 +207,43 @@ export async function analyzeTender(form: FormData) {
     }
     if (totalText < 300) {
       return { ok: false as const, error: "This PDF has little or no selectable text. Scanned PDFs and OCR are not supported in this MVP yet." };
+    }
+
+    const structuredPages = pages.filter((page) => page.structuredSection);
+    if (structuredPages.length) {
+      const section = structuredPages[0].structuredSection!;
+      let nextRequirementId = 1;
+      const requirements: Requirement[] = structuredPages.flatMap((structuredPage) => structuredPage.structuredSection!.requirements.map((item) => {
+        const id = `req-${nextRequirementId++}`;
+        return {
+          id,
+          text: item.parameter,
+          parameter: item.parameter,
+          specifications: item.specifications,
+          category: item.parameter === "Other requirements" ? "Other" : "Technical",
+          page: structuredPage.page,
+          quote: item.quote,
+          bbox: {
+            x: (item.bbox.x / structuredPage.width) * 100,
+            y: (item.bbox.y / structuredPage.height) * 100,
+            width: (item.bbox.width / structuredPage.width) * 100,
+            height: (item.bbox.height / structuredPage.height) * 100,
+          },
+          precision: "exact" as const,
+          reviewed: false,
+        };
+      }));
+      return { ok: true as const, analysis: {
+        filename: file.name,
+        pageCount: pdf.numPages,
+        textPages: pages.length,
+        sectionTitle: section.sectionTitle,
+        sectionHeading: section.sectionHeading,
+        requirements,
+        rejectedCandidates: 0,
+        extractionMode: "structured-table" as const,
+        reviewNote: "Technical table rows and the separate requirements list were grouped from their source layout. Check each source row; this extraction is not a completeness guarantee.",
+      } };
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
