@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { discardContainedSuggestions, mergeVisualExportGroups, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, splitSourceQuote } from "./visual-table.ts";
+import { discardContainedSuggestions, keepParsedSourceCandidate, mergeVisualExportGroups, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, sourceCandidateKey, splitSourceQuote } from "./visual-table.ts";
 
 test("keeps the compliance response rows in source order across source-page boundaries", () => {
   const rows = [
@@ -101,6 +101,28 @@ test("drops a partial visual suggestion when a longer accepted quote already cov
     [{ quote: "c) Effusion cells: Capacity" }, { quote: "a) Motorized phosphorus cracker source" }],
   );
   assert.deepEqual(kept, [{ quote: "a) Motorized phosphorus cracker source" }]);
+});
+
+test("keeps an exact source cell even when its wording is contained in another requirement", () => {
+  assert.equal(keepParsedSourceCandidate(
+    { quote: "thick steel", source_cells_exact: true },
+    ["Trussed honeycomb, made with 0.25 mm or more thick steel sheet materials"],
+  ), true);
+  assert.equal(keepParsedSourceCandidate(
+    { quote: "partial summary" },
+    ["A longer requirement containing partial summary"],
+  ), false);
+});
+
+test("does not deduplicate equal specification text from different source rows", () => {
+  assert.notEqual(
+    sourceCandidateKey(23, "6 EA", ["3", "Number of Isolators", "6 EA"]),
+    sourceCandidateKey(23, "6 EA", ["4", "Leveling Valves", "6 EA"]),
+  );
+  assert.equal(
+    sourceCandidateKey(23, "6 EA", ["3", "Number of Isolators", "6 EA"]),
+    sourceCandidateKey(23, " 6 EA ", ["3", "Number of Isolators", "6 EA"]),
+  );
 });
 
 test("keeps a separately formatted section heading contained in a larger source quote", () => {
