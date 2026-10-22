@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCoverageReport } from "./coverage-ledger.ts";
+import { buildCoverageReport, collectSourceTableCoverageRows } from "./coverage-ledger.ts";
 
 const record = (page, overrides = {}) => ({
   page,
@@ -69,4 +69,42 @@ test("preserves explicit incomplete and not-run states instead of inferring succ
   assert.equal(report.summary.auditPagesIncomplete, 1);
   assert.equal(report.summary.auditPagesNotRun, 1);
   assert.equal(report.summary.auditPagesWithNoGapsReported, 0);
+});
+
+test("lists source table rows with disposition and page-relative evidence boxes", () => {
+  const rows = [
+    { cells: ["Heading", ""], cellBoxes: [{ x: 10, y: 10, width: 20, height: 5 }, null], bbox: { x: 10, y: 10, width: 20, height: 5 } },
+    { cells: ["Parameter", "Required Specification"], cellBoxes: [null, null], bbox: { x: 0, y: 0, width: 1, height: 1 } },
+    { cells: ["Grip distance", "0 to 100 mm"], cellBoxes: [{ x: 20, y: 30, width: 30, height: 8 }, { x: 70, y: 31, width: 50, height: 7 }], bbox: { x: 20, y: 30, width: 30, height: 8 } },
+    { cells: ["", "   "], cellBoxes: [null, null], bbox: { x: 0, y: 0, width: 1, height: 1 } },
+  ];
+  const result = collectSourceTableCoverageRows(rows, new Map([[0, 1]]), new Set([1]), { width: 200, height: 100 });
+
+  assert.equal(result.count, 1);
+  assert.equal(result.notShown, 0);
+  assert.deepEqual(result.rows[2], {
+    rowNumber: 3,
+    cells: ["Grip distance", "0 to 100 mm"],
+    textTruncated: false,
+    disposition: "unmapped",
+    candidateSuggestions: 0,
+    sourceMatchedCandidates: 0,
+    bbox: { x: 10, y: 30, width: 50, height: 8 },
+  });
+  assert.equal(result.rows[0].disposition, "candidate");
+  assert.equal(result.rows[1].disposition, "header");
+  assert.equal(result.rows[3].disposition, "empty");
+});
+
+test("keeps the total unmapped-row count when detail previews are capped", () => {
+  const rows = Array.from({ length: 12 }, (_, index) => ({
+    cells: [`unmapped ${index + 1}`],
+    cellBoxes: [null],
+    bbox: { x: 1, y: index * 5, width: 20, height: 4 },
+  }));
+  const result = collectSourceTableCoverageRows(rows, new Map(rows.map((_, index) => [index, 1])), new Set(), { width: 100, height: 100 }, 10);
+
+  assert.equal(result.rows.length, 10);
+  assert.equal(result.notShown, 2);
+  assert.equal(result.count, 0);
 });

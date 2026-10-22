@@ -11,7 +11,7 @@ import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
-import type { CoverageReport, RejectedSuggestion } from "./coverage-ledger";
+import type { CoverageReport, CoverageSourceRow, RejectedSuggestion } from "./coverage-ledger";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -63,6 +63,24 @@ function countLabel(count: number, singular: string, plural = `${singular}s`): s
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function coverageRowReviewLabel(row: CoverageSourceRow): string {
+  if (row.disposition === "header") return `SOURCE HEADER ROW ${row.rowNumber} · REPEATED LABEL`;
+  if (row.disposition === "empty") return `EMPTY SOURCE ROW ${row.rowNumber}`;
+  if (row.disposition === "unmapped") return `UNMAPPED SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
+  if (row.sourceMatchedCandidates < row.candidateSuggestions) return `SOURCE ROW ${row.rowNumber} · COVERAGE MISMATCH`;
+  return `SOURCE TABLE ROW ${row.rowNumber} · CANDIDATES SOURCE MATCHED`;
+}
+
+function coverageRowReviewMessage(row: CoverageSourceRow): string {
+  if (row.disposition === "header") return "This detected row was classified as a repeated table header.";
+  if (row.disposition === "empty") return "This detected source row contains no selectable cell text.";
+  if (row.disposition === "unmapped") return "No extraction candidate was generated for this nonempty source row. Decide whether it is a requirement, heading, or other table content.";
+  if (row.sourceMatchedCandidates < row.candidateSuggestions) {
+    return `${row.sourceMatchedCandidates} of ${row.candidateSuggestions} generated candidates from this source row matched the source; inspect the unmatched candidate and confirm the row grouping.`;
+  }
+  return `${countLabel(row.candidateSuggestions, "candidate")} from this source row matched the source. Check that the extracted wording and grouping preserve the full row meaning.`;
+}
+
 function splitRequirementSubpoints(text: string): string[] {
   return text
     .split(/(?=[\uF0B7\u2022\u25CF\u25AA]\s*|(?<=\s)o\s+(?!C\b)(?=[A-Z0-9])|(?<=\s)[1-9]\.\s+(?=[A-Z]))/)
@@ -104,6 +122,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
+  const [coverageFocus, setCoverageFocus] = useState<{ page: number; row: CoverageSourceRow } | null>(null);
 
   useGSAP(() => {
     const root = motionRoot.current;
@@ -171,6 +190,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setResponseSheet(null);
     setSheetEdited(false);
     setActiveId(null);
+    setCoverageFocus(null);
     setFile(event.target.files?.[0] ?? null);
   }
 
@@ -227,6 +247,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   }
 
   function openRequirement(item: Requirement) {
+    setCoverageFocus(null);
     setActiveId(item.id);
     setPage(item.page);
   }
@@ -688,7 +709,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     || item.extractionStatus === "incomplete"
     || item.auditStatus === "incomplete"
     || item.auditStatus === "possible_gaps_reported"
-    || item.rejectedSuggestions > 0) ?? [];
+    || item.rejectedSuggestions > 0
+    || Boolean(item.sourceTableRowsUnmapped)) ?? [];
   const pendingReviewByPage = new Map<number, number>();
   for (const item of analysis.requirements) {
     if (!item.reviewed) pendingReviewByPage.set(item.page, (pendingReviewByPage.get(item.page) ?? 0) + 1);
@@ -732,11 +754,27 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               {coveragePagesToShow.map((item) => {
                 const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
                 return <li key={item.page}>
-                  <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => setPage(item.page)}>Open source page</button></div>
+                  <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); }}>Open source page</button></div>
                   <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrNeeded ? "No selectable text · OCR needed" : "Considered by router, not selected"}</span>
                   {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}
                   {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
-                  {Boolean(item.sourceTableRowsUnmapped) && <span className="is-warning">Inspect the unmapped source rows on this page.</span>}
+                  {Boolean(item.sourceTableCoverageRows?.length) && <div className="mvp-coverage-row-findings">
+                    <strong>Detected source rows and their extraction coverage</strong>
+                    {item.sourceTableCoverageRows?.map((row) => {
+                      const status = row.disposition === "header" ? "repeated header"
+                        : row.disposition === "empty" ? "empty row"
+                          : row.disposition === "unmapped" ? "no candidate generated"
+                          : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")}`;
+                      const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions;
+                      return <div className="mvp-coverage-row-finding" key={`${item.page}-${row.rowNumber}`}>
+                        <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status}{row.textTruncated ? " · excerpt shortened" : ""}</span>
+                        <p>{row.cells.filter(Boolean).join(" | ") || "(No cell text available)"}</p>
+                        <button type="button" disabled={!row.bbox} onClick={() => { setCoverageFocus({ page: item.page, row }); setPage(item.page); }}>Inspect source row</button>
+                      </div>;
+                    })}
+                    {Boolean(item.sourceTableRowsNotShown) && <span className="is-warning">{item.sourceTableRowsNotShown} additional detected row(s) are not listed here; inspect the full page.</span>}
+                    {Boolean(item.sourceTableRowsUnmapped) && <span className="is-warning">{countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} produced no extraction candidate; each needs inspection. Unmapped rows may be headings or other non-requirement content.</span>}
+                  </div>}
                   <span>{item.candidateSuggestions} model suggestion(s) · {item.sourceMatchedRows} source matched row(s) · {item.sourceMatchedRequirements} requirement row(s) · {pendingReviewByPage.get(item.page) ?? 0} need review</span>
                   {item.extractionStatus === "incomplete" && <span className="is-warning">Extraction incomplete</span>}
                   {item.routingContextClipped && <span className="is-warning">Routing excerpt clipped</span>}
@@ -765,13 +803,13 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         </section>
 
         <section className="mvp-evidence-panel" aria-label="Cited tender source">
-          <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2>{active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => setPage((current) => Math.max(1, current - 1))} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => setPage((current) => Math.min(analysis.pageCount, current + 1))} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button></div></div>
-          {file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={active?.page === page ? active.bbox : null} highlightLabel={active?.ocrWarning ? "Approximate table-row box for visually transcribed text; verify the full row" : "Bounding box for cited source quote"} />}
+          <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2>{coverageFocus?.page === page ? `Page ${page} source row` : active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.max(1, current - 1)); }} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.min(analysis.pageCount, current + 1)); }} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button></div></div>
+          {file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={coverageFocus?.page === page ? coverageFocus.row.bbox : active?.page === page ? active.bbox : null} highlightLabel={coverageFocus?.page === page ? "Detected source row not matched to an extraction candidate; inspect its meaning" : active?.ocrWarning ? "Approximate table-row box for visually transcribed text; verify the full row" : "Bounding box for cited source quote"} />}
           <div className="mvp-citation-detail">
-            <div className={`mvp-citation-label ${active?.ocrWarning ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(active?.page ?? page).padStart(2, "0")}</div>
-            <blockquote>{active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
-            {active?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{active.selectableTextQuote}</p></div>}
-            <div className="mvp-review-actions"><span>{active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={!active || page !== active.page || !active.bbox} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
+            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.ocrWarning ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}</div>
+            <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
+            {coverageFocus?.page !== page && active?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{active.selectableTextQuote}</p></div>}
+            <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={Boolean(coverageFocus?.page === page) || !active || page !== active.page || !active.bbox} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
           </div>
         </section>
       </div>

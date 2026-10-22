@@ -236,6 +236,12 @@ a { color: inherit; }
 .mvp-coverage-page-title button { padding: 2px 0; border: 0; background: none; color: #315e9c; cursor: pointer; font: inherit; font-size: 11px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 .mvp-coverage-pages .is-warning, .mvp-coverage-ledger .is-warning { color: #965b10; }
 .mvp-coverage-rejection { padding-left: 9px; border-left: 2px solid #e1b553; color: #7b4d14; }
+.mvp-coverage-row-findings { display: grid; gap: 7px; margin-top: 4px; }
+.mvp-coverage-row-finding { display: grid; gap: 4px; padding: 8px 9px; border: 1px solid #eadfcb; border-radius: 6px; background: #fffdf8; }
+.mvp-coverage-row-finding > span { color: #805512; font-size: 11px; font-weight: 650; }
+.mvp-coverage-row-finding p { margin: 0; color: #35455a; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mvp-coverage-row-finding button { justify-self: start; padding: 2px 0; border: 0; background: none; color: #315e9c; cursor: pointer; font: inherit; font-size: 11px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.mvp-coverage-row-finding button:disabled { color: #7b8490; cursor: not-allowed; }
 .mvp-requirement-list { min-height: 0; flex: 1; overflow: auto; padding: 7px; scrollbar-color: #c8cdd0 transparent; scrollbar-width: thin; }
 .mvp-requirement { width: 100%; display: flex; flex-direction: column; gap: 8px; margin: 0 0 4px; padding: 12px 12px 11px; border: 1px solid transparent; border-radius: 4px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease; }
 .mvp-requirement:hover { background: #f8f9f9; }
