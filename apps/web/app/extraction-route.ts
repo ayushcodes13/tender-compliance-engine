@@ -2,9 +2,9 @@
 export function shouldUseStructuredTableExtraction(input: {
   hasStructuredPages: boolean;
   hasVisualPages: boolean;
-  hasModelCredentials: boolean;
+  hasConfiguredModel: boolean;
 }): boolean {
-  return input.hasStructuredPages && !input.hasModelCredentials;
+  return input.hasStructuredPages && !input.hasConfiguredModel;
 }
 
 /** Every text-bearing page is eligible for LLM section routing, including borderless schedules. */

@@ -22,7 +22,7 @@
 
 Tender Review is a focused single-user demo for preparing a technical response sheet from a text-based tender PDF. It finds candidate clauses, links each candidate to selectable text on its cited page, displays a page highlight, and exports a DOCX with blank OEM response fields.
 
-When a technical page contains a selectable two-column table headed **Parameter** and **Required Specification**, the app uses PDF cell geometry to keep each parameter with its full specification cell. It also preserves blank specification rows and a following **Other requirements** bullet list. The DOCX uses the four-column response layout shown in the reference, with compliance and remarks left blank. Other document layouts use the configured model path or the limited rule-based preview.
+When a technical page contains a selectable two-column table headed **Parameter** and **Required Specification**, the app uses PDF cell geometry to keep each parameter with its full specification cell. It also preserves blank specification rows and a following **Other requirements** bullet list. The DOCX uses the four-column response layout shown in the reference, with compliance and remarks left blank. Other document layouts use GPT-6 Luna to route and extract candidate requirements for human review.
 
 The app does not decide whether a supplier complies. Every candidate starts in **Needs review** and should be checked against the original tender.
 
@@ -40,7 +40,7 @@ The yellow page highlight is positioned from the matched source text. Selecting 
 
 Open [Tender Review on Vercel](https://tender-compliance-engine.vercel.app/). Upload a readable, text-based PDF (up to 4 MB and 120 pages), choose a candidate, inspect its citation and page highlight, and download the response sheet.
 
-The current hosted run used the rule-based preview. It filters for technical-looking sentences, matches them to selectable text, and computes the page geometry used for highlights. An optional server-side OpenAI-compatible model path can propose candidate quotes when configured; the model key remains server-side.
+GPT-6 Luna routes tender pages and proposes requirement candidates. Candidate quotes are checked against selectable source text before display; the model key remains server-side.
 
 ## How a citation is produced
 
@@ -62,18 +62,17 @@ PDF.js reads the PDF text and provides the page-coordinate geometry used by the 
 
 ## Run locally
 
-Prerequisites: Node.js 20+, npm, and an OpenAI-compatible model credential for the model-assisted path.
+Prerequisites: Node.js 20+, npm, and GPT-6 Luna credentials configured in the local environment.
 
 ```sh
 git clone https://github.com/ayushcodes13/tender-compliance-engine.git
 cd tender-compliance-engine
 cp .env.example .env.local
-# Add OPENAI_API_KEY to .env.local.
-# For an Azure-compatible endpoint, also set OPENAI_BASE_URL and OPENAI_MODEL.
 make web-install
 make pilot-start
 ```
 
+The app uses GPT-6 Luna for model-assisted extraction. Set `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL=gpt-6-luna` in `apps/web/.env.local`. Tender text and page images are sent to the configured endpoint for processing. There is no Ollama or open-source model fallback. Structured source tables with explicit cell geometry may be grouped directly from the PDF without an LLM call.
 Open [http://127.0.0.1:3307](http://127.0.0.1:3307). Stop the local app with:
 
 ```sh
@@ -88,8 +87,8 @@ There is no separate API service, worker, database, job queue, or Docker stack i
 
 ## Limits
 
-- The rule-based preview is a candidate finder, not an exhaustive extraction system. It can include irrelevant clauses and miss technical requirements.
-- Structured table grouping currently requires selectable text, vector cell rectangles, a technical section heading, and the `Parameter` / `Required Specification` headers. Other table layouts use the configured model path or rule-based preview.
+- Model-assisted extraction is a human-review draft, not an exhaustive completeness guarantee.
+- Structured table grouping currently requires selectable text, vector cell rectangles, a technical section heading, and the `Parameter` / `Required Specification` headers. Other table layouts use the configured GPT-6 Luna model path.
 - Scanned PDFs and OCR-heavy files are not supported by the current demo.
 - Review each candidate and check the original tender for omissions before using the exported sheet.
 - Refreshing or closing the browser clears the current review. Download the DOCX before leaving the page.

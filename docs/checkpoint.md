@@ -14,11 +14,11 @@ Upload a text-based tender PDF
 → download DOCX, PDF, or Excel with the reviewed edits
 ```
 
-This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory; the PDF text is sent to the configured model during one bounded server action. The server-only model credential is never exposed to the browser.
+This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory. GPT-6 Luna is the only model provider; the server-side credential is never exposed to the browser.
 
 ## Checkpoint 72 — Single-user Vercel MVP
 
-**Status: LOCAL MVP VERIFIED; HOSTING NOT YET VERIFIED.**
+**Status: LOCAL UI VERIFIED; CURRENT GPT-6 LUNA ENDPOINT UNREACHABLE FROM THIS MACHINE; HOSTING NOT YET VERIFIED.**
 
 ### Done only when
 
@@ -34,6 +34,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 - [x] Extraction is scoped to technical requirement wording and quantified product specifications; commercial, delivery, procurement, and bid-response clauses are filtered out by a conservative rule screen.
 - [ ] Vercel uses `apps/web`, server-only model settings, and `tender.devayushrout.me` is configured through Namecheap DNS and verified over HTTPS.
 - [x] README and deployment runbook give accurate local steps and limits; hosted steps are documented but not yet verified against an authenticated account.
+- [x] GPT-6 Luna is the sole model provider; credentials are server-side and no Ollama/open-source model fallback is configured.
 
 ### Limits
 
@@ -42,6 +43,6 @@ This is a deliberate simplification requested by the user. The deployed product 
 - One bounded synchronous extraction call; no background jobs or persistence.
 - A validated quote and bounding box prove the displayed citation only, not exhaustive tender coverage.
 - Grid-based row separation depends on vector border geometry. When borders are merged, missing, or malformed, the model-driven fallback and human review remain necessary; neither guarantees exhaustive coverage.
-- The technical-only rule screen can miss technical requirements and is not proof of complete coverage; review every source citation.
+- Model routing and extraction can miss technical requirements and are not proof of complete coverage; review every source citation.
 - Requirements remain in human review until the user checks them.
 - The hosted workflow is not complete until a fresh hosted upload and DOCX export are inspected.
