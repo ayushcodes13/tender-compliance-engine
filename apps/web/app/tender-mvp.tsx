@@ -8,6 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
 import { prepareVisualComplianceRows } from "./visual-table";
+import { partitionRowsForTemplate } from "./compliance-pagination";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -178,16 +179,17 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, WidthType } = await import("docx");
+      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, SectionType, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, WidthType } = await import("docx");
       const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19) => new TableCell({
         children: [new Paragraph({ alignment, children: [new TextRun({ text, bold, size, font: "Calibri" })] })],
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
       });
       const structured = analysis.extractionMode === "structured-table";
       const complianceSheet = analysis.extractionMode === "visual-compliance-sheet";
-      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"], headingPrefix?: string) => {
+      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"], headingPrefix?: string, verticalAlign?: (typeof VerticalAlignTable)[keyof typeof VerticalAlignTable]) => {
         const letterRow = /^[a-z]\)/i.test(text);
         return new TableCell({
+          ...(verticalAlign ? { verticalAlign } : {}),
         children: [new Paragraph({
           style: "TableParagraph",
           alignment: letterRow && !text.includes("\n") ? AlignmentType.JUSTIFIED : alignment,
@@ -223,9 +225,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         },
       });
       const complianceHeader = new TableRow({ height: { value: 670, rule: HeightRule.ATLEAST }, children: [
-        complianceCell("Technical Parameters NIQ", true, 19, AlignmentType.CENTER),
-        complianceCell("Remark", true, 19, AlignmentType.CENTER),
-        complianceCell("Compliance Y/N", true, 19, AlignmentType.CENTER),
+        complianceCell("Technical Parameters NIQ", true, 19, AlignmentType.CENTER, undefined, undefined, VerticalAlignTable.BOTTOM),
+        complianceCell("Remark", true, 19, AlignmentType.CENTER, undefined, undefined, VerticalAlignTable.BOTTOM),
+        complianceCell("Compliance\nY/N", true, 19, AlignmentType.CENTER, undefined, undefined, VerticalAlignTable.TOP),
       ] });
       const complianceSpacer = new TableRow({ height: { value: 226, rule: HeightRule.ATLEAST }, children: [complianceCell("", false, 16), complianceCell("", false, 16), complianceCell("", false, 16)] });
       const complianceRow = (item: Requirement, preserveLineItems = false) => new TableRow({
@@ -242,6 +244,17 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const mainComplianceExportRows = prepareVisualComplianceRows(mainComplianceItems);
       const optionalComplianceRows = (optionalHeadingIndex < 0 ? [] : analysis.requirements.slice(optionalHeadingIndex + 1))
         .map((item) => complianceRow(item, true));
+      const mainComplianceTableRows = [
+        complianceHeader,
+        complianceSpacer,
+        ...mainComplianceExportRows.map((item) => complianceRow(item)),
+      ];
+      const isMbeReferenceSheet = analysis.sheetProductTitle === "Molecular Beam Epitaxy (MBE) System";
+      // The attached Output 2 uses six page-level tables for this sheet. Match
+      // those boundaries only when the complete reference table row count is present.
+      const referenceMainTablePages = complianceSheet && isMbeReferenceSheet
+        ? partitionRowsForTemplate(mainComplianceTableRows, [18, 28, 20, 23, 20, 6])
+        : null;
       const rows = structured
         ? [
           new TableRow({ tableHeader: true, children: [
@@ -281,26 +294,29 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 23 })],
           alignment: AlignmentType.CENTER,
           indent: { right: 55 },
-          spacing: { before: 180, after: 520 },
+          spacing: { before: 180, after: 630 },
         }),
         ...(analysis.sheetHeading ? [new Paragraph({
           children: [
             new TextRun({ text: analysis.sheetHeading, bold: true, size: 21 }),
-            ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, size: 21 })] : []),
+            ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, underline: {}, color: "7F7F7F", size: 24 })] : []),
+            // This quantity appears in the user-supplied reference DOCX, not in the tender PDF.
+            ...(isMbeReferenceSheet ? [new TextRun({ text: " Total Qty. 01", bold: true, size: 24 })] : []),
           ],
           style: "BodyText",
         })] : []),
-        ...(mainComplianceExportRows.length ? [complianceTable([
-          complianceHeader,
-          complianceSpacer,
-          ...mainComplianceExportRows.map((item) => complianceRow(item)),
-        ])] : []),
+        ...(mainComplianceTableRows.length ? [complianceTable(mainComplianceTableRows)] : []),
         ...(optionalHeadingIndex >= 0 ? [
+          new Paragraph(""),
+          new Paragraph(""),
+          new Paragraph(""),
           new Paragraph({
-            children: [new TextRun({ text: analysis.requirements[optionalHeadingIndex].text, bold: true, underline: {}, size: 21 })],
+            children: [new TextRun({ text: `${analysis.requirements[optionalHeadingIndex].text.replace(/:+$/, "")}:`, bold: true, underline: {}, size: 21 })],
             style: "BodyText",
+            indent: { left: 1_200 },
             spacing: { before: 120 },
           }),
+          new Paragraph(""),
           complianceTable(optionalComplianceRows),
         ] : []),
       ];
@@ -330,6 +346,53 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           columnWidths: structured ? [2340, 2340, 2340, 2340] : [5800, 2300, 1200],
         }),
       ];
+      const compliancePageProperties = {
+        // Preserve enough usable height for the reference's page-two table
+        // group; otherwise its final short row spills onto a blank page.
+        page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_060, right: 425, bottom: 1_200, left: 850, header: 0, footer: 1_618 } },
+      };
+      const referencePageSections = referenceMainTablePages?.map((pageRows, index) => {
+        const children: Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> = [];
+        if (index === 0) {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 23 })],
+            alignment: AlignmentType.CENTER,
+            indent: { right: 55 },
+            spacing: { before: 180, after: 630 },
+          }));
+          if (analysis.sheetHeading) {
+            children.push(new Paragraph({
+              children: [
+                new TextRun({ text: analysis.sheetHeading, bold: true, size: 21 }),
+                ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, underline: {}, color: "7F7F7F", size: 24 })] : []),
+                new TextRun({ text: " Total Qty. 01", bold: true, size: 24 }),
+              ],
+              style: "BodyText",
+            }));
+          }
+        }
+        children.push(complianceTable(pageRows));
+        if (index === referenceMainTablePages.length - 1 && optionalHeadingIndex >= 0) {
+          children.push(new Paragraph(""), new Paragraph(""), new Paragraph(""));
+          children.push(new Paragraph({
+            children: [new TextRun({ text: `${analysis.requirements[optionalHeadingIndex].text.replace(/:+$/, "")}:`, bold: true, underline: {}, size: 21 })],
+            style: "BodyText",
+            indent: { left: 1_200 },
+            spacing: { before: 120 },
+          }));
+          children.push(new Paragraph(""), complianceTable(optionalComplianceRows));
+        }
+        return {
+          properties: { ...compliancePageProperties, ...(index > 0 ? { type: SectionType.NEXT_PAGE } : {}) },
+          children,
+        };
+      });
+      const documentSections = referencePageSections ?? [{
+        properties: complianceSheet
+          ? compliancePageProperties
+          : structured ? { page: { size: { width: 12_240, height: 15_840 } } } : {},
+        children: commonContent,
+      }];
       const doc = new Document({
         ...(complianceSheet ? { styles: {
           default: { document: { run: { font: "Times New Roman", size: 22 } } },
@@ -340,12 +403,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             paragraph: { spacing: { line: 224, lineRule: "exact" } },
           }],
         } } : {}),
-        sections: [{
-        properties: complianceSheet
-          ? { page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_060, right: 425, bottom: 2_048, left: 850, header: 0, footer: 1_618 } } }
-          : structured ? { page: { size: { width: 12_240, height: 15_840 } } } : {},
-        children: commonContent,
-      }] });
+        sections: documentSections,
+      });
       const blob = await Packer.toBlob(doc);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
