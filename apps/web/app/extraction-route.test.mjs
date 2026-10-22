@@ -2,16 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { shouldUseStructuredTableExtraction, technicalRoutingPages } from "./extraction-route.ts";
 
-test("configured LLM always gets to identify technical pages before a structured-table shortcut", () => {
+test("configured local or hosted models route pages before a structured-table shortcut", () => {
   assert.equal(shouldUseStructuredTableExtraction({
     hasStructuredPages: true,
     hasVisualPages: true,
-    hasModelCredentials: true,
+    hasConfiguredModel: true,
   }), false);
   assert.equal(shouldUseStructuredTableExtraction({
     hasStructuredPages: true,
     hasVisualPages: false,
-    hasModelCredentials: true,
+    hasConfiguredModel: true,
   }), false);
 });
 
@@ -19,12 +19,12 @@ test("recognized source-cell geometry remains the deterministic offline fallback
   assert.equal(shouldUseStructuredTableExtraction({
     hasStructuredPages: true,
     hasVisualPages: true,
-    hasModelCredentials: false,
+    hasConfiguredModel: false,
   }), true);
   assert.equal(shouldUseStructuredTableExtraction({
     hasStructuredPages: false,
     hasVisualPages: true,
-    hasModelCredentials: false,
+    hasConfiguredModel: false,
   }), false);
 });
 
