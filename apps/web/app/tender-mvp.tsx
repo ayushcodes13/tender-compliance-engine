@@ -227,7 +227,6 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       ] });
       const complianceSpacer = new TableRow({ height: { value: 226, rule: HeightRule.ATLEAST }, children: [complianceCell("", false, 16), complianceCell("", false, 16), complianceCell("", false, 16)] });
       const complianceRow = (item: Requirement, preserveLineItems = false) => new TableRow({
-        cantSplit: true,
         height: { value: complianceRowHeightTwips(item.sourceRowHeight, item.rowType === "section" || item.rowType === "optional_heading"), rule: HeightRule.ATLEAST },
         children: [
           complianceCell(reflowComplianceText(item.text, preserveLineItems), item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix),
