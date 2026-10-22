@@ -14,6 +14,7 @@ import { validateVisualRowTranscription, type VisualOcrConfidence } from "./visu
 import type { ProcessingProgress } from "./processing-progress";
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
+import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
@@ -39,6 +40,7 @@ type Requirement = {
   category: string;
   page: number;
   quote: string;
+  sourceReference: RequirementSourceReference;
   selectableTextQuote?: string;
   bbox: Box | null;
   precision: "exact" | "visual-ocr" | "page-only";
@@ -218,6 +220,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       await pdf.destroy();
       return { ok: false as const, error: `This MVP accepts up to ${MAX_PAGES} pages per tender.` };
     }
+    const sourceDocument = createSourceDocumentModel(bytes, pdf.numPages);
+    const documentReference = {
+      documentId: sourceDocument.documentId,
+      documentVersionId: sourceDocument.documentVersionId,
+      documentFingerprint: sourceDocument.fingerprint,
+      pageCount: sourceDocument.pageCount,
+    };
 
     const pages: Array<{
       page: number;
@@ -230,6 +239,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       sourceItems: SourceTextItem[];
       rectangles: PdfRectangle[];
       hasVectorTableGeometry: boolean;
+      vectorRows?: ReturnType<typeof extractVectorTableRows>;
+      sourceModel: SourcePageModel;
       structuredSection?: StructuredSection;
       visualImage?: string;
     }> = [];
@@ -308,11 +319,31 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         const result = extractStructuredTechnicalSection(sourceItems, rectangles, viewport.height);
         if (result) structuredSection = result;
       }
-      pages.push({ page: pageNumber, text, width: viewport.width, height: viewport.height, rawText, rawItemMap, positioned, sourceItems, rectangles, hasVectorTableGeometry: rectangles.length >= 8 || hasTableGridGeometry(pathRectangles, viewport.width, viewport.height), structuredSection, visualImage });
+      const hasVectorTableGeometry = rectangles.length >= 8 || hasTableGridGeometry(pathRectangles, viewport.width, viewport.height);
+      const sourceModel = buildSourcePageModel({
+        documentId: sourceDocument.documentId,
+        physicalPdfPageNumber: pageNumber,
+        width: viewport.width,
+        height: viewport.height,
+        sourceText: rawText,
+        positionedItems: positioned,
+      });
+      sourceDocument.pages.push(sourceModel);
+      pages.push({ page: pageNumber, text, width: viewport.width, height: viewport.height, rawText, rawItemMap, positioned, sourceItems, rectangles, hasVectorTableGeometry, sourceModel, structuredSection, visualImage });
       onProgress?.({ stage: "reading", message: `Reading PDF text and table layout · page ${pageNumber} of ${pdf.numPages}`, current: pageNumber, total: pdf.numPages });
       page.cleanup();
       if (totalText > MAX_TEXT_CHARS) break;
     }
+
+    const getVectorRows = (page: (typeof pages)[number]) => {
+      if (!page.vectorRows) {
+        page.vectorRows = page.hasVectorTableGeometry
+          ? extractVectorTableRows(page.sourceItems, page.rectangles, page.width, page.height)
+          : [];
+        page.sourceModel.tables = buildSourceTables(page.sourceModel.id, page.vectorRows);
+      }
+      return page.vectorRows;
+    };
     if (totalText > MAX_TEXT_CHARS) {
       await pdf.destroy();
       return { ok: false as const, error: "This tender has too much selectable text for one hosted MVP run. Try a shorter technical section PDF." };
@@ -340,6 +371,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       let nextRequirementId = 1;
       const requirements: Requirement[] = structuredPages.flatMap((structuredPage) => structuredPage.structuredSection!.requirements.map((item) => {
         const id = `req-${nextRequirementId++}`;
+        const bbox = {
+          x: (item.bbox.x / structuredPage.width) * 100,
+          y: (item.bbox.y / structuredPage.height) * 100,
+          width: (item.bbox.width / structuredPage.width) * 100,
+          height: (item.bbox.height / structuredPage.height) * 100,
+        };
         return {
           id,
           text: item.parameter,
@@ -349,12 +386,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           category: item.parameter === "Other requirements" ? "Other" : "Technical",
           page: structuredPage.page,
           quote: item.quote,
-          bbox: {
-            x: (item.bbox.x / structuredPage.width) * 100,
-            y: (item.bbox.y / structuredPage.height) * 100,
-            width: (item.bbox.width / structuredPage.width) * 100,
-            height: (item.bbox.height / structuredPage.height) * 100,
-          },
+          sourceReference: buildRequirementSourceReference({
+            document: sourceDocument,
+            page: structuredPage.sourceModel,
+            quote: item.quote,
+            bbox: item.bbox,
+          }),
+          bbox,
           precision: "exact" as const,
           reviewed: false,
         };
@@ -364,6 +402,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         filename: file.name,
         pageCount: pdf.numPages,
         textPages: pages.length,
+        document: documentReference,
         sectionTitle: section.sectionTitle,
         sectionHeading: section.sectionHeading,
         requirements,
@@ -545,13 +584,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       },
     };
 
-    type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean };
+    type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
     let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number }>;
     let sourceColumns: SourceColumn[] = [];
     let coverageCheckIncomplete = false;
     if (visualSheetType === "compliance-sheet" && visualPages.length
-      && visualPages.every((page) => extractVectorTableRows(page.sourceItems, page.rectangles, page.width, page.height).length > 0)) {
+      && visualPages.every((page) => getVectorRows(page).length > 0)) {
       stage = "matching source text to visible vector table rows";
       const labelSchema = {
         type: "object",
@@ -616,7 +655,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       };
       report("mapping source table columns", { stage: "mapping", message: "Mapping every tender column from the selected table" });
       const firstPage = visualPages[0];
-      const headerRows = extractVectorTableRows(firstPage.sourceItems, firstPage.rectangles, firstPage.width, firstPage.height);
+      const headerRows = getVectorRows(firstPage);
       const columnSchema = {
         type: "object",
         additionalProperties: false,
@@ -665,7 +704,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       }
       report("matching source text to visible vector table rows", { stage: "extracting", message: "Reading each table row and splitting independent subpoints", current: 0, total: visualPages.length });
       const pageResults = await Promise.all(visualPages.map(async (page) => {
-        const sourceRows = extractVectorTableRows(page.sourceItems, page.rectangles, page.width, page.height);
+        const sourceRows = getVectorRows(page);
         const precedingPage = pages.find((candidatePage) => candidatePage.page === page.page - 1 && candidatePage.visualImage);
         const pageColumns = sourceColumns;
         const requirementColumnIndex = chooseRequirementColumn(pageColumns, sourceRows.map((row) => row.cells));
@@ -749,6 +788,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               quote,
               selectableTextQuote: visualOcr ? row.quote : undefined,
               visualOcr,
+              visualOcrConfidence: visualOcr ? visualCompletion?.confidence : undefined,
               ocrWarning,
               remark: splitQuotes.length === 1 ? row.cells[pageColumns.findIndex((column) => column.role === "remark")] ?? "" : "",
               heading_prefix: splitQuotes.length === 1 || splitIndex === 0 ? label?.heading_prefix ?? "" : "",
@@ -761,6 +801,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               remarkBox: splitQuotes.length === 1 ? row.remarkBox : undefined,
               source_cells: outputCells,
               source_cells_exact: true,
+              source_row_index: index,
+              source_column_index: requirementColumnIndex,
               sourceRowHeight: exportAsSourceCell
                 ? row.rowHeight
                 : splitQuotes.length === 1
@@ -994,6 +1036,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         : undefined;
       const geometricLines = displayLinesForQuote(quote, sourcePage.rawText, sourcePage.rawItemMap, sourcePage.positioned);
       const displayText = (geometricLines && geometricLines.length > 1 ? geometricLines : validatedModelLines)?.join("\n") || quote;
+      const sourceCellLocation: SourceCellLocation | undefined = candidate.source_cells_exact === true
+        && Number.isInteger(candidate.source_row_index)
+        && Number.isInteger(candidate.source_column_index)
+        ? { rowIndex: candidate.source_row_index!, columnIndex: candidate.source_column_index! }
+        : undefined;
       requirements.push({
         id: `req-${requirements.length + 1}`,
         text: displayText,
@@ -1020,6 +1067,16 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         sourceCells,
         page: pageNumber,
         quote,
+        sourceReference: buildRequirementSourceReference({
+          document: sourceDocument,
+          page: sourcePage.sourceModel,
+          quote,
+          bbox,
+          visualTranscription: visualOcr ? quote : undefined,
+          ocrConfidence: candidate.visualOcrConfidence,
+          selectableTextContext: candidate.selectableTextQuote,
+          sourceCellLocation,
+        }),
         selectableTextQuote: visualOcr ? candidate.selectableTextQuote : undefined,
         bbox: {
           x: (Math.min(bbox.x, remarkBox?.x ?? bbox.x) / sourcePage.width) * 100,
@@ -1055,6 +1112,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       filename: file.name,
       pageCount: pdf.numPages,
       textPages: pages.length,
+      document: documentReference,
       requirements,
       sourceColumns,
       rejectedCandidates: rejected,
