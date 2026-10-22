@@ -13,7 +13,7 @@ Upload a text-based tender PDF
 → download a DOCX with blank OEM response fields
 ```
 
-This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory; the PDF text is sent to the configured model during one bounded server action. The server-only model credential is never exposed to the browser.
+This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory; the PDF text is sent to the configured model during one bounded server action, in parallel page groups sized by text length. The server-only model credential is never exposed to the browser.
 
 ## Checkpoint 72 — Single-user Vercel MVP
 
@@ -34,7 +34,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 ### Limits
 
 - Text-based PDFs only; OCR is not included.
-- One bounded synchronous extraction call; no background jobs or persistence.
+- One bounded synchronous analysis action, with parallel page-group model requests; no background jobs or persistence.
 - A validated quote and bounding box prove the displayed citation only, not exhaustive tender coverage.
 - The technical-only rule screen can miss technical requirements and is not proof of complete coverage; review every source citation.
 - Requirements remain in human review until the user checks them.

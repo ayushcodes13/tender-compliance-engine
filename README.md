@@ -38,7 +38,7 @@ The yellow page highlight is positioned from the matched source text. Selecting 
 
 Open [Tender Review on Vercel](https://tender-compliance-engine.vercel.app/). Upload a readable, text-based PDF (up to 4 MB and 120 pages), choose a candidate, inspect its citation and page highlight, and download the response sheet.
 
-The current hosted run used the rule-based preview. It filters for technical-looking sentences, matches them to selectable text, and computes the page geometry used for highlights. An optional server-side OpenAI-compatible model path can propose candidate quotes when configured; the model key remains server-side.
+The current hosted run uses the rule-based preview. When a server-side OpenAI-compatible model is configured, the model-assisted path groups pages into bounded requests and asks the model to inspect complete technical schedule rows, including their attached bullets. Every proposed quote still has to match selectable text on its cited page before it is shown. The model key remains server-side.
 
 ## How a citation is produced
 
@@ -47,7 +47,7 @@ Tender PDF
    ↓
 Read selectable text page by page
    ↓
-Choose a candidate sentence (rule-based preview or configured model)
+Choose candidate rows (rule-based preview or configured model page groups)
    ↓
 Match the quote back to the cited page and locate its PDF text geometry
    ↓
@@ -86,7 +86,8 @@ There is no separate API service, worker, database, job queue, or Docker stack i
 
 ## Limits
 
-- The rule-based preview is a candidate finder, not an exhaustive extraction system. It can include irrelevant clauses and miss technical requirements.
+- Both extraction paths are candidate finders, not exhaustive extraction systems. The model-assisted path preserves source table-row grouping, checks every proposed quote against its cited page, and drops unmatched suggestions; it can still miss requirements or suggest irrelevant clauses.
+- A document producing more than 250 matched rows is rejected for this MVP instead of silently truncating the review.
 - Scanned PDFs and OCR-heavy files are not supported by the current demo.
 - Review each candidate and check the original tender for omissions before using the exported sheet.
 - Refreshing or closing the browser clears the current review. Download the DOCX before leaving the page.
