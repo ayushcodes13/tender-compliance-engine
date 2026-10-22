@@ -16,6 +16,7 @@ import type { ProcessingProgress } from "./processing-progress";
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
+import { buildCoverageReport, type CoverageAuditStatus, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
@@ -586,9 +587,18 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
 
     type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
-    let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number }>;
+    let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: "extraction" | "coverage" }>;
     let sourceColumns: SourceColumn[] = [];
     let coverageCheckIncomplete = false;
+    const pageExtractionState = new Map<number, {
+      status: ExtractionStatus;
+      sourceTableRowsDetected: number | null;
+      sourceTableRowsMappedToCandidates: number | null;
+      sourceTableRowsExcludedAsHeaders: number | null;
+      sourceTableRowsEmpty: number | null;
+      sourceTableRowsUnmapped: number | null;
+    }>();
+    const pageAuditState = new Map<number, { total: number; completed: number; possibleOmissions: number }>();
     if (visualSheetType === "compliance-sheet" && visualPages.length
       && visualPages.every((page) => getVectorRows(page).length > 0)) {
       stage = "matching source text to visible vector table rows";
@@ -697,7 +707,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           }
         }
       } catch {
-        coverageCheckIncomplete = true;
+        // A missing initial header map is reflected by the page layout state;
+        // it is not an omission-audit failure.
       }
       report("matching source text to visible vector table rows", { stage: "extracting", message: "Reading each table row and splitting independent subpoints", current: 0, total: visualPages.length });
       const pageResults = await Promise.all(visualPages.map(async (page) => {
@@ -711,6 +722,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         let visualCompletions: Array<{ row_index?: number; quote?: string; confidence?: VisualOcrConfidence }> = [];
         let returnedColumns: SourceColumn[] = [];
         let invalidPageColumnMap = false;
+        let modelInspectionComplete = false;
         try {
           const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
@@ -747,6 +759,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               rowSplits = Array.isArray(result.splits) ? result.splits : [];
               looseHeadings = Array.isArray(result.loose_headings) ? result.loose_headings : [];
               visualCompletions = Array.isArray(result.visual_completions) ? result.visual_completions : [];
+              modelInspectionComplete = Array.isArray(result.rows) && Array.isArray(result.splits);
             } else coverageCheckIncomplete = true;
           }
         } catch {
@@ -817,6 +830,17 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             };
           });
         });
+        const sourceRowsMappedToCandidates = new Set(requirements
+          .map((candidate) => candidate.source_row_index)
+          .filter((rowIndex): rowIndex is number => Number.isInteger(rowIndex)));
+        const sourceRowsExcludedAsHeaders = sourceRows.filter((row, index) => row.cells.some((cell) => cell.trim())
+          && (labelByIndex.get(index)?.row_type === "header"
+            || isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header)))).length;
+        const sourceRowsEmpty = sourceRows.filter((row) => row.cells.every((cell) => !cell.trim())).length;
+        const sourceRowsUnmapped = sourceRows.filter((row, index) => row.cells.some((cell) => cell.trim())
+          && labelByIndex.get(index)?.row_type !== "header"
+          && !isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header))
+          && !sourceRowsMappedToCandidates.has(index)).length;
         for (const heading of looseHeadings) {
           if (typeof heading.quote !== "string" || !["section", "optional_heading"].includes(heading.row_type ?? "")) continue;
           const sourceBox = locateQuote(heading.quote, page.rawText, page.rawItemMap, page.positioned);
@@ -831,8 +855,22 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           columns: returnedColumns.length ? returnedColumns : pageColumns,
           observedColumns: returnedColumns,
           invalidPageColumnMap,
+          modelInspectionComplete,
+          sourceTableRowsDetected: sourceRows.length,
+          sourceTableRowsMappedToCandidates: sourceRowsMappedToCandidates.size,
+          sourceTableRowsExcludedAsHeaders: sourceRowsExcludedAsHeaders,
+          sourceTableRowsEmpty: sourceRowsEmpty,
+          sourceTableRowsUnmapped: sourceRowsUnmapped,
         };
       }));
+      for (const result of pageResults) pageExtractionState.set(result.page, {
+        status: result.modelInspectionComplete ? "complete" : "incomplete",
+        sourceTableRowsDetected: result.sourceTableRowsDetected,
+        sourceTableRowsMappedToCandidates: result.sourceTableRowsMappedToCandidates,
+        sourceTableRowsExcludedAsHeaders: result.sourceTableRowsExcludedAsHeaders,
+        sourceTableRowsEmpty: result.sourceTableRowsEmpty,
+        sourceTableRowsUnmapped: result.sourceTableRowsUnmapped,
+      });
       const expectedPageColumns = sourceColumns.length
         ? sourceColumns
         : pageResults.find((result) => result.observedColumns.length)?.observedColumns ?? [];
@@ -848,7 +886,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         };
       }
       sourceColumns = expectedPageColumns;
-      parsedResponses = pageResults;
+      for (const result of pageResults) {
+        const extraction = pageExtractionState.get(result.page);
+        if (extraction) pageExtractionState.set(result.page, {
+          ...extraction,
+          status: result.modelInspectionComplete && expectedPageColumns.length > 0 ? "complete" : "incomplete",
+        });
+      }
+      parsedResponses = pageResults.map((result) => ({ ...result, origin: "extraction" as const }));
     } else if (visualSheetType === "compliance-sheet" && visualPages.length) {
       report("splitting selected table pages into overlapping visual reading regions", { stage: "mapping", message: "Reading the selected table layout" });
       const pageSegments = (await Promise.all(visualPages.map(async (page) =>
@@ -875,14 +920,25 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             ],
           }),
         });
-        if (!response.ok) return { ok: false as const, status: response.status, page: page.page };
+        if (!response.ok) return { ok: false as const, status: response.status, page: page.page, segment };
         const payload = await response.json();
         const content = payload.choices?.[0]?.message?.content;
-        if (typeof content !== "string") return { ok: false as const, status: 200, page: page.page };
+        if (typeof content !== "string") return { ok: false as const, status: 200, page: page.page, segment };
         const parsed = parseJson(content) as ParsedExtraction;
-        if (!Array.isArray(parsed.requirements)) return { ok: false as const, status: 200, page: page.page };
+        if (!Array.isArray(parsed.requirements)) return { ok: false as const, status: 200, page: page.page, segment };
         return { ok: true as const, parsed, page: page.page, segment };
       }));
+      for (const page of visualPages) {
+        const segments = pageResults.filter((result) => result.page === page.page);
+        pageExtractionState.set(page.page, {
+          status: segments.length === 3 && segments.every((result) => result.ok) ? "complete" : "incomplete",
+          sourceTableRowsDetected: page.hasVectorTableGeometry ? getVectorRows(page).length : null,
+          sourceTableRowsMappedToCandidates: null,
+          sourceTableRowsExcludedAsHeaders: null,
+          sourceTableRowsEmpty: null,
+          sourceTableRowsUnmapped: null,
+        });
+      }
       sourceColumns = pageResults.flatMap((result) => result.ok ? result.parsed.columns ?? [] : []).length
         ? pageResults.flatMap((result) => result.ok ? result.parsed.columns ?? [] : [])
         : [];
@@ -914,10 +970,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         return { ok: false as const, error: failedPage.status === 401 ? "The configured model credential was rejected." : `The model could not extract page ${failedPage.page} (${failedPage.status}).` };
       }
       report("checking page images for omitted table rows", { stage: "verifying", message: "Checking the selected pages for omitted rows", current: 0, total: visualPages.length });
+      for (const page of visualPages) pageAuditState.set(page.page, { total: 0, completed: 0, possibleOmissions: 0 });
       const coverageResults = await Promise.all(pageResults.map(async (result) => {
-        if (!result.ok) return null;
+        if (!result.ok) return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
         const page = visualPages.find((candidatePage) => candidatePage.page === result.page);
-        if (!page) return null;
+        if (!page) return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
         const sequenceStarts: Array<{ heading: string; label: string }> = [];
         let currentHeading = "the current page";
         let currentSequenceStarted = false;
@@ -964,29 +1021,38 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           });
           if (!coverageResponse.ok) {
             coverageCheckIncomplete = true;
-            return null;
+            return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
           }
           const payload = await coverageResponse.json();
           const content = payload?.choices?.[0]?.message?.content;
           if (typeof content !== "string") {
             coverageCheckIncomplete = true;
-            return null;
+            return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
           }
           const parsed = parseJson(content) as ParsedExtraction | null;
           if (!parsed || !Array.isArray(parsed.requirements)) {
             coverageCheckIncomplete = true;
-            return null;
+            return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
           }
           const completeRows = discardContainedSuggestions(knownRows, parsed.requirements);
-          return { parsed: { requirements: completeRows }, page: result.page };
+          return { parsed: { requirements: completeRows }, page: result.page, segmentIndex: result.segment.index, auditComplete: true, possibleOmissions: completeRows.length };
         } catch {
           coverageCheckIncomplete = true;
-          return null;
+          return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
         }
       }));
+      for (const page of visualPages) {
+        const results = coverageResults.filter((result) => result.page === page.page);
+        pageAuditState.set(page.page, {
+          total: results.length,
+          completed: results.filter((result) => result.auditComplete).length,
+          possibleOmissions: results.reduce((total, result) => total + result.possibleOmissions, 0),
+        });
+      }
       parsedResponses = [
-        ...pageResults.flatMap((result) => result.ok ? [{ parsed: result.parsed, page: result.page }] : []),
-        ...coverageResults.filter((result): result is { parsed: { requirements: Candidate[] }; page: number } => result !== null),
+        ...pageResults.flatMap((result) => result.ok ? [{ parsed: result.parsed, page: result.page, origin: "extraction" as const }] : []),
+        ...coverageResults.filter((result) => result.auditComplete && result.parsed.requirements.length > 0)
+          .map((result) => ({ parsed: result.parsed, page: result.page, origin: "coverage" as const })),
       ];
     } else {
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
@@ -1015,33 +1081,60 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       if (typeof content !== "string") return { ok: false as const, error: "The model returned an empty result." };
       const parsed = parseJson(content) as ParsedExtraction;
       if (!Array.isArray(parsed.requirements)) return { ok: false as const, error: "The model response did not contain a requirements list." };
-      parsedResponses = [{ parsed }];
+      parsedResponses = [{ parsed, origin: "extraction" }];
+      for (const pageNumber of visualPageNumbers) pageExtractionState.set(pageNumber, {
+        status: "complete",
+        sourceTableRowsDetected: (() => {
+          const page = pages.find((candidatePage) => candidatePage.page === pageNumber);
+          return page?.hasVectorTableGeometry ? getVectorRows(page).length : null;
+        })(),
+        sourceTableRowsMappedToCandidates: null,
+        sourceTableRowsExcludedAsHeaders: null,
+        sourceTableRowsEmpty: null,
+        sourceTableRowsUnmapped: null,
+      });
     }
-    const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
+    const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction" }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
       ...candidate,
       ...(page === undefined ? {} : { page }),
       ordinal,
+      suggestionOrigin: origin,
     })));
+    const rejectedSuggestionDetails: RejectedSuggestion[] = [];
+    const addRejection = (page: number | null, reason: string, quote: string) => rejectedSuggestionDetails.push({
+      page,
+      reason,
+      quotePreview: quote.slice(0, 180),
+    });
     const parsedCandidates = unfilteredCandidates.filter((candidate) => {
       const samePage = unfilteredCandidates.filter((other) => other.page === candidate.page);
       const samePageQuotes = samePage.map((other) => typeof other.quote === "string" ? other.quote : "").filter(Boolean);
-      return keepParsedSourceCandidate(candidate, samePageQuotes);
+      const kept = keepParsedSourceCandidate(candidate, samePageQuotes);
+      if (!kept) addRejection(Number.isInteger(candidate.page) ? Number(candidate.page) : null, "duplicate_or_contained_suggestion", typeof candidate.quote === "string" ? candidate.quote : "");
+      return kept;
     });
 
     report("validating source quotes", { stage: "verifying", message: "Verifying each quote and citation against the PDF", current: 0, total: parsedCandidates.length });
     if (parsedCandidates.length > MAX_REQUIREMENTS) {
       return { ok: false as const, error: "This tender produced more than 250 matched technical rows, beyond this MVP's review limit. Upload a shorter technical section so no requirements are silently omitted." };
     }
-    let rejected = 0;
+    let rejected = rejectedSuggestionDetails.length;
     const seen = new Set<string>();
     const requirements: Requirement[] = [];
     for (const candidate of parsedCandidates.slice(0, MAX_REQUIREMENTS * 2)) {
-      const pageNumber = Number(candidate.page);
+      const pageNumber = typeof candidate.page === "number" ? candidate.page : Number.NaN;
       const quote = typeof candidate.quote === "string" ? candidate.quote.trim() : "";
       const sourcePage = pages.find((page) => page.page === pageNumber);
       const isSection = candidate.row_type === "section" || candidate.row_type === "optional_heading";
-      if (!sourcePage || !quote || quote.length > 5_000 || isClearlyAdministrativeClause(quote) || (visualSheetType !== "compliance-sheet" && !isSection && !isTechnicalRequirementCandidate(quote))) {
+      const pageWasSelected = visualPageNumbers.includes(pageNumber);
+      if (!Number.isInteger(pageNumber) || !sourcePage || !pageWasSelected) {
         rejected += 1;
+        addRejection(sourcePage ? pageNumber : null, "page_not_selected_by_router", quote);
+        continue;
+      }
+      if (!quote || quote.length > 5_000 || isClearlyAdministrativeClause(quote) || (visualSheetType !== "compliance-sheet" && !isSection && !isTechnicalRequirementCandidate(quote))) {
+        rejected += 1;
+        addRejection(pageNumber, "invalid_or_nontechnical_candidate", quote);
         continue;
       }
       const normalizedQuote = normalize(quote);
@@ -1049,19 +1142,25 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         ? candidate.source_cells
         : undefined;
       const key = sourceCandidateKey(pageNumber, normalizedQuote, sourceIdentity);
-      if (seen.has(key)) continue;
+      if (seen.has(key)) {
+        rejected += 1;
+        addRejection(pageNumber, "duplicate_or_contained_suggestion", quote);
+        continue;
+      }
       seen.add(key);
       const textMatch = normalize(sourcePage.rawText).includes(normalizedQuote);
       const visualOcr = candidate.visualOcr === true && visualSheetType === "compliance-sheet";
       const bbox = candidate.sourceBox ?? locateQuote(quote, sourcePage.rawText, sourcePage.rawItemMap, sourcePage.positioned);
       if ((!textMatch && !visualOcr) || !bbox) {
         rejected += 1;
+        addRejection(pageNumber, "source_quote_or_location_not_verified", quote);
         continue;
       }
       const remark = typeof candidate.remark === "string" ? candidate.remark.trim() : "";
       const remarkBox = remark ? candidate.remarkBox ?? locateQuote(remark, sourcePage.rawText, sourcePage.rawItemMap, sourcePage.positioned) : null;
       if (visualSheetType === "compliance-sheet" && remark && !remarkBox) {
         rejected += 1;
+        addRejection(pageNumber, "remark_not_located_in_source", remark);
         continue;
       }
       const category = ["Performance", "Electrical", "Mechanical", "Environmental", "Testing", "Documentation", "Other"].includes(candidate.category || "") ? candidate.category! : "Other";
@@ -1152,6 +1251,56 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         item.id = `req-${index + 1}`;
       }
     }
+    const pageRejections = new Map<number, RejectedSuggestion[]>();
+    for (const suggestion of rejectedSuggestionDetails) {
+      if (suggestion.page === null) continue;
+      const current = pageRejections.get(suggestion.page) ?? [];
+      current.push(suggestion);
+      pageRejections.set(suggestion.page, current);
+    }
+    const coveragePages = pages.map((page) => {
+      const selectedForExtraction = visualPageNumbers.includes(page.page);
+      const extraction = pageExtractionState.get(page.page);
+      const audit = pageAuditState.get(page.page);
+      const auditStatus: CoverageAuditStatus = !audit || audit.total === 0
+        ? "not_run"
+        : audit.completed < audit.total
+          ? "incomplete"
+          : audit.possibleOmissions > 0
+            ? "possible_gaps_reported"
+            : "no_gaps_reported";
+      const rejectedOnPage = pageRejections.get(page.page) ?? [];
+      const rejectionReasons = [...new Set(rejectedOnPage.map((item) => item.reason))]
+        .map((reason) => ({ reason, count: rejectedOnPage.filter((item) => item.reason === reason).length }));
+      return {
+        page: page.page,
+        selectableTextAvailable: Boolean(page.rawText.trim()),
+        routingInputIncluded: Boolean(page.text.trim()),
+        routingContextClipped: clippedFromRouting.includes(page.page),
+        selectedForExtraction,
+        extractionStatus: selectedForExtraction ? extraction?.status ?? "incomplete" as const : "not_selected" as const,
+        sourceTableRowsDetected: extraction?.sourceTableRowsDetected ?? null,
+        sourceTableRowsMappedToCandidates: extraction?.sourceTableRowsMappedToCandidates ?? null,
+        sourceTableRowsExcludedAsHeaders: extraction?.sourceTableRowsExcludedAsHeaders ?? null,
+        sourceTableRowsEmpty: extraction?.sourceTableRowsEmpty ?? null,
+        sourceTableRowsUnmapped: extraction?.sourceTableRowsUnmapped ?? null,
+        candidateSuggestions: unfilteredCandidates.filter((candidate) => candidate.page === page.page && candidate.suggestionOrigin === "extraction").length,
+        sourceMatchedRows: requirements.filter((item) => item.page === page.page).length,
+        sourceMatchedRequirements: requirements.filter((item) => item.page === page.page && item.rowType === "requirement").length,
+        needsHumanReview: requirements.filter((item) => item.page === page.page && !item.reviewed).length,
+        rejectedSuggestions: rejectedOnPage.length,
+        rejectionReasons,
+        auditStatus,
+        possibleOmissionSuggestions: audit?.possibleOmissions ?? 0,
+        ocrNeeded: !page.rawText.trim(),
+      };
+    });
+    const coverage = buildCoverageReport(coveragePages, {
+      candidateSuggestions: unfilteredCandidates.filter((candidate) => !Number.isInteger(candidate.page)
+        || !pages.some((page) => page.page === candidate.page)).length,
+      rejectedSuggestions: rejectedSuggestionDetails.filter((item) => item.page === null
+        || !pages.some((page) => page.page === item.page)).length,
+    });
     report("analysis complete", { stage: "complete", message: `Verified ${requirements.length} source-linked rows` });
     return { ok: true as const, analysis: {
       filename: file.name,
@@ -1161,6 +1310,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       requirements,
       sourceColumns,
       rejectedCandidates: rejected,
+      rejectedSuggestionDetails,
+      coverage,
       extractionMode: visualSheetType === "compliance-sheet" ? "visual-compliance-sheet" as const : undefined,
       // Prefer the exact document-level sheet title and technical section heading
       // when present. Model-suggested metadata can otherwise mistake a column
@@ -1171,7 +1322,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       sheetHeading: pages.some((page) => locateQuote("TECHNICAL SPECIFICATION:", page.rawText, page.rawItemMap, page.positioned))
         ? "TECHNICAL SPECIFICATION:"
         : undefined,
-      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${coverageCheckIncomplete ? " One or more visual coverage checks could not complete; inspect those page rows for omissions." : ""}`,
+      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""}`,
     } };
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";

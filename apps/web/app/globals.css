@@ -221,6 +221,21 @@ a { color: inherit; }
 .mvp-text-button { min-height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border: 1px solid #dfe3e4; border-radius: 4px; background: #fff; color: #5f6c7c; font-size: 9px; cursor: pointer; transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease; }
 .mvp-text-button:hover { border-color: #bfc8d3; background: #fafbfc; color: var(--ink); }
 .mvp-review-note { margin: 0; padding: 11px 17px; border-bottom: 1px solid #edf0ef; background: #fafaf9; color: #586678; font-size: 12px; line-height: 1.55; }
+.mvp-coverage-ledger { border-bottom: 1px solid #edf0ef; background: #fcfcfb; color: #293849; font-size: 12px; }
+.mvp-coverage-ledger > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 11px 17px; cursor: pointer; font-weight: 700; list-style-position: inside; }
+.mvp-coverage-ledger > summary small { color: #64748b; font-size: 11px; font-weight: 500; }
+.mvp-coverage-caveat { margin: 0; padding: 0 17px 10px; color: #64748b; line-height: 1.5; }
+.mvp-coverage-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 14px; margin: 0; padding: 0 17px 12px; }
+.mvp-coverage-summary > div { min-width: 0; }
+.mvp-coverage-summary dt { color: #697789; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.mvp-coverage-summary dd { margin: 2px 0 0; color: #293849; line-height: 1.45; }
+.mvp-coverage-pages { display: grid; gap: 7px; margin: 0; padding: 0 17px 13px; list-style: none; }
+.mvp-coverage-pages li { display: grid; gap: 3px; padding: 9px 10px; border: 1px solid #e8eceb; border-radius: 7px; background: #fff; color: #526174; line-height: 1.45; overflow-wrap: anywhere; }
+.mvp-coverage-pages li > strong { color: #25364a; }
+.mvp-coverage-page-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; }
+.mvp-coverage-page-title button { padding: 2px 0; border: 0; background: none; color: #315e9c; cursor: pointer; font: inherit; font-size: 11px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.mvp-coverage-pages .is-warning, .mvp-coverage-ledger .is-warning { color: #965b10; }
+.mvp-coverage-rejection { padding-left: 9px; border-left: 2px solid #e1b553; color: #7b4d14; }
 .mvp-requirement-list { min-height: 0; flex: 1; overflow: auto; padding: 7px; scrollbar-color: #c8cdd0 transparent; scrollbar-width: thin; }
 .mvp-requirement { width: 100%; display: flex; flex-direction: column; gap: 8px; margin: 0 0 4px; padding: 12px 12px 11px; border: 1px solid transparent; border-radius: 4px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease; }
 .mvp-requirement:hover { background: #f8f9f9; }

@@ -11,6 +11,7 @@ import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
+import type { CoverageReport, RejectedSuggestion } from "./coverage-ledger";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -52,9 +53,15 @@ type Analysis = {
   sheetProductTitle?: string;
   requirements: Requirement[];
   rejectedCandidates: number;
+  rejectedSuggestionDetails?: RejectedSuggestion[];
+  coverage?: CoverageReport;
   extractionMode?: "rule-based-preview" | "structured-table" | "visual-compliance-sheet";
   reviewNote: string;
 };
+
+function countLabel(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
 
 function splitRequirementSubpoints(text: string): string[] {
   return text
@@ -675,6 +682,18 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   }
 
   const checkedCount = analysis.requirements.filter((item) => item.reviewed).length;
+  const coveragePagesToShow = analysis.coverage?.pages.filter((item) => item.selectedForExtraction
+    || item.ocrNeeded
+    || item.routingContextClipped
+    || item.extractionStatus === "incomplete"
+    || item.auditStatus === "incomplete"
+    || item.auditStatus === "possible_gaps_reported"
+    || item.rejectedSuggestions > 0) ?? [];
+  const pendingReviewByPage = new Map<number, number>();
+  for (const item of analysis.requirements) {
+    if (!item.reviewed) pendingReviewByPage.set(item.page, (pendingReviewByPage.get(item.page) ?? 0) + 1);
+  }
+  const currentNeedsReviewCount = [...pendingReviewByPage.values()].reduce((total, count) => total + count, 0);
   return (
     <main ref={motionRoot} className="tender-mvp-root mvp-review-screen">
       <header className="mvp-topbar mvp-review-topbar">
@@ -693,6 +712,44 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <section className="mvp-list-panel" aria-label="Extracted requirements">
           <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); }}><X size={15} /> New tender</button></div>
           <p className="mvp-review-note">{analysis.reviewNote}{analysis.extractionMode === "structured-table" ? "" : ` ${analysis.rejectedCandidates ? `${analysis.rejectedCandidates} unmatched model suggestions were left out.` : "Unmatched suggestions are left out."}`}</p>
+          {analysis.coverage && <details className="mvp-coverage-ledger">
+            <summary>
+              <span>Coverage ledger</span>
+              <small>{countLabel(analysis.coverage.summary.selectedTechnicalPages, "routed page")} · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(analysis.coverage.summary.rejectedSuggestions, "rejected suggestion")}</small>
+            </summary>
+            <p className="mvp-coverage-caveat">Counts describe what the parser, router, and page audit actually processed. A model audit reporting no gaps does not prove that the tender is complete.</p>
+            <dl className="mvp-coverage-summary">
+              <div><dt>Router input</dt><dd>{analysis.coverage.summary.routingPages} of {analysis.coverage.summary.documentPages} pages with selectable text</dd></div>
+              <div><dt>Source table rows</dt><dd>{countLabel(analysis.coverage.summary.tableRowsDetected, "row")} detected · {countLabel(analysis.coverage.summary.tableRowsMappedToCandidates, "row")} mapped · {countLabel(analysis.coverage.summary.tableRowsExcludedAsHeaders, "header")} · {countLabel(analysis.coverage.summary.tableRowsEmpty, "empty row")} · {countLabel(analysis.coverage.summary.tableRowsUnmapped, "nonempty row")} unmapped, across {countLabel(analysis.coverage.summary.tablePagesWithKnownRowCount, "page")} with detected row geometry</dd></div>
+              <div><dt>Suggestions and review</dt><dd>{countLabel(analysis.coverage.summary.candidateSuggestions, "model suggestion")} · {countLabel(analysis.coverage.summary.sourceMatchedRows, "source matched row")} including headings · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(currentNeedsReviewCount, "row")} awaiting your review</dd></div>
+              <div><dt>Page audits</dt><dd>{analysis.coverage.summary.auditPagesWithNoGapsReported} reported no gaps · {analysis.coverage.summary.auditPagesWithPossibleGaps} flagged possible gaps · {analysis.coverage.summary.auditPagesIncomplete} incomplete · {analysis.coverage.summary.auditPagesNotRun} not run</dd></div>
+              {analysis.coverage.summary.pagesWithoutSelectableText > 0 && <div><dt>OCR review</dt><dd>{countLabel(analysis.coverage.summary.pagesWithoutSelectableText, "page")} had no selectable text</dd></div>}
+              {analysis.coverage.summary.clippedRoutingPages > 0 && <div><dt>Clipped router context</dt><dd>{countLabel(analysis.coverage.summary.clippedRoutingPages, "page")} had source text outside the routing excerpt</dd></div>}
+              {analysis.coverage.summary.possibleOmissionSuggestions > 0 && <div><dt>Possible omissions</dt><dd>{countLabel(analysis.coverage.summary.possibleOmissionSuggestions, "source suggestion")} returned by the page audit; inspect the flagged pages</dd></div>}
+              {analysis.coverage.summary.unattributedCandidateSuggestions > 0 && <div><dt>Unattributed suggestions</dt><dd>{countLabel(analysis.coverage.summary.unattributedCandidateSuggestions, "suggestion")} had no usable source page</dd></div>}
+            </dl>
+            <ul className="mvp-coverage-pages">
+              {coveragePagesToShow.map((item) => {
+                const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
+                return <li key={item.page}>
+                  <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => setPage(item.page)}>Open source page</button></div>
+                  <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrNeeded ? "No selectable text · OCR needed" : "Considered by router, not selected"}</span>
+                  {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}
+                  {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
+                  {Boolean(item.sourceTableRowsUnmapped) && <span className="is-warning">Inspect the unmapped source rows on this page.</span>}
+                  <span>{item.candidateSuggestions} model suggestion(s) · {item.sourceMatchedRows} source matched row(s) · {item.sourceMatchedRequirements} requirement row(s) · {pendingReviewByPage.get(item.page) ?? 0} need review</span>
+                  {item.extractionStatus === "incomplete" && <span className="is-warning">Extraction incomplete</span>}
+                  {item.routingContextClipped && <span className="is-warning">Routing excerpt clipped</span>}
+                  <span className={item.auditStatus === "no_gaps_reported" ? "" : "is-warning"}>Page audit: {item.auditStatus.replace(/_/g, " ")}</span>
+                  {item.possibleOmissionSuggestions > 0 && <span className="is-warning">{countLabel(item.possibleOmissionSuggestions, "possible omission suggestion")}</span>}
+                  {rejectedOnPage.map((suggestion, index) => <span className="mvp-coverage-rejection" key={`${item.page}-${suggestion.reason}-${index}`}>
+                    Rejected: {suggestion.reason.replace(/_/g, " ")}{suggestion.quotePreview ? ` — “${suggestion.quotePreview}”` : ""}
+                  </span>)}
+                </li>;
+              })}
+            </ul>
+            {analysis.coverage.summary.unattributedRejectedSuggestions > 0 && <p className="is-warning">{countLabel(analysis.coverage.summary.unattributedRejectedSuggestions, "rejected suggestion")} had no usable source page reference.</p>}
+          </details>}
           <div className="mvp-requirement-list">
             {analysis.requirements.map((item, index) => (
               <button className={`mvp-requirement ${active?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => openRequirement(item)}>
