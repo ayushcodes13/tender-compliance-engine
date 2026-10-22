@@ -8,10 +8,12 @@ export function PdfEvidenceViewer({
   file,
   pageNumber,
   selectedBox,
+  highlightLabel = "Bounding box for cited source quote",
 }: {
   file: File;
   pageNumber: number;
   selectedBox: Box | null;
+  highlightLabel?: string;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -110,7 +112,7 @@ export function PdfEvidenceViewer({
         {selectedBox && (
           <div
             className="mvp-pdf-highlight"
-            aria-label="Bounding box for cited source quote"
+            aria-label={highlightLabel}
             style={{ left: `${selectedBox.x}%`, top: `${selectedBox.y}%`, width: `${selectedBox.width}%`, height: `${selectedBox.height}%` }}
           />
         )}

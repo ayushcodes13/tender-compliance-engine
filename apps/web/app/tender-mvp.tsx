@@ -29,8 +29,10 @@ type Requirement = {
   category: string;
   page: number;
   quote: string;
+  selectableTextQuote?: string;
   bbox: BoundingBox | null;
-  precision: "exact" | "page-only";
+  precision: "exact" | "visual-ocr" | "page-only";
+  ocrWarning?: boolean;
   reviewed: boolean;
 };
 type Analysis = {
@@ -476,7 +478,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <div className="mvp-requirement-list">
             {analysis.requirements.map((item, index) => (
               <button className={`mvp-requirement ${active?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => openRequirement(item)}>
-                <span className="mvp-req-topline"><span>REQ {String(index + 1).padStart(3, "0")}</span><span className="mvp-citation-tag">Page {item.page} · exact</span></span>
+                <span className="mvp-req-topline"><span>REQ {String(index + 1).padStart(3, "0")}</span><span className={`mvp-citation-tag ${item.ocrWarning ? "is-ocr-warning" : ""}`}>Page {item.page} · {item.ocrWarning ? "OCR warning" : item.precision === "page-only" ? "page only" : "exact"}</span></span>
                 <span className={`mvp-req-text ${item.parameter ? "mvp-req-structured" : ""}`}>
                   {item.parameter ? <><strong className="mvp-req-parameter">{item.parameter}</strong>{item.specifications?.map((specification, specIndex) => <span className={`mvp-req-spec ${item.quote.startsWith("•") ? "is-bullet" : ""}`} key={`${item.id}-spec-${specIndex}`}>{specification}</span>)}</> : item.text}
                 </span>
@@ -489,10 +491,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
         <section className="mvp-evidence-panel" aria-label="Cited tender source">
           <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2>{active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => setPage((current) => Math.max(1, current - 1))} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => setPage((current) => Math.min(analysis.pageCount, current + 1))} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button></div></div>
-          {file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={active?.page === page ? active.bbox : null} />}
+          {file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={active?.page === page ? active.bbox : null} highlightLabel={active?.ocrWarning ? "Approximate table-row box for visually transcribed text; verify the full row" : "Bounding box for cited source quote"} />}
           <div className="mvp-citation-detail">
-            <div className="mvp-citation-label"><span className="mvp-exact-dot" /> {active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(active?.page ?? page).padStart(2, "0")}</div>
+            <div className={`mvp-citation-label ${active?.ocrWarning ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(active?.page ?? page).padStart(2, "0")}</div>
             <blockquote>{active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
+            {active?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{active.selectableTextQuote}</p></div>}
             <div className="mvp-review-actions"><span>{active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={!active || page !== active.page || !active.bbox} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
           </div>
         </section>

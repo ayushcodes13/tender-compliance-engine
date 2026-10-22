@@ -216,6 +216,11 @@ a { color: inherit; }
 .mvp-req-topline, .mvp-req-bottom { display: flex; align-items: center; justify-content: space-between; gap: 9px; color: #586678; font-size: 10px; font-weight: 650; letter-spacing: .025em; }
 .mvp-req-topline > span:first-child { color: #818a94; font-variant-numeric: tabular-nums; }
 .mvp-citation-tag { color: #4567a4; font-weight: 650; letter-spacing: 0; }
+.mvp-citation-tag.is-ocr-warning { color: #9a5b08; }
+.mvp-citation-label.is-ocr-warning { color: #8d570e; }
+.mvp-selectable-excerpt { margin-top: 12px; padding: 9px 11px; border-left: 2px solid #c98a2b; background: #fff8e9; }
+.mvp-selectable-excerpt > span { color: #8d570e; font-size: 9px; font-weight: 750; letter-spacing: .08em; }
+.mvp-selectable-excerpt p { margin: 4px 0 0; color: #5c5142; font-size: 12px; line-height: 1.5; }
 .mvp-req-text { display: -webkit-box; overflow: hidden; color: #29384d; font-size: 13px; line-height: 1.58; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .mvp-req-text.mvp-req-structured { display: flex; flex-direction: column; gap: 3px; max-height: 150px; overflow: hidden; -webkit-line-clamp: unset; }
 .mvp-req-parameter { color: #1d2b40; font-weight: 700; }
