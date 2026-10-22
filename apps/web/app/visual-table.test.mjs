@@ -41,11 +41,11 @@ test("reassembles AI-split items from the same source cell for DOCX export", () 
     { text: "f) Different source cell.", page: 12 },
   ];
   assert.deepEqual(mergeVisualExportGroups(rows), [
-    { text: "c) Check uniformity. d) Check Hall mobility. e) Show cracker efficiency.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
+    { text: "c) Check uniformity.\nd) Check Hall mobility.\ne) Show cracker efficiency.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
     { text: "f) Different source cell.", page: 12 },
   ]);
   assert.deepEqual(prepareVisualComplianceRows(rows).map((row) => row.text), [
-    "c) Check uniformity. d) Check Hall mobility. e) Show cracker efficiency.",
+    "c) Check uniformity.\nd) Check Hall mobility.\ne) Show cracker efficiency.",
     "f) Different source cell.",
   ]);
 });

@@ -8,7 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
 import { prepareVisualComplianceRows } from "./visual-table";
-import { partitionRowsForTemplate } from "./compliance-pagination";
+import { attachLeadingContinuation, partitionRowsAtMarkers, splitRowBeforeLiteral } from "./compliance-pagination";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -186,27 +186,34 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       });
       const structured = analysis.extractionMode === "structured-table";
       const complianceSheet = analysis.extractionMode === "visual-compliance-sheet";
-      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"], headingPrefix?: string, verticalAlign?: (typeof VerticalAlignTable)[keyof typeof VerticalAlignTable]) => {
-        const letterRow = /^[a-z]\)/i.test(text);
+      const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"], headingPrefix?: string, verticalAlign?: (typeof VerticalAlignTable)[keyof typeof VerticalAlignTable], pageContinuation?: string) => {
+        const segments = pageContinuation === undefined ? [text] : [pageContinuation, text];
         return new TableCell({
           ...(verticalAlign ? { verticalAlign } : {}),
-        children: [new Paragraph({
-          style: "TableParagraph",
-          alignment: letterRow && !text.includes("\n") ? AlignmentType.JUSTIFIED : alignment,
-          ...(rowType === "section" ? { indent: { left: 102 } } : letterRow ? { indent: { left: 801, hanging: 348 } } : {}),
-          children: text.split("\n").flatMap((line, index) => {
-            const headingParts = index === 0 ? splitHeadingPrefix(line, headingPrefix) : null;
-            return [
-              ...(index > 0 ? [new TextRun({ break: 1 })] : []),
-              ...(headingParts
-                ? [new TextRun({ text: headingParts.heading, bold: true, size }), new TextRun({ text: headingParts.remainder, bold, size })]
-                : [new TextRun({ text: line, bold, size })]),
-            ];
+          children: segments.map((segment, segmentIndex) => {
+            const isContinuation = segmentIndex === 0 && segments.length > 1;
+            const segmentRowType = isContinuation ? undefined : rowType;
+            const segmentHeadingPrefix = isContinuation ? undefined : headingPrefix;
+            const letterRow = /^[a-z]\)/i.test(segment);
+            return new Paragraph({
+              style: "TableParagraph",
+              alignment: letterRow && !segment.includes("\n") ? AlignmentType.JUSTIFIED : alignment,
+              ...(segmentRowType === "section" ? { indent: { left: 102 } } : letterRow ? { indent: { left: 801, hanging: 348 } } : {}),
+              ...(isContinuation ? { border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 0, color: "000000" } } } : {}),
+              children: segment.split("\n").flatMap((line, index) => {
+                const headingParts = index === 0 ? splitHeadingPrefix(line, segmentHeadingPrefix) : null;
+                return [
+                  ...(index > 0 ? [new TextRun({ break: 1 })] : []),
+                  ...(headingParts
+                    ? [new TextRun({ text: headingParts.heading, bold: true, size }), new TextRun({ text: headingParts.remainder, bold, size })]
+                    : [new TextRun({ text: line, bold, size })]),
+                ];
+              }),
+            });
           }),
-        })],
-        margins: { left: 0, right: 0 },
-        borders: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 0, color: "000000" } },
-      });
+          margins: { left: 0, right: 0 },
+          borders: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 0, color: "000000" } },
+        });
       };
       const complianceTable = (tableRows: Array<InstanceType<typeof TableRow>>) => new Table({
         rows: tableRows,
@@ -230,12 +237,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         complianceCell("Compliance\nY/N", true, 19, AlignmentType.CENTER, undefined, undefined, VerticalAlignTable.TOP),
       ] });
       const complianceSpacer = new TableRow({ height: { value: 226, rule: HeightRule.ATLEAST }, children: [complianceCell("", false, 16), complianceCell("", false, 16), complianceCell("", false, 16)] });
-      const complianceRow = (item: Requirement, preserveLineItems = false) => new TableRow({
+      const complianceRow = (item: Requirement, preserveLineItems = false, pageContinuation?: string) => new TableRow({
         height: { value: complianceRowHeightTwips(item.sourceRowHeight, item.rowType === "section" || item.rowType === "optional_heading"), rule: HeightRule.ATLEAST },
         children: [
-          complianceCell(reflowComplianceText(item.text, preserveLineItems), item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix),
-          complianceCell(reflowComplianceText(item.remark ?? ""), false, 16, AlignmentType.CENTER),
-          complianceCell("", false, 16),
+          complianceCell(reflowComplianceText(item.text, preserveLineItems), item.rowType === "section" && !item.headingPrefix, 19, undefined, item.rowType, item.headingPrefix, undefined, pageContinuation === undefined ? undefined : reflowComplianceText(pageContinuation, preserveLineItems)),
+          complianceCell(reflowComplianceText(item.remark ?? ""), false, 16, AlignmentType.CENTER, undefined, undefined, undefined, pageContinuation === undefined ? undefined : ""),
+          complianceCell("", false, 16, undefined, undefined, undefined, undefined, pageContinuation === undefined ? undefined : ""),
         ],
       });
       const optionalHeadingIndex = analysis.requirements.findIndex((item) => item.rowType === "optional_heading");
@@ -250,10 +257,36 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         ...mainComplianceExportRows.map((item) => complianceRow(item)),
       ];
       const isMbeReferenceSheet = analysis.sheetProductTitle === "Molecular Beam Epitaxy (MBE) System";
-      // The attached Output 2 uses six page-level tables for this sheet. Match
-      // those boundaries only when the complete reference table row count is present.
-      const referenceMainTablePages = complianceSheet && isMbeReferenceSheet
-        ? partitionRowsForTemplate(mainComplianceTableRows, [19, 27, 20, 23, 20, 6])
+      // Match the attached MBE response's visible page boundaries only when every
+      // anchored source row is present. These presentation fragments never alter
+      // the extracted requirement kept in analysis/review state.
+      const referenceHolderRows = complianceSheet && isMbeReferenceSheet
+        ? splitRowBeforeLiteral(mainComplianceExportRows, "p) Molybdenum substrate holder", "included.")
+        : null;
+      const referenceDisplayRows = referenceHolderRows
+        ? splitRowBeforeLiteral(referenceHolderRows, "The control system shall provide automatic long-term logging", "process parameters including")
+        : null;
+      const referenceMainItemPages = referenceDisplayRows
+        ? partitionRowsAtMarkers(referenceDisplayRows, [
+          "Blank substrate holder should also be",
+          "d) Appropriate isolation gate valves throughout",
+          "The control system shall provide automatic long-term logging of all critical",
+          "11. Growth test performed on - site as part of system acceptance",
+          "o) Vendor should provide all accessories and utilities required for full operation of MBE.",
+        ])
+        : null;
+      type ReferenceExportRequirement = Requirement & { pageContinuation?: string };
+      const referenceMainDisplayPages: ReferenceExportRequirement[][] | null = referenceMainItemPages
+        ? referenceMainItemPages.map((pageRows, index) => {
+          if (index === 1 || index === 3) return attachLeadingContinuation(pageRows) ?? [];
+          return pageRows.map((item) => ({ ...item }));
+        })
+        : null;
+      const referenceMainTablePages = referenceMainDisplayPages?.every((pageRows) => pageRows.length > 0)
+        ? referenceMainDisplayPages.map((pageRows, index) => [
+        ...(index === 0 ? [complianceHeader, complianceSpacer] : []),
+        ...pageRows.map((item) => complianceRow(item, false, item.pageContinuation)),
+      ])
         : null;
       const rows = structured
         ? [

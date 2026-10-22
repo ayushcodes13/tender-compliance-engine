@@ -12,7 +12,7 @@ export function reflowComplianceText(text: string, preserveLineItems = false): s
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   let output = "";
   for (const line of lines) {
-    const listItem = /^[-•]\s/.test(line) || preserveLineItems;
+    const listItem = /^[-•]\s/.test(line) || /^[a-z]\)\s/i.test(line) || preserveLineItems;
     output += `${output ? (listItem ? "\n" : " ") : ""}${line}`;
   }
   return output;

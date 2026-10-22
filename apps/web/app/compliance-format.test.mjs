@@ -18,6 +18,10 @@ test("keeps separately listed material lines and explicit dash bullets", () => {
   assert.equal(reflowComplianceText("Dopant cells:\n- Silicon source\n- Carbon source"), "Dopant cells:\n- Silicon source\n- Carbon source");
 });
 
+test("keeps AI-separated lettered subitems on distinct display lines", () => {
+  assert.equal(reflowComplianceText("r) At least two viewing ports.\ns) Suitable bake out facilities."), "r) At least two viewing ports.\ns) Suitable bake out facilities.");
+});
+
 test("splits a literal section heading from its description without changing text", () => {
   const text = "6. MBE process control system\nElectronic Cabinets for PID controllers.";
   const parts = splitHeadingPrefix(text, "6. MBE process control system");

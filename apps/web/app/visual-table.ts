@@ -40,7 +40,7 @@ export function mergeVisualExportGroups<T extends VisualTableRow>(rows: T[]): T[
     if (row.exportGroupId && previous?.exportGroupId === row.exportGroupId) {
       merged[merged.length - 1] = {
         ...previous,
-        text: `${previous.text} ${row.text}`,
+        text: `${previous.text}\n${row.text}`,
       };
     } else {
       merged.push(row);
