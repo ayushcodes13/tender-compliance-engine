@@ -2,7 +2,7 @@
 
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
-import { isTechnicalRequirementCandidate, splitTechnicalCandidates } from "./extraction-rules";
+import { isClearlyAdministrativeClause, isTechnicalRequirementCandidate, splitTechnicalCandidates } from "./extraction-rules";
 import { extractStructuredTechnicalSection, type PdfRectangle, type SourceTextItem, type StructuredSection } from "./pdf-structure";
 import { shouldUseStructuredTableExtraction } from "./extraction-route";
 import { displayLinesForQuote, type PositionedTextItem } from "./visual-lines";
@@ -845,6 +845,10 @@ export async function analyzeTender(form: FormData) {
       return discardContainedSuggestions(samePageQuotes, [candidate]).length > 0;
     });
 
+    if (parsedCandidates.length > MAX_REQUIREMENTS) {
+      return { ok: false as const, error: "This tender produced more than 250 matched technical rows, beyond this MVP's review limit. Upload a shorter technical section so no requirements are silently omitted." };
+    }
+
     let rejected = 0;
     const seen = new Set<string>();
     const requirements: Requirement[] = [];
@@ -853,7 +857,7 @@ export async function analyzeTender(form: FormData) {
       const quote = typeof candidate.quote === "string" ? candidate.quote.trim() : "";
       const sourcePage = pages.find((page) => page.page === pageNumber);
       const isSection = candidate.row_type === "section" || candidate.row_type === "optional_heading";
-      if (!sourcePage || !quote || quote.length > 5_000 || (visualSheetType !== "compliance-sheet" && !isSection && !isTechnicalRequirementCandidate(quote))) {
+      if (!sourcePage || !quote || quote.length > 5_000 || isClearlyAdministrativeClause(quote) || (visualSheetType !== "compliance-sheet" && !isSection && !isTechnicalRequirementCandidate(quote))) {
         rejected += 1;
         continue;
       }
