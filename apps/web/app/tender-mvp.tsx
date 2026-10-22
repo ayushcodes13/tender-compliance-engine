@@ -10,6 +10,7 @@ import { PROCESSING_STEPS, processingStepIndex, type ProcessingProgress } from "
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
+import type { RequirementSourceReference } from "./source-document";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -31,6 +32,7 @@ type Requirement = {
   category: string;
   page: number;
   quote: string;
+  sourceReference: RequirementSourceReference;
   selectableTextQuote?: string;
   bbox: BoundingBox | null;
   precision: "exact" | "visual-ocr" | "page-only";
@@ -41,6 +43,7 @@ type Analysis = {
   filename: string;
   pageCount: number;
   textPages: number;
+  document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number };
   sectionTitle?: string;
   sectionHeading?: string;
   sourceColumns?: Array<{ header: string; role: "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other" }>;
