@@ -36,6 +36,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 - [x] README and deployment runbook give accurate local steps and limits; hosted steps are documented but not yet verified against an authenticated account.
 - [x] GPT-6 Luna is the sole model provider; credentials are server-side and no Ollama/open-source model fallback is configured.
 - [x] The server builds a source-preserving document model with a SHA-256 fingerprint, physical PDF page numbers, original PDF.js page text, text-block offsets and page-coordinate boxes. For selected vector-table pages it also retains row/cell geometry and identity. Accepted requirements carry a document/version reference; unique native-text matches include the original page excerpt and page-local offsets, while unmatched quotes do not become source excerpts. Visual transcriptions keep native context, OCR text, confidence, and approximate location separate. Printed page numbers remain unknown when the parser cannot determine them.
+- [x] A single editable response sheet is not built when selected compliance pages expose different column headers or roles. Page-specific model column proposals must match literal source text, and visible maps must agree before they can share one sheet; incompatible or unsupported maps stop with a review message.
 
 ### Limits
 
@@ -44,6 +45,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 - One bounded synchronous extraction call; no background jobs or persistence.
 - A validated quote and bounding box prove the displayed citation only, not exhaustive tender coverage.
 - Grid-based row separation depends on vector border geometry. When borders are merged, missing, or malformed, the model-driven fallback and human review remain necessary; neither guarantees exhaustive coverage.
+- A layout mismatch is detected only when the page model reports visible column headers. Continuation pages without headers inherit the selected schedule layout; unseen layout changes on such pages can still require human review.
 - Model routing and extraction can miss technical requirements and are not proof of complete coverage; review every source citation.
 - Requirements remain in human review until the user checks them.
 - The hosted workflow is not complete until a fresh hosted upload and DOCX export are inspected.
