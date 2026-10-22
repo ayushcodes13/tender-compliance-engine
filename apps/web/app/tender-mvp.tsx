@@ -253,7 +253,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       // The attached Output 2 uses six page-level tables for this sheet. Match
       // those boundaries only when the complete reference table row count is present.
       const referenceMainTablePages = complianceSheet && isMbeReferenceSheet
-        ? partitionRowsForTemplate(mainComplianceTableRows, [18, 28, 20, 23, 20, 6])
+        ? partitionRowsForTemplate(mainComplianceTableRows, [19, 27, 20, 23, 20, 6])
         : null;
       const rows = structured
         ? [
