@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format.ts";
+import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format.ts";
 
 test("scales PDF cell heights to DOCX row heights and enforces compact minimums", () => {
   assert.equal(complianceRowHeightTwips(46.1, false), 889);
@@ -40,4 +40,9 @@ test("accepts source line wrapping between heading words", () => {
 test("rejects a heading suggestion that is not a literal prefix", () => {
   assert.equal(splitHeadingPrefix("6. MBE process control system", "MBE process"), null);
   assert.equal(splitHeadingPrefix("MBE process control system", "6. MBE process"), null);
+});
+
+test("merges only adjacent repeated heading values", () => {
+  const values = ["Universal Testing Machine", "Universal Testing Machine", "Accessories", "Accessories", "Load Cells"];
+  assert.deepEqual(values.map((_, index) => verticalMergeAt(values, index)), ["restart", "continue", "restart", "continue", undefined]);
 });

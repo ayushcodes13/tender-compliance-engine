@@ -31,3 +31,15 @@ export function splitHeadingPrefix(text: string, headingPrefix?: string): Headin
     remainder: text.slice(match[0].length),
   };
 }
+
+/** Returns the vertical-merge instruction for a value repeated in adjacent rows. */
+export function verticalMergeAt(values: string[], index: number): "restart" | "continue" | undefined {
+  const value = values[index];
+  if (!value) return undefined;
+  let first = index;
+  let last = index;
+  while (first > 0 && values[first - 1] === value) first -= 1;
+  while (last + 1 < values.length && values[last + 1] === value) last += 1;
+  if (first === last) return undefined;
+  return index === first ? "restart" : "continue";
+}

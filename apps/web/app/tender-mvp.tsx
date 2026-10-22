@@ -8,7 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
 import { prepareVisualComplianceRows } from "./visual-table";
-import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format";
+import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -187,18 +187,20 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, WidthType } = await import("docx");
-      const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19, indent = 0, headingPrefix?: string) => {
-        const headingParts = splitHeadingPrefix(text, headingPrefix);
+      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, VerticalMergeType, WidthType } = await import("docx");
+      const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19, indent = 0, headingPrefix?: string, verticalMerge?: "restart" | "continue") => {
+        const displayText = verticalMerge === "continue" ? "" : text;
+        const headingParts = splitHeadingPrefix(displayText, headingPrefix);
         return new TableCell({
         children: [new Paragraph({
           alignment,
           ...(indent ? { indent: { left: indent } } : {}),
           children: headingParts
             ? [new TextRun({ text: headingParts.heading, bold: true, size, font: "Calibri" }), new TextRun({ text: headingParts.remainder, bold, size, font: "Calibri" })]
-            : [new TextRun({ text, bold, size, font: "Calibri" })],
+            : [new TextRun({ text: displayText, bold, size, font: "Calibri" })],
         })],
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
+        ...(verticalMerge ? { verticalMerge: verticalMerge === "restart" ? VerticalMergeType.RESTART : VerticalMergeType.CONTINUE } : {}),
         });
       };
       const structured = analysis.extractionMode === "structured-table";
@@ -363,11 +365,18 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           }
         }
       }
+      const headingColumnIndex = exportColumns.findIndex((column) => column.role === "heading");
+      const headingValues = responseRows.map((row) => headingColumnIndex < 0 ? "" : row.values[headingColumnIndex] ?? "");
       const rows = [
         new TableRow({ tableHeader: true, children: exportColumns.map((column) => cell(column.header, true, AlignmentType.CENTER)) }),
-        ...responseRows.map((item) => new TableRow({
+        ...responseRows.map((item, rowIndex) => new TableRow({
           cantSplit: true,
-          children: item.values.map((value) => cell(value, item.section)),
+          children: item.values.map((value, columnIndex) => {
+            const merge = columnIndex === headingColumnIndex
+              ? verticalMergeAt(headingValues, rowIndex)
+              : undefined;
+            return cell(value, item.section, undefined, 19, 0, undefined, merge);
+          }),
         })),
       ];
       const complianceContent = [
