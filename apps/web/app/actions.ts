@@ -16,7 +16,7 @@ import type { ProcessingProgress } from "./processing-progress";
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
-import { buildCoverageReport, type CoverageAuditStatus, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
+import { buildCoverageReport, collectSourceTableCoverageRows, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
@@ -597,6 +597,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       sourceTableRowsExcludedAsHeaders: number | null;
       sourceTableRowsEmpty: number | null;
       sourceTableRowsUnmapped: number | null;
+      sourceTableCoverageRows: CoverageSourceRow[];
+      sourceTableRowsNotShown: number;
     }>();
     const pageAuditState = new Map<number, { total: number; completed: number; possibleOmissions: number }>();
     if (visualSheetType === "compliance-sheet" && visualPages.length
@@ -830,17 +832,18 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             };
           });
         });
-        const sourceRowsMappedToCandidates = new Set(requirements
-          .map((candidate) => candidate.source_row_index)
-          .filter((rowIndex): rowIndex is number => Number.isInteger(rowIndex)));
-        const sourceRowsExcludedAsHeaders = sourceRows.filter((row, index) => row.cells.some((cell) => cell.trim())
+        const candidateCountBySourceRow = new Map<number, number>();
+        for (const candidate of requirements) {
+          const rowIndex = candidate.source_row_index;
+          if (Number.isInteger(rowIndex)) candidateCountBySourceRow.set(rowIndex!, (candidateCountBySourceRow.get(rowIndex!) ?? 0) + 1);
+        }
+        const sourceRowsMappedToCandidates = new Set(candidateCountBySourceRow.keys());
+        const excludedSourceRowIndices = new Set(sourceRows.flatMap((row, index) => row.cells.some((cell) => cell.trim())
           && (labelByIndex.get(index)?.row_type === "header"
-            || isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header)))).length;
+            || isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header))) ? [index] : []));
+        const sourceRowsExcludedAsHeaders = excludedSourceRowIndices.size;
         const sourceRowsEmpty = sourceRows.filter((row) => row.cells.every((cell) => !cell.trim())).length;
-        const sourceRowsUnmapped = sourceRows.filter((row, index) => row.cells.some((cell) => cell.trim())
-          && labelByIndex.get(index)?.row_type !== "header"
-          && !isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header))
-          && !sourceRowsMappedToCandidates.has(index)).length;
+        const tableCoverageRows = collectSourceTableCoverageRows(sourceRows, candidateCountBySourceRow, excludedSourceRowIndices, page);
         for (const heading of looseHeadings) {
           if (typeof heading.quote !== "string" || !["section", "optional_heading"].includes(heading.row_type ?? "")) continue;
           const sourceBox = locateQuote(heading.quote, page.rawText, page.rawItemMap, page.positioned);
@@ -860,7 +863,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           sourceTableRowsMappedToCandidates: sourceRowsMappedToCandidates.size,
           sourceTableRowsExcludedAsHeaders: sourceRowsExcludedAsHeaders,
           sourceTableRowsEmpty: sourceRowsEmpty,
-          sourceTableRowsUnmapped: sourceRowsUnmapped,
+          sourceTableRowsUnmapped: tableCoverageRows.count,
+          sourceTableCoverageRows: tableCoverageRows.rows,
+          sourceTableRowsNotShown: tableCoverageRows.notShown,
         };
       }));
       for (const result of pageResults) pageExtractionState.set(result.page, {
@@ -870,6 +875,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         sourceTableRowsExcludedAsHeaders: result.sourceTableRowsExcludedAsHeaders,
         sourceTableRowsEmpty: result.sourceTableRowsEmpty,
         sourceTableRowsUnmapped: result.sourceTableRowsUnmapped,
+        sourceTableCoverageRows: result.sourceTableCoverageRows,
+        sourceTableRowsNotShown: result.sourceTableRowsNotShown,
       });
       const expectedPageColumns = sourceColumns.length
         ? sourceColumns
@@ -937,6 +944,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           sourceTableRowsExcludedAsHeaders: null,
           sourceTableRowsEmpty: null,
           sourceTableRowsUnmapped: null,
+          sourceTableCoverageRows: [],
+          sourceTableRowsNotShown: 0,
         });
       }
       sourceColumns = pageResults.flatMap((result) => result.ok ? result.parsed.columns ?? [] : []).length
@@ -1092,6 +1101,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         sourceTableRowsExcludedAsHeaders: null,
         sourceTableRowsEmpty: null,
         sourceTableRowsUnmapped: null,
+        sourceTableCoverageRows: [],
+        sourceTableRowsNotShown: 0,
       });
     }
     const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction" }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
@@ -1284,6 +1295,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         sourceTableRowsExcludedAsHeaders: extraction?.sourceTableRowsExcludedAsHeaders ?? null,
         sourceTableRowsEmpty: extraction?.sourceTableRowsEmpty ?? null,
         sourceTableRowsUnmapped: extraction?.sourceTableRowsUnmapped ?? null,
+        sourceTableCoverageRows: (extraction?.sourceTableCoverageRows ?? []).map((row) => ({
+          ...row,
+          sourceMatchedCandidates: requirements.filter((item) => item.page === page.page
+            && item.sourceReference.sourceCell?.rowIndex === row.rowNumber - 1).length,
+        })),
+        sourceTableRowsNotShown: extraction?.sourceTableRowsNotShown ?? 0,
         candidateSuggestions: unfilteredCandidates.filter((candidate) => candidate.page === page.page && candidate.suggestionOrigin === "extraction").length,
         sourceMatchedRows: requirements.filter((item) => item.page === page.page).length,
         sourceMatchedRequirements: requirements.filter((item) => item.page === page.page && item.rowType === "requirement").length,
