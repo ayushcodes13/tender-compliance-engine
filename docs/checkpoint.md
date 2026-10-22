@@ -27,6 +27,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 - [x] Example 2 uploaded freshly and extraction succeeded through the app's configured model path: 102 source-matched requirements from 37 pages; 5 non-matching suggestions discarded.
 - [x] Input 2 was uploaded freshly; visually legible text embedded as images in vector compliance-table cells is transcribed only at high model confidence, retained alongside the original selectable-text excerpt, and marked for human verification in the review UI. The generated response sheet includes the recovered phrases; a focused validator and regression tests guard selectable-word preservation.
 - [x] Displayed requirements use unique literal quotes matched to selectable text on their cited pages; all start unreviewed. The PDF page and bounding-box overlay render in the browser.
+- [x] Compliance schedules are selected with the model, their visible columns are mapped dynamically, and individual source cells are separated using table grid boundaries where available. Exact source-cell rows are retained even when their wording repeats or is contained in another row; page continuations stay linked to their source heading and both page citations; requirement quotes still must match selectable source text.
 - [x] A DOCX downloaded and was inspected: 102 tender rows, 102 page references, and 102 blank OEM response cells.
 - [ ] The response sheet is editable before download; row edits and removals affect DOCX, PDF, and Excel exports, while source page citations remain locked and source evidence remains available.
 - [x] Desktop review layout was visually inspected; a reviewer mark changed the checked count from 0 to 1. Narrow layout rules are present; narrow-screen visual QA remains to be completed.
@@ -36,10 +37,11 @@ This is a deliberate simplification requested by the user. The deployed product 
 
 ### Limits
 
-- Scanned PDFs without extractable table structure remain unsupported. Visual transcription currently applies only to image text embedded inside detected vector compliance-table cells; it is not general-purpose OCR.
+- Scanned PDFs without selectable text and usable source structure remain unsupported. Visual transcription currently applies only to image text embedded inside detected vector compliance-table cells; it is not general-purpose OCR.
 - Visually transcribed wording is a reviewer aid, not an exact selectable-text citation. The UI labels the warning and highlights the whole source row; a human must verify every character against the rendered PDF.
 - One bounded synchronous extraction call; no background jobs or persistence.
 - A validated quote and bounding box prove the displayed citation only, not exhaustive tender coverage.
+- Grid-based row separation depends on vector border geometry. When borders are merged, missing, or malformed, the model-driven fallback and human review remain necessary; neither guarantees exhaustive coverage.
 - The technical-only rule screen can miss technical requirements and is not proof of complete coverage; review every source citation.
 - Requirements remain in human review until the user checks them.
 - The hosted workflow is not complete until a fresh hosted upload and DOCX export are inspected.

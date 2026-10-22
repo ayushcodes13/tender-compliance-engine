@@ -6,7 +6,7 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
-import { analyzeTender } from "./actions";
+import { PROCESSING_STEPS, processingStepIndex, type ProcessingProgress } from "./processing-progress";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
@@ -90,6 +90,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [activeId, setActiveId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [processing, setProcessing] = useState<ProcessingProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
@@ -155,6 +156,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     setError(null);
+    setProcessing(null);
     setAnalysis(null);
     setResponseSheet(null);
     setSheetEdited(false);
@@ -167,11 +169,39 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     if (!file) return;
     setBusy(true);
     setError(null);
+    setProcessing({ stage: "reading", message: "Uploading your PDF and reading its pages" });
     const body = new FormData();
     body.set("file", file);
     try {
-      const result = await analyzeTender(body);
-      if (!result.ok) throw new Error(result.error);
+      const response = await fetch("/api/analyze", { method: "POST", body });
+      if (!response.ok) {
+        const problem = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(problem?.error || "The extraction service could not start.");
+      }
+      if (!response.body) throw new Error("The extraction service did not return a progress stream. Please retry.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const streamedResult: { current: { ok: boolean; analysis?: Analysis; error?: string } | null } = { current: null };
+      const handleEvent = (packet: string) => {
+        const data = packet.split(/\r?\n/).find((line) => line.startsWith("data: "))?.slice(6);
+        if (!data) return;
+        const event = JSON.parse(data) as { type: string; progress?: ProcessingProgress; result?: { ok: boolean; analysis?: Analysis; error?: string } };
+        if (event.type === "progress" && event.progress) setProcessing(event.progress);
+        if (event.type === "result" && event.result) streamedResult.current = event.result;
+      };
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const packets = buffer.split(/\r?\n\r?\n/);
+        buffer = packets.pop() ?? "";
+        packets.forEach(handleEvent);
+        if (done) break;
+      }
+      if (buffer.trim()) handleEvent(buffer);
+      const result = streamedResult.current;
+      if (!result) throw new Error("The extraction stream ended before the tender was ready. Please retry.");
+      if (!result.ok) throw new Error(result.error || "The tender could not be processed.");
       const payload = result.analysis as Analysis;
       setAnalysis(payload);
       setResponseSheet(buildResponseSheet(payload));
@@ -182,6 +212,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       setError(cause instanceof Error ? cause.message : "The tender could not be processed.");
     } finally {
       setBusy(false);
+      setProcessing(null);
     }
   }
 
@@ -608,14 +639,28 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span><span className="mvp-upload-private"><span /> Single browser session</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
-                <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} />
+                <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} disabled={busy} />
                 <span className="mvp-upload-icon"><Upload size={20} /></span>
                 {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>Choose a tender PDF</strong><span>PDF files up to 4 MB</span></>}
                 <span className="mvp-browse-link">Select PDF <ArrowUpRight size={14} /></span>
               </label>
               <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
-                {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Reading the PDF…</> : <>Find requirements <ArrowRight size={17} /></>}
+                {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Processing tender…</> : <>Find requirements <ArrowRight size={17} />
+                </>}
               </button>
+              {busy && processing && <section className="mvp-processing" role="status" aria-live="polite" aria-atomic="true">
+                <div className="mvp-processing-heading"><LoaderCircle className="mvp-spin" size={17} /><div><strong>{processing.message}</strong><span>Long tenders can take 15–30 seconds or longer. Keep this page open; progress updates as each step finishes.</span></div></div>
+                <ol className="mvp-processing-steps">
+                  {PROCESSING_STEPS.map((step, index) => {
+                    const current = processingStepIndex(processing.stage);
+                    const state = index < current ? "complete" : index === current ? "active" : "waiting";
+                    return <li key={step.id} className={`is-${state}`} aria-current={state === "active" ? "step" : undefined}>
+                      <span>{state === "complete" ? "✓" : state === "active" ? <LoaderCircle className="mvp-spin" size={14} /> : index + 1}</span>
+                      <span>{step.label}</span>
+                    </li>;
+                  })}
+                </ol>
+              </section>}
               {error && <p className="mvp-error" role="alert">{error}</p>}
             </form>
             <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Review every quote</span><span><ShieldCheck size={15} /> Nothing marked checked for you</span></div>
@@ -703,10 +748,13 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   </td>;
                 })}
                 <td className="mvp-sheet-row-actions">
-                  <button type="button" className="mvp-sheet-source-link" onClick={() => {
-                    const item = analysis.requirements.find((requirement) => requirement.id === row.sourceRequirementId);
-                    if (item) openRequirement(item);
-                  }}>View source</button>
+                  {(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId) => {
+                    const item = analysis.requirements.find((requirement) => requirement.id === sourceId);
+                    if (!item) return null;
+                    return <button type="button" className="mvp-sheet-source-link" key={`${row.id}-${sourceId}`} onClick={() => openRequirement(item)}>
+                      {row.sourceRequirementIds?.length > 1 ? `Page ${item.page}` : "View source"}
+                    </button>;
+                  })}
                   <button type="button" className="mvp-sheet-remove" aria-label={`Remove response row ${rowIndex + 1}`} onClick={() => removeSheetRow(row.id)}><X size={15} /> Remove</button>
                 </td>
               </tr>;

@@ -7,6 +7,8 @@ export type ResponseSheetColumn = {
 export type ResponseSheetRow = {
   id: string;
   sourceRequirementId: string;
+  sourceRequirementIds: string[];
+  continuationOfPrevious?: boolean;
   values: string[];
   section?: boolean;
 };
@@ -16,6 +18,8 @@ export type ResponseRequirement = {
   text: string;
   quote: string;
   page: number;
+  continuationOfPrevious?: boolean;
+  continuationSourceCellsBlank?: boolean;
   parameter?: string;
   specifications?: string[];
   sourceCells?: string[];
@@ -70,6 +74,8 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     columns.push({ header: "OEM response", role: "response" });
   }
   columns.push({ header: "Source page", role: "page" });
+  const sourceHeadingIndex = sourceColumns.findIndex((column) => column.role === "heading");
+  const sourceSerialIndex = sourceColumns.findIndex((column) => column.role === "serial");
 
   const rows: ResponseSheetRow[] = [];
   const addRow = (item: ResponseRequirement, heading: string, requirement: string, rowIndex: number, section = false) => {
@@ -80,7 +86,17 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
       if (column.role === "page") return `Page ${item.page}`;
       return column.sourceIndex === undefined ? "" : item.sourceCells?.[column.sourceIndex] ?? "";
     });
-    rows.push({ id: `${item.id}:${rowIndex}`, sourceRequirementId: item.id, values, ...(section ? { section: true } : {}) });
+    rows.push({
+      id: `${item.id}:${rowIndex}`,
+      sourceRequirementId: item.id,
+      sourceRequirementIds: [item.id],
+      ...(item.continuationOfPrevious && rowIndex === 0
+        && item.continuationSourceCellsBlank === true
+        ? { continuationOfPrevious: true }
+        : {}),
+      values,
+      ...(section ? { section: true } : {}),
+    });
   };
 
   let activeHeading = source.sheetProductTitle || source.sectionTitle || "";
@@ -99,7 +115,18 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
   }
 
   let productHeading = "";
-  for (const item of source.requirements) {
+  let previousSourceHeading = "";
+  for (const originalItem of source.requirements) {
+    let item = originalItem;
+    const sourceHeading = item.sourceCells?.[sourceHeadingIndex]?.trim() ?? "";
+    if (sourceHeading) previousSourceHeading = sourceHeading;
+    else if (item.continuationOfPrevious && previousSourceHeading && sourceHeadingIndex >= 0) {
+      const sourceCells = [...(item.sourceCells ?? [])];
+      const sourceContinuationBlank = sourceHeadingIndex >= 0 && !item.sourceCells?.[sourceHeadingIndex]?.trim()
+        && (sourceSerialIndex < 0 || !item.sourceCells?.[sourceSerialIndex]?.trim());
+      sourceCells[sourceHeadingIndex] = previousSourceHeading;
+      item = { ...item, sourceCells, continuationSourceCellsBlank: sourceContinuationBlank };
+    }
     const label = item.text.trim();
     if (structuralLabel.test(label)) continue;
     if (item.rowType === "optional_heading") {
@@ -130,6 +157,24 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     }
     const heading = productHeading || activeHeading || source.sheetHeading || "Tender requirement";
     splitRequirementSubpoints(requirement).forEach((subpoint, rowIndex) => addRow(item, heading, subpoint, rowIndex));
+  }
+  if (source.extractionMode === "visual-compliance-sheet") {
+    const requirementIndex = columns.findIndex((column) => column.role === "requirement");
+    const pageIndex = columns.findIndex((column) => column.role === "page");
+    const merged: ResponseSheetRow[] = [];
+    for (const row of rows) {
+      const previous = merged.at(-1);
+      if (row.continuationOfPrevious && previous && requirementIndex >= 0 && pageIndex >= 0) {
+        previous.values[requirementIndex] = [previous.values[requirementIndex], row.values[requirementIndex]].filter(Boolean).join(" ");
+        const pages = [...new Set([previous.values[pageIndex], row.values[pageIndex]]
+          .flatMap((value) => [...value.matchAll(/\bPage\s+(\d+)\b/g)].map((match) => Number(match[1]))))];
+        previous.values[pageIndex] = pages.length > 1 ? `Pages ${pages.join(" and ")}` : previous.values[pageIndex];
+        previous.sourceRequirementIds = [...previous.sourceRequirementIds, ...row.sourceRequirementIds];
+      } else {
+        merged.push(row);
+      }
+    }
+    return { columns, rows: merged };
   }
   return { columns, rows };
 }

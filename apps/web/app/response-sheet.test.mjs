@@ -57,3 +57,54 @@ test("keeps source-defined columns and creates distinct IDs for split requiremen
   assert.notEqual(sheet.rows[0].id, sheet.rows[1].id);
   assert.deepEqual(sheet.rows.map((row) => row.values[1]), ["performance", "• accuracy"]);
 });
+
+test("preserves every source column for an explicit multi-column compliance report", () => {
+  const sheet = buildResponseSheet({
+    sourceColumns: [
+      { header: "S. No.", role: "serial" },
+      { header: "Specification", role: "heading" },
+      { header: "Description", role: "specification" },
+      { header: "Comply (Yes/No)", role: "compliance" },
+      { header: "Remarks/Justifications", role: "remark" },
+    ],
+    extractionMode: "visual-compliance-sheet",
+    requirements: [
+      { id: "req-1", text: "≥ 300 mm", quote: "≥ 300 mm", sourceCells: ["3", "Thickness", "≥ 300 mm", "", ""], page: 20 },
+      { id: "req-2", text: "≥ 4 mm", quote: "≥ 4 mm", sourceCells: ["4", "Top skin thickness", "≥ 4 mm", "", ""], page: 20 },
+    ],
+  });
+  assert.deepEqual(sheet.columns.map((column) => column.header), [
+    "S. No.", "Specification", "Description", "Comply (Yes/No)", "Remarks/Justifications", "Source page",
+  ]);
+  assert.deepEqual(sheet.rows.map((row) => row.values), [
+    ["3", "Thickness", "≥ 300 mm", "", "", "Page 20"],
+    ["4", "Top skin thickness", "≥ 4 mm", "", "", "Page 20"],
+  ]);
+});
+
+test("merges blank page continuations but keeps a numbered requirement on the next page separate", () => {
+  const sheet = buildResponseSheet({
+    sourceColumns: [
+      { header: "S. No.", role: "serial" },
+      { header: "Specification", role: "heading" },
+      { header: "Description", role: "specification" },
+    ],
+    extractionMode: "visual-compliance-sheet",
+    requirements: [
+      { id: "req-3", text: "6 EA", quote: "6 EA", sourceCells: ["3", "Number of Isolators", "6 EA"], page: 23 },
+      { id: "req-5", text: "1.5 Hz or lower", quote: "1.5 Hz or lower", sourceCells: ["5", "Vertical Isolation, Resonance", "1.5 Hz or lower"], page: 24, continuationOfPrevious: true },
+      { id: "req-10", text: "The service requirement starts here.", quote: "The service requirement starts here.", sourceCells: ["10", "Service", "The service requirement starts here."], page: 25 },
+      { id: "req-11", text: "warranty will be extended accordingly.", quote: "warranty will be extended accordingly.", sourceCells: ["", "", "warranty will be extended accordingly."], page: 26, continuationOfPrevious: true },
+    ],
+  });
+  assert.equal(sheet.rows.length, 3);
+  assert.deepEqual(sheet.rows.slice(0, 2).map((row) => row.values.slice(0, 3)), [
+    ["3", "Number of Isolators", "6 EA"],
+    ["5", "Vertical Isolation, Resonance", "1.5 Hz or lower"],
+  ]);
+  assert.deepEqual(sheet.rows[2].values.slice(0, 3), [
+    "10", "Service", "The service requirement starts here. warranty will be extended accordingly.",
+  ]);
+  assert.equal(sheet.rows[2].values.at(-1), "Pages 25 and 26");
+  assert.deepEqual(sheet.rows[2].sourceRequirementIds, ["req-10", "req-11"]);
+});

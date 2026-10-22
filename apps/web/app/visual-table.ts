@@ -95,6 +95,20 @@ export function discardContainedSuggestions<T extends { quote?: unknown; row_typ
   });
 }
 
+/** Exact, individually bordered source cells may legitimately repeat words found in another row. */
+export function keepParsedSourceCandidate<T extends { quote?: unknown; row_type?: string; source_cells_exact?: boolean }>(
+  candidate: T,
+  samePageQuotes: string[],
+): boolean {
+  return candidate.source_cells_exact === true
+    || discardContainedSuggestions(samePageQuotes, [candidate]).length > 0;
+}
+
+export function sourceCandidateKey(page: number, quote: string, sourceCells?: string[]): string {
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  return `${page}:${normalize(quote)}:${sourceCells?.length ? normalize(sourceCells.join(" | ")) : ""}`;
+}
+
 export function splitSourceQuote(source: string, parts: string[]): string[] {
   const normalized = (value: string) => value.replace(/\s+/g, " ").trim();
   if (parts.length < 2 || parts.some((part) => !part.trim())) return [source];
