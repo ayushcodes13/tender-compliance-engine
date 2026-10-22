@@ -19,6 +19,7 @@ export type ResponseRequirement = {
   quote: string;
   page: number;
   continuationOfPrevious?: boolean;
+  continuationSourceCellsBlank?: boolean;
   parameter?: string;
   specifications?: string[];
   sourceCells?: string[];
@@ -73,6 +74,8 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     columns.push({ header: "OEM response", role: "response" });
   }
   columns.push({ header: "Source page", role: "page" });
+  const sourceHeadingIndex = sourceColumns.findIndex((column) => column.role === "heading");
+  const sourceSerialIndex = sourceColumns.findIndex((column) => column.role === "serial");
 
   const rows: ResponseSheetRow[] = [];
   const addRow = (item: ResponseRequirement, heading: string, requirement: string, rowIndex: number, section = false) => {
@@ -87,7 +90,10 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
       id: `${item.id}:${rowIndex}`,
       sourceRequirementId: item.id,
       sourceRequirementIds: [item.id],
-      ...(item.continuationOfPrevious && rowIndex === 0 ? { continuationOfPrevious: true } : {}),
+      ...(item.continuationOfPrevious && rowIndex === 0
+        && item.continuationSourceCellsBlank === true
+        ? { continuationOfPrevious: true }
+        : {}),
       values,
       ...(section ? { section: true } : {}),
     });
@@ -109,7 +115,6 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
   }
 
   let productHeading = "";
-  const sourceHeadingIndex = sourceColumns.findIndex((column) => column.role === "heading");
   let previousSourceHeading = "";
   for (const originalItem of source.requirements) {
     let item = originalItem;
@@ -117,8 +122,10 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     if (sourceHeading) previousSourceHeading = sourceHeading;
     else if (item.continuationOfPrevious && previousSourceHeading && sourceHeadingIndex >= 0) {
       const sourceCells = [...(item.sourceCells ?? [])];
+      const sourceContinuationBlank = sourceHeadingIndex >= 0 && !item.sourceCells?.[sourceHeadingIndex]?.trim()
+        && (sourceSerialIndex < 0 || !item.sourceCells?.[sourceSerialIndex]?.trim());
       sourceCells[sourceHeadingIndex] = previousSourceHeading;
-      item = { ...item, sourceCells };
+      item = { ...item, sourceCells, continuationSourceCellsBlank: sourceContinuationBlank };
     }
     const label = item.text.trim();
     if (structuralLabel.test(label)) continue;
