@@ -95,6 +95,17 @@ export function discardContainedSuggestions<T extends { quote?: unknown; row_typ
   });
 }
 
+export function discardContainedSuggestionsByPage<T extends { page?: number; quote?: unknown; row_type?: string }>(
+  draftRows: Array<{ page?: number; quote?: unknown }>,
+  suggestions: T[],
+): T[] {
+  return suggestions.filter((suggestion) => Number.isInteger(suggestion.page)
+    && discardContainedSuggestions(
+      draftRows.filter((draft) => draft.page === suggestion.page && typeof draft.quote === "string").map((draft) => draft.quote as string),
+      [suggestion],
+    ).length > 0);
+}
+
 /** Exact, individually bordered source cells may legitimately repeat words found in another row. */
 export function keepParsedSourceCandidate<T extends { quote?: unknown; row_type?: string; source_cells_exact?: boolean }>(
   candidate: T,
