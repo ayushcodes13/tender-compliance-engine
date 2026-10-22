@@ -88,6 +88,7 @@ There is no separate API service, worker, database, job queue, or Docker stack i
 ## Limits
 
 - Model-assisted extraction is a human-review draft, not an exhaustive completeness guarantee.
+- Successful reviews show a page coverage ledger with routed pages, detected table rows where geometry is available, source matches, rejected suggestions and audit state. A page audit that reports no gaps is not a completeness guarantee; paths without that audit are marked not run.
 - Structured table grouping currently requires selectable text, vector cell rectangles, a technical section heading, and the `Parameter` / `Required Specification` headers. Other table layouts use the configured GPT-6 Luna model path.
 - Scanned PDFs and OCR-heavy files are not supported by the current demo.
 - Review each candidate and check the original tender for omissions before using the exported sheet.
