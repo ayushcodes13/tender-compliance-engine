@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isTechnicalRequirementCandidate, splitTechnicalCandidates } from "./extraction-rules.ts";
+import { isClearlyAdministrativeClause, isTechnicalRequirementCandidate, splitTechnicalCandidates } from "./extraction-rules.ts";
 
 test("keeps product specifications and measured performance", () => {
   assert.equal(isTechnicalRequirementCandidate("The equipment shall operate at 220 V AC and 50 Hz."), true);
@@ -41,4 +41,14 @@ test("splits enumerated technical clauses into independently reviewable candidat
     "The equipment shall operate at 220 V.",
     "The instrument shall have 5 µm resolution.",
   ]);
+});
+
+test("LLM technical candidates are not rejected for lacking a known keyword", () => {
+  assert.equal(isClearlyAdministrativeClause("The cell source shall incorporate a computer-controlled all-metal valve."), false);
+  assert.equal(isClearlyAdministrativeClause("The control system shall log valve positions and water flow."), false);
+  assert.equal(isClearlyAdministrativeClause("The vendor shall provide price quotation including GST."), true);
+  assert.equal(isClearlyAdministrativeClause("The delivery schedule is ten months from purchase order."), true);
+  assert.equal(isClearlyAdministrativeClause("The firm should arrange the pre-dispatch inspection prior to packing and dispatching."), true);
+  assert.equal(isClearlyAdministrativeClause("The articles shall be of the best quality and of the kind as per the requirement of the institution."), true);
+  assert.equal(isClearlyAdministrativeClause("The control software shall have a pre-dispatch test mode."), false);
 });
