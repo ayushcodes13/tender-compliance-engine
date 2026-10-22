@@ -1,6 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { discardContainedSuggestions, keepParsedSourceCandidate, mergeVisualExportGroups, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, sourceCandidateKey, splitSourceQuote } from "./visual-table.ts";
+import { discardContainedSuggestions, discardContainedSuggestionsByPage, keepParsedSourceCandidate, mergeVisualExportGroups, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, sourceCandidateKey, splitSourceQuote } from "./visual-table.ts";
+
+test("coverage recovery removes represented rows only from the same source page", () => {
+  const draft = [{ page: 3, quote: "Range: 0 to 100 mm" }];
+  const suggestions = [
+    { page: 3, quote: "0 to 100 mm" },
+    { page: 4, quote: "0 to 100 mm" },
+    { page: 4, quote: "Probe travel: 25 mm" },
+  ];
+
+  assert.deepEqual(discardContainedSuggestionsByPage(draft, suggestions), [
+    { page: 4, quote: "0 to 100 mm" },
+    { page: 4, quote: "Probe travel: 25 mm" },
+  ]);
+});
 
 test("keeps the compliance response rows in source order across source-page boundaries", () => {
   const rows = [
