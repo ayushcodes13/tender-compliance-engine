@@ -1,8 +1,8 @@
-/** Keep structured geometry extraction as the no-vision fallback. */
+/** Prefer exact source-cell geometry when the tender has a recognized two-column technical table. */
 export function shouldUseStructuredTableExtraction(input: {
   hasStructuredPages: boolean;
   hasVisualPages: boolean;
   hasModelCredentials: boolean;
 }): boolean {
-  return input.hasStructuredPages && (!input.hasVisualPages || !input.hasModelCredentials);
+  return input.hasStructuredPages;
 }

@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { shouldUseStructuredTableExtraction } from "./extraction-route.ts";
 
-test("uses visual interpretation when structured and visual table evidence and credentials exist", () => {
+test("prefers exact source-cell geometry when a recognized technical table exists", () => {
   assert.equal(shouldUseStructuredTableExtraction({
     hasStructuredPages: true,
     hasVisualPages: true,
     hasModelCredentials: true,
-  }), false);
+  }), true);
 });
 
-test("keeps structured extraction as fallback when visual interpretation is unavailable", () => {
+test("uses structured extraction without requiring a visual renderer or model credential", () => {
   assert.equal(shouldUseStructuredTableExtraction({
     hasStructuredPages: true,
     hasVisualPages: false,

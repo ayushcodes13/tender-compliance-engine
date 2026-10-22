@@ -8,7 +8,6 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
 import { prepareVisualComplianceRows } from "./visual-table";
-import { attachLeadingContinuation, partitionRowsAtMarkers, splitRowBeforeLiteral } from "./compliance-pagination";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix } from "./compliance-format";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
@@ -19,6 +18,7 @@ type Requirement = {
   text: string;
   parameter?: string;
   specifications?: string[];
+  sourceCells?: string[];
   remark?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
@@ -42,6 +42,7 @@ type Analysis = {
   textPages: number;
   sectionTitle?: string;
   sectionHeading?: string;
+  sourceColumns?: Array<{ header: string; role: "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other" }>;
   sheetTitle?: string;
   sheetHeading?: string;
   sheetProductTitle?: string;
@@ -50,6 +51,13 @@ type Analysis = {
   extractionMode?: "rule-based-preview" | "structured-table" | "visual-compliance-sheet";
   reviewNote: string;
 };
+
+function splitRequirementSubpoints(text: string): string[] {
+  return text
+    .split(/(?=[\uF0B7\u2022\u25CF\u25AA]\s*|(?<=\s)o\s+(?!C\b)(?=[A-Z0-9])|(?<=\s)[1-9]\.\s+(?=[A-Z]))/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
 
 function TenderReviewMark() {
   return (
@@ -179,13 +187,22 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, SectionType, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, WidthType } = await import("docx");
-      const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19) => new TableCell({
-        children: [new Paragraph({ alignment, children: [new TextRun({ text, bold, size, font: "Calibri" })] })],
+      const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, WidthType } = await import("docx");
+      const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19, indent = 0, headingPrefix?: string) => {
+        const headingParts = splitHeadingPrefix(text, headingPrefix);
+        return new TableCell({
+        children: [new Paragraph({
+          alignment,
+          ...(indent ? { indent: { left: indent } } : {}),
+          children: headingParts
+            ? [new TextRun({ text: headingParts.heading, bold: true, size, font: "Calibri" }), new TextRun({ text: headingParts.remainder, bold, size, font: "Calibri" })]
+            : [new TextRun({ text, bold, size, font: "Calibri" })],
+        })],
         margins: { top: 100, bottom: 100, left: 120, right: 120 },
-      });
+        });
+      };
       const structured = analysis.extractionMode === "structured-table";
-      const complianceSheet = analysis.extractionMode === "visual-compliance-sheet";
+      const complianceSheet = false;
       const complianceCell = (text: string, bold = false, size = 19, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], rowType?: Requirement["rowType"], headingPrefix?: string, verticalAlign?: (typeof VerticalAlignTable)[keyof typeof VerticalAlignTable], pageContinuation?: string) => {
         const segments = pageContinuation === undefined ? [text] : [pageContinuation, text];
         return new TableCell({
@@ -256,72 +273,103 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         complianceSpacer,
         ...mainComplianceExportRows.map((item) => complianceRow(item)),
       ];
-      const isMbeReferenceSheet = analysis.sheetProductTitle === "Molecular Beam Epitaxy (MBE) System";
-      // Match the attached MBE response's visible page boundaries only when every
-      // anchored source row is present. These presentation fragments never alter
-      // the extracted requirement kept in analysis/review state.
-      const referenceHolderRows = complianceSheet && isMbeReferenceSheet
-        ? splitRowBeforeLiteral(mainComplianceExportRows, "p) Molybdenum substrate holder", "included.")
-        : null;
-      const referenceDisplayRows = referenceHolderRows
-        ? splitRowBeforeLiteral(referenceHolderRows, "The control system shall provide automatic long-term logging", "process parameters including")
-        : null;
-      const referenceMainItemPages = referenceDisplayRows
-        ? partitionRowsAtMarkers(referenceDisplayRows, [
-          "Blank substrate holder should also be",
-          "d) Appropriate isolation gate valves throughout",
-          "The control system shall provide automatic long-term logging of all critical",
-          "11. Growth test performed on - site as part of system acceptance",
-          "o) Vendor should provide all accessories and utilities required for full operation of MBE.",
-        ])
-        : null;
-      type ReferenceExportRequirement = Requirement & { pageContinuation?: string };
-      const referenceMainDisplayPages: ReferenceExportRequirement[][] | null = referenceMainItemPages
-        ? referenceMainItemPages.map((pageRows, index) => {
-          if (index === 1 || index === 3) return attachLeadingContinuation(pageRows) ?? [];
-          return pageRows.map((item) => ({ ...item }));
-        })
-        : null;
-      const referenceMainTablePages = referenceMainDisplayPages?.every((pageRows) => pageRows.length > 0)
-        ? referenceMainDisplayPages.map((pageRows, index) => [
-        ...(index === 0 ? [complianceHeader, complianceSpacer] : []),
-        ...pageRows.map((item) => complianceRow(item, false, item.pageContinuation)),
-      ])
-        : null;
-      const rows = structured
+      const sourceColumns = structured
         ? [
-          new TableRow({ tableHeader: true, children: [
-            cell("Parameter", true, AlignmentType.CENTER, 19),
-            cell("Required Specification", true, AlignmentType.CENTER, 19),
-            cell("Compliance (Yes / No)", true, AlignmentType.CENTER, 19),
-            cell("Any remarks", true, AlignmentType.CENTER, 19),
-          ] }),
-          ...analysis.requirements.map((item) => {
-            const specificationParagraphs = (item.specifications ?? []).map((specification) => new Paragraph({
-              children: [new TextRun({ text: item.quote.startsWith("•") ? `• ${specification}` : specification, size: 19, font: "Calibri" })],
-              spacing: { after: 40 },
-            }));
-            return new TableRow({
-              cantSplit: true,
-              children: [
-                cell(item.parameter ?? item.text, true, undefined, 19),
-                new TableCell({
-                  children: specificationParagraphs.length ? specificationParagraphs : [new Paragraph("")],
-                  margins: { top: 100, bottom: 100, left: 120, right: 120 },
-                }),
-                cell(""),
-                cell(""),
-              ],
-            });
-          }),
+          { header: "Parameter", role: "heading" as const },
+          { header: "Required Specification", role: "specification" as const },
+          { header: "Compliance (Yes / No)", role: "compliance" as const },
+          { header: "Any remarks", role: "remark" as const },
         ]
-        : [
-          new TableRow({ tableHeader: true, children: [cell("Tender requirement", true), cell("OEM response", true), cell("Source", true)] }),
-          ...analysis.requirements.map((item) => new TableRow({
-            cantSplit: true,
-            children: [cell(item.text), cell(""), cell(`Page ${item.page}`)],
-          })),
-        ];
+        : analysis.sourceColumns?.length
+          ? analysis.sourceColumns
+          : [{ header: "Tender specification", role: "specification" as const }];
+      type ExportColumn = { header: string; role: "heading" | "requirement" | "source" | "response" | "page"; sourceIndex?: number };
+      const hasHeadingColumn = sourceColumns.some((column) => column.role === "heading");
+      const exportColumns: ExportColumn[] = sourceColumns.flatMap((column, index): ExportColumn[] => {
+        if (column.role === "heading") return [{ header: column.header || "Heading", role: "heading", sourceIndex: index }];
+        if (column.role === "specification") return hasHeadingColumn
+          ? [{ header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }]
+          : [{ header: "Heading", role: "heading" }, { header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }];
+        return [{ header: column.header || `Source column ${index + 1}`, role: "source", sourceIndex: index }];
+      });
+      const existingResponseField = sourceColumns.some((column) => ["compliance", "deviation", "remark"].includes(column.role));
+      if (!existingResponseField) exportColumns.push({ header: "OEM response", role: "response" });
+      exportColumns.push({ header: "Source page", role: "page" as const });
+      const responseRows: Array<{ values: string[]; section?: boolean }> = [];
+      const addResponseRow = (item: Requirement, heading: string, requirement: string) => {
+        const values = exportColumns.map((column) => {
+          if (column.role === "heading") return column.sourceIndex === undefined ? heading : item.sourceCells?.[column.sourceIndex] || heading;
+          if (column.role === "requirement") return requirement;
+          if (column.role === "response") return "";
+          if (column.role === "page") return `Page ${item.page}`;
+          return column.sourceIndex === undefined ? "" : item.sourceCells?.[column.sourceIndex] ?? "";
+        });
+        responseRows.push({ values });
+      };
+      const addSectionRow = (item: Requirement, heading: string, section: string) => {
+        const values = exportColumns.map((column) => {
+          if (column.role === "heading") return column.sourceIndex === undefined ? heading : item.sourceCells?.[column.sourceIndex] || heading;
+          if (column.role === "requirement") return section;
+          if (column.role === "page") return `Page ${item.page}`;
+          return column.sourceIndex === undefined ? "" : item.sourceCells?.[column.sourceIndex] ?? "";
+        });
+        responseRows.push({ values, section: true });
+      };
+      let activeHeading = analysis.sheetProductTitle || analysis.sectionTitle || "";
+      const structuralLabel = /^(?:section|part|chapter|annex(?:ure)?|schedule)\s*(?:[-:.)]?\s*)?(?:[ivxlcdm]+|\d+|[a-z])\s*[.:)-]?$/i;
+      if (structured) {
+        for (const item of analysis.requirements) {
+          const heading = item.parameter ?? item.text;
+          for (const specification of item.specifications?.length ? item.specifications : [item.quote]) {
+            for (const subpoint of splitRequirementSubpoints(specification)) {
+              addResponseRow(item, heading, subpoint.replace(/^\s*[•●]\s*/, ""));
+            }
+          }
+        }
+      } else {
+        let productHeading = "";
+        for (const item of analysis.requirements) {
+          const label = item.text.trim();
+          if (structuralLabel.test(label)) continue;
+          if (item.rowType === "optional_heading") {
+            if (productHeading) addSectionRow(item, productHeading, label);
+            else {
+              activeHeading = label;
+              addSectionRow(item, label, "");
+            }
+            continue;
+          }
+          if (item.rowType === "section") {
+            if (productHeading) addSectionRow(item, productHeading, label);
+            else if (!/^\d+(?:\.\d+)*\s/.test(label)) {
+              productHeading = label;
+              activeHeading = label;
+              addSectionRow(item, label, "");
+            } else {
+              activeHeading = label;
+              addSectionRow(item, label, "");
+            }
+            continue;
+          }
+          const split = splitHeadingPrefix(label, item.headingPrefix);
+          const requirement = split?.remainder.trim() || label;
+          if (split?.heading.trim()) {
+            productHeading ||= split.heading.trim();
+            activeHeading = productHeading;
+          }
+          const heading = productHeading || activeHeading || analysis.sheetHeading || "Tender requirement";
+          for (const subpoint of splitRequirementSubpoints(requirement)) {
+            addResponseRow(item, heading, subpoint);
+          }
+        }
+      }
+      const rows = [
+        new TableRow({ tableHeader: true, children: exportColumns.map((column) => cell(column.header, true, AlignmentType.CENTER)) }),
+        ...responseRows.map((item) => new TableRow({
+          cantSplit: true,
+          children: item.values.map((value) => cell(value, item.section)),
+        })),
+      ];
       const complianceContent = [
         new Paragraph({
           children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 23 })],
@@ -333,8 +381,6 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           children: [
             new TextRun({ text: analysis.sheetHeading, bold: true, size: 21 }),
             ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, underline: {}, color: "7F7F7F", size: 24 })] : []),
-            // This quantity appears in the user-supplied reference DOCX, not in the tender PDF.
-            ...(isMbeReferenceSheet ? [new TextRun({ text: " Total Qty. 01", bold: true, size: 24 })] : []),
           ],
           style: "BodyText",
         })] : []),
@@ -376,54 +422,30 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         new Table({
           rows,
           width: { size: 100, type: WidthType.PERCENTAGE },
-          columnWidths: structured ? [2340, 2340, 2340, 2340] : [5800, 2300, 1200],
+          columnWidths: (() => {
+            const weights = exportColumns.map((column) => {
+              if (column.role === "heading") return 1.35;
+              if (column.role === "requirement") return 3.4;
+              if (column.role === "page" || column.role === "response") return 1;
+              const sourceRole = column.sourceIndex === undefined ? undefined : sourceColumns[column.sourceIndex]?.role;
+              if (sourceRole === "serial") return 0.55;
+              if (sourceRole === "quantity") return 0.65;
+              if (sourceRole === "compliance") return 0.85;
+              if (sourceRole === "remark" || sourceRole === "deviation") return 1.45;
+              return 1;
+            });
+            const sum = weights.reduce((total, weight) => total + weight, 0);
+            const availableWidth = exportColumns.length > 4 ? 15_200 : 10_400;
+            const widths = weights.map((weight) => Math.floor(availableWidth * weight / sum));
+            widths[widths.length - 1] += availableWidth - widths.reduce((total, width) => total + width, 0);
+            return widths;
+          })(),
         }),
       ];
-      const compliancePageProperties = {
-        // Preserve enough usable height for the reference's page-two table
-        // group; otherwise its final short row spills onto a blank page.
-        page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_060, right: 425, bottom: 1_200, left: 850, header: 0, footer: 1_618 } },
-      };
-      const referencePageSections = referenceMainTablePages?.map((pageRows, index) => {
-        const children: Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> = [];
-        if (index === 0) {
-          children.push(new Paragraph({
-            children: [new TextRun({ text: analysis.sheetTitle || "COMPLIANCE SHEET", bold: true, underline: {}, size: 23 })],
-            alignment: AlignmentType.CENTER,
-            indent: { right: 55 },
-            spacing: { before: 180, after: 630 },
-          }));
-          if (analysis.sheetHeading) {
-            children.push(new Paragraph({
-              children: [
-                new TextRun({ text: analysis.sheetHeading, bold: true, size: 21 }),
-                ...(analysis.sheetProductTitle ? [new TextRun({ text: ` ${analysis.sheetProductTitle}`, bold: true, underline: {}, color: "7F7F7F", size: 24 })] : []),
-                new TextRun({ text: " Total Qty. 01", bold: true, size: 24 }),
-              ],
-              style: "BodyText",
-            }));
-          }
-        }
-        children.push(complianceTable(pageRows));
-        if (index === referenceMainTablePages.length - 1 && optionalHeadingIndex >= 0) {
-          children.push(new Paragraph(""), new Paragraph(""), new Paragraph(""));
-          children.push(new Paragraph({
-            children: [new TextRun({ text: `${analysis.requirements[optionalHeadingIndex].text.replace(/:+$/, "")}:`, bold: true, underline: {}, size: 21 })],
-            style: "BodyText",
-            indent: { left: 1_200 },
-            spacing: { before: 120 },
-          }));
-          children.push(new Paragraph(""), complianceTable(optionalComplianceRows));
-        }
-        return {
-          properties: { ...compliancePageProperties, ...(index > 0 ? { type: SectionType.NEXT_PAGE } : {}) },
-          children,
-        };
-      });
-      const documentSections = referencePageSections ?? [{
+      const documentSections = [{
         properties: complianceSheet
-          ? compliancePageProperties
-          : structured ? { page: { size: { width: 12_240, height: 15_840 } } } : {},
+          ? { page: { size: { width: 11_910, height: 16_840 }, margin: { top: 1_060, right: 425, bottom: 1_200, left: 850, header: 0, footer: 1_618 } } }
+          : { page: { size: exportColumns.length > 4 ? { width: 16_840, height: 11_910 } : { width: 11_910, height: 16_840 }, margin: { top: 720, right: 700, bottom: 720, left: 700 } } },
         children: commonContent,
       }];
       const doc = new Document({

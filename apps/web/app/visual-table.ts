@@ -80,12 +80,18 @@ export function mergeVisualHeadingRows<T extends VisualHeadingRow>(rows: T[]): T
   return merged;
 }
 
-export function discardContainedSuggestions<T extends { quote?: unknown }>(draftQuotes: string[], suggestions: T[]): T[] {
+export function discardContainedSuggestions<T extends { quote?: unknown; row_type?: string }>(draftQuotes: string[], suggestions: T[]): T[] {
   const drafts = draftQuotes.map((quote) => quote.replace(/\s+/g, " ").trim().toLocaleLowerCase());
   return suggestions.filter((suggestion) => {
     if (typeof suggestion.quote !== "string") return false;
     const candidate = suggestion.quote.replace(/\s+/g, " ").trim().toLocaleLowerCase();
-    return candidate && !drafts.some((draft) => draft.length > candidate.length && draft.includes(candidate));
+    if (!candidate) return false;
+    // A structural label can be a separately formatted heading inside the
+    // same source cell as its following requirements. Its words therefore
+    // also occur inside the larger draft quote, but the heading still needs
+    // its own visible row in the response sheet.
+    if (suggestion.row_type === "section" || suggestion.row_type === "optional_heading") return true;
+    return !drafts.some((draft) => draft.length > candidate.length && draft.includes(candidate));
   });
 }
 

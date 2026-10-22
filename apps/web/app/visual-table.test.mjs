@@ -103,6 +103,14 @@ test("drops a partial visual suggestion when a longer accepted quote already cov
   assert.deepEqual(kept, [{ quote: "a) Motorized phosphorus cracker source" }]);
 });
 
+test("keeps a separately formatted section heading contained in a larger source quote", () => {
+  const kept = discardContainedSuggestions(
+    ["Accessories and Attachments Wide Frame Option WF850-300kN: Wide frame"],
+    [{ quote: "Accessories and Attachments", row_type: "section" }],
+  );
+  assert.deepEqual(kept, [{ quote: "Accessories and Attachments", row_type: "section" }]);
+});
+
 test("accepts AI row splits only when the literal parts cover the full source cell", () => {
   const source = "6. Control system Cabinets are included. Logging is provided.";
   assert.deepEqual(splitSourceQuote(source, ["6. Control system Cabinets are included.", "Logging is provided."]), [

@@ -9,6 +9,7 @@ export type VectorRectangle = { x: number; y: number; width: number; height: num
 
 export type VectorTableRow = {
   quote: string;
+  cells: string[];
   remark?: string;
   rowHeight: number;
   bbox: { x: number; y: number; width: number; height: number };
@@ -72,12 +73,15 @@ export function extractVectorTableRows(
   for (const left of rows) {
     const leftContent = cellContents(items, left);
     if (!leftContent.text || !leftContent.bbox) continue;
-    const right = uniqueRectangles(rectangles, pageWidth, pageHeight)
-      .filter((cell) => cell.x >= left.x + left.width - 2
-        && Math.abs(cell.y - left.y) <= 1
-        && Math.abs(cell.height - left.height) <= 1)
+    const rowCells = uniqueRectangles(rectangles, pageWidth, pageHeight)
+      .filter((cell) => Math.abs(cell.y - left.y) <= 1
+        && Math.abs(cell.height - left.height) <= 1
+        && cell.x >= Math.max(0, left.x - pageWidth * 0.08)
+        && cell.x <= left.x + left.width + pageWidth * 0.45)
       .sort((a, b) => a.x - b.x);
-    const rightContents = right.map((cell) => cellContents(items, cell)).filter((content) => content.text && content.bbox);
+    const cellContentsForRow = rowCells.map((cell) => cellContents(items, cell));
+    const cells = cellContentsForRow.map((content) => content.text);
+    const rightContents = cellContentsForRow.slice(rowCells.findIndex((cell) => cell.x === left.x) + 1).filter((content) => content.text && content.bbox);
     const remark = rightContents.map((content) => content.text).join(" ").replace(/\s+/g, " ").trim();
     const remarkBoxes = rightContents.map((content) => content.bbox!).filter(Boolean);
     const remarkBox = remarkBoxes.length ? {
@@ -86,7 +90,7 @@ export function extractVectorTableRows(
       width: Math.max(...remarkBoxes.map((box) => box.x + box.width)) - Math.min(...remarkBoxes.map((box) => box.x)),
       height: Math.max(...remarkBoxes.map((box) => box.y + box.height)) - Math.min(...remarkBoxes.map((box) => box.y)),
     } : undefined;
-    output.push({ quote: leftContent.text, ...(remark ? { remark } : {}), rowHeight: left.height, bbox: leftContent.bbox, ...(remarkBox ? { remarkBox } : {}) });
+    output.push({ quote: leftContent.text, cells, ...(remark ? { remark } : {}), rowHeight: left.height, bbox: leftContent.bbox, ...(remarkBox ? { remarkBox } : {}) });
   }
 
   return output;
