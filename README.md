@@ -22,6 +22,8 @@
 
 Tender Review is a focused single-user demo for preparing a technical response sheet from a text-based tender PDF. It finds candidate clauses, links each candidate to selectable text on its cited page, displays a page highlight, and exports a DOCX with blank OEM response fields.
 
+When a technical page contains a selectable two-column table headed **Parameter** and **Required Specification**, the app uses PDF cell geometry to keep each parameter with its full specification cell. It also preserves blank specification rows and a following **Other requirements** bullet list. The DOCX uses the four-column response layout shown in the reference, with compliance and remarks left blank. Other document layouts use the configured model path or the limited rule-based preview.
+
 The app does not decide whether a supplier complies. Every candidate starts in **Needs review** and should be checked against the original tender.
 
 ## Screenshots
@@ -38,22 +40,22 @@ The yellow page highlight is positioned from the matched source text. Selecting 
 
 Open [Tender Review on Vercel](https://tender-compliance-engine.vercel.app/). Upload a readable, text-based PDF (up to 4 MB and 120 pages), choose a candidate, inspect its citation and page highlight, and download the response sheet.
 
-The current hosted run uses the rule-based preview. When a server-side OpenAI-compatible model is configured, the model-assisted path groups pages into bounded requests and asks the model to inspect complete technical schedule rows, including their attached bullets. Every proposed quote still has to match selectable text on its cited page before it is shown. The model key remains server-side.
+The current hosted run used the rule-based preview. It filters for technical-looking sentences, matches them to selectable text, and computes the page geometry used for highlights. An optional server-side OpenAI-compatible model path can propose candidate quotes when configured; the model key remains server-side.
 
 ## How a citation is produced
 
 ```text
 Tender PDF
    ↓
-Read selectable text page by page
+Read selectable text and PDF page geometry
    ↓
-Choose candidate rows (rule-based preview or configured model page groups)
+Group supported technical table cells, or choose candidate quotes
    ↓
-Match the quote back to the cited page and locate its PDF text geometry
+Tie each row or quote to its cited page and geometry
    ↓
-Show the quote, page number, and bounding-box highlight for human review
+Show the source row or quote and highlight for human review
    ↓
-Export the source wording and blank OEM response cells to DOCX
+Export source wording and blank compliance/remarks fields to DOCX
 ```
 
 PDF.js reads the PDF text and provides the page-coordinate geometry used by the highlight overlay. Quotes that cannot be matched to the cited page with usable geometry are not presented as verified citations. A visible source match still does not prove that the whole tender has been covered.
@@ -82,16 +84,12 @@ make pilot-stop
 
 The hosted MVP is one Next.js app deployed on Vercel. A server-side route handles PDF analysis and any configured model request; the browser renders the original PDF, shows source highlights, holds the active review, and creates the DOCX.
 
-<p align="center">
-  <img src="docs/screenshots/architecture.svg" alt="Tender Review flow from selectable PDF text through candidate finding, page-matched quote geometry, human review, and a DOCX with blank OEM response fields." width="100%" />
-</p>
-
 There is no separate API service, worker, database, job queue, or Docker stack in the deployed MVP. Uploaded files and review results are not saved as a project history. The hosted site has no sign-in, so use a non-confidential sample document.
 
 ## Limits
 
-- Both extraction paths are candidate finders, not exhaustive extraction systems. The model-assisted path preserves source table-row grouping, checks every proposed quote against its cited page, and drops unmatched suggestions; it can still miss requirements or suggest irrelevant clauses.
-- A document producing more than 250 matched rows is rejected for this MVP instead of silently truncating the review.
+- The rule-based preview is a candidate finder, not an exhaustive extraction system. It can include irrelevant clauses and miss technical requirements.
+- Structured table grouping currently requires selectable text, vector cell rectangles, a technical section heading, and the `Parameter` / `Required Specification` headers. Other table layouts use the configured model path or rule-based preview.
 - Scanned PDFs and OCR-heavy files are not supported by the current demo.
 - Review each candidate and check the original tender for omissions before using the exported sheet.
 - Refreshing or closing the browser clears the current review. Download the DOCX before leaving the page.
