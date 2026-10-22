@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileText, LoaderCircle, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, LockKeyhole, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -9,6 +9,7 @@ import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { analyzeTender } from "./actions";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
+import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -59,6 +60,15 @@ function splitRequirementSubpoints(text: string): string[] {
     .filter(Boolean);
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 function TenderReviewMark() {
   return (
     <svg className="mvp-brand-symbol" viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
@@ -75,6 +85,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const motionRoot = useRef<HTMLElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [responseSheet, setResponseSheet] = useState<ResponseSheet | null>(null);
+  const [sheetEdited, setSheetEdited] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -144,6 +156,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     setError(null);
     setAnalysis(null);
+    setResponseSheet(null);
+    setSheetEdited(false);
     setActiveId(null);
     setFile(event.target.files?.[0] ?? null);
   }
@@ -160,6 +174,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       if (!result.ok) throw new Error(result.error);
       const payload = result.analysis as Analysis;
       setAnalysis(payload);
+      setResponseSheet(buildResponseSheet(payload));
+      setSheetEdited(false);
       setActiveId(payload.requirements[0]?.id ?? null);
       setPage(payload.requirements[0]?.page ?? 1);
     } catch (cause) {
@@ -182,8 +198,26 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     });
   }
 
-  async function exportDocx() {
+  function updateSheetCell(rowId: string, columnIndex: number, value: string) {
+    if (!responseSheet) return;
+    setResponseSheet(updateResponseSheetCell(responseSheet, rowId, columnIndex, value));
+    setSheetEdited(true);
+  }
+
+  function removeSheetRow(rowId: string) {
+    if (!responseSheet) return;
+    setResponseSheet(removeResponseSheetRow(responseSheet, rowId));
+    setSheetEdited(true);
+  }
+
+  function resetResponseSheet() {
     if (!analysis) return;
+    setResponseSheet(buildResponseSheet(analysis));
+    setSheetEdited(false);
+  }
+
+  async function exportDocx() {
+    if (!analysis || !responseSheet?.rows.length) return;
     setExporting(true);
     setError(null);
     try {
@@ -285,86 +319,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         : analysis.sourceColumns?.length
           ? analysis.sourceColumns
           : [{ header: "Tender specification", role: "specification" as const }];
-      type ExportColumn = { header: string; role: "heading" | "requirement" | "source" | "response" | "page"; sourceIndex?: number };
-      const hasHeadingColumn = sourceColumns.some((column) => column.role === "heading");
-      const exportColumns: ExportColumn[] = sourceColumns.flatMap((column, index): ExportColumn[] => {
-        if (column.role === "heading") return [{ header: column.header || "Heading", role: "heading", sourceIndex: index }];
-        if (column.role === "specification") return hasHeadingColumn
-          ? [{ header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }]
-          : [{ header: "Heading", role: "heading" }, { header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }];
-        return [{ header: column.header || `Source column ${index + 1}`, role: "source", sourceIndex: index }];
-      });
-      const existingResponseField = sourceColumns.some((column) => ["compliance", "deviation", "remark"].includes(column.role));
-      if (!existingResponseField) exportColumns.push({ header: "OEM response", role: "response" });
-      exportColumns.push({ header: "Source page", role: "page" as const });
-      const responseRows: Array<{ values: string[]; section?: boolean }> = [];
-      const addResponseRow = (item: Requirement, heading: string, requirement: string) => {
-        const values = exportColumns.map((column) => {
-          if (column.role === "heading") return column.sourceIndex === undefined ? heading : item.sourceCells?.[column.sourceIndex] || heading;
-          if (column.role === "requirement") return requirement;
-          if (column.role === "response") return "";
-          if (column.role === "page") return `Page ${item.page}`;
-          return column.sourceIndex === undefined ? "" : item.sourceCells?.[column.sourceIndex] ?? "";
-        });
-        responseRows.push({ values });
-      };
-      const addSectionRow = (item: Requirement, heading: string, section: string) => {
-        const values = exportColumns.map((column) => {
-          if (column.role === "heading") return column.sourceIndex === undefined ? heading : item.sourceCells?.[column.sourceIndex] || heading;
-          if (column.role === "requirement") return section;
-          if (column.role === "page") return `Page ${item.page}`;
-          return column.sourceIndex === undefined ? "" : item.sourceCells?.[column.sourceIndex] ?? "";
-        });
-        responseRows.push({ values, section: true });
-      };
-      let activeHeading = analysis.sheetProductTitle || analysis.sectionTitle || "";
-      const structuralLabel = /^(?:section|part|chapter|annex(?:ure)?|schedule)\s*(?:[-:.)]?\s*)?(?:[ivxlcdm]+|\d+|[a-z])\s*[.:)-]?$/i;
-      if (structured) {
-        for (const item of analysis.requirements) {
-          const heading = item.parameter ?? item.text;
-          for (const specification of item.specifications?.length ? item.specifications : [item.quote]) {
-            for (const subpoint of splitRequirementSubpoints(specification)) {
-              addResponseRow(item, heading, subpoint.replace(/^\s*[•●]\s*/, ""));
-            }
-          }
-        }
-      } else {
-        let productHeading = "";
-        for (const item of analysis.requirements) {
-          const label = item.text.trim();
-          if (structuralLabel.test(label)) continue;
-          if (item.rowType === "optional_heading") {
-            if (productHeading) addSectionRow(item, productHeading, label);
-            else {
-              activeHeading = label;
-              addSectionRow(item, label, "");
-            }
-            continue;
-          }
-          if (item.rowType === "section") {
-            if (productHeading) addSectionRow(item, productHeading, label);
-            else if (!/^\d+(?:\.\d+)*\s/.test(label)) {
-              productHeading = label;
-              activeHeading = label;
-              addSectionRow(item, label, "");
-            } else {
-              activeHeading = label;
-              addSectionRow(item, label, "");
-            }
-            continue;
-          }
-          const split = splitHeadingPrefix(label, item.headingPrefix);
-          const requirement = split?.remainder.trim() || label;
-          if (split?.heading.trim()) {
-            productHeading ||= split.heading.trim();
-            activeHeading = productHeading;
-          }
-          const heading = productHeading || activeHeading || analysis.sheetHeading || "Tender requirement";
-          for (const subpoint of splitRequirementSubpoints(requirement)) {
-            addResponseRow(item, heading, subpoint);
-          }
-        }
-      }
+      const exportColumns = responseSheet.columns;
+      const responseRows = responseSheet.rows;
       const headingColumnIndex = exportColumns.findIndex((column) => column.role === "heading");
       const headingValues = responseRows.map((row) => headingColumnIndex < 0 ? "" : row.values[headingColumnIndex] ?? "");
       const rows = [
@@ -425,7 +381,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           spacing: { after: 100 },
         })] : [
           new Paragraph({ text: `Source tender: ${analysis.filename}` }),
-          new Paragraph({ text: `${analysis.requirements.length} source-matched requirements · ${analysis.requirements.filter((item) => item.reviewed).length} checked by reviewer` }),
+          new Paragraph({ text: `${responseRows.length} worksheet rows · ${analysis.requirements.filter((item) => item.reviewed).length} source items checked by reviewer` }),
           new Paragraph({ text: analysis.extractionMode === "rule-based-preview" ? "Rule-based preview for human review. Candidate extraction may miss requirements and does not guarantee tender completeness." : "AI-assisted draft for human review. This document does not guarantee tender completeness." }),
         ]),
         new Table({
@@ -470,14 +426,105 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         sections: documentSections,
       });
       const blob = await Packer.toBlob(doc);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      downloadBlob(blob, `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
     } catch {
       setError("The response sheet could not be created. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportExcel() {
+    if (!analysis || !responseSheet?.rows.length) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const ExcelJS = await import("exceljs");
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Technical response", { views: [{ state: "frozen", ySplit: 1 }] });
+      worksheet.columns = responseSheet.columns.map((column) => ({
+        header: column.header,
+        key: column.header,
+        width: column.role === "requirement" ? 58 : column.role === "heading" ? 32 : column.role === "page" ? 16 : 24,
+      }));
+      worksheet.addRows(responseSheet.rows.map((row) => row.values));
+      worksheet.getRow(1).font = { bold: true, color: { argb: "FF24354D" } };
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3F8" } };
+      worksheet.eachRow((row) => {
+        row.alignment = { vertical: "top", wrapText: true };
+        row.font = { ...row.font, name: "Arial", size: 10 };
+      });
+      worksheet.getRow(1).font = { bold: true, name: "Arial", size: 10, color: { argb: "FF24354D" } };
+      const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
+      const headingValues = responseSheet.rows.map((row) => headingColumn < 0 ? "" : row.values[headingColumn] ?? "");
+      if (headingColumn >= 0) {
+        responseSheet.rows.forEach((row, index) => {
+          if (verticalMergeAt(headingValues, index) !== "restart") return [];
+          let end = index;
+          while (end + 1 < headingValues.length && headingValues[end + 1] === headingValues[index]) end += 1;
+          if (end > index) worksheet.mergeCells(index + 2, headingColumn + 1, end + 2, headingColumn + 1);
+        });
+      }
+      const buffer = await workbook.xlsx.writeBuffer();
+      downloadBlob(new Blob([buffer as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.xlsx`);
+    } catch {
+      setError("The Excel workbook could not be created. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function exportPdf() {
+    if (!analysis || !responseSheet?.rows.length) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+      const wide = responseSheet.columns.length > 4;
+      const pdf = new jsPDF({ orientation: wide ? "landscape" : "portrait", unit: "pt", format: responseSheet.columns.length > 6 ? "a3" : "a4" });
+      const title = analysis.sheetTitle || "Tender Technical Requirements";
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(15);
+      pdf.text(title, 36, 34, { maxWidth: pdf.internal.pageSize.getWidth() - 72 });
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.text(`Source tender: ${analysis.filename} · ${responseSheet.rows.length} worksheet rows`, 36, 49);
+      const pdfSafe = (value: string) => value
+        .replace(/[•●]/g, "-")
+        .replace(/[–—−]/g, "-")
+        .replace(/[’‘]/g, "'")
+        .replace(/[“”]/g, '"')
+        .replace(/·/g, "-");
+      const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
+      const headingValues = responseSheet.rows.map((row) => headingColumn < 0 ? "" : row.values[headingColumn] ?? "");
+      autoTableModule.default(pdf, {
+        startY: 60,
+        head: [responseSheet.columns.map((column) => pdfSafe(column.header))],
+        body: responseSheet.rows.map((row, rowIndex) => row.values.map((value, columnIndex) => pdfSafe(
+          columnIndex === headingColumn && verticalMergeAt(headingValues, rowIndex) === "continue" ? "" : value,
+        ))),
+        styles: { font: "helvetica", fontSize: responseSheet.columns.length > 6 ? 6 : 7.5, cellPadding: 4, overflow: "linebreak", valign: "top" },
+        headStyles: { fillColor: [36, 79, 187], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [247, 249, 252] },
+        margin: { left: 36, right: 36, top: 60, bottom: 32 },
+        showHead: "everyPage",
+        didDrawPage: (data) => {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(7);
+          pdf.text(`Page ${data.pageNumber}`, pdf.internal.pageSize.getWidth() - 36, pdf.internal.pageSize.getHeight() - 14, { align: "right" });
+          if (data.pageNumber > 1) {
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(11);
+            pdf.text(pdfSafe(`${title} (continued)`), 36, 34, { maxWidth: pdf.internal.pageSize.getWidth() - 72 });
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(7);
+            pdf.text(pdfSafe(`Source tender: ${analysis.filename}`), 36, 49);
+          }
+        },
+      });
+      pdf.save(`${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.pdf`);
+    } catch {
+      setError("The PDF could not be created. Please try again.");
     } finally {
       setExporting(false);
     }
@@ -596,7 +643,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       </section>
       <div className="mvp-workspace">
         <section className="mvp-list-panel" aria-label="Extracted requirements">
-          <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setFile(null); setError(null); }}><X size={15} /> New tender</button></div>
+          <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); }}><X size={15} /> New tender</button></div>
           <p className="mvp-review-note">{analysis.reviewNote}{analysis.extractionMode === "structured-table" ? "" : ` ${analysis.rejectedCandidates ? `${analysis.rejectedCandidates} unmatched model suggestions were left out.` : "Unmatched suggestions are left out."}`}</p>
           <div className="mvp-requirement-list">
             {analysis.requirements.map((item, index) => (
@@ -609,7 +656,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               </button>
             ))}
           </div>
-        <div className="mvp-list-footer"><button className="mvp-export" onClick={exportDocx} disabled={exporting || analysis.requirements.length === 0}>{exporting ? <LoaderCircle className="mvp-spin" size={16} /> : <ArrowDownToLine size={16} />}{exporting ? "Building DOCX…" : "Download response sheet"}</button><p>{analysis.extractionMode === "structured-table" ? "DOCX preserves each parameter and leaves compliance and remarks blank." : analysis.extractionMode === "visual-compliance-sheet" ? "DOCX follows the source compliance sheet with blank compliance cells; verify each cited row." : "DOCX includes source pages and blank OEM response cells."}</p>{error && <p className="mvp-error" role="alert">{error}</p>}</div>
+        <div className="mvp-list-footer"><p>Choose a requirement to inspect its tender evidence. Make final sheet edits in the export preview below.</p></div>
         </section>
 
         <section className="mvp-evidence-panel" aria-label="Cited tender source">
@@ -623,6 +670,60 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           </div>
         </section>
       </div>
+      {responseSheet && <section className="mvp-sheet-panel" aria-label="Editable response sheet">
+        <div className="mvp-sheet-heading">
+          <div><span className="mvp-panel-kicker">EXPORT PREVIEW</span><h2>Response sheet <span>{responseSheet.rows.length} rows</span></h2><p>Edit the sheet before downloading. Source page citations stay locked, and the original quote remains visible in Source evidence.</p></div>
+          {sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}
+        </div>
+        <div className="mvp-sheet-scroll">
+          <table className="mvp-sheet-table">
+            <thead><tr>{responseSheet.columns.map((column, index) => <th key={`${column.header}-${index}`}>{column.header}{column.role === "page" && <LockKeyhole size={12} aria-label="Locked citation" />}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
+            <tbody>{responseSheet.rows.map((row, rowIndex) => {
+              const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
+              const headingValues = responseSheet.rows.map((item) => headingColumn < 0 ? "" : item.values[headingColumn] ?? "");
+              return <tr key={row.id} className={row.section ? "is-section-row" : undefined}>
+                {row.values.map((value, columnIndex) => {
+                  const column = responseSheet.columns[columnIndex];
+                  const locked = column.role === "page";
+                  const merge = column.role === "heading" ? verticalMergeAt(headingValues, rowIndex) : undefined;
+                  if (merge === "continue") return null;
+                  let rowSpan = 1;
+                  if (merge === "restart") {
+                    while (rowIndex + rowSpan < headingValues.length && headingValues[rowIndex + rowSpan] === value) rowSpan += 1;
+                  }
+                  return <td key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
+                    {locked
+                      ? <span className="mvp-sheet-source"><LockKeyhole size={12} />{value}</span>
+                      : <textarea
+                        aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
+                        rows={Math.min(4, Math.max(1, Math.ceil(value.length / (column.role === "requirement" ? 58 : 34))))}
+                        value={value}
+                        onChange={(event) => updateSheetCell(row.id, columnIndex, event.target.value)}
+                      />}
+                  </td>;
+                })}
+                <td className="mvp-sheet-row-actions">
+                  <button type="button" className="mvp-sheet-source-link" onClick={() => {
+                    const item = analysis.requirements.find((requirement) => requirement.id === row.sourceRequirementId);
+                    if (item) openRequirement(item);
+                  }}>View source</button>
+                  <button type="button" className="mvp-sheet-remove" aria-label={`Remove response row ${rowIndex + 1}`} onClick={() => removeSheetRow(row.id)}><X size={15} /> Remove</button>
+                </td>
+              </tr>;
+            })}</tbody>
+          </table>
+          {responseSheet.rows.length === 0 && <div className="mvp-sheet-empty"><p>All rows are removed from the export preview.</p><button type="button" className="mvp-text-button" onClick={resetResponseSheet}>Restore extracted rows</button></div>}
+        </div>
+        <footer className="mvp-sheet-footer">
+          <span>{responseSheet.rows.length} rows · {sheetEdited ? "Unsaved edits apply to all downloads" : "Ready to review and download"}</span>
+          <div className="mvp-sheet-downloads">
+            <button type="button" className="mvp-export" onClick={exportDocx} disabled={exporting || responseSheet.rows.length === 0}><FileText size={16} /> Download DOCX</button>
+            <button type="button" className="mvp-export mvp-export-secondary" onClick={exportPdf} disabled={exporting || responseSheet.rows.length === 0}><FileText size={16} /> Download PDF</button>
+            <button type="button" className="mvp-export mvp-export-secondary" onClick={exportExcel} disabled={exporting || responseSheet.rows.length === 0}><FileSpreadsheet size={16} /> Download Excel</button>
+          </div>
+          {error && <p className="mvp-error" role="alert">{error}</p>}
+        </footer>
+      </section>}
     </main>
   );
 }

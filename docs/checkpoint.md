@@ -10,7 +10,8 @@ Upload a text-based tender PDF
 → verify each quote against selectable text on its cited page
 → show that page and its bounding box
 → let a human mark it checked
-→ download a DOCX with blank OEM response fields
+→ edit the response sheet and remove unwanted rows
+→ download DOCX, PDF, or Excel with the reviewed edits
 ```
 
 This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory; the PDF text is sent to the configured model during one bounded server action. The server-only model credential is never exposed to the browser.
@@ -27,6 +28,7 @@ This is a deliberate simplification requested by the user. The deployed product 
 - [x] Input 2 was uploaded freshly; visually legible text embedded as images in vector compliance-table cells is transcribed only at high model confidence, retained alongside the original selectable-text excerpt, and marked for human verification in the review UI. The generated response sheet includes the recovered phrases; a focused validator and regression tests guard selectable-word preservation.
 - [x] Displayed requirements use unique literal quotes matched to selectable text on their cited pages; all start unreviewed. The PDF page and bounding-box overlay render in the browser.
 - [x] A DOCX downloaded and was inspected: 102 tender rows, 102 page references, and 102 blank OEM response cells.
+- [ ] The response sheet is editable before download; row edits and removals affect DOCX, PDF, and Excel exports, while source page citations remain locked and source evidence remains available.
 - [x] Desktop review layout was visually inspected; a reviewer mark changed the checked count from 0 to 1. Narrow layout rules are present; narrow-screen visual QA remains to be completed.
 - [x] Extraction is scoped to technical requirement wording and quantified product specifications; commercial, delivery, procurement, and bid-response clauses are filtered out by a conservative rule screen.
 - [ ] Vercel uses `apps/web`, server-only model settings, and `tender.devayushrout.me` is configured through Namecheap DNS and verified over HTTPS.

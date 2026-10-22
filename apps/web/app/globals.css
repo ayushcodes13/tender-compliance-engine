@@ -235,6 +235,45 @@ a { color: inherit; }
 .mvp-export:hover:not(:disabled) { border-color: var(--blue-hover); background: var(--blue-hover); }
 .mvp-list-footer p { margin: 7px 0 0; color: #5f6c7c; text-align: center; font-size: 10px; }
 .mvp-list-footer .mvp-error { text-align: left; font-size: 11px; }
+.mvp-review-screen { overflow: auto; }
+.mvp-workspace { flex: none; min-height: min(72vh, 820px); }
+.mvp-sheet-panel { width: min(1600px, calc(100% - 48px)); flex: none; align-self: center; overflow: hidden; margin: 0 auto 30px; border: 1px solid #e0e3e3; border-radius: 5px; background: #fff; }
+.mvp-sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-bottom: 1px solid #e9ebeb; }
+.mvp-sheet-heading h2 { display: flex; align-items: center; gap: 9px; margin: 4px 0 3px; color: #29384d; font: 650 18px/1.35 Inter, 'Avenir Next', sans-serif; letter-spacing: -.025em; }
+.mvp-sheet-heading h2 span { padding: 2px 7px; border-radius: 3px; background: #f0f2f3; color: #6f7b89; font: 600 10px/1.5 Inter, 'Avenir Next', sans-serif; font-variant-numeric: tabular-nums; }
+.mvp-sheet-heading p { margin: 0; color: #586678; font-size: 11px; line-height: 1.5; }
+.mvp-sheet-reset { min-height: 40px; flex: 0 0 auto; padding: 0 13px; font-size: 11px; }
+.mvp-sheet-scroll { max-height: 68vh; overflow: auto; scrollbar-color: #c8cdd0 transparent; scrollbar-width: thin; }
+.mvp-sheet-table { width: 100%; min-width: max-content; border-collapse: separate; border-spacing: 0; color: #26364c; font-size: 11px; }
+.mvp-sheet-table th { position: sticky; top: 0; z-index: 1; min-width: 150px; padding: 11px 12px; border-right: 1px solid #e2e6e8; border-bottom: 1px solid #dfe3e5; background: #f6f7f7; color: #425168; text-align: left; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.mvp-sheet-table th:first-child { border-left: 0; }
+.mvp-sheet-table th svg { margin-left: 6px; vertical-align: -2px; color: #7a8796; }
+.mvp-sheet-table th:last-child { min-width: 175px; }
+.mvp-sheet-table td { min-width: 150px; padding: 5px; border-right: 1px solid #edf0f0; border-bottom: 1px solid #edf0f0; vertical-align: top; }
+.mvp-sheet-table td:nth-child(2) { min-width: 260px; }
+.mvp-sheet-table tr:nth-child(even) td { background: #fbfcfc; }
+.mvp-sheet-table tr.is-section-row td { background: #f6f8fc; }
+.mvp-sheet-table td.mvp-sheet-merged-cell { vertical-align: top; padding-top: 9px; background: #f8f9fb; }
+.mvp-sheet-table textarea { width: 100%; min-width: 135px; min-height: 38px; display: block; resize: vertical; padding: 8px 9px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: #26364c; font: inherit; line-height: 1.5; }
+.mvp-sheet-table td:nth-child(2) textarea { min-width: 245px; }
+.mvp-sheet-table textarea:hover { border-color: #dce2e6; background: #fff; }
+.mvp-sheet-table textarea:focus { outline: 2px solid rgba(36,79,187,.24); border-color: #aebfe0; background: #fff; }
+.mvp-sheet-source { min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 9px; color: #647186; white-space: nowrap; }
+.mvp-sheet-row-actions { min-width: 175px !important; display: flex; align-items: center; gap: 6px; }
+.mvp-sheet-source-link, .mvp-sheet-remove { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; border: 1px solid #dfe3e4; border-radius: 4px; background: #fff; color: #4d5d72; font-size: 10px; white-space: nowrap; cursor: pointer; }
+.mvp-sheet-source-link:hover { border-color: #bac8dc; color: var(--blue); }
+.mvp-sheet-remove { color: #8a4944; }
+.mvp-sheet-remove:hover { border-color: #d8aaa5; background: #fff8f7; color: #9e382f; }
+.mvp-sheet-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 16px; border-top: 1px solid #e9ebeb; background: #fcfcfb; }
+.mvp-sheet-footer > span { color: #586678; font-size: 11px; }
+.mvp-sheet-downloads { display: flex; flex-wrap: wrap; gap: 8px; }
+.mvp-sheet-downloads .mvp-export { width: auto; min-width: 145px; min-height: 42px; padding: 0 13px; font-size: 11px; }
+.mvp-sheet-downloads .mvp-export-secondary { border-color: #d5dce5; background: #fff; color: #34445b; }
+.mvp-sheet-downloads .mvp-export-secondary:hover:not(:disabled) { border-color: #aebcd2; background: #f7f9fc; }
+.mvp-sheet-empty { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 40px; color: #586678; font-size: 12px; }
+.mvp-sheet-empty p { margin: 0; }
+.mvp-sheet-empty button { min-height: 40px; font-size: 11px; }
+.mvp-sheet-footer .mvp-error { margin: 0; }
 .mvp-evidence-heading { flex-shrink: 0; min-height: 65px; }
 .mvp-evidence-heading h2 { font-size: 16px; }
 .mvp-evidence-actions { display: flex; align-items: center; gap: 9px; color: #586678; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -320,6 +359,14 @@ a { color: inherit; }
   .mvp-evidence-heading { padding-right: 12px; padding-left: 12px; }
   .mvp-pdf-stage { min-height: 380px; padding: 16px; }
   .mvp-citation-detail { padding: 11px 13px 13px; }
+  .mvp-workspace { min-height: 0; }
+  .mvp-sheet-panel { width: calc(100% - 22px); margin-bottom: 20px; }
+  .mvp-sheet-scroll { max-height: 70vh; }
+  .mvp-sheet-heading { align-items: flex-start; flex-direction: column; padding: 15px; }
+  .mvp-sheet-reset { align-self: flex-end; }
+  .mvp-sheet-footer { align-items: flex-start; flex-direction: column; }
+  .mvp-sheet-downloads { width: 100%; }
+  .mvp-sheet-downloads .mvp-export { flex: 1; }
 }
 @media (max-width: 420px) {
   .mvp-landing-topbar { padding-right: 14px; padding-left: 14px; }
@@ -335,6 +382,9 @@ a { color: inherit; }
   .mvp-review-stats > div { gap: 5px; }
   .mvp-review-stats small { font-size: 8px; }
   .mvp-review-actions { align-items: flex-start; }
+  .mvp-sheet-downloads { display: grid; grid-template-columns: 1fr; }
+  .mvp-sheet-downloads .mvp-export { width: 100%; }
+  .mvp-sheet-empty { align-items: flex-start; flex-direction: column; padding: 25px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
