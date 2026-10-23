@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildOcrTextPositionMap, combineOcrConfidence, parseTesseractTsv, resolveTesseractLanguage } from "./local-ocr.ts";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, parseTesseractTsv, resolveTesseractLanguage } from "./local-ocr.ts";
 
 test("parses OCR words into source-ordered lines with page-coordinate boxes", () => {
   const tsv = [
@@ -54,4 +57,22 @@ test("maps each OCR line to its approximate source box without mapping inserted 
     [0, 9, "First row", lines[0].bbox, "high"],
     [10, 20, "Second row", lines[1].bbox, "medium"],
   ]);
+});
+
+test("aborting a Poppler render terminates its process and leaves renderer cleanup available", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tce-test-poppler-cancel-"));
+  const binary = join(directory, "slow-renderer");
+  await writeFile(binary, "#!/usr/bin/env node\nsetInterval(() => {}, 1000);\n", { mode: 0o700 });
+  await chmod(binary, 0o700);
+  const renderer = createPopplerPageRenderer(new Uint8Array([0x25, 0x50, 0x44, 0x46]), binary);
+  const controller = new AbortController();
+  try {
+    const pendingRender = renderer.renderPage(1, 1700, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort("cancel test render");
+    await assert.rejects(pendingRender, { name: "AbortError" });
+  } finally {
+    await renderer.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

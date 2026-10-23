@@ -35,15 +35,17 @@ export type OcrPageText = {
 };
 
 export type PopplerPageRenderer = {
-  renderPage(pageNumber: number, maxDimension: number): Promise<Uint8Array>;
+  renderPage(pageNumber: number, maxDimension: number, signal?: AbortSignal): Promise<Uint8Array>;
   close(): Promise<void>;
 };
 
-export async function isPopplerAvailable(binary = process.env.PDFTOPPM_BINARY || "pdftoppm"): Promise<boolean> {
+export async function isPopplerAvailable(binary = process.env.PDFTOPPM_BINARY || "pdftoppm", signal?: AbortSignal): Promise<boolean> {
   try {
-    await execFile(binary, ["-v"], { timeout: 3_000, maxBuffer: 64 * 1024 });
+    signal?.throwIfAborted();
+    await execFile(binary, ["-v"], { timeout: 3_000, maxBuffer: 64 * 1024, signal });
     return true;
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
 }
@@ -63,7 +65,8 @@ export function createPopplerPageRenderer(
     return inputPath;
   };
   return {
-    async renderPage(pageNumber, maxDimension) {
+    async renderPage(pageNumber, maxDimension, signal) {
+      signal?.throwIfAborted();
       if (!Number.isInteger(pageNumber) || pageNumber < 1 || !Number.isInteger(maxDimension) || maxDimension < 1) {
         throw new Error("Invalid PDF page render request.");
       }
@@ -72,7 +75,9 @@ export function createPopplerPageRenderer(
       await execFile(binary, ["-f", String(pageNumber), "-l", String(pageNumber), "-singlefile", "-scale-to", String(maxDimension), "-png", sourcePath, prefix], {
         timeout: 30_000,
         maxBuffer: 64 * 1024,
+        signal,
       });
+      signal?.throwIfAborted();
       return readFile(`${prefix}.png`);
     },
     async close() {
@@ -168,13 +173,15 @@ export function parseTesseractTsv(
   return { text: lines.map((line) => line.text).join("\n"), lines };
 }
 
-export async function isTesseractAvailable(binary = resolveTesseractBinary()): Promise<boolean> {
+export async function isTesseractAvailable(binary = resolveTesseractBinary(), signal?: AbortSignal): Promise<boolean> {
   try {
-    await execFile(binary, ["--version"], { timeout: 10_000, maxBuffer: 64 * 1024 });
-    const { stdout } = await execFile(binary, ["--list-langs"], { timeout: 10_000, maxBuffer: 64 * 1024 });
+    signal?.throwIfAborted();
+    await execFile(binary, ["--version"], { timeout: 10_000, maxBuffer: 64 * 1024, signal });
+    const { stdout } = await execFile(binary, ["--list-langs"], { timeout: 10_000, maxBuffer: 64 * 1024, signal });
     const available = new Set(stdout.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^[A-Za-z0-9_]+$/.test(line)));
     return resolveTesseractLanguage().split("+").every((language) => available.has(language));
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
 }
@@ -187,16 +194,19 @@ export async function recognizePageImage(input: {
   binary?: string;
   language?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<OcrPageText> {
   const directory = await mkdtemp(join(tmpdir(), "tce-page-ocr-"));
   const imagePath = join(directory, "page.png");
   try {
+    input.signal?.throwIfAborted();
     await writeFile(imagePath, input.image, { mode: 0o600 });
     const { stdout } = await execFile(
       input.binary || resolveTesseractBinary(),
       [imagePath, "stdout", "--oem", "1", "--psm", "3", "-l", resolveTesseractLanguage(input.language), "tsv"],
-      { timeout: input.timeoutMs ?? OCR_TIMEOUT_MS, maxBuffer: OCR_MAX_BUFFER_BYTES, encoding: "utf8" },
+      { timeout: input.timeoutMs ?? OCR_TIMEOUT_MS, maxBuffer: OCR_MAX_BUFFER_BYTES, encoding: "utf8", signal: input.signal },
     );
+    input.signal?.throwIfAborted();
     return parseTesseractTsv(stdout, input.pageSize, input.imageSize);
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -158,6 +158,7 @@ a { color: inherit; }
 .mvp-error { margin: 12px 0 0; color: var(--red); font-size: 12px; }
 .mvp-upload-limits { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 9px; margin-top: 15px; padding-top: 14px; border-top: 1px solid #edf0f0; }
 .mvp-processing { margin-top: 16px; padding: 15px 16px; border: 1px solid #dce4ef; border-radius: 8px; background: #f7f9fc; }
+.mvp-processing-terminal { margin: 12px 0 0; padding: 11px 13px; border: 1px solid #dce4ef; border-radius: 8px; background: #f7f9fc; color: #44546a; font-size: 12px; line-height: 1.5; }
 .mvp-processing-heading { display: flex; align-items: flex-start; gap: 10px; color: #284a83; }
 .mvp-processing-heading > svg { flex: 0 0 auto; margin-top: 1px; }
 .mvp-processing-heading > div { display: grid; gap: 5px; }

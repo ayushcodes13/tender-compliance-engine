@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, LockKeyhole, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
-import { PROCESSING_STEPS, processingStepIndex, type ProcessingProgress } from "./processing-progress";
+import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type ProcessingProgress } from "./processing-progress";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
@@ -119,10 +119,23 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [processing, setProcessing] = useState<ProcessingProgress | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
   const [coverageFocus, setCoverageFocus] = useState<{ page: number; row: CoverageSourceRow } | null>(null);
+  const activeRequestRef = useRef<AbortController | null>(null);
+  const processingStartedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!busy) return;
+    const updateElapsed = () => setElapsedSeconds(Math.floor((Date.now() - processingStartedAtRef.current) / 1000));
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
+  useEffect(() => () => activeRequestRef.current?.abort("upload screen closed"), []);
 
   useGSAP(() => {
     const root = motionRoot.current;
@@ -191,19 +204,25 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setSheetEdited(false);
     setActiveId(null);
     setCoverageFocus(null);
+    setElapsedSeconds(0);
     setFile(event.target.files?.[0] ?? null);
   }
 
   async function analyze(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) return;
+    const requestController = new AbortController();
+    activeRequestRef.current = requestController;
+    processingStartedAtRef.current = Date.now();
+    setElapsedSeconds(0);
     setBusy(true);
     setError(null);
     setProcessing({ stage: "reading", message: "Uploading your PDF and reading its pages" });
     const body = new FormData();
     body.set("file", file);
+    let keepTerminalState = false;
     try {
-      const response = await fetch("/api/analyze", { method: "POST", body });
+      const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
       if (!response.ok) {
         const problem = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(problem?.error || "The extraction service could not start.");
@@ -213,12 +232,15 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const decoder = new TextDecoder();
       let buffer = "";
       const streamedResult: { current: { ok: boolean; analysis?: Analysis; error?: string } | null } = { current: null };
+      const streamedError: { current: string | null } = { current: null };
       const handleEvent = (packet: string) => {
+        if (streamedResult.current || streamedError.current) return;
         const data = packet.split(/\r?\n/).find((line) => line.startsWith("data: "))?.slice(6);
         if (!data) return;
-        const event = JSON.parse(data) as { type: string; progress?: ProcessingProgress; result?: { ok: boolean; analysis?: Analysis; error?: string } };
+        const event = JSON.parse(data) as { type: string; progress?: ProcessingProgress; result?: { ok: boolean; analysis?: Analysis; error?: string }; error?: string };
         if (event.type === "progress" && event.progress) setProcessing(event.progress);
         if (event.type === "result" && event.result) streamedResult.current = event.result;
+        if (event.type === "error") streamedError.current = event.error || "The tender could not be processed. Please try again.";
       };
       while (true) {
         const { value, done } = await reader.read();
@@ -229,6 +251,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         if (done) break;
       }
       if (buffer.trim()) handleEvent(buffer);
+      if (streamedError.current) throw new Error(streamedError.current);
       const result = streamedResult.current;
       if (!result) throw new Error("The extraction stream ended before the tender was ready. Please retry.");
       if (!result.ok) throw new Error(result.error || "The tender could not be processed.");
@@ -239,11 +262,25 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       setActiveId(payload.requirements[0]?.id ?? null);
       setPage(payload.requirements[0]?.page ?? 1);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The tender could not be processed.");
+      keepTerminalState = true;
+      const elapsed = Math.floor((Date.now() - processingStartedAtRef.current) / 1000);
+      setElapsedSeconds(elapsed);
+      if (requestController.signal.aborted) {
+        setError(null);
+        setProcessing({ stage: "cancelled", message: `Processing cancelled after ${formatElapsedSeconds(elapsed)}. The selected PDF is ready to try again.` });
+      } else {
+        setError(cause instanceof Error ? cause.message : "The tender could not be processed.");
+        setProcessing({ stage: "error", message: `Processing stopped after ${formatElapsedSeconds(elapsed)}.` });
+      }
     } finally {
+      if (activeRequestRef.current === requestController) activeRequestRef.current = null;
       setBusy(false);
-      setProcessing(null);
+      if (!keepTerminalState) setProcessing(null);
     }
+  }
+
+  function cancelAnalysis() {
+    activeRequestRef.current?.abort("user cancelled processing");
   }
 
   function openRequirement(item: Requirement) {
@@ -665,7 +702,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <a className="mvp-upload-back" href="/">Back to overview</a>
         </header>
         <section className="mvp-upload-page">
-          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a text-based PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum 4 MB</li><li>Up to 120 pages</li><li>Scanned PDFs are not supported yet</li></ul></div>
+          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum 4 MB</li><li>Up to 120 pages</li><li>Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable</li></ul></div>
           <div className="mvp-upload-card">
             <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span><span className="mvp-upload-private"><span /> Single browser session</span></div>
             <form onSubmit={analyze}>
@@ -676,11 +713,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                 <span className="mvp-browse-link">Select PDF <ArrowUpRight size={14} /></span>
               </label>
               <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
-                {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Processing tender…</> : <>Find requirements <ArrowRight size={17} />
+                {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Processing tender…</> : <>{error || processing?.stage === "cancelled" ? "Try again" : "Find requirements"} <ArrowRight size={17} />
                 </>}
               </button>
-              {busy && processing && <section className="mvp-processing" role="status" aria-live="polite" aria-atomic="true">
-                <div className="mvp-processing-heading"><LoaderCircle className="mvp-spin" size={17} /><div><strong>{processing.message}</strong><span>Long tenders can take 15–30 seconds or longer. Keep this page open; progress updates as each step finishes.</span></div></div>
+              {busy && processing && <section className="mvp-processing" role="region" aria-label="Tender processing progress">
+                <div className="mvp-processing-heading"><LoaderCircle className="mvp-spin" size={17} /><div><strong role="status" aria-live="polite">{processing.message}</strong><span>Long tenders can take several minutes. Keep this page open; progress updates as each step finishes.</span><span>{formatElapsedSeconds(elapsedSeconds)} elapsed{processing.current !== undefined && processing.total !== undefined ? ` · ${processing.current} of ${processing.total}` : ""}</span></div></div>
                 <ol className="mvp-processing-steps">
                   {PROCESSING_STEPS.map((step, index) => {
                     const current = processingStepIndex(processing.stage);
@@ -691,7 +728,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                     </li>;
                   })}
                 </ol>
+                <button type="button" className="mvp-text-button" onClick={cancelAnalysis}>Cancel processing</button>
               </section>}
+              {!busy && processing?.stage === "cancelled" && <p className="mvp-processing-terminal" role="status">{processing.message}</p>}
+              {!busy && processing?.stage === "error" && <p className="mvp-processing-terminal" role="status">{processing.message}</p>}
               {error && <p className="mvp-error" role="alert">{error}</p>}
             </form>
             <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Review every quote</span><span><ShieldCheck size={15} /> Nothing marked checked for you</span></div>
