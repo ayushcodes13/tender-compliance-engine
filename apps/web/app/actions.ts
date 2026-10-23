@@ -235,7 +235,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     : AbortSignal.timeout(timeoutMs);
   try {
     signal?.throwIfAborted();
-    report("file validation", { stage: "reading", message: "Checking the uploaded PDF" });
+    report("file validation", { stage: "uploading", message: "Checking the uploaded PDF" });
     const file = form.get("file");
     if (!(file instanceof File)) return { ok: false as const, error: "Choose a tender PDF to upload." };
     if (file.size === 0 || file.size > MAX_FILE_BYTES) {
@@ -473,6 +473,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       hasVisualPages: pages.some((page) => Boolean(page.visualImage)),
       hasConfiguredModel: true,
     })) {
+      report("using detected technical table", { stage: "locating", message: "Using the technical section detected in the PDF layout" });
+      report("mapping detected source columns", { stage: "mapping", message: "Reading the columns from the detected table structure" });
+      report("extracting structured technical rows", { stage: "extracting", message: "Extracting rows from the detected technical table" });
       await pdf.destroy();
       const section = structuredPages[0].structuredSection!;
       let nextRequirementId = 1;
@@ -504,7 +507,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           reviewed: false,
         };
       }));
-      report("structured result ready", { stage: "complete", message: "Structured requirements are ready for review" });
+      report("structured table coverage needs review", { stage: "coverage", message: "Structured rows were found; compare the full source table to check for omissions" });
+      report("verifying structured source quotations", { stage: "verifying", message: "Verifying each extracted quote against its source page", current: requirements.length, total: requirements.length });
+      report("structured source verification complete", { stage: "verifying", message: `Verified ${requirements.length} structured source-linked rows` });
       return { ok: true as const, analysis: {
         filename: file.name,
         pageCount: pdf.numPages,
@@ -1086,7 +1091,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       if (failedPage && !failedPage.ok) {
         return { ok: false as const, error: failedPage.status === 401 ? "The configured model credential was rejected." : `The model could not extract page ${failedPage.page} (${failedPage.status}).` };
       }
-      report("checking page images for omitted table rows", { stage: "verifying", message: "Checking the selected pages for omitted rows", current: 0, total: visualPages.length });
+      report("checking page images for omitted table rows", { stage: "coverage", message: "Checking the selected table regions for omitted rows", current: 0, total: pageResults.length });
       for (const page of visualPages) pageAuditState.set(page.page, { total: 0, completed: 0, possibleOmissions: 0 });
       const coverageResults = await Promise.all(pageResults.map(async (result) => {
         if (!result.ok) return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
@@ -1167,6 +1172,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           possibleOmissions: results.reduce((total, result) => total + result.possibleOmissions, 0),
         });
       }
+      report("page image coverage audit attempt ended", {
+        stage: "coverage",
+        message: coverageCheckIncomplete ? "Image coverage audit incomplete; inspect the coverage ledger" : "Image coverage audit finished; inspect any reported gaps",
+        current: pageResults.length,
+        total: pageResults.length,
+      });
       parsedResponses = [
         ...pageResults.flatMap((result) => result.ok ? [{ parsed: result.parsed, page: result.page, origin: "extraction" as const }] : []),
         ...coverageResults.filter((result) => result.auditComplete && result.parsed.requirements.length > 0)
@@ -1193,7 +1204,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         }),
       });
       if (!response.ok) return { ok: false as const, error: response.status === 401 ? "The configured model credential was rejected." : `The model request failed (${response.status}).` };
-      report("reading the model response", { stage: "verifying", message: "Checking extracted quotes against the PDF source text" });
+      report("reading the model response", { stage: "extracting", message: "Parsing the model's extracted technical requirements" });
       const payload = await response.json();
       const content = payload.choices?.[0]?.message?.content;
       if (typeof content !== "string") return { ok: false as const, error: "The model returned an empty result." };
@@ -1231,8 +1242,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const auditInputChars = pageInput.length + [...knownRowsByPage.values()].flat().reduce((total, quote) => total + quote.length, 0);
       if (auditInputChars > 180_000) {
         coverageCheckIncomplete = true;
+        report("text coverage audit skipped", { stage: "coverage", message: "The text coverage audit exceeded its size limit; review this routed section manually", current: 0, total: 1 });
       } else {
-        report("auditing text pages for omitted requirements", { stage: "verifying", message: "Checking routed technical text for omitted requirements", current: 0, total: 1 });
+        report("auditing text pages for omitted requirements", { stage: "coverage", message: "Checking routed technical text for omitted requirements", current: 0, total: 1 });
         try {
           const auditResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
@@ -1273,8 +1285,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           signal?.throwIfAborted();
           coverageCheckIncomplete = true;
         }
-        report("text-page omission audit attempt ended", { stage: "verifying", message: "Text-page audit attempt ended; check the ledger for incomplete status", current: 1, total: 1 });
       }
+      report("text-page omission audit attempt ended", {
+        stage: "coverage",
+        message: coverageCheckIncomplete ? "Text-page coverage audit incomplete; inspect the coverage ledger" : "Text-page coverage audit finished; inspect any reported gaps",
+        current: 1,
+        total: 1,
+      });
     }
     const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction" }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
       ...candidate,
@@ -1494,7 +1511,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       rejectedSuggestions: rejectedSuggestionDetails.filter((item) => item.page === null
         || !pages.some((page) => page.page === item.page)).length,
     });
-    report("analysis complete", { stage: "complete", message: `Verified ${requirements.length} source-linked rows` });
+    report("source verification complete", { stage: "verifying", message: `Verified ${requirements.length} source-linked rows` });
     return { ok: true as const, analysis: {
       filename: file.name,
       pageCount: pdf.numPages,

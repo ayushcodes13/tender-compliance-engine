@@ -7,6 +7,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type ProcessingProgress } from "./processing-progress";
+import { consumeAnalysisStream } from "./analysis-events";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
@@ -197,6 +198,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   );
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    const previousRequest = activeRequestRef.current;
+    activeRequestRef.current = null;
+    previousRequest?.abort("a different tender was selected");
+    setBusy(false);
     setError(null);
     setProcessing(null);
     setAnalysis(null);
@@ -217,51 +222,36 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setElapsedSeconds(0);
     setBusy(true);
     setError(null);
-    setProcessing({ stage: "reading", message: "Uploading your PDF and reading its pages" });
+    setProcessing({ stage: "uploading", message: "Uploading and validating your PDF" });
     const body = new FormData();
     body.set("file", file);
     let keepTerminalState = false;
     try {
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
-      if (!response.ok) {
-        const problem = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(problem?.error || "The extraction service could not start.");
-      }
-      if (!response.body) throw new Error("The extraction service did not return a progress stream. Please retry.");
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const streamedResult: { current: { ok: boolean; analysis?: Analysis; error?: string } | null } = { current: null };
-      const streamedError: { current: string | null } = { current: null };
-      const handleEvent = (packet: string) => {
-        if (streamedResult.current || streamedError.current) return;
-        const data = packet.split(/\r?\n/).find((line) => line.startsWith("data: "))?.slice(6);
-        if (!data) return;
-        const event = JSON.parse(data) as { type: string; progress?: ProcessingProgress; result?: { ok: boolean; analysis?: Analysis; error?: string }; error?: string };
-        if (event.type === "progress" && event.progress) setProcessing(event.progress);
-        if (event.type === "result" && event.result) streamedResult.current = event.result;
-        if (event.type === "error") streamedError.current = event.error || "The tender could not be processed. Please try again.";
-      };
-      while (true) {
-        const { value, done } = await reader.read();
-        buffer += decoder.decode(value, { stream: !done });
-        const packets = buffer.split(/\r?\n\r?\n/);
-        buffer = packets.pop() ?? "";
-        packets.forEach(handleEvent);
-        if (done) break;
-      }
-      if (buffer.trim()) handleEvent(buffer);
-      if (streamedError.current) throw new Error(streamedError.current);
-      const result = streamedResult.current;
-      if (!result) throw new Error("The extraction stream ended before the tender was ready. Please retry.");
+      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string }>(response, {
+        signal: requestController.signal,
+        onProgress: (progress) => {
+          if (activeRequestRef.current === requestController) setProcessing(progress);
+        },
+      });
+      if (activeRequestRef.current !== requestController) return;
       if (!result.ok) throw new Error(result.error || "The tender could not be processed.");
       const payload = result.analysis as Analysis;
+      setProcessing({ stage: "preparing", message: "Preparing the editable response sheet" });
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      requestController.signal.throwIfAborted();
+      const preparedSheet = buildResponseSheet(payload);
       setAnalysis(payload);
-      setResponseSheet(buildResponseSheet(payload));
+      setResponseSheet(preparedSheet);
       setSheetEdited(false);
       setActiveId(payload.requirements[0]?.id ?? null);
       setPage(payload.requirements[0]?.page ?? 1);
+      const elapsed = Math.floor((Date.now() - processingStartedAtRef.current) / 1000);
+      setElapsedSeconds(elapsed);
+      setProcessing({ stage: "complete", message: `Ready for review after ${formatElapsedSeconds(elapsed)}.` });
+      keepTerminalState = true;
     } catch (cause) {
+      if (activeRequestRef.current !== requestController) return;
       keepTerminalState = true;
       const elapsed = Math.floor((Date.now() - processingStartedAtRef.current) / 1000);
       setElapsedSeconds(elapsed);
@@ -273,9 +263,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         setProcessing({ stage: "error", message: `Processing stopped after ${formatElapsedSeconds(elapsed)}.` });
       }
     } finally {
-      if (activeRequestRef.current === requestController) activeRequestRef.current = null;
-      setBusy(false);
-      if (!keepTerminalState) setProcessing(null);
+      if (activeRequestRef.current === requestController) {
+        activeRequestRef.current = null;
+        setBusy(false);
+        if (!keepTerminalState) setProcessing(null);
+      }
     }
   }
 
@@ -763,7 +755,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span><span className="mvp-private"><span /> Single-user demo</span></div>
       </header>
       <section className="mvp-review-summarybar">
-        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p></div>
+        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}</div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
           <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{analysis.requirements.length}</strong><small>Source matched</small></span></div>
           <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {analysis.requirements.length}</i></strong><small>Checked by you</small></span></div>
@@ -772,7 +764,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       </section>
       <div className="mvp-workspace">
         <section className="mvp-list-panel" aria-label="Extracted requirements">
-          <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); }}><X size={15} /> New tender</button></div>
+          <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); }}><X size={15} /> New tender</button></div>
           <p className="mvp-review-note">{analysis.reviewNote}{analysis.extractionMode === "structured-table" ? "" : ` ${analysis.rejectedCandidates ? `${analysis.rejectedCandidates} unmatched model suggestions were left out.` : "Unmatched suggestions are left out."}`}</p>
           {analysis.coverage && <details className="mvp-coverage-ledger">
             <summary>
