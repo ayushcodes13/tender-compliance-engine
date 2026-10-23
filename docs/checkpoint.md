@@ -18,11 +18,11 @@ This is a deliberate simplification requested by the user. The deployed product 
 
 ## Checkpoint 72 — Single-user Vercel MVP
 
-**Status: LOCAL UI VERIFIED; CURRENT GPT-6 LUNA ENDPOINT UNREACHABLE FROM THIS MACHINE; HOSTING NOT YET VERIFIED.**
+**Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; PUBLIC VERCEL APP REACHABLE BUT MODEL CREDENTIALS ARE MISSING; CUSTOM DOMAIN DNS IS UNRESOLVED.**
 
 ### Sequence update — 2026-10-23
 
-The custom-domain check remains pending because `tender.devayushrout.me` does not resolve. Deployment metadata confirms the Vercel project root is `apps/web`, and the existing Vercel preview is available. Vercel/Namecheap account settings could not be inspected in this session, so no DNS changes were made. Continue with the next independently actionable item from the requested implementation sequence (P8 progress UX) while preserving the domain item as an external release blocker.
+The custom-domain check remains pending because `tender.devayushrout.me` does not resolve. Deployment metadata confirms the Vercel project root is `apps/web`, and `https://tender-compliance-engine.vercel.app/` returns HTTP 200. A synthetic text PDF sent to the public analysis route returns `GPT-6 Luna is not configured`; the deployed project needs its server-side model environment variables. A scan-only synthetic PDF returns the expected hosted OCR-unavailable message. No DNS or Vercel credential changes were made. Continue with independently actionable items while preserving the model environment and custom domain as release blockers.
 
 ### Done only when
 
@@ -45,7 +45,7 @@ The custom-domain check remains pending because `tender.devayushrout.me` does no
 - [x] ~~P8 progress UX~~: cancellation stops model requests, OCR/render subprocesses, and PDF.js work; the UI retains a truthful cancelled state, elapsed time, and a retry path. Progress-stage counts come from actual pipeline events. Fragmentation, disconnects, duplicate/stale events, and cancellation behavior were verified in focused tests and a browser run.
   - Completed in PR #279 (`ff7036614ebbe03227e42622fa626ef854ea5fa5`). The implementation has nine explicit stages: upload/validate, read/layout, locate, map columns, extract, audit coverage, verify quotations, prepare the response sheet, and ready for review. The displayed order reflects the current pipeline: its coverage audit operates on draft rows before final source-quote acceptance. Local verification covers fragmented UTF-8 SSE, disconnects, duplicate/stale events, reader cancellation, stream cancellation propagation, Tesseract/Poppler subprocess termination, and browser cancellation against a delayed local mock model. The browser showed the elapsed cancelled state and retry action, and the mock server observed the response connection close. Screenshot: `output/playwright/p8-cancelled.png`. The GitHub Actions job did not start because of the account billing/spending limit; the repository owner authorized merging past that billing-only gate after confirming the annotation. Vercel preview checks succeeded.
 - [ ] Vercel uses `apps/web`, server-only model settings, and `tender.devayushrout.me` is configured through Namecheap DNS and verified over HTTPS.
-- [ ] Local OCR is unsupported in the hosted Vercel preview, which does not bundle Tesseract, trained data, or Poppler.
+- [x] ~~Local OCR is unsupported in the hosted Vercel preview~~: the hosted app does not bundle Tesseract, trained data, or Poppler. Verified against the public deployment on 2026-10-23 with a synthetic image-only PDF; the analysis route returned the explicit local-OCR-unavailable message before model routing.
 
 ### Limits
 
