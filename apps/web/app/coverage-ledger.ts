@@ -42,6 +42,7 @@ export type PageCoverageRecord = {
   auditStatus: CoverageAuditStatus;
   possibleOmissionSuggestions: number;
   ocrNeeded: boolean;
+  ocrPerformed: boolean;
 };
 
 export function collectSourceTableCoverageRows(
@@ -103,6 +104,7 @@ export type CoverageReport = {
     routingPages: number;
     selectedTechnicalPages: number;
     pagesWithoutSelectableText: number;
+    pagesProcessedWithOcr: number;
     clippedRoutingPages: number;
     tableRowsDetected: number;
     tablePagesWithKnownRowCount: number;
@@ -140,6 +142,7 @@ export function buildCoverageReport(
       routingPages: count((page) => page.routingInputIncluded),
       selectedTechnicalPages: count((page) => page.selectedForExtraction),
       pagesWithoutSelectableText: count((page) => !page.selectableTextAvailable),
+      pagesProcessedWithOcr: count((page) => page.ocrPerformed),
       clippedRoutingPages: count((page) => page.routingContextClipped),
       tableRowsDetected: sum((page) => page.sourceTableRowsDetected ?? 0),
       tablePagesWithKnownRowCount: count((page) => page.sourceTableRowsDetected !== null),
