@@ -221,15 +221,21 @@ function parseJson(content: string): unknown {
   }
 }
 
-export async function analyzeTender(form: FormData, onProgress?: ProgressCallback) {
+export async function analyzeTender(form: FormData, onProgress?: ProgressCallback, signal?: AbortSignal) {
   let stage = "file validation";
   let cleanupOcrRenderer: (() => Promise<void>) | undefined;
+  let detachPdfAbort: (() => void) | undefined;
   const report = (stageName: string, progress: ProcessingProgress) => {
+    signal?.throwIfAborted();
     stage = stageName;
     onProgress?.(progress);
   };
+  const modelRequestSignal = (timeoutMs = 90_000) => signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+    : AbortSignal.timeout(timeoutMs);
   try {
-    report("file validation", { stage: "reading", message: "Checking the uploaded PDF" });
+    signal?.throwIfAborted();
+    report("file validation", { stage: "uploading", message: "Checking the uploaded PDF" });
     const file = form.get("file");
     if (!(file instanceof File)) return { ok: false as const, error: "Choose a tender PDF to upload." };
     if (file.size === 0 || file.size > MAX_FILE_BYTES) {
@@ -243,6 +249,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
 
     report("opening PDF", { stage: "reading", message: "Opening the PDF" });
     const task = getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: true });
+    if (signal) {
+      const abortPdf = () => { void task.destroy().catch(() => undefined); };
+      signal.addEventListener("abort", abortPdf, { once: true });
+      detachPdfAbort = () => signal.removeEventListener("abort", abortPdf);
+      if (signal.aborted) abortPdf();
+    }
     const pdf = await task.promise;
     if (pdf.numPages > MAX_PAGES) {
       await pdf.destroy();
@@ -286,6 +298,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const MAX_TOTAL_OCR_MS = 210_000;
     report("reading PDF text and page positions", { stage: "reading", message: "Reading text and page layout", current: 0, total: pdf.numPages });
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      signal?.throwIfAborted();
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();
@@ -325,7 +338,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const text = normalize(rawText);
       let ocrResult: OcrPageText = { text: "", lines: [] };
       if (text.length < 40 && ocrAttemptedPages < MAX_PAGES && Date.now() - ocrStartedAt < MAX_TOTAL_OCR_MS) {
-        if (tesseractAvailable === undefined) tesseractAvailable = await isTesseractAvailable();
+        if (tesseractAvailable === undefined) tesseractAvailable = await isTesseractAvailable(undefined, signal);
         if (tesseractAvailable) {
           ocrAttemptedPages += 1;
           report("running local OCR", {
@@ -335,7 +348,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             total: Math.min(pdf.numPages, MAX_PAGES),
           });
           try {
-            if (popplerAvailable === undefined) popplerAvailable = await isPopplerAvailable();
+            if (popplerAvailable === undefined) popplerAvailable = await isPopplerAvailable(undefined, signal);
             let image: Uint8Array;
             let imageSize: { width: number; height: number };
             if (popplerAvailable) {
@@ -343,7 +356,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
                 popplerRenderer = createPopplerPageRenderer(bytes);
                 cleanupOcrRenderer = () => popplerRenderer!.close();
               }
-              image = await popplerRenderer.renderPage(pageNumber, 1700);
+              image = await popplerRenderer.renderPage(pageNumber, 1700, signal);
               const rendered = await loadImage(Buffer.from(image));
               imageSize = { width: rendered.width, height: rendered.height };
             } else {
@@ -358,8 +371,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               image,
               imageSize,
               pageSize: { width: viewport.width, height: viewport.height },
+              signal,
             });
           } catch {
+            signal?.throwIfAborted();
             // Keep the page's native text and record OCR as missing; never log source content.
           }
         }
@@ -458,6 +473,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       hasVisualPages: pages.some((page) => Boolean(page.visualImage)),
       hasConfiguredModel: true,
     })) {
+      report("using detected technical table", { stage: "locating", message: "Using the technical section detected in the PDF layout" });
+      report("mapping detected source columns", { stage: "mapping", message: "Reading the columns from the detected table structure" });
+      report("extracting structured technical rows", { stage: "extracting", message: "Extracting rows from the detected technical table" });
       await pdf.destroy();
       const section = structuredPages[0].structuredSection!;
       let nextRequirementId = 1;
@@ -489,7 +507,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           reviewed: false,
         };
       }));
-      report("structured result ready", { stage: "complete", message: "Structured requirements are ready for review" });
+      report("structured table coverage needs review", { stage: "coverage", message: "Structured rows were found; compare the full source table to check for omissions" });
+      report("verifying structured source quotations", { stage: "verifying", message: "Verifying each extracted quote against its source page", current: requirements.length, total: requirements.length });
+      report("structured source verification complete", { stage: "verifying", message: `Verified ${requirements.length} structured source-linked rows` });
       return { ok: true as const, analysis: {
         filename: file.name,
         pageCount: pdf.numPages,
@@ -558,7 +578,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       };
       const pageSelection = await modelClient.fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        signal: AbortSignal.timeout(45_000),
+        signal: modelRequestSignal(45_000),
         body: JSON.stringify({
           model,
           response_format: { type: "json_schema", json_schema: { name: "technical_section_route", strict: true, schema } },
@@ -775,7 +795,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       try {
         const mapResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
-            signal: AbortSignal.timeout(90_000),
+            signal: modelRequestSignal(90_000),
           body: JSON.stringify({
             model,
             response_format: { type: "json_schema", json_schema: { name: "tender_source_column_map", strict: true, schema: columnSchema } },
@@ -800,6 +820,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           }
         }
       } catch {
+        signal?.throwIfAborted();
         // A missing initial header map is reflected by the page layout state;
         // it is not an omission-audit failure.
       }
@@ -819,7 +840,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         try {
           const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-                signal: AbortSignal.timeout(90_000),
+                signal: modelRequestSignal(90_000),
             body: JSON.stringify({
               model,
               response_format: { type: "json_schema", json_schema: { name: "visual_table_row_labels", strict: true, schema: labelSchema } },
@@ -856,6 +877,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             } else coverageCheckIncomplete = true;
           }
         } catch {
+          signal?.throwIfAborted();
           coverageCheckIncomplete = true;
         }
         const labelByIndex = new Map(rowLabels.map((row) => [Number(row.row_index), row]));
@@ -1000,7 +1022,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const pageResults = await Promise.all(pageSegments.map(async ({ page, segment }) => {
         const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
-            signal: AbortSignal.timeout(90_000),
+            signal: modelRequestSignal(90_000),
           body: JSON.stringify({
             model,
             response_format: { type: "json_schema", json_schema: { name: "technical_table_page_rows", strict: true, schema } },
@@ -1069,7 +1091,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       if (failedPage && !failedPage.ok) {
         return { ok: false as const, error: failedPage.status === 401 ? "The configured model credential was rejected." : `The model could not extract page ${failedPage.page} (${failedPage.status}).` };
       }
-      report("checking page images for omitted table rows", { stage: "verifying", message: "Checking the selected pages for omitted rows", current: 0, total: visualPages.length });
+      report("checking page images for omitted table rows", { stage: "coverage", message: "Checking the selected table regions for omitted rows", current: 0, total: pageResults.length });
       for (const page of visualPages) pageAuditState.set(page.page, { total: 0, completed: 0, possibleOmissions: 0 });
       const coverageResults = await Promise.all(pageResults.map(async (result) => {
         if (!result.ok) return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
@@ -1101,7 +1123,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             : undefined;
           const coverageResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-                signal: AbortSignal.timeout(90_000),
+                signal: modelRequestSignal(90_000),
             body: JSON.stringify({
               model,
               response_format: { type: "json_schema", json_schema: { name: "technical_table_missing_rows", strict: true, schema } },
@@ -1137,6 +1159,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           const completeRows = discardContainedSuggestions(knownRows, parsed.requirements);
           return { parsed: { requirements: completeRows }, page: result.page, segmentIndex: result.segment.index, auditComplete: true, possibleOmissions: completeRows.length };
         } catch {
+          signal?.throwIfAborted();
           coverageCheckIncomplete = true;
           return { page: result.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 };
         }
@@ -1149,6 +1172,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           possibleOmissions: results.reduce((total, result) => total + result.possibleOmissions, 0),
         });
       }
+      report("page image coverage audit attempt ended", {
+        stage: "coverage",
+        message: coverageCheckIncomplete ? "Image coverage audit incomplete; inspect the coverage ledger" : "Image coverage audit finished; inspect any reported gaps",
+        current: pageResults.length,
+        total: pageResults.length,
+      });
       parsedResponses = [
         ...pageResults.flatMap((result) => result.ok ? [{ parsed: result.parsed, page: result.page, origin: "extraction" as const }] : []),
         ...coverageResults.filter((result) => result.auditComplete && result.parsed.requirements.length > 0)
@@ -1158,7 +1187,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
       const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        signal: AbortSignal.timeout(90_000),
+        signal: modelRequestSignal(90_000),
         body: JSON.stringify({
           model,
           response_format: { type: "json_schema", json_schema: { name: "tender_requirements", strict: true, schema } },
@@ -1175,7 +1204,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         }),
       });
       if (!response.ok) return { ok: false as const, error: response.status === 401 ? "The configured model credential was rejected." : `The model request failed (${response.status}).` };
-      report("reading the model response", { stage: "verifying", message: "Checking extracted quotes against the PDF source text" });
+      report("reading the model response", { stage: "extracting", message: "Parsing the model's extracted technical requirements" });
       const payload = await response.json();
       const content = payload.choices?.[0]?.message?.content;
       if (typeof content !== "string") return { ok: false as const, error: "The model returned an empty result." };
@@ -1213,12 +1242,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const auditInputChars = pageInput.length + [...knownRowsByPage.values()].flat().reduce((total, quote) => total + quote.length, 0);
       if (auditInputChars > 180_000) {
         coverageCheckIncomplete = true;
+        report("text coverage audit skipped", { stage: "coverage", message: "The text coverage audit exceeded its size limit; review this routed section manually", current: 0, total: 1 });
       } else {
-        report("auditing text pages for omitted requirements", { stage: "verifying", message: "Checking routed technical text for omitted requirements", current: 0, total: 1 });
+        report("auditing text pages for omitted requirements", { stage: "coverage", message: "Checking routed technical text for omitted requirements", current: 0, total: 1 });
         try {
           const auditResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-            signal: AbortSignal.timeout(90_000),
+            signal: modelRequestSignal(90_000),
             body: JSON.stringify({
               model,
               response_format: { type: "json_schema", json_schema: { name: "technical_text_missing_requirements", strict: true, schema } },
@@ -1252,10 +1282,16 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             }
           }
         } catch {
+          signal?.throwIfAborted();
           coverageCheckIncomplete = true;
         }
-        report("text-page omission audit attempt ended", { stage: "verifying", message: "Text-page audit attempt ended; check the ledger for incomplete status", current: 1, total: 1 });
       }
+      report("text-page omission audit attempt ended", {
+        stage: "coverage",
+        message: coverageCheckIncomplete ? "Text-page coverage audit incomplete; inspect the coverage ledger" : "Text-page coverage audit finished; inspect any reported gaps",
+        current: 1,
+        total: 1,
+      });
     }
     const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction" }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
       ...candidate,
@@ -1475,7 +1511,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       rejectedSuggestions: rejectedSuggestionDetails.filter((item) => item.page === null
         || !pages.some((page) => page.page === item.page)).length,
     });
-    report("analysis complete", { stage: "complete", message: `Verified ${requirements.length} source-linked rows` });
+    report("source verification complete", { stage: "verifying", message: `Verified ${requirements.length} source-linked rows` });
     return { ok: true as const, analysis: {
       filename: file.name,
       pageCount: pdf.numPages,
@@ -1499,13 +1535,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""}`,
     } };
   } catch (error) {
-    try {
-      await cleanupOcrRenderer?.();
-    } catch {
-      // Do not allow temporary OCR cleanup errors to hide the processing failure.
-    }
     const errorName = error instanceof Error ? error.name : "UnknownError";
     const errorMessage = error instanceof Error ? error.message : "";
+    if (signal?.aborted || errorName === "AbortError") {
+      return { ok: false as const, error: "Processing was cancelled." };
+    }
     const errorHint = /fake worker|worker/i.test(errorMessage) ? "pdfjs-worker"
       : /DOMMatrix|ImageData|Path2D|canvas/i.test(errorMessage) ? "node-canvas"
         : /invalid pdf|pdf structure|xref|cross-reference/i.test(errorMessage) ? "pdf-structure"
@@ -1526,6 +1560,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       return { ok: false as const, error: "The extraction service could not complete this request. Please retry in a moment." };
     }
     return { ok: false as const, error: "The upload could not be processed. Please choose a readable text-based PDF and try again." };
-
+  } finally {
+    detachPdfAbort?.();
+    try {
+      await cleanupOcrRenderer?.();
+    } catch {
+      // Do not allow temporary OCR cleanup errors to hide the processing result.
+    }
   }
 }
