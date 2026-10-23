@@ -649,7 +649,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         </section>
         <section className="mvp-limits mvp-motion-section" id="limits">
           <div><h2>What this version supports</h2></div>
-          <p>It processes text-based PDFs in this browser session. Scanned PDFs need OCR, which is not included. The extracted rows are a review starting point, not a guarantee that every tender requirement was found. Always check the tender source before relying on the response sheet.</p>
+          <p>It processes text-based PDFs in this browser session. The local app can OCR scanned pages when Tesseract 5 and the selected language data are installed; the hosted preview does not include OCR tools. OCR-derived wording needs visual review. Extracted rows are a review starting point, not a guarantee that every tender requirement was found. Always check the tender source before relying on the response sheet.</p>
         </section>
         <section className="mvp-bottom-cta mvp-motion-section"><div><h2>Start with your tender PDF.</h2></div><a className="mvp-primary" href="/new">Start a review <ArrowRight size={17} /></a></section>
         <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> Single-user pilot</span><span>Your document and review marks stay in this browser session and are not saved as project history.</span></footer>
@@ -741,11 +741,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             </summary>
             <p className="mvp-coverage-caveat">Counts describe what the parser, router, and page audit actually processed. A model audit reporting no gaps does not prove that the tender is complete.</p>
             <dl className="mvp-coverage-summary">
-              <div><dt>Router input</dt><dd>{analysis.coverage.summary.routingPages} of {analysis.coverage.summary.documentPages} pages with selectable text</dd></div>
+              <div><dt>Router input</dt><dd>{analysis.coverage.summary.routingPages} of {analysis.coverage.summary.documentPages} pages with native or OCR text</dd></div>
               <div><dt>Source table rows</dt><dd>{countLabel(analysis.coverage.summary.tableRowsDetected, "row")} detected · {countLabel(analysis.coverage.summary.tableRowsMappedToCandidates, "row")} mapped · {countLabel(analysis.coverage.summary.tableRowsExcludedAsHeaders, "header")} · {countLabel(analysis.coverage.summary.tableRowsEmpty, "empty row")} · {countLabel(analysis.coverage.summary.tableRowsUnmapped, "nonempty row")} unmapped, across {countLabel(analysis.coverage.summary.tablePagesWithKnownRowCount, "page")} with detected row geometry</dd></div>
               <div><dt>Suggestions and review</dt><dd>{countLabel(analysis.coverage.summary.candidateSuggestions, "model suggestion")} · {countLabel(analysis.coverage.summary.sourceMatchedRows, "source matched row")} including headings · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(currentNeedsReviewCount, "row")} awaiting your review</dd></div>
               <div><dt>Page audits</dt><dd>{analysis.coverage.summary.auditPagesWithNoGapsReported} reported no gaps · {analysis.coverage.summary.auditPagesWithPossibleGaps} flagged possible gaps · {analysis.coverage.summary.auditPagesIncomplete} incomplete · {analysis.coverage.summary.auditPagesNotRun} not run</dd></div>
               {analysis.coverage.summary.pagesWithoutSelectableText > 0 && <div><dt>OCR review</dt><dd>{countLabel(analysis.coverage.summary.pagesWithoutSelectableText, "page")} had no selectable text</dd></div>}
+              {analysis.coverage.summary.pagesProcessedWithOcr > 0 && <div><dt>Local OCR</dt><dd>{countLabel(analysis.coverage.summary.pagesProcessedWithOcr, "page")} transcribed locally; verify every OCR-grounded row against the page image</dd></div>}
               {analysis.coverage.summary.clippedRoutingPages > 0 && <div><dt>Clipped router context</dt><dd>{countLabel(analysis.coverage.summary.clippedRoutingPages, "page")} had source text outside the routing excerpt</dd></div>}
               {analysis.coverage.summary.possibleOmissionSuggestions > 0 && <div><dt>Possible omissions</dt><dd>{countLabel(analysis.coverage.summary.possibleOmissionSuggestions, "source suggestion")} returned by the page audit; inspect the flagged pages</dd></div>}
               {analysis.coverage.summary.unattributedCandidateSuggestions > 0 && <div><dt>Unattributed suggestions</dt><dd>{countLabel(analysis.coverage.summary.unattributedCandidateSuggestions, "suggestion")} had no usable source page</dd></div>}
@@ -755,7 +756,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                 const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
                 return <li key={item.page}>
                   <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); }}>Open source page</button></div>
-                  <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrNeeded ? "No selectable text · OCR needed" : "Considered by router, not selected"}</span>
+                  <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrPerformed ? "Local OCR completed · verify transcription" : item.ocrNeeded ? "No selectable text · OCR unavailable or unreadable" : "Considered by router, not selected"}</span>
                   {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}
                   {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
                   {Boolean(item.sourceTableCoverageRows?.length) && <div className="mvp-coverage-row-findings">

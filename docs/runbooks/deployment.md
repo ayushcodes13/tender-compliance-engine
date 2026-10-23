@@ -13,4 +13,4 @@ The app root is `apps/web`; no API or worker service is deployed.
 
 The user authorized the model credential as a server-only environment variable. Never put it in a `NEXT_PUBLIC_*` variable or commit it to the repository.
 
-This is a small single-user demo. It does not provide accounts, persistent storage, OCR, tenant isolation, or a completeness guarantee. Do not upload confidential tenders unless access controls and document handling have been agreed separately.
+This is a small single-user demo. It does not provide accounts, persistent storage, hosted OCR, tenant isolation, or a completeness guarantee. For local OCR only, install Tesseract 5 and the required language data; set `TESSERACT_BINARY` and `TESSERACT_LANG` in the local environment if auto-detection or the English default is not suitable. OCR-derived evidence remains approximate and needs human inspection. Do not upload confidential tenders to the hosted preview unless access controls and document handling have been agreed separately.

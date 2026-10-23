@@ -62,7 +62,7 @@ PDF.js reads the PDF text and provides the page-coordinate geometry used by the 
 
 ## Run locally
 
-Prerequisites: Node.js 20+, npm, and GPT-6 Luna credentials configured in the local environment.
+Prerequisites: Node.js 20+, npm, and GPT-6 Luna credentials configured in the local environment. For local scanned-page OCR, install Tesseract 5 with the configured language data; OCR is optional for text-based PDFs.
 
 ```sh
 git clone https://github.com/ayushcodes13/tender-compliance-engine.git
@@ -73,6 +73,7 @@ make pilot-start
 ```
 
 The app uses GPT-6 Luna for model-assisted extraction. Set `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL=gpt-6-luna` in `apps/web/.env.local`. Tender text and page images are sent to the configured endpoint for processing. There is no Ollama or open-source model fallback. Structured source tables with explicit cell geometry may be grouped directly from the PDF without an LLM call.
+For a local macOS setup, install Tesseract 5 and Poppler's `pdftoppm` tools with `brew install tesseract poppler`. Tesseract and its trained data use Apache-2.0; Poppler is an optional external renderer under GPL terms and is not bundled by this project. The app detects standard Homebrew paths and `PATH`; set `TESSERACT_BINARY` or `PDFTOPPM_BINARY` in `.env.local` if either executable is installed elsewhere. `TESSERACT_LANG` defaults to `eng`; set it to a `+`-separated language list such as `eng+hin` only after installing each matching trained-data file. OCR text stays separate from native PDF text, carries approximate page boxes and Tesseract confidence, and every OCR-derived requirement remains marked for human verification. The hosted Vercel preview does not bundle these local binaries and reports scanned documents as unsupported there.
 Open [http://127.0.0.1:3307](http://127.0.0.1:3307). Stop the local app with:
 
 ```sh
@@ -90,7 +91,7 @@ There is no separate API service, worker, database, job queue, or Docker stack i
 - Model-assisted extraction is a human-review draft, not an exhaustive completeness guarantee.
 - Successful reviews show a page coverage ledger with routed pages, detected table rows where geometry is available, source matches, rejected suggestions and audit state. Detected source-table rows include candidate and accepted-match counts with a row highlight for inspection; unmapped rows may be headings or other content rather than omitted requirements. A page audit that reports no gaps is not a completeness guarantee; paths without that audit are marked not run.
 - Structured table grouping currently requires selectable text, vector cell rectangles, a technical section heading, and the `Parameter` / `Required Specification` headers. Other table layouts use the configured GPT-6 Luna model path.
-- Scanned PDFs and OCR-heavy files are not supported by the current demo.
+- The local app can OCR pages with little or no selectable text when Tesseract 5 and the configured trained-data languages are installed. Poppler is used for page rasterization when available; otherwise PDF.js renders the page. OCR is bounded by a per-page timeout and a document OCR time budget; pages left unprocessed are shown in the coverage ledger. OCR confidence and page boxes are approximate, and OCR-derived requirements must be checked visually. The hosted Vercel preview has no Tesseract or Poppler runtime and does not support scanned PDFs.
 - Review each candidate and check the original tender for omissions before using the exported sheet.
 - Refreshing or closing the browser clears the current review. Download the DOCX before leaving the page.
 - The hosted preview accepts PDFs up to 4 MB, 120 pages, and 140,000 characters of selectable text per run.

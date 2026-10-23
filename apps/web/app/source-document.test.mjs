@@ -101,6 +101,36 @@ test("visual transcriptions keep OCR text separate from native context and omit 
   assert.equal("endOffset" in reference, false);
 });
 
+test("stores local OCR regions separately from native text with approximate citations", () => {
+  const document = createSourceDocumentModel(new Uint8Array([6]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId, physicalPdfPageNumber: 2, width: 200, height: 300,
+    sourceText: "", positionedItems: [],
+    ocrRegions: [{
+      text: "Load capacity ≥ 300 kN",
+      bbox: { x: 20, y: 40, width: 100, height: 12 },
+      confidence: 78,
+      confidenceLevel: "medium",
+    }],
+  });
+  const reference = buildRequirementSourceReference({
+    document, page, quote: "Load capacity ≥ 300 kN", bbox: { x: 20, y: 40, width: 100, height: 12 },
+    visualTranscription: "Load capacity ≥ 300 kN", transcriptionMethod: "tesseract-ocr", ocrConfidence: "medium",
+  });
+
+  assert.equal(page.sourceText, "");
+  assert.equal(page.ocrText, "Load capacity ≥ 300 kN");
+  assert.equal(page.extractionMethod, "tesseract-ocr");
+  assert.equal(page.ocrRegions[0].extractionMethod, "tesseract-ocr");
+  assert.deepEqual(page.ocrRegions[0].bbox, { x: 20, y: 40, width: 100, height: 12 });
+  assert.equal(reference.sourceText, "");
+  assert.equal(reference.transcribedText, "Load capacity ≥ 300 kN");
+  assert.equal(reference.extractionMethod, "tesseract-ocr");
+  assert.equal(reference.locationPrecision, "approximate");
+  assert.equal(reference.ocrConfidence, "medium");
+  assert.equal(reference.startOffset, undefined);
+});
+
 test("does not report an unmatched model quote as source text", () => {
   const document = createSourceDocumentModel(new Uint8Array([5]), 1);
   const page = buildSourcePageModel({

@@ -23,13 +23,14 @@ const record = (page, overrides = {}) => ({
   auditStatus: "not_run",
   possibleOmissionSuggestions: 0,
   ocrNeeded: false,
+  ocrPerformed: false,
   ...overrides,
 });
 
 test("summarizes document and selected-page coverage without calling unrun audits complete", () => {
   const report = buildCoverageReport([
     record(3, { sourceTableRowsDetected: 14, sourceTableRowsMappedToCandidates: 9, sourceTableRowsExcludedAsHeaders: 2, sourceTableRowsEmpty: 1, sourceTableRowsUnmapped: 2, auditStatus: "no_gaps_reported" }),
-    record(1, { selectableTextAvailable: false, routingInputIncluded: false, selectedForExtraction: false, extractionStatus: "not_selected", ocrNeeded: true, sourceTableRowsDetected: null, candidateSuggestions: 0, sourceMatchedRows: 0, sourceMatchedRequirements: 0, needsHumanReview: 0, rejectedSuggestions: 0, rejectionReasons: [], auditStatus: "not_run" }),
+    record(1, { selectableTextAvailable: false, routingInputIncluded: false, selectedForExtraction: false, extractionStatus: "not_selected", ocrNeeded: true, ocrPerformed: false, sourceTableRowsDetected: null, candidateSuggestions: 0, sourceMatchedRows: 0, sourceMatchedRequirements: 0, needsHumanReview: 0, rejectedSuggestions: 0, rejectionReasons: [], auditStatus: "not_run" }),
     record(2, { selectedForExtraction: false, extractionStatus: "not_selected", routingContextClipped: true, sourceTableRowsDetected: 0, sourceTableRowsMappedToCandidates: 0, sourceTableRowsExcludedAsHeaders: 0, sourceTableRowsEmpty: 0, sourceTableRowsUnmapped: 0, candidateSuggestions: 0, sourceMatchedRows: 0, sourceMatchedRequirements: 0, needsHumanReview: 0, rejectedSuggestions: 0, rejectionReasons: [], auditStatus: "incomplete" }),
   ]);
 
@@ -38,6 +39,7 @@ test("summarizes document and selected-page coverage without calling unrun audit
   assert.equal(report.summary.routingPages, 2);
   assert.equal(report.summary.selectedTechnicalPages, 1);
   assert.equal(report.summary.pagesWithoutSelectableText, 1);
+  assert.equal(report.summary.pagesProcessedWithOcr, 0);
   assert.equal(report.summary.clippedRoutingPages, 1);
   assert.equal(report.summary.tableRowsDetected, 14);
   assert.equal(report.summary.tablePagesWithKnownRowCount, 2);
@@ -49,6 +51,15 @@ test("summarizes document and selected-page coverage without calling unrun audit
   assert.equal(report.summary.auditPagesWithNoGapsReported, 1);
   assert.equal(report.summary.auditPagesIncomplete, 1);
   assert.equal(report.summary.auditPagesNotRun, 1);
+});
+
+test("distinguishes OCR processed pages from pages that still need OCR", () => {
+  const report = buildCoverageReport([
+    record(1, { selectableTextAvailable: false, ocrNeeded: true, ocrPerformed: true }),
+    record(2, { selectableTextAvailable: false, ocrNeeded: true, ocrPerformed: false }),
+  ]);
+  assert.equal(report.summary.pagesWithoutSelectableText, 2);
+  assert.equal(report.summary.pagesProcessedWithOcr, 1);
 });
 
 test("keeps model-reported gaps and rejected suggestions visible in totals", () => {

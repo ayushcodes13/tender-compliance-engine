@@ -8,7 +8,16 @@ export type SourceTextBlock = {
   startOffset: number;
   endOffset: number;
   bbox: SourceBox | null;
-  extractionMethod: "pdfjs-native-text";
+  extractionMethod: "pdfjs-native-text" | "tesseract-ocr";
+};
+
+export type SourceOcrRegion = {
+  id: string;
+  text: string;
+  bbox: SourceBox;
+  confidence: number;
+  confidenceLevel: "high" | "medium" | "low";
+  extractionMethod: "tesseract-ocr";
 };
 
 export type SourceTableCell = {
@@ -30,7 +39,9 @@ export type SourcePageModel = {
   height: number;
   coordinateSystem: "pdfjs-viewport-scale-1";
   sourceText: string;
-  extractionMethod: "pdfjs-native-text" | "no-selectable-text";
+  ocrText: string;
+  ocrRegions: SourceOcrRegion[];
+  extractionMethod: "pdfjs-native-text" | "tesseract-ocr" | "no-selectable-text";
   textBlocks: SourceTextBlock[];
   tables: SourceTable[];
   warnings: string[];
@@ -58,7 +69,7 @@ export type RequirementSourceReference = {
   offsetScope?: "page-source-text";
   bbox: SourceBox | null;
   bboxCoordinateSystem: "pdfjs-viewport-scale-1";
-  extractionMethod: "pdfjs-native-text" | "visual-transcription";
+  extractionMethod: "pdfjs-native-text" | "visual-transcription" | "tesseract-ocr";
   locationPrecision: "exact" | "approximate";
   transcribedText?: string;
   ocrConfidence?: "high" | "medium" | "low";
@@ -107,6 +118,7 @@ export function buildSourcePageModel(input: {
   height: number;
   sourceText: string;
   positionedItems: PositionedSourceItem[];
+  ocrRegions?: Array<Omit<SourceOcrRegion, "id" | "extractionMethod">>;
   vectorRows?: VectorRowInput[];
 }): SourcePageModel {
   const pageId = `${input.documentId}:page:${input.physicalPdfPageNumber}`;
@@ -119,6 +131,13 @@ export function buildSourcePageModel(input: {
     extractionMethod: "pdfjs-native-text" as const,
   }));
   const tables = buildSourceTables(pageId, input.vectorRows ?? []);
+  const ocrRegions: SourceOcrRegion[] = (input.ocrRegions ?? []).map((region, index) => ({
+    ...region,
+    id: `${pageId}:ocr:${index + 1}`,
+    bbox: { ...region.bbox },
+    extractionMethod: "tesseract-ocr",
+  }));
+  const ocrText = ocrRegions.map((region) => region.text).join("\n");
 
   return {
     id: pageId,
@@ -127,10 +146,14 @@ export function buildSourcePageModel(input: {
     height: input.height,
     coordinateSystem: "pdfjs-viewport-scale-1",
     sourceText: input.sourceText,
-    extractionMethod: input.sourceText.trim() ? "pdfjs-native-text" : "no-selectable-text",
+    ocrText,
+    ocrRegions,
+    extractionMethod: input.sourceText.trim() ? "pdfjs-native-text" : ocrText.trim() ? "tesseract-ocr" : "no-selectable-text",
     textBlocks,
     tables,
-    warnings: input.sourceText.trim() ? [] : ["No selectable text was found on this page."],
+    warnings: input.sourceText.trim() ? [] : ocrText.trim()
+      ? ["No selectable text was found; OCR text and approximate regions are stored separately."]
+      : ["No selectable text was found on this page."],
   };
 }
 
@@ -168,6 +191,7 @@ export function buildRequirementSourceReference(input: {
   quote: string;
   bbox: SourceBox | null;
   visualTranscription?: string;
+  transcriptionMethod?: "visual-transcription" | "tesseract-ocr";
   ocrConfidence?: "high" | "medium" | "low";
   selectableTextContext?: string;
   sourceCellLocation?: SourceCellLocation;
@@ -201,7 +225,7 @@ export function buildRequirementSourceReference(input: {
     ...(match ? { offsetUnit: "utf16-code-unit" as const, offsetScope: "page-source-text" as const } : {}),
     bbox: input.bbox ? { ...input.bbox } : null,
     bboxCoordinateSystem: "pdfjs-viewport-scale-1",
-    extractionMethod: transcription ? "visual-transcription" : "pdfjs-native-text",
+    extractionMethod: transcription ? input.transcriptionMethod ?? "visual-transcription" : "pdfjs-native-text",
     locationPrecision: transcription ? "approximate" : match || sourceCell ? "exact" : "approximate",
     ...(transcription ? { transcribedText: transcription } : {}),
     ...(transcription && input.ocrConfidence ? { ocrConfidence: input.ocrConfidence } : {}),
