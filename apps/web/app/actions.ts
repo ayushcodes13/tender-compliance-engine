@@ -4,7 +4,7 @@ import { PDF_FONT_OPTIONS } from "./pdf-runtime";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
 import { isClearlyAdministrativeClause } from "./extraction-rules";
-import { findAnnexureHeading, sourceAnnexureTitleLines, expandSelectedAnnexures } from "./annexure-routing";
+import { findAnnexureHeading, findTechnicalSectionHeading, sourceAnnexureTitleLines, expandSelectedAnnexures } from "./annexure-routing";
 import { combinePageTranscripts, useComplianceSheetLayout, buildExtractionBatches } from "./document-input";
 import { extractStructuredTechnicalSection, type PdfRectangle, type SourceTextItem, type StructuredSection } from "./pdf-structure";
 import { shouldUseStructuredTableExtraction, technicalRoutingPages } from "./extraction-route";
@@ -448,12 +448,16 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     }
     await cleanupOcrRenderer?.();
     cleanupOcrRenderer = undefined;
+    popplerRenderer = undefined;
 
     const getVectorRows = (page: (typeof pages)[number]) => {
       if (!page.vectorRows) {
         page.vectorRows = page.hasVectorTableGeometry
           ? extractVectorTableRows(page.sourceItems, page.rectangles, page.width, page.height)
           : [];
+        const heading = findAnnexureHeading(page.positioned, page.height) ?? findTechnicalSectionHeading(page.positioned, page.height);
+        const headingBox = heading ? locateQuote(heading, page.rawText, page.rawItemMap, page.positioned) : null;
+        if (headingBox) page.vectorRows = page.vectorRows.filter(row => row.bbox.y >= headingBox.y + headingBox.height);
         page.sourceModel.tables = buildSourceTables(page.sourceModel.id, page.vectorRows);
       }
       return page.vectorRows;
@@ -645,15 +649,16 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       section,
     ])).values()].sort((a, b) => a.start_page - b.start_page || a.end_page - b.end_page);
     const sourceAnnexures = pages.flatMap((page) => {
-      const title = findAnnexureHeading(page.positioned, page.height);
+      const annexure = findAnnexureHeading(page.positioned, page.height);
+      const title = annexure ?? findTechnicalSectionHeading(page.positioned, page.height);
       const rows = title ? getVectorRows(page) : [];
       const tableTop = rows.length ? Math.min(...rows.map(row => row.bbox.y)) : 0;
-      return title && locatePageQuote(title, page) ? [{ page: page.page, title,
+      return title && locatePageQuote(title, page) ? [{ page: page.page, title, annexure: Boolean(annexure),
         headings: sourceAnnexureTitleLines(page.positioned, title, tableTop, page.rawText),
       }] : [];
     });
     const modelSelectedPages = expandRoutedSections(uniqueSections, routingPages.map((page) => page.page));
-    visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.map((section) => section.page), pages.map((page) => page.page));
+    visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.filter(section=>section.annexure).map((section) => section.page), pages.map((page) => page.page));
     const addedContinuationPages = visualPageNumbers.filter((page) => !modelSelectedPages.includes(page));
     if (addedContinuationPages.length) routingWarnings.push(`Source annexure boundaries retained PDF pages ${formatPageNumbers(addedContinuationPages)} in addition to model-routed pages. These continuation pages require review too.`);
     if (!visualPageNumbers.length) {
@@ -664,7 +669,23 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     // Render only pages selected by the text-first routing step. This avoids
     // rasterizing unrelated pages and delays optional native canvas work until
     // the model has identified the actual technical table pages.
+    if (popplerAvailable === undefined) popplerAvailable = await isPopplerAvailable(undefined, signal);
+    if (popplerAvailable && !popplerRenderer) {
+      popplerRenderer = createPopplerPageRenderer(bytes);
+      cleanupOcrRenderer = () => popplerRenderer!.close();
+    }
     for (const sourcePage of pages.filter((page) => visualPageNumbers.includes(page.page))) {
+      signal?.throwIfAborted();
+      // Prefer the isolated renderer locally. Some valid embedded fonts crash
+      // the native canvas library rather than throwing a catchable exception.
+      if (popplerRenderer) {
+        const image = await popplerRenderer.renderPage(sourcePage.page, 1500, signal);
+        const rendered = await loadImage(Buffer.from(image));
+        const canvas = createCanvas(rendered.width, rendered.height);
+        canvas.getContext('2d').drawImage(rendered, 0, 0);
+        sourcePage.visualImage = canvas.toBuffer('image/jpeg', 82).toString('base64');
+        continue;
+      }
       const page = await pdf.getPage(sourcePage.page);
       const scale = Math.min(2.5, 1500 / sourcePage.width);
       const canvas = createCanvas(Math.ceil(sourcePage.width * scale), Math.ceil(sourcePage.height * scale));
@@ -737,9 +758,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const pageAuditState = new Map<number, { total: number; completed: number; possibleOmissions: number }>();
     const vectorPages = visualPages.filter((page) => getVectorRows(page).length > 0);
     const otherPages = visualPages.filter((page) => !vectorPages.includes(page));
-    let generalExtractionPages: typeof visualPages = [];
     const extractGeneralPages = async (generalPages: typeof visualPages) => {
-      generalExtractionPages = generalPages;
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
       for (const batch of buildExtractionBatches(generalPages)) {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
@@ -1285,11 +1304,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const failure = await extractGeneralPages(otherPages);
       if (failure) return failure;
     }
-    if (generalExtractionPages.length > 0 && parsedResponses.length > 0) {
-      // Text-only technical sections need an independent omission pass too.
+    if (visualPages.length > 0 && parsedResponses.length > 0) {
+      // Selected technical sections need an independent omission pass too.
       // Keep it to one bounded request over the already bounded routing input;
       // suggestions remain untrusted until source validation below.
-      const selectedPages = generalExtractionPages;
+      // Tables do not cover the whole page: inspect prose outside detected grids too.
+      const selectedPages = visualPages;
       const auditPageInput = selectedPages.map(({page, text}) => `PDF PAGE ${page}\n${text}`).join("\n\n");
       const extractedRows = parsedResponses.flatMap(({ parsed }) => (parsed.requirements ?? []).filter((candidate) => selectedPages.some((page) => page.page === candidate.page)));
       const knownRowsByPage = new Map<number, string[]>();

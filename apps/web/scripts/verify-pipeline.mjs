@@ -18,6 +18,7 @@ const quotes = [
   'Ferromagnetic stainless steel.',
 ];
 const recovery = 'Surface flatness shall be within 0.1 mm over 1 m square.';
+const outsideTable = 'Service support shall remain available for 10 years.';
 let scenario = "prose";
 let extractionCalls = 0;
 let routeCalls = 0;
@@ -41,7 +42,10 @@ const provider = http.createServer(async (request, response) => {
         ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>({row_index:Number(match[1]),row_type:Number(match[1])===2?'header':match[2].includes('Description')?'header':match[2].includes('A. Optical table')?'section':'requirement',category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false})),loose_headings:[],splits:[],visual_completions:[]};
     } else if (schema === 'technical_text_missing_requirements') {
-      result = {columns:[],requirements:text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]};
+      result = {columns:[],requirements:[
+        ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
+        ...(text.includes(outsideTable)?[{page:1,quote:outsideTable,category:'Other',row_type:'requirement',heading_prefix:''}]:[]),
+      ]};
     } else if (schema === 'tender_requirements') {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
@@ -108,12 +112,14 @@ try {
   const tables=new jsPDF({unit:'pt',format:'a4'});
   for(let page=1;page<=2;page++){
     if(page>1)tables.addPage();
+    if(page===1){tables.setFontSize(6);tables.rect(40,0,515,12);tables.text('Letterhead contact details',43,8);}
     const widths=page===1?[35,100,380]:[35,100,230,75,75];
     const sourceRows=[['A. Optical table',...widths.slice(1).map(()=>'')],['S. No.','Specification','Description',...(page===2?['Comply (Yes/No)','Remarks']:[])],
       ...Array.from({length:16},(_,index)=>[String(index+1),`Parameter ${index+1}`,`Required value ${index+1} mm`,...(page===2?['','']:[])])];
     tables.setFontSize(11);tables.text(page===1?'Annexure I':'Annexure II',40,25);tables.text(page===1?'Technical Specifications for Optical Tables':'Technical Compliance Report for Optical Tables',40,45);
     tables.setFontSize(8);
     sourceRows.forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{tables.rect(x,70+row*26,widths[column],26);if(value)tables.text(value,x+3,85+row*26);x+=widths[column];});});
+    if(page===1)tables.text(outsideTable,40,600);
   }
   tables.addPage();tables.text('Technical safety requirements',40,40);tables.text(quotes[2],40,70);
   const mixed=await analyze(tables);
@@ -122,14 +128,16 @@ try {
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
   const grouped=buildResponseSheet(mixed.analysis);
-  assert.equal(grouped.rows.length,33,'Both 16-row tables and the prose page retained');
-  assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 1').length,16);
+  assert.equal(grouped.rows.length,34,'Both tables, prose outside the grid, and the prose page retained');
+  assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 1').length,17);
   assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 2').length,16);
   const projected=buildResponseSections(grouped);
-  assert.deepEqual(projected.map(section=>section.rows.length),[16,16,1]);
-  assert.equal(projected[0].annexure,'Annexure I');assert.equal(projected[1].annexure,'Annexure II');
+  assert.deepEqual(projected.map(section=>section.rows.length),[16,1,16,1]);
+  assert.equal(projected[0].annexure,'Annexure I');assert.equal(projected[2].annexure,'Annexure II');
   assert.ok(projected.every(section=>section.columns.every(column=>column.role!=='heading'&&column.role!=='page')));
-  assert.ok(grouped.rows.slice(0,32).every(row=>row.values[0]==='A. Optical table'));
+  assert.equal(grouped.rows.filter(row=>row.values[0]==='A. Optical table').length,32);
+  assert.ok(mixed.analysis.requirements.some(row=>row.quote===outsideTable&&row.sourceReference.locationPrecision==='exact'));
+  assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
   console.log(JSON.stringify({passed:true,cases:['short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));

@@ -29,3 +29,9 @@ test('table headers retain their verified per-table source wording',()=>{
  const sheet=fixture();sheet.rows[0].sourceHeaders={2:'Parameter',3:'Required Specification'};
  assert.deepEqual(buildResponseSections(sheet)[0].columns.slice(0,2).map(c=>c.header),['Parameter','Required Specification']);
 });
+
+test('a source title already above the table is not repeated as an equipment heading',()=>{
+ const sheet=fixture();sheet.rows[0].values[0]='Optical Table';sheet.rows[0].sectionHeadings=['▪ Optical Table'];
+ const section=buildResponseSections(sheet)[0];
+ assert.equal(section.heading,'');assert.deepEqual(section.titleLines,['▪ Optical Table']);
+});
