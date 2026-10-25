@@ -24,6 +24,10 @@ This is a deliberate simplification requested by the user. The deployed product 
 
 The custom-domain check remains pending because `tender.devayushrout.me` does not resolve. Deployment metadata confirms the Vercel project root is `apps/web`, and `https://tender-compliance-engine.vercel.app/` returns HTTP 200. A synthetic text PDF sent to the public analysis route returns `GPT-6 Luna is not configured`; the deployed project needs its server-side model environment variables. A scan-only synthetic PDF returns the expected hosted OCR-unavailable message. No DNS or Vercel credential changes were made. Continue with independently actionable items while preserving the model environment and custom domain as release blockers.
 
+### Sequence update — 2026-10-25
+
+The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped technical annexures. Prioritize document reliability and the grouped OEM response sheet before the remaining hosted-release checkpoint. The acceptance case must include source Annexure I (pages 20–22) and Annexure II (pages 23–26), retain their differences, keep the 16 optical-table specifications under their source equipment heading, omit serial numbers from the grouped response sheet, and leave compliance/deviation/remarks blank for the reviewer. Do not implement OEM assessment.
+
 ### Done only when
 
 - [x] Only the Next.js app and its small local run scripts remain as runtime services; legacy API, worker, database, queue, and Docker setup are removed.
@@ -51,12 +55,28 @@ The custom-domain check remains pending because `tender.devayushrout.me` does no
 
 - Local scanned PDFs can use Tesseract 5 OCR when the configured trained-data languages are installed. Hosted Vercel scans remain unsupported. OCR text and approximate page boxes stay distinct from native source text, and all OCR-derived requirements need visual human review. Visual transcription also applies to image text embedded inside detected vector compliance-table cells.
 - Visually transcribed wording is a reviewer aid, not an exact selectable-text citation. The UI labels the warning and highlights the whole source row; a human must verify every character against the rendered PDF.
-- One bounded synchronous extraction call; no background jobs or persistence.
+- One synchronous analysis request with bounded model contexts; no durable background jobs or persistence.
 - A validated quote and bounding box prove the displayed citation only, not exhaustive tender coverage.
 - Grid-based row separation depends on vector border geometry. When borders are merged, missing, or malformed, the model-driven fallback and human review remain necessary; neither guarantees exhaustive coverage.
-- A layout mismatch is detected only when the page model reports visible column headers. Continuation pages without headers inherit the selected schedule layout; unseen layout changes on such pages can still require human review.
+- Supported vector tables map their columns separately and inherit the last verified map on continuation pages. Unsupported geometry and unseen layout changes still require human review; crop fallback stops rather than silently mixing incompatible maps.
 - Omission audits run on crop-based compliance-table pages and text-only technical sections. The text audit is skipped and marked incomplete if its bounded input exceeds 180,000 characters or if the model call/response fails. Vector-row counts are known only where supported table geometry was detected; unstructured text has candidate counts, not a deterministic source-row denominator.
 - Row-level coverage findings are available only where vector table geometry produced source rows. The UI lists the first twelve such rows per page; it gives a total and count of detected rows not listed for pages with more than twelve.
 - Model routing and extraction can miss technical requirements and are not proof of complete coverage; review every source citation.
 - Requirements remain in human review until the user checks them.
 - The hosted workflow is not complete until a fresh hosted upload and DOCX export are inspected.
+
+## Checkpoint 73 — Client tender document reliability
+
+**Status: LOCAL ACCEPTANCE VERIFIED; REMOTE CI / RELEASE GATE PENDING.**
+
+- [x] Real 42-page client PDF routes both full technical annexures, including continuation pages 22 and 26.
+- [x] Different table column layouts preserve literal source specifications/descriptions, section/equipment headings, and independent source citations in one grouped sheet; the optical-table group has 16 source rows per annexure.
+- [x] Page continuations and source-cell subpoints retain their complete text and every source link when joined for export.
+- [x] SHA-256 provenance matches the uploaded bytes after PDF.js parsing; unknown evidence remains unknown.
+- [x] PDF export preserves comparison signs, numerical precision, units, and source pages.
+- [x] Regression tests, production build, and deterministic upload-to-sheet contract checks pass and run in CI.
+- [x] Real browser upload/review and DOCX/PDF/Excel download are inspected, with remaining limits documented.
+
+This checkpoint does not establish exhaustive extraction on unseen layouts, hosted OCR support, client production access controls, persistence, or a completed hosted deployment. See `docs/document-reliability-audit.md` for the evidence and limits.
+
+- [ ] Required remote CI passes. Keep this checkpoint title open until the PR checks pass; do not merge a failing required check.

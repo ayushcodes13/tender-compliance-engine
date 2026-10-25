@@ -1,4 +1,8 @@
-# review.md — items needing your input
+# Historical review notes — retired pre-MVP architecture
+
+These notes describe the removed API/worker/database implementation. They are not evidence of current capabilities or current test counts. See `docs/checkpoint.md`, `README.md`, and the current Next.js sources for the active product.
+
+# Original review.md — items needing your input
 
 > For anything marked 🟢 I'll proceed with the stated default. Anything 🔴 is a
 > blocking decision — add your preference and I'll adjust the next checkpoint.

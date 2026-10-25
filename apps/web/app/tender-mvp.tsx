@@ -10,7 +10,7 @@ import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type Proce
 import { consumeAnalysisStream } from "./analysis-events";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
+import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import type { CoverageReport, CoverageSourceRow, RejectedSuggestion } from "./coverage-ledger";
 
@@ -23,6 +23,10 @@ type Requirement = {
   parameter?: string;
   specifications?: string[];
   sourceCells?: string[];
+  sourceColumnMap?: Array<{header: string; role: string}>;
+  sourceSectionTitle?: string;
+  sourceSpecificationColumnIndex?: number;
+  sourceSpecificationBlank?: boolean;
   remark?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
@@ -46,6 +50,7 @@ type Analysis = {
   pageCount: number;
   textPages: number;
   document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number };
+  normalizedTables?: boolean;
   sectionTitle?: string;
   sectionHeading?: string;
   sourceColumns?: Array<{ header: string; role: "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other" }>;
@@ -413,7 +418,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const exportColumns = responseSheet.columns;
       const responseRows = responseSheet.rows;
       const headingColumnIndex = exportColumns.findIndex((column) => column.role === "heading");
-      const headingValues = responseRows.map((row) => headingColumnIndex < 0 ? "" : row.values[headingColumnIndex] ?? "");
+      const headingValues = responseHeadingMergeKeys(responseSheet);
       const rows = [
         new TableRow({ tableHeader: true, children: exportColumns.map((column) => cell(column.header, true, AlignmentType.CENTER)) }),
         ...responseRows.map((item, rowIndex) => new TableRow({
@@ -547,7 +552,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       });
       worksheet.getRow(1).font = { bold: true, name: "Arial", size: 10, color: { argb: "FF24354D" } };
       const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-      const headingValues = responseSheet.rows.map((row) => headingColumn < 0 ? "" : row.values[headingColumn] ?? "");
+      const headingValues = responseHeadingMergeKeys(responseSheet);
       if (headingColumn >= 0) {
         responseSheet.rows.forEach((row, index) => {
           if (verticalMergeAt(headingValues, index) !== "restart") return [];
@@ -570,52 +575,19 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-      const wide = responseSheet.columns.length > 4;
-      const pdf = new jsPDF({ orientation: wide ? "landscape" : "portrait", unit: "pt", format: responseSheet.columns.length > 6 ? "a3" : "a4" });
-      const title = analysis.sheetTitle || "Tender Technical Requirements";
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(15);
-      pdf.text(title, 36, 34, { maxWidth: pdf.internal.pageSize.getWidth() - 72 });
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.text(`Source tender: ${analysis.filename} · ${responseSheet.rows.length} worksheet rows`, 36, 49);
-      const pdfSafe = (value: string) => value
-        .replace(/[•●]/g, "-")
-        .replace(/[–—−]/g, "-")
-        .replace(/[’‘]/g, "'")
-        .replace(/[“”]/g, '"')
-        .replace(/·/g, "-");
-      const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-      const headingValues = responseSheet.rows.map((row) => headingColumn < 0 ? "" : row.values[headingColumn] ?? "");
-      autoTableModule.default(pdf, {
-        startY: 60,
-        head: [responseSheet.columns.map((column) => pdfSafe(column.header))],
-        body: responseSheet.rows.map((row, rowIndex) => row.values.map((value, columnIndex) => pdfSafe(
-          columnIndex === headingColumn && verticalMergeAt(headingValues, rowIndex) === "continue" ? "" : value,
-        ))),
-        styles: { font: "helvetica", fontSize: responseSheet.columns.length > 6 ? 6 : 7.5, cellPadding: 4, overflow: "linebreak", valign: "top" },
-        headStyles: { fillColor: [36, 79, 187], textColor: 255, fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [247, 249, 252] },
-        margin: { left: 36, right: 36, top: 60, bottom: 32 },
-        showHead: "everyPage",
-        didDrawPage: (data) => {
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(7);
-          pdf.text(`Page ${data.pageNumber}`, pdf.internal.pageSize.getWidth() - 36, pdf.internal.pageSize.getHeight() - 14, { align: "right" });
-          if (data.pageNumber > 1) {
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(11);
-            pdf.text(pdfSafe(`${title} (continued)`), 36, 34, { maxWidth: pdf.internal.pageSize.getWidth() - 72 });
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
-            pdf.text(pdfSafe(`Source tender: ${analysis.filename}`), 36, 49);
-          }
-        },
-      });
+      const [{ createResponsePdf }, fontResponse] = await Promise.all([
+        import("./pdf-export"), fetch("/fonts/DejaVuSans.ttf"),
+      ]);
+      if (!fontResponse.ok) throw new Error("The PDF font could not be loaded. Retry or download DOCX or Excel.");
+      const fontBytes = new Uint8Array(await fontResponse.arrayBuffer());
+      let binary = "";
+      for (let offset = 0; offset < fontBytes.length; offset += 8_192) {
+        binary += String.fromCharCode(...fontBytes.subarray(offset, offset + 8_192));
+      }
+      const pdf = createResponsePdf(responseSheet, analysis.sheetTitle || "Tender Technical Requirements", analysis.filename, btoa(binary));
       pdf.save(`${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.pdf`);
-    } catch {
-      setError("The PDF could not be created. Please try again.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The PDF could not be created. Please try again.");
     } finally {
       setExporting(false);
     }
@@ -853,10 +825,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         </div>
         <div className="mvp-sheet-scroll">
           <table className="mvp-sheet-table">
-            <thead><tr>{responseSheet.columns.map((column, index) => <th key={`${column.header}-${index}`}>{column.header}{column.role === "page" && <LockKeyhole size={12} aria-label="Locked citation" />}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
+            <thead><tr>{responseSheet.columns.map((column, index) => <th data-role={column.role} key={`${column.header}-${index}`}>{column.header}{column.role === "page" && <LockKeyhole size={12} aria-label="Locked citation" />}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
             <tbody>{responseSheet.rows.map((row, rowIndex) => {
               const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-              const headingValues = responseSheet.rows.map((item) => headingColumn < 0 ? "" : item.values[headingColumn] ?? "");
+              const headingValues = responseHeadingMergeKeys(responseSheet);
               return <tr key={row.id} className={row.section ? "is-section-row" : undefined}>
                 {row.values.map((value, columnIndex) => {
                   const column = responseSheet.columns[columnIndex];
@@ -865,9 +837,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   if (merge === "continue") return null;
                   let rowSpan = 1;
                   if (merge === "restart") {
-                    while (rowIndex + rowSpan < headingValues.length && headingValues[rowIndex + rowSpan] === value) rowSpan += 1;
+                    while (rowIndex + rowSpan < headingValues.length && headingValues[rowIndex + rowSpan] === headingValues[rowIndex]) rowSpan += 1;
                   }
-                  return <td key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
+                  return <td data-role={column.role} key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
                     {locked
                       ? <span className="mvp-sheet-source"><LockKeyhole size={12} />{value}</span>
                       : <textarea

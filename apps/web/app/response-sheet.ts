@@ -11,6 +11,8 @@ export type ResponseSheetRow = {
   continuationOfPrevious?: boolean;
   values: string[];
   section?: boolean;
+  mergeScope?: string;
+  exportGroupId?: string;
 };
 export type ResponseSheet = { columns: ResponseSheetColumn[]; rows: ResponseSheetRow[] };
 export type ResponseRequirement = {
@@ -23,10 +25,16 @@ export type ResponseRequirement = {
   parameter?: string;
   specifications?: string[];
   sourceCells?: string[];
+  sourceColumnMap?: Array<{header: string; role: string}>;
+  sourceSectionTitle?: string;
+  sourceSpecificationColumnIndex?: number;
+  sourceSpecificationBlank?: boolean;
+  exportGroupId?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
 };
 export type ResponseSheetSource = {
+  normalizedTables?: boolean;
   requirements: ResponseRequirement[];
   sourceColumns?: Array<{ header: string; role: SourceColumnRole }>;
   extractionMode?: "rule-based-preview" | "structured-table" | "visual-compliance-sheet";
@@ -51,6 +59,7 @@ function splitHeadingPrefix(text: string, headingPrefix?: string): { heading: st
 }
 
 export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
+  if (source.normalizedTables) return buildGroupedTableSheet(source);
   const structured = source.extractionMode === "structured-table";
   const sourceColumns = structured
     ? [
@@ -188,8 +197,8 @@ export function updateResponseSheetCell(sheet: ResponseSheet, rowId: string, col
   let lastIndex = targetIndex;
   if (column?.role === "heading" && sheet.rows[targetIndex].values[columnIndex]) {
     const oldHeading = sheet.rows[targetIndex].values[columnIndex];
-    while (firstIndex > 0 && sheet.rows[firstIndex - 1].values[columnIndex] === oldHeading) firstIndex -= 1;
-    while (lastIndex + 1 < sheet.rows.length && sheet.rows[lastIndex + 1].values[columnIndex] === oldHeading) lastIndex += 1;
+    while (firstIndex > 0 && sheet.rows[firstIndex - 1].mergeScope === sheet.rows[targetIndex].mergeScope && sheet.rows[firstIndex - 1].values[columnIndex] === oldHeading) firstIndex -= 1;
+    while (lastIndex + 1 < sheet.rows.length && sheet.rows[lastIndex + 1].mergeScope === sheet.rows[targetIndex].mergeScope && sheet.rows[lastIndex + 1].values[columnIndex] === oldHeading) lastIndex += 1;
   }
   return {
     ...sheet,
@@ -201,4 +210,79 @@ export function updateResponseSheetCell(sheet: ResponseSheet, rowId: string, col
 
 export function removeResponseSheetRow(sheet: ResponseSheet, rowId: string): ResponseSheet {
   return { ...sheet, rows: sheet.rows.filter((row) => row.id !== rowId) };
+}
+
+/** Preserve source table wording while normalizing distinct schedules into one review sheet. */
+function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
+  const columns: ResponseSheetColumn[] = [
+    { header: "Equipment / group", role: "heading" },
+    { header: "Annexure / section", role: "source" },
+    { header: "Specification", role: "source" },
+    { header: "Description", role: "requirement" },
+    { header: "Comply (Yes/No)", role: "response" },
+    { header: "Any deviation", role: "response" },
+    { header: "Remarks / Justifications", role: "response" },
+    { header: "Source page", role: "page" },
+  ];
+  const rows: ResponseSheetRow[] = [];
+  let group = "";
+  let section = "";
+  for (const item of source.requirements) {
+    if (item.sourceSectionTitle && item.sourceSectionTitle !== section) {
+      section = item.sourceSectionTitle;
+      group = "";
+    }
+    if (item.rowType === "section" || item.rowType === "optional_heading") {
+      group = item.quote;
+      continue;
+    }
+    const mapping = item.sourceColumnMap ?? [];
+    const parameterIndex = mapping.findIndex((column) => column.role === "heading");
+    const parameter = parameterIndex >= 0 ? item.sourceCells?.[parameterIndex] ?? "" : "";
+    const specificationIndex = item.sourceSpecificationColumnIndex ?? mapping.findIndex((column) => column.role === "specification");
+    const extras = mapping.flatMap((column, index) => {
+      if (index === parameterIndex || index === specificationIndex || ["serial", "compliance", "deviation", "remark"].includes(column.role)) return [];
+      const value = item.sourceCells?.[index];
+      return value ? [`${column.header}: ${value}`] : [];
+    });
+    const sourceRemarks = mapping.flatMap((column, index) => ["remark", "deviation", "compliance"].includes(column.role) && item.sourceCells?.[index]
+      ? [`${column.header}: ${item.sourceCells[index]}`] : []);
+    rows.push({
+      id: `${item.id}:0`, sourceRequirementId: item.id, sourceRequirementIds: [item.id],
+      mergeScope: section, exportGroupId: item.exportGroupId,
+      continuationOfPrevious: item.continuationOfPrevious === true
+        && parameter === ""
+        && mapping.every((column, index) => column.role !== "serial" || !item.sourceCells?.[index]?.trim()),
+      values: [group, section, parameter, [item.sourceSpecificationBlank ? "" : item.quote, ...extras].join("\n"), "", "", sourceRemarks.join("\n"), `Page ${item.page}`],
+    });
+  }
+  const merged: ResponseSheetRow[] = [];
+  for (const row of rows) {
+    const previous = merged.at(-1);
+    if (row.exportGroupId && previous?.exportGroupId === row.exportGroupId && previous.mergeScope === row.mergeScope) {
+      previous.values[3] += " " + row.values[3];
+      previous.sourceRequirementIds.push(...row.sourceRequirementIds);
+    } else merged.push(row);
+  }
+  const continued: ResponseSheetRow[] = [];
+  for (const row of merged) {
+    const previous = continued.at(-1);
+    const currentPage = Number(row.values[7].match(/\d+/)?.[0]);
+    const previousPages = [...(previous?.values[7].matchAll(/\d+/g) ?? [])].map((match) => Number(match[0]));
+    if (row.continuationOfPrevious && previous && previous.mergeScope === row.mergeScope
+      && previous.values[0] === row.values[0] && previousPages.at(-1) === currentPage - 1) {
+      previous.values[3] += " " + row.values[3];
+      previous.values[7] = `Pages ${[...previousPages, currentPage].join(" and ")}`;
+      previous.sourceRequirementIds.push(...row.sourceRequirementIds);
+    } else continued.push(row);
+  }
+  return {columns, rows: continued};
+}
+
+export function responseHeadingMergeKeys(sheet: ResponseSheet): string[] {
+  const headingColumn = sheet.columns.findIndex((column) => column.role === "heading");
+  return sheet.rows.map((row) => {
+    const value = headingColumn < 0 ? "" : row.values[headingColumn] ?? "";
+    return value && row.mergeScope ? `${row.mergeScope}\u0000${value}` : value;
+  });
 }

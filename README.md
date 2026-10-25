@@ -22,7 +22,9 @@
 
 Tender Review is a focused single-user demo for preparing a technical response sheet from a text-based tender PDF. It finds candidate clauses, links each candidate to selectable text on its cited page, displays a page highlight, and exports a DOCX with blank OEM response fields.
 
-When a technical page contains a selectable two-column table headed **Parameter** and **Required Specification**, the app uses PDF cell geometry to keep each parameter with its full specification cell. It also preserves blank specification rows and a following **Other requirements** bullet list. The DOCX uses the four-column response layout shown in the reference, with compliance and remarks left blank. Other document layouts use GPT-6 Luna to route and extract candidate requirements for human review.
+Selectable vector tables are read by source row and cell geometry. The model maps each table's visible headers and identifies equipment groups; continuation pages inherit the last verified map. Different table schemas can feed one response sheet with **Equipment / group**, **Annexure / section**, **Specification**, **Description**, blank **Comply (Yes/No)**, **Any deviation**, **Remarks / Justifications**, and locked **Source page** columns. Serial numbers stay in source evidence and are omitted from this grouped response sheet. Split review candidates from the same source cell are reassembled in the exported row. Both annexures remain separate even when their wording repeats.
+
+A standalone source annexure heading establishes a page boundary. When the model selects part of that annexure, its remaining pages are included up to the next verified annexure heading so short service/warranty continuations are not silently dropped. Pages without usable table geometry use bounded text/image extraction and an advisory omission audit. A source match verifies a citation, not complete coverage.
 
 The app does not decide whether a supplier complies. Every candidate starts in **Needs review** and should be checked against the original tender.
 
@@ -62,7 +64,7 @@ PDF.js reads the PDF text and provides the page-coordinate geometry used by the 
 
 ## Run locally
 
-Prerequisites: Node.js 20+, npm, and GPT-6 Luna credentials configured in the local environment. For local scanned-page OCR, install Tesseract 5 with the configured language data; OCR is optional for text-based PDFs.
+Prerequisites: Node.js 22.13+, npm, and GPT-6 Luna credentials configured in the local environment. For local scanned-page OCR, install Tesseract 5 with the configured language data; OCR is optional for text-based PDFs.
 
 ```sh
 git clone https://github.com/ayushcodes13/tender-compliance-engine.git
@@ -101,3 +103,16 @@ There is no separate API service, worker, database, job queue, or Docker stack i
 - [Live MVP](https://tender-compliance-engine.vercel.app/)
 - [Portfolio](https://devayushrout.me/)
 - [How the evidence match works](https://tender-compliance-engine.vercel.app/method)
+
+## Reliability checks
+
+```sh
+make web-test
+make web-typecheck
+make web-build
+make web-test-pipeline
+```
+
+The pipeline check starts an isolated production Next.js server and a scripted model endpoint. It exercises real synthetic PDF uploads, routing, mixed table/prose extraction, source verification, omission recovery, and response-sheet edits without external model credentials. It is a deterministic contract test, not a measurement of live model accuracy. The regression suite also checks Unicode PDF export so comparison signs and units survive the generated PDF. CI runs all four checks on Node.js 22.
+
+See [the reliability audit](docs/document-reliability-audit.md) for the client-tender acceptance case, implementation evidence, and remaining limits. The public demo is a separate deployment and must be reverified after release.

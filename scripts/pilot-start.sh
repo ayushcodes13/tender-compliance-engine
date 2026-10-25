@@ -12,7 +12,7 @@ if [[ -f .env.local ]]; then
   set +a
 fi
 
-command -v node >/dev/null || { echo "Install Node.js 20+ first." >&2; exit 1; }
+command -v node >/dev/null || { echo "Install Node.js 22.13+ first." >&2; exit 1; }
 command -v npm >/dev/null || { echo "Install npm first." >&2; exit 1; }
 if [[ -z "${OPENAI_API_KEY:-}" ]]; then
   echo "Add OPENAI_API_KEY to .env.local before starting the extraction demo." >&2
@@ -28,7 +28,7 @@ if [[ -f .local/web.pid ]] && kill -0 "$(cat .local/web.pid)" 2>/dev/null; then
   exit 0
 fi
 
-node apps/web/node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3307 >.local/logs/web.log 2>&1 &
+node apps/web/node_modules/next/dist/bin/next dev apps/web --hostname 127.0.0.1 --port 3307 >.local/logs/web.log 2>&1 &
 echo "$!" > .local/web.pid
 
 for attempt in $(seq 1 60); do

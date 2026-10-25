@@ -2,6 +2,7 @@ export type RoutingPage = {
   page: number;
   text: string;
   rawText?: string;
+  routingText?: string;
   hasVectorTableGeometry?: boolean;
 };
 
@@ -19,7 +20,7 @@ export type RoutingBatch = {
   clippedPages: number[];
 };
 
-const PAGE_SUMMARY_LIMIT = 380;
+const PAGE_SUMMARY_LIMIT = 900;
 export const ROUTING_BATCH_CHARACTER_LIMIT = 10_000;
 
 const technicalSignal = /\b(?:technical|specification|equipment|instrument|machine|system|parameter|performance|capacity|accuracy|resolution|range|voltage|current|power|pressure|temperature|dimension|material|shall|must|required|minimum|maximum|at least|not less than|comply|conform|test|calibration|compliance|remark|deviation)\b/i;
@@ -39,7 +40,7 @@ function scoreLine(line: string, index: number): number {
 }
 
 function excerptForPage(page: RoutingPage): { summary: string; clipped: boolean } {
-  const original = page.rawText?.trim() || page.text.trim();
+  const original = page.routingText?.trim() || page.rawText?.trim() || page.text.trim();
   const lines = original.split(/\r?\n/).map(normalizedLine).filter(Boolean);
   const candidates = lines.map((line, index) => ({ line, index, score: scoreLine(line, index) }));
   const selected = new Set<number>();

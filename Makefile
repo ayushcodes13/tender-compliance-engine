@@ -1,4 +1,4 @@
-.PHONY: help pilot-start pilot-stop pilot-status web-install web-typecheck web-build
+.PHONY: help pilot-start pilot-stop pilot-status web-install web-typecheck web-build web-test web-test-pipeline
 
 help:
 	@echo "Tender Review: single-app private MVP"
@@ -7,6 +7,7 @@ help:
 	@echo "  make pilot-status   Check the local app"
 	@echo "  make web-install    Install the Next app dependencies"
 	@echo "  make web-typecheck  Type-check the app"
+	@echo "  make web-test       Run extraction and provenance regression tests"
 	@echo "  make web-build      Build the app"
 
 pilot-start:
@@ -27,3 +28,9 @@ web-typecheck:
 
 web-build:
 	npm --prefix apps/web run build
+
+web-test:
+	npm --prefix apps/web test
+
+web-test-pipeline:
+	cd apps/web && npm run test:pipeline

@@ -45,3 +45,29 @@ test("turns a network failure into a safe endpoint connection message", async ()
     return true;
   });
 });
+
+test('bounds in-flight requests and never sends aborted queued work', async () => {
+  let active = 0;
+  let peak = 0;
+  let sent = 0;
+  const releaseRequests = [];
+  const client = createModelCompletionClient({provider:'openai-compatible',baseUrl:'https://example.invalid',model:'gpt-6-luna',apiKey:'secret'}, async () => {
+    sent++; active++; peak=Math.max(peak,active);
+    await new Promise(resolve=>releaseRequests.push(resolve));
+    active--; return new Response('{}');
+  });
+  const requests = Array.from({length:3},()=>client.fetch('ignored'));
+  await new Promise(resolve=>setImmediate(resolve));
+  const controller = new AbortController();
+  const queued = client.fetch('ignored',{signal:controller.signal});
+  controller.abort();
+  await assert.rejects(queued, {name:'AbortError'});
+  const final = client.fetch('ignored');
+  releaseRequests.splice(0).forEach(resolve=>resolve());
+  await Promise.all(requests);
+  await new Promise(resolve=>setImmediate(resolve));
+  releaseRequests.splice(0).forEach(resolve=>resolve());
+  await final;
+  assert.equal(peak,3);
+  assert.equal(sent,4);
+});

@@ -115,9 +115,9 @@ export function keepParsedSourceCandidate<T extends { quote?: unknown; row_type?
     || discardContainedSuggestions(samePageQuotes, [candidate]).length > 0;
 }
 
-export function sourceCandidateKey(page: number, quote: string, sourceCells?: string[]): string {
+export function sourceCandidateKey(page: number, quote: string, sourceCells?: string[], sourceRowIndex?: number): string {
   const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
-  return `${page}:${normalize(quote)}:${sourceCells?.length ? normalize(sourceCells.join(" | ")) : ""}`;
+  return `${page}:${sourceRowIndex ?? ""}:${normalize(quote)}:${sourceCells?.length ? normalize(sourceCells.join(" | ")) : ""}`;
 }
 
 export function splitSourceQuote(source: string, parts: string[]): string[] {
