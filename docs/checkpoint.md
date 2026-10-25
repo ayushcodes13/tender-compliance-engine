@@ -73,7 +73,7 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 - [x] Different table column layouts preserve literal source specifications/descriptions, section/equipment headings, and independent source citations in one grouped sheet; the optical-table group has 16 source rows per annexure.
 - [x] Page continuations and source-cell subpoints retain their complete text and every source link when joined for export.
 - [x] SHA-256 provenance matches the uploaded bytes after PDF.js parsing; unknown evidence remains unknown.
-- [x] PDF export preserves comparison signs, numerical precision, units, and source pages.
+- [x] PDF export preserves comparison signs, numerical precision, and units. Per the 2026-10-25 client clarification, the printable PDF omits the source-page column and page-number footer; locked source citations remain available in the UI.
 - [x] Regression tests, production build, and deterministic upload-to-sheet contract checks pass and run in CI.
 - [x] Real browser upload/review and DOCX/PDF/Excel download are inspected, with remaining limits documented.
 

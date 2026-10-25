@@ -6,6 +6,12 @@ import { verticalMergeAt } from './compliance-format.ts';
 
 /** Embedded Unicode font preserves comparison signs, units and source punctuation. */
 export function createResponsePdf(sheet: ResponseSheet, title: string, filename: string, fontBase64: string): jsPDF {
+  // Keep provenance in the review model/UI; the printable PDF omits citations.
+  const printableIndices = sheet.columns.flatMap((column, index) => column.role === 'page' ? [] : [index]);
+  sheet = {
+    columns: printableIndices.map(index => sheet.columns[index]),
+    rows: sheet.rows.map(row => ({...row, values: printableIndices.map(index => row.values[index] ?? '')})),
+  };
   const pdf = new jsPDF({orientation:sheet.columns.length > 4 ? 'landscape':'portrait',unit:'pt',format:sheet.columns.length > 6 ? 'a3':'a4'});
   pdf.addFileToVFS('DejaVuSans.ttf',fontBase64);
   pdf.addFont('DejaVuSans.ttf','TenderUnicode','normal');
@@ -27,7 +33,7 @@ export function createResponsePdf(sheet: ResponseSheet, title: string, filename:
   pdf.text(`Source tender: ${filename} · ${sheet.rows.length} worksheet rows`,36,49);
   const headingColumn=sheet.columns.findIndex(column=>column.role==='heading');
   const headingValues=responseHeadingMergeKeys(sheet);
-  const weights = sheet.columns.map(column => column.role === 'requirement' ? 3.8 : column.role === 'heading' ? 1.5 : column.role === 'page' ? 0.8 : 1);
+  const weights = sheet.columns.map(column => column.role === 'requirement' ? 3.8 : column.role === 'heading' ? 1.5 : 1);
   const totalWeight = weights.reduce((sum,weight)=>sum+weight,0);
   const usableWidth = pdf.internal.pageSize.getWidth()-72;
   autoTable(pdf,{
@@ -40,8 +46,7 @@ export function createResponsePdf(sheet: ResponseSheet, title: string, filename:
     alternateRowStyles:{fillColor:[247,249,252]},
     margin:{left:36,right:36,top:60,bottom:32},showHead:'everyPage',rowPageBreak:'avoid',
     didDrawPage(data){
-      pdf.setFont('TenderUnicode','normal');pdf.setFontSize(7);
-      pdf.text(`Page ${data.pageNumber}`,pdf.internal.pageSize.getWidth()-36,pdf.internal.pageSize.getHeight()-14,{align:'right'});
+      pdf.setFont('TenderUnicode','normal');
       if(data.pageNumber>1){pdf.setFontSize(11);pdf.text(`${title} (continued)`,36,34,{maxWidth:pdf.internal.pageSize.getWidth()-72});pdf.setFontSize(7);pdf.text(`Source tender: ${filename}`,36,49);}
     },
   });
