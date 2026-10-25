@@ -1,5 +1,10 @@
 type PositionedText = {text:string;box:{x:number;y:number;width:number;height:number}};
 
+/** Header cells can be vertically aligned differently; use the earliest cell. */
+export function sourceTableTextTop(rows:Array<{bbox:{y:number};cellBoxes:Array<{y:number}|null>}>):number {
+  return rows.length ? Math.min(...rows.flatMap(row=>[row.bbox.y,...row.cellBoxes.flatMap(box=>box?[box.y]:[])])) : 0;
+}
+
 /** Only a standalone, visible top-of-page heading establishes an annexure boundary. */
 export function findAnnexureHeading(items: PositionedText[], pageHeight: number): string | null {
   const lines: Array<{y:number;items:PositionedText[]}> = [];
@@ -19,13 +24,14 @@ export function findAnnexureHeading(items: PositionedText[], pageHeight: number)
 /** A technical section title can label output without expanding routing to the document tail. */
 export function findTechnicalSectionHeading(items: PositionedText[], pageHeight: number): string | null {
   const lines: Array<{y:number;items:PositionedText[]}> = [];
-  for(const item of items.filter(item=>item.text.trim()&&item.box.y<pageHeight*0.35).sort((a,b)=>a.box.y-b.box.y||a.box.x-b.box.x)) {
+  for(const item of items.filter(item=>item.text.trim()&&item.box.y<pageHeight*0.75).sort((a,b)=>a.box.y-b.box.y||a.box.x-b.box.x)) {
     const line=lines.find(line=>Math.abs(line.y-item.box.y)<3);
     if(line)line.items.push(item);else lines.push({y:item.box.y,items:[item]});
   }
   for(const line of lines) {
     const text=line.items.sort((a,b)=>a.box.x-b.box.x).map(item=>item.text).join(' ').replace(/\s+/g,' ').trim();
-    if(/^Section\s*(?:\d+|[IVXLCDM]+)\s*[-–—:]\s*Technical\s+(?:specifications?|requirements?)\s*$/i.test(text))return text;
+    if(line.y<pageHeight*0.35&&/^Section\s*(?:\d+|[IVXLCDM]+)\s*[-–—:]\s*Technical\s+(?:specifications?|requirements?)\s*$/i.test(text))return text;
+    if(/^Technical\s+(?:specifications?|requirements?)\s*:?$/i.test(text))return text;
   }
   return null;
 }

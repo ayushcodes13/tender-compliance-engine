@@ -38,19 +38,22 @@ const provider = http.createServer(async (request, response) => {
       result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
-      const columns = [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
+      const columns = scenario==='single-content' ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>({row_index:Number(match[1]),row_type:Number(match[1])===2?'header':match[2].includes('Description')?'header':match[2].includes('A. Optical table')?'section':'requirement',category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false})),loose_headings:[],splits:[],visual_completions:[]};
     } else if (schema === 'technical_text_missing_requirements') {
       result = {columns:[],requirements:[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
-        ...(text.includes(outsideTable)?[{page:1,quote:outsideTable,category:'Other',row_type:'requirement',heading_prefix:''}]:[]),
+        ...(text.includes(outsideTable)?[{page:1,quote:outsideTable,category:'Other',row_type:'requirement',heading_prefix:''},{page:1,quote:'Required value 1 mm',category:'Other',row_type:'requirement',heading_prefix:''},{page:1,quote:'A. Optical table',category:'Other',row_type:'section',heading_prefix:''}]:[]),
       ]};
     } else if (schema === 'tender_requirements') {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
+      if(scenario==='case-sensitive')result={columns:[],requirements:[...text.matchAll(/Optical power shall be 1 (?:mW|MW)\./g)].map(match=>({page:1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
+      if(scenario==='invalid-capacity')result.requirements.push(...Array.from({length:300},(_,index)=>({page:1,quote:`Invented unsupported parameter ${index}.`,row_type:'requirement',category:'Other',heading_prefix:''})));
+      if(scenario==='verified-capacity')result={columns:[],requirements:[...text.matchAll(/Capacity parameter (\d+) shall be (\d+) mm\./g)].map(match=>({page:Math.floor((Number(match[1])-1)/50)+1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
     } else throw new Error(`Unexpected provider operation: ${schema}`);
     response.writeHead(200, {'content-type':'application/json'});
     response.end(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}));
@@ -81,6 +84,37 @@ try {
   assert.equal(one.analysis.document.documentFingerprint,createHash('sha256').update(Buffer.from(short.output('arraybuffer'))).digest('hex'));
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
+  scenario='case-sensitive';
+  const unitPdf=new jsPDF();unitPdf.text('Optical power shall be 1 mW.',20,30);unitPdf.text('Optical power shall be 1 MW.',20,50);
+  const unitResult=await analyze(unitPdf);assert.equal(unitResult.ok,true,unitResult.error);
+  assert.deepEqual(unitResult.analysis.requirements.map(row=>row.quote),['Optical power shall be 1 mW.','Optical power shall be 1 MW.']);
+  scenario='invalid-capacity';
+  const invalidCapacity=await analyze(short);
+  assert.equal(invalidCapacity.ok,true,invalidCapacity.error);
+  assert.equal(invalidCapacity.analysis.requirements.length,1,'Rejected model suggestions do not consume verified review capacity');
+  assert.ok(invalidCapacity.analysis.rejectedCandidates>=300);
+  scenario='verified-capacity';
+  const capacityPdf=new jsPDF({unit:'pt'});
+  for(let index=1;index<=251;index++){
+    if(index>1&&(index-1)%50===0)capacityPdf.addPage();
+    capacityPdf.setFontSize(8);capacityPdf.text(`Capacity parameter ${index} shall be ${index} mm.`,30,30+((index-1)%50)*14);
+  }
+  const capacity=await analyze(capacityPdf);
+  assert.equal(capacity.ok,false,'Oversized verified sheets stop without partial output');
+  assert.match(capacity.error,/251 verified response rows/);
+  assert.equal(capacity.analysis,undefined);
+  scenario='single-content';
+  const single=new jsPDF({unit:'pt'});single.setFontSize(9);single.text('TECHNICAL SPECIFICATION',40,45);
+  [['Technical Parameters NIQ','Remark'],['Optical power shall be 1 mW.',''],['Vacuum shall remain below 1 mbar.',''],['Pressure shall remain below 2 Pa.','']].forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{const width=column===0?370:130;single.rect(x,70+row*35,width,35);if(value)single.text(value,x+3,(row===0&&column===1?80:88)+row*35);x+=width;});});
+  const singleResult=await analyze(single);assert.equal(singleResult.ok,true,singleResult.error);
+  assert.ok(singleResult.analysis.requirements.every(row=>!row.sourceSectionHeadings?.includes('Remark')),'Vertically aligned response headers stay inside the table');
+  assert.equal(singleResult.analysis.normalizedTables,true);assert.equal(singleResult.analysis.requirements.length,3);
+  assert.ok(singleResult.analysis.requirements.every(row=>row.sourceReference.sourceCell));
+  const singleSections=buildResponseSections(buildResponseSheet(singleResult.analysis));
+  assert.equal(singleSections[0].columns[0].header,'Technical Parameters NIQ');
+  assert.equal(singleSections[0].columnIndices[0],3,'No invented empty parameter column');
+  assert.equal(singleSections[0].rows.length,3);
+  scenario='prose';
   const pdf=new jsPDF();
   quotes.forEach((quote,index)=>{if(index)pdf.addPage();pdf.text('Technical requirements',20,20);pdf.text(quote,20,40);if(index===4)pdf.text(recovery,20,60);});
   const result=await analyze(pdf);
@@ -140,7 +174,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

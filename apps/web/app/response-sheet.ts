@@ -15,7 +15,8 @@ export type ResponseSheetRow = {
   exportGroupId?: string;
   sectionHeadings?: string[];
   headingId?: string;
-  sourceHeaders?: Record<number, string>;
+  sourceHeaders?: Partial<Record<number, string>>;
+  includeParameterColumn?: boolean;
 };
 export type ResponseSheet = { columns: ResponseSheetColumn[]; rows: ResponseSheetRow[]; layout?: "sectioned" };
 export type ResponseRequirement = {
@@ -260,8 +261,9 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       ? [`${column.header}: ${item.sourceCells[index]}`] : []);
     rows.push({
       id: `${item.id}:0`, sourceRequirementId: item.id, sourceRequirementIds: [item.id],
+      includeParameterColumn: mapping.length ? parameterIndex >= 0 : item.sourceCells?.length ? undefined : false,
       sourceHeaders: {
-        2: mapping[parameterIndex]?.header || "Specification",
+        ...(parameterIndex >= 0 ? {2: mapping[parameterIndex].header} : {}),
         3: mapping[specificationIndex]?.header || "Description",
         4: mapping.find(column => column.role === "compliance")?.header || "Comply (Yes/No)",
         6: mapping.find(column => column.role === "remark")?.header || "Remarks / Justifications",
@@ -270,7 +272,7 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       continuationOfPrevious: item.continuationOfPrevious === true
         && parameter === ""
         && mapping.every((column, index) => column.role !== "serial" || !item.sourceCells?.[index]?.trim()),
-      values: [group, section, parameter, [item.sourceSpecificationBlank ? "" : item.quote, ...extras].join("\n"), "", "", sourceRemarks.join("\n"), `Page ${item.page}`],
+      values: [group, section, parameter, [item.sourceSpecificationBlank ? "" : item.quote, ...extras, ...sourceRemarks].join("\n"), "", "", "", `Page ${item.page}`],
     });
   }
   const merged: ResponseSheetRow[] = [];

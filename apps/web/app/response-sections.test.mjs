@@ -35,3 +35,21 @@ test('a source title already above the table is not repeated as an equipment hea
  const section=buildResponseSections(sheet)[0];
  assert.equal(section.heading,'');assert.deepEqual(section.titleLines,['▪ Optical Table']);
 });
+
+test('single-content source tables do not gain an empty parameter column',()=>{
+ const sheet=fixture();sheet.rows=sheet.rows.slice(0,1);sheet.rows[0].values[2]='';sheet.rows[0].includeParameterColumn=false;sheet.rows[0].sourceHeaders={3:'Technical Parameters NIQ'};
+ const original=structuredClone(sheet);const section=buildResponseSections(sheet,true)[0];
+ assert.equal(section.columns[0].header,'Technical Parameters NIQ');assert.equal(section.columnIndices[0],3);
+ assert.equal(section.rows[0].values[0],'≥ 300 mm');assert.deepEqual(sheet,original);
+ sheet.rows[0].sourceHeaders[2]='Native parameter';
+ assert.equal(buildResponseSections(sheet)[0].columns[0].header,'Native parameter','A deliberately blank source column remains');
+});
+
+test('each single-content table has an independent edit-column projection',()=>{
+ const sheet=fixture();for(const row of sheet.rows){row.includeParameterColumn=false;row.values[2]='';delete row.sourceHeaders?.[2];}
+ const before=structuredClone(sheet);const sections=buildResponseSections(sheet);
+ assert.equal(sections.length,3);assert.ok(sections.every(section=>section.columns.length===4));
+ assert.ok(sections.every(section=>section.columnIndices[0]===3));
+ assert.deepEqual(sections.map(section=>section.rows[0].values[0]),['≥ 300 mm','6 EA','±0.1 mm']);
+ assert.notEqual(sections[0].columnIndices,sections[1].columnIndices);assert.deepEqual(sheet,before);
+});

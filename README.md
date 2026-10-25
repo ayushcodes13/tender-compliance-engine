@@ -26,6 +26,8 @@ Selectable vector tables are read by source row and cell geometry. The model map
 
 A standalone source annexure heading establishes a page boundary. When the model selects part of that annexure, its remaining pages are included up to the next verified annexure heading so short service/warranty continuations are not silently dropped. Pages without usable table geometry use bounded text/image extraction and an advisory omission audit. A source match verifies a citation, not complete coverage.
 
+The local review accepts up to 250 verified response-sheet rows per run. The limit is checked after source verification and source-cell reassembly; rejected model suggestions do not count, and an oversized sheet stops explicitly instead of returning a truncated result.
+
 The app does not decide whether a supplier complies. Every candidate starts in **Needs review** and should be checked against the original tender.
 
 ## Screenshots

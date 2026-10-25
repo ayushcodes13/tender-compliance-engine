@@ -34,3 +34,17 @@ test('retains literal source title lines below an annexure and above the table',
  const items=[item('Institute header',10,10),item('Annexure I',10,60),item('Technical Specifications',10,80),item('for Optical Tables',10,100),item('A. Optical Table',10,130),item('Invented title',10,110)];
  assert.deepEqual(sourceAnnexureTitleLines(items,'Annexure I',125,'Institute header Annexure I Technical Specifications for Optical Tables A. Optical Table'),['Technical Specifications','for Optical Tables']);
 });
+
+
+test('a standalone technical title can start a table below an invitation on the same page',()=>{
+ assert.equal(findTechnicalSectionHeading([item('Invitation for Tender Offers',40,100),item('TECHNICAL SPECIFICATION',40,350)],800),'TECHNICAL SPECIFICATION');
+ assert.equal(findTechnicalSectionHeading([item('See TECHNICAL SPECIFICATION for details',40,350)],800),null);
+ assert.equal(findTechnicalSectionHeading([item('Technical Specification',40,730)],800),null);
+});
+
+test('top-aligned response headers do not become source title lines above the table',async()=>{
+ const {sourceTableTextTop,sourceAnnexureTitleLines}=await import('./annexure-routing.ts');
+ const top=sourceTableTextTop([{bbox:{y:100},cellBoxes:[{y:100},{y:80}]}]);
+ assert.equal(top,80);assert.equal(sourceTableTextTop([]),0);
+ assert.deepEqual(sourceAnnexureTitleLines([item('Annexure I',40,20),item('Technical Specification',40,40),item('Compliance',400,80),item('Y/N',400,95),item('Technical Parameters',40,100)],'Annexure I',top,'Annexure I Technical Specification Compliance Y/N Technical Parameters'),['Technical Specification']);
+});

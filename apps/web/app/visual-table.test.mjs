@@ -16,6 +16,16 @@ test("coverage recovery removes represented rows only from the same source page"
   ]);
 });
 
+test('coverage recovery does not duplicate an equal table quote or heading, but retains another page',()=>{
+ const drafts=[{page:2,quote:'Range: 0 to 100 mm'},{page:2,quote:'A. Optical table'}];
+ const otherPage={page:3,quote:'Range: 0 to 100 mm'};
+ assert.deepEqual(discardContainedSuggestionsByPage(drafts,[
+  {page:2,quote:'Range: 0 to 100 mm'},
+  {page:2,quote:'Range:  0 to 100 mm'},
+  {page:2,quote:'A. Optical table',row_type:'section'},otherPage,
+ ]),[otherPage]);
+});
+
 test("keeps the compliance response rows in source order across source-page boundaries", () => {
   const rows = [
     { text: "page 8 row 1", page: 8 },
@@ -169,4 +179,13 @@ test("accepts separate lettered checks only when all source text is retained in 
     "e) Show cracker efficiency.",
   ]);
   assert.deepEqual(splitSourceQuote(source, ["c) Check uniformity by XRD.", "e) Show cracker efficiency."]), [source]);
+});
+
+
+test('case-sensitive units remain distinct during recovery and source candidate deduplication',()=>{
+ const milli={page:2,quote:'Optical power shall be 1 mW.'};
+ const mega={page:2,quote:'Optical power shall be 1 MW.'};
+ assert.deepEqual(discardContainedSuggestionsByPage([milli],[mega]),[mega]);
+ assert.notEqual(sourceCandidateKey(2,milli.quote),sourceCandidateKey(2,mega.quote));
+ assert.deepEqual(discardContainedSuggestions(['Limit: Optical power shall be 1 mW.'],[mega]),[mega]);
 });

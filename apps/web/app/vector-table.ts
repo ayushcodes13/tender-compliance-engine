@@ -224,7 +224,7 @@ export function extractVectorTableRows(
 
 /** Excludes a repeated table header by comparing every populated source cell with the detected header map. */
 export function isRepeatedTableHeader(cells: string[], headers: string[]): boolean {
-  const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "").trim();
+  const normalize = (value: string) => /^(?:s(?:r|l)?\.?\s*no\.?|serial\s+no\.?)$/i.test(value.trim()) ? "serial-no" : value.replace(/\s+/g, " ").trim();
   const known = new Set([...headers, "s.no.", "s.no", "sr.no.", "sr.no", "sr no", "serial no", "sl.no", "sl no"].map(normalize).filter(Boolean));
   const populated = cells.map(normalize).filter(Boolean);
   if (!populated.length) return false;

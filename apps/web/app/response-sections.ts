@@ -34,10 +34,20 @@ export function buildResponseSections(sheet:ResponseSheet, includeCitations=fals
     const headingId=sectioned?row.headingId:sourceHeadingId;
     let current=sections.at(-1);
     if(!current||current.annexure!==annexure||current.heading!==heading||current.headingId!==headingId){
-      current={id:row.id,annexure,heading,headingId,titleLines:row.sectionHeadings??[],columns:indices.map(index=>({...sheet.columns[index],header:row.sourceHeaders?.[index]||sheet.columns[index].header})),columnIndices:indices,rows:[]};
+      current={id:row.id,annexure,heading,headingId,titleLines:row.sectionHeadings??[],columns:indices.map(index=>({...sheet.columns[index],header:row.sourceHeaders?.[index]||sheet.columns[index].header})),columnIndices:[...indices],rows:[]};
       sections.push(current);
     }
     current.rows.push({...row,values:indices.map(index=>row.values[index]??'')});
+  }
+  // A source table may have one requirement column and no separate parameter
+  // column. Keep its native schema rather than printing an invented empty one.
+  if(sectioned)for(const section of sections){
+    const parameterIndex=section.columnIndices.indexOf(2);
+    if(parameterIndex>=0&&section.rows.every(row=>row.includeParameterColumn===false&&!row.values[parameterIndex]?.trim()&&!row.sourceHeaders?.[2])){
+      section.columnIndices.splice(parameterIndex,1);
+      section.columns.splice(parameterIndex,1);
+      for(const row of section.rows)row.values.splice(parameterIndex,1);
+    }
   }
   return sections;
 }

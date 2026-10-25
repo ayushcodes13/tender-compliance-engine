@@ -164,3 +164,23 @@ test('normalized continuation retains both citations and additional source colum
   assert.equal(sheet.rows[0].values[7],'Pages 25 and 26');
   assert.deepEqual(sheet.rows[0].sourceRequirementIds,['a','b']);
 });
+
+test('many verified subpoints from one source cell retain every citation without becoming hundreds of response rows',()=>{
+ const mapping=[{header:'Parameter',role:'heading'},{header:'Description',role:'specification'}];
+ const requirements=Array.from({length:300},(_,index)=>({
+  id:`subpoint-${index}`,text:`Constraint ${index} mm.`,quote:`Constraint ${index} mm.`,page:4,
+  exportGroupId:'source-cell-4-1',sourceColumnMap:mapping,sourceCells:['Instrument',`Constraint ${index} mm.`],
+ }));
+ const sheet=buildResponseSheet({normalizedTables:true,requirements});
+ assert.equal(sheet.rows.length,1);
+ assert.equal(sheet.rows[0].sourceRequirementIds.length,300);
+ assert.deepEqual(sheet.rows[0].sourceRequirementIds,requirements.map(row=>row.id));
+ for(const row of requirements)assert.ok(sheet.rows[0].values[3].includes(row.quote));
+});
+
+test('source response-column notes remain source context while every OEM response field starts blank',()=>{
+ const mapping=[{header:'Required specification',role:'specification'},{header:'Remark',role:'remark'},{header:'Compliance',role:'compliance'}];
+ const sheet=buildResponseSheet({normalizedTables:true,requirements:[{id:'r',page:2,text:'Dopant cell',quote:'Dopant cell',sourceColumnMap:mapping,sourceCells:['Dopant cell','1 EA','To be confirmed']} ]});
+ assert.equal(sheet.rows[0].values[3],'Dopant cell\nRemark: 1 EA\nCompliance: To be confirmed');
+ assert.deepEqual(sheet.rows[0].values.slice(4,7),['','','']);
+});

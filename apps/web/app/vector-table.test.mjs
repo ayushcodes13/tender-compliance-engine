@@ -87,3 +87,10 @@ test("uses horizontal grid rules to keep wrapped table rows separate", () => {
     ["1", "Parameter 1", "1 mm or better"],
   ]);
 });
+
+
+test('header recognition does not erase unit case or numerical operators from data rows',()=>{
+ assert.equal(isRepeatedTableHeader(['MW'],['mW']),false);
+ assert.equal(isRepeatedTableHeader(['300 mm'],['≥ 300 mm']),false);
+ assert.equal(isRepeatedTableHeader(['≥ 300 mm'],['≥ 300 mm']),true);
+});
