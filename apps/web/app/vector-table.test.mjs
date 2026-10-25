@@ -94,3 +94,14 @@ test('header recognition does not erase unit case or numerical operators from da
  assert.equal(isRepeatedTableHeader(['300 mm'],['≥ 300 mm']),false);
  assert.equal(isRepeatedTableHeader(['≥ 300 mm'],['≥ 300 mm']),true);
 });
+
+test('retains the font boundary inside a mixed heading and specification cell',()=>{
+ const items=[
+  {str:'16.',bold:true,x:45,y:190,box:{x:45,y:600,width:15,height:10}},
+  {str:'Source shutter assembly',bold:true,x:70,y:190,box:{x:70,y:600,width:150,height:10}},
+  {str:'The system shall withstand 300 N.',bold:false,x:45,y:170,box:{x:45,y:620,width:200,height:10}},
+ ];
+ const rows=extractVectorTableRows(items,[{x:40,y:150,width:300,height:60},{x:340,y:150,width:100,height:60}],600,800);
+ assert.equal(rows[0].cellHeadingPrefixes[0],'16. Source shutter assembly');
+ assert.equal(rows[0].cells[0],'16. Source shutter assembly The system shall withstand 300 N.');
+});

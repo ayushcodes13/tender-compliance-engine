@@ -1,8 +1,11 @@
+import { nativeBoldPrefix } from './native-typography.ts';
+
 export type TableSourceItem = {
   str: string;
   x: number;
   y: number;
   box: { x: number; y: number; width: number; height: number } | null;
+  bold?:boolean;
 };
 
 export type VectorRectangle = { x: number; y: number; width: number; height: number };
@@ -11,6 +14,7 @@ export type VectorTableRow = {
   quote: string;
   cells: string[];
   cellBoxes: Array<{ x: number; y: number; width: number; height: number } | null>;
+  cellHeadingPrefixes?: Array<string|null>;
   remark?: string;
   rowHeight: number;
   bbox: { x: number; y: number; width: number; height: number };
@@ -41,7 +45,7 @@ function cellContents(items: TableSourceItem[], cell: VectorRectangle) {
     width: Math.max(...boxes.map((box) => box.x + box.width)) - Math.min(...boxes.map((box) => box.x)),
     height: Math.max(...boxes.map((box) => box.y + box.height)) - Math.min(...boxes.map((box) => box.y)),
   } : null;
-  return { text: inside.map((item) => item.str).join(" ").replace(/\s+/g, " ").trim(), bbox };
+  return { text: inside.map((item) => item.str).join(" ").replace(/\s+/g, " ").trim(), bbox, headingPrefix:nativeBoldPrefix(inside) };
 }
 
 function extractRowsFromGrid(
@@ -117,7 +121,7 @@ function extractRowsFromGrid(
         width: Math.max(...boxes.map((box) => box.x + box.width)) - Math.min(...boxes.map((box) => box.x)),
         height: Math.max(...boxes.map((box) => box.y + box.height)) - Math.min(...boxes.map((box) => box.y)),
       } : null;
-      return { text: cellItems.map((item) => item.str).join(" ").replace(/\s+/g, " ").trim(), bbox };
+      return { text: cellItems.map((item) => item.str).join(" ").replace(/\s+/g, " ").trim(), bbox, headingPrefix:nativeBoldPrefix(cellItems) };
     });
     if (!cellContentsForRow.some((cell) => cell.text)) continue;
     const first = cellContentsForRow.find((cell) => cell.text && cell.bbox);
@@ -133,6 +137,7 @@ function extractRowsFromGrid(
       quote: first.text,
       cells: cellContentsForRow.map((cell) => cell.text),
       cellBoxes: cellContentsForRow.map((cell) => cell.bbox),
+      ...(cellContentsForRow.some(cell=>cell.headingPrefix)?{cellHeadingPrefixes:cellContentsForRow.map(cell=>cell.headingPrefix)}:{}),
       ...(populatedRight.length ? { remark: populatedRight.map((cell) => cell.text).join(" ") } : {}),
       rowHeight: upper - lower,
       bbox: first.bbox,
@@ -212,6 +217,7 @@ export function extractVectorTableRows(
       quote: firstContent.text,
       cells,
       cellBoxes: cellContentsForRow.map((content) => content.bbox),
+      ...(cellContentsForRow.some(content=>content.headingPrefix)?{cellHeadingPrefixes:cellContentsForRow.map(content=>content.headingPrefix)}:{}),
       ...(remark ? { remark } : {}),
       rowHeight: Math.max(...rowCells.map((cell) => cell.height)),
       bbox: firstContent.bbox,

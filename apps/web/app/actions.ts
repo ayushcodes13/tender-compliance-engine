@@ -1,6 +1,7 @@
 import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
+import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
@@ -27,7 +28,7 @@ import { buildCoverageReport, collectSourceTableCoverageRows, type CoverageAudit
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
 
 type Box = { x: number; y: number; width: number; height: number };
-type TextItem = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean };
+type TextItem = { str: string; transform: number[]; width: number; height: number; hasEOL?: boolean; fontName?:string };
 type PositionedItem = PositionedTextItem & { box: Box; ocrConfidenceLevel?: OcrConfidence };
 type Requirement = {
   id: string;
@@ -44,6 +45,7 @@ type Requirement = {
   remark?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
+  nativeHeadingPrefix?: string;
   mergeWithNext?: boolean;
   continuationOfPrevious?: boolean;
   sourceRowHeight?: number;
@@ -331,7 +333,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         for (let i = start; i < rawText.length; i += 1) rawItemMap.push(itemIndex);
         const box = boxForItem(item, viewport);
         const [, , , , x, y] = item.transform;
-        sourceItems.push({ str: item.str, x, y, box });
+        sourceItems.push({ str: item.str, x, y, box, fontName:item.fontName });
         positioned.push({
           start,
           end: rawText.length,
@@ -403,6 +405,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       let visualImage: string | undefined;
       {
         const operators = await page.getOperatorList();
+        for(const item of sourceItems){
+          if(!item.fontName)continue;
+          try{item.bold=nativeFontBold(page.commonObjs.get(item.fontName)?.name);}catch{ /* Font style remains unknown. */ }
+        }
         for (let index = 0; index < operators.fnArray.length; index += 1) {
           if (operators.fnArray[index] !== OPS.constructPath) continue;
           const [commands, coordinates] = operators.argsArray[index] as [number[], number[]];
@@ -740,7 +746,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       },
     };
 
-    type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean };
+    type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
     let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: "extraction" | "coverage"; allowedPages?: number[] }> = [];
     let sourceColumns: SourceColumn[] = [];
@@ -997,7 +1003,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         const requirements: Candidate[] = sourceRows.flatMap((row, index) => {
           const sourceLabel = labelByIndex.get(index);
           const groupHeading = sourceTableGroupHeading(row.cells, pageColumns);
-          const label = groupHeading ? { ...sourceLabel, row_type: "section" } : sourceLabel;
+          let label = groupHeading ? { ...sourceLabel, row_type: "section" } : sourceLabel;
+          const nativePrefix=row.cellHeadingPrefixes?.[requirementColumnIndex];
+          const nativeHeadingPrefix=!groupHeading?confirmedNativeHeadingPrefix(nativePrefix,label?.row_type,label?.heading_prefix):undefined;
+          if(nativeHeadingPrefix){
+            label={...label,row_type:'requirement',heading_prefix:nativeHeadingPrefix};
+          }
           if (isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header))) return [];
           const isSection = label?.row_type === "section" || label?.row_type === "optional_heading";
           const headingColumnIndex = pageColumns.findIndex((column) => column.role === "heading");
@@ -1036,6 +1047,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               ocrWarning,
               remark: splitQuotes.length === 1 ? row.cells[pageColumns.findIndex((column) => column.role === "remark")] ?? "" : "",
               heading_prefix: splitQuotes.length === 1 || splitIndex === 0 ? label?.heading_prefix ?? "" : "",
+              nativeHeadingPrefix: nativeHeadingPrefix&&quote.startsWith(nativeHeadingPrefix)?nativeHeadingPrefix:undefined,
               merge_with_next: splitQuotes.length === 1 && label?.merge_with_next === true,
               display_lines: lines,
               category: segment.category ?? label?.category,
@@ -1479,6 +1491,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         headingPrefix: typeof candidate.heading_prefix === "string" && quote.startsWith(candidate.heading_prefix.trim())
           ? candidate.heading_prefix.trim()
           : undefined,
+        nativeHeadingPrefix: typeof candidate.nativeHeadingPrefix==='string' && quote.startsWith(candidate.nativeHeadingPrefix)
+          && sourcePage.vectorRows?.[candidate.source_row_index??-1]?.cellHeadingPrefixes?.[candidate.source_column_index??-1]===candidate.nativeHeadingPrefix
+          ? candidate.nativeHeadingPrefix : undefined,
         mergeWithNext: visualSheetType === "compliance-sheet" && candidate.merge_with_next === true,
         sourceRowHeight: typeof candidate.sourceRowHeight === "number" && Number.isFinite(candidate.sourceRowHeight)
           ? candidate.sourceRowHeight

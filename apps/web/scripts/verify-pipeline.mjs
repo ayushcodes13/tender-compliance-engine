@@ -38,9 +38,10 @@ const provider = http.createServer(async (request, response) => {
       result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
-      const columns = scenario==='single-content' ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
+      const columns = ['single-content','mixed-native-heading'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>({row_index:Number(match[1]),row_type:Number(match[1])===2?'header':match[2].includes('Description')?'header':match[2].includes('A. Optical table')?'section':'requirement',category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false})),loose_headings:[],splits:[],visual_completions:[]};
+      if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly'))row.row_type='section';}}
     } else if (schema === 'technical_text_missing_requirements') {
       result = {columns:[],requirements:[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
@@ -114,6 +115,16 @@ try {
   assert.equal(singleSections[0].columns[0].header,'Technical Parameters NIQ');
   assert.equal(singleSections[0].columnIndices[0],3,'No invented empty parameter column');
   assert.equal(singleSections[0].rows.length,3);
+  scenario='mixed-native-heading';
+  const mixedTitle='16. Source shutter assembly',mixedBody='The system shall withstand 300 N.';
+  const mixedPdf=new jsPDF({unit:'pt'});mixedPdf.setFontSize(9);mixedPdf.text('TECHNICAL SPECIFICATION',40,45);
+  [['Technical Parameters NIQ','Remark'],[mixedTitle,''],['Optical power shall be 1 mW.',''],['Vacuum shall remain below 1 mbar.','']].forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{const width=column===0?370:130;mixedPdf.rect(x,70+row*60,width,60);if(row===1&&column===0){mixedPdf.setFont('helvetica','bold');mixedPdf.text(value,x+3,88+row*60);mixedPdf.setFont('helvetica','normal');mixedPdf.text(mixedBody,x+3,102+row*60);}else if(value)mixedPdf.text(value,x+3,88+row*60);x+=width;});});
+  const mixedHeading=await analyze(mixedPdf);assert.equal(mixedHeading.ok,true,mixedHeading.error);
+  const mixedCell=mixedHeading.analysis.requirements.find(row=>row.quote.includes(mixedTitle));
+  assert.equal(mixedCell.rowType,'requirement','A mixed source cell is assessable despite model section classification');
+  assert.equal(mixedCell.headingPrefix,mixedTitle);assert.equal(mixedCell.nativeHeadingPrefix,mixedTitle);assert.ok(mixedCell.quote.includes(mixedBody));
+  const mixedSheet=buildResponseSheet(mixedHeading.analysis);assert.equal(mixedSheet.rows[0].values[0],mixedTitle);assert.equal(mixedSheet.rows[0].values[3],mixedBody);
+  assert.ok(mixedCell.sourceReference.sourceCell,'Full-cell source identity retained');
   scenario='prose';
   const pdf=new jsPDF();
   quotes.forEach((quote,index)=>{if(index)pdf.addPage();pdf.text('Technical requirements',20,20);pdf.text(quote,20,40);if(index===4)pdf.text(recovery,20,60);});
@@ -174,7 +185,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['mixed bold heading retains assessable body','single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

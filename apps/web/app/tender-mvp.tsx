@@ -32,6 +32,7 @@ type Requirement = {
   remark?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
+  nativeHeadingPrefix?: string;
   mergeWithNext?: boolean;
   continuationOfPrevious?: boolean;
   sourceRowHeight?: number;

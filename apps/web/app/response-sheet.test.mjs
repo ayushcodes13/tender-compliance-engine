@@ -184,3 +184,21 @@ test('source response-column notes remain source context while every OEM respons
  assert.equal(sheet.rows[0].values[3],'Dopant cell\nRemark: 1 EA\nCompliance: To be confirmed');
  assert.deepEqual(sheet.rows[0].values.slice(4,7),['','','']);
 });
+
+test('a verified mixed-cell heading stays above an assessable body row with the original citation',()=>{
+ const title='16. Source shutter assembly';const full=title+' The system shall withstand 300 N.';
+ const source={normalizedTables:true,requirements:[{id:'mixed',page:26,text:full,quote:full,headingPrefix:title,nativeHeadingPrefix:title,rowType:'requirement',sourceColumnMap:[{header:'Technical Parameters',role:'specification'}],sourceCells:[full]}]};
+ const before=structuredClone(source),sheet=buildResponseSheet(source);
+ assert.equal(sheet.rows.length,1);assert.equal(sheet.rows[0].values[0],title);assert.equal(sheet.rows[0].values[3],'The system shall withstand 300 N.');
+ assert.deepEqual(sheet.rows[0].sourceRequirementIds,['mixed']);assert.deepEqual(source,before);
+});
+
+test('an unverified inline model prefix does not change the group of following sibling requirements',()=>{
+ const mapping=[{header:'Technical Parameters',role:'specification'}];
+ const source={normalizedTables:true,requirements:[
+  {id:'h',page:26,text:'15. MBE sources',quote:'15. MBE sources',rowType:'section'},
+  {id:'f',page:26,text:'f) Dopant cells Carbon source.',quote:'f) Dopant cells Carbon source.',rowType:'requirement',headingPrefix:'f) Dopant cells',sourceColumnMap:mapping,sourceCells:['f) Dopant cells Carbon source.']},
+  {id:'g',page:26,text:'g) All cells require cooling.',quote:'g) All cells require cooling.',rowType:'requirement',sourceColumnMap:mapping,sourceCells:['g) All cells require cooling.']},
+ ]};
+ const sheet=buildResponseSheet(source);assert.deepEqual(sheet.rows.map(row=>row.values[0]),['15. MBE sources','15. MBE sources']);assert.equal(sheet.rows[0].values[3],'f) Dopant cells Carbon source.');
+});

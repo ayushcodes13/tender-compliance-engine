@@ -37,6 +37,7 @@ export type ResponseRequirement = {
   exportGroupId?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
+  nativeHeadingPrefix?: string;
 };
 export type ResponseSheetSource = {
   normalizedTables?: boolean;
@@ -249,6 +250,8 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
     const mapping = item.sourceColumnMap ?? [];
     if (!mapping.length && previousWasTable) { group = ""; groupId = `general-${item.page}`; }
     previousWasTable = mapping.length > 0;
+    const split=splitHeadingPrefix(item.quote,item.nativeHeadingPrefix);
+    if(split?.remainder.trim()) { group=split.heading;groupId=item.id; }
     const parameterIndex = mapping.findIndex((column) => column.role === "heading");
     const parameter = parameterIndex >= 0 ? item.sourceCells?.[parameterIndex] ?? "" : "";
     const specificationIndex = item.sourceSpecificationColumnIndex ?? mapping.findIndex((column) => column.role === "specification");
@@ -272,7 +275,7 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       continuationOfPrevious: item.continuationOfPrevious === true
         && parameter === ""
         && mapping.every((column, index) => column.role !== "serial" || !item.sourceCells?.[index]?.trim()),
-      values: [group, section, parameter, [item.sourceSpecificationBlank ? "" : item.quote, ...extras, ...sourceRemarks].join("\n"), "", "", "", `Page ${item.page}`],
+      values: [group, section, parameter, [item.sourceSpecificationBlank ? "" : split?.remainder.trim() || item.quote, ...extras, ...sourceRemarks].join("\n"), "", "", "", `Page ${item.page}`],
     });
   }
   const merged: ResponseSheetRow[] = [];
