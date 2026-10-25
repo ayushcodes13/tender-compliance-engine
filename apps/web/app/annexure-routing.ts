@@ -25,3 +25,18 @@ export function expandSelectedAnnexures(selectedPages: number[], annexureStarts:
   }
   return [...selected].sort((a,b)=>a-b);
 }
+
+/** Preserve only literal source lines between the annexure label and its first table. */
+export function sourceAnnexureTitleLines(items: PositionedText[], annexure: string, tableTop: number, sourceText: string): string[] {
+  const normalize = (value: string) => value.replace(/\s+/g,' ').trim();
+  const lines: Array<{y:number;items:PositionedText[]}> = [];
+  for(const item of items.filter(item=>item.text.trim()&&item.box.y<tableTop).sort((a,b)=>a.box.y-b.box.y||a.box.x-b.box.x)) {
+    const line=lines.find(line=>Math.abs(line.y-item.box.y)<3);
+    if(line)line.items.push(item);else lines.push({y:item.box.y,items:[item]});
+  }
+  const textLines=lines.map(line=>normalize(line.items.sort((a,b)=>a.box.x-b.box.x).map(item=>item.text).join(' ')));
+  const start=textLines.indexOf(normalize(annexure));
+  if(start<0)return [];
+  const native=normalize(sourceText);
+  return textLines.slice(start+1).filter(text=>text&&native.includes(text));
+}

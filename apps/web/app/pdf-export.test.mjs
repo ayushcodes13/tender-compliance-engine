@@ -48,3 +48,12 @@ test('removes a citation column in the middle without shifting the response cell
     assert.equal(source.rows[0].values[1],'Pages 20 and 21');
   }finally{await task.destroy();}
 });
+
+test('prints native annexure and equipment headings above the tables without generic wrappers',async()=>{
+ const {fixture}=await import('./test-fixtures/response-sections.mjs');
+ const pdf=createResponsePdf(fixture(),'UNWANTED GENERIC TITLE','UNWANTED-FILENAME.pdf',font);
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');const task=getDocument({data:new Uint8Array(pdf.output('arraybuffer')),isEvalSupported:false});
+ try{const document=await task.promise;let text='';for(let i=1;i<=document.numPages;i++){text+=(await(await document.getPage(i)).getTextContent()).items.filter(item=>'str'in item).map(item=>item.str).join(' ')+' ';}
+ assert.ok(text.indexOf('Annexure I')<text.indexOf('Specification'));assert.ok(text.includes('Technical Specifications for Optical Tables'));assert.ok(text.includes('A. Optical Table'));assert.ok(text.includes('B. Isolators'));assert.ok(text.includes('Annexure II'));assert.equal(text.includes('UNWANTED'),false);assert.equal(text.includes('Equipment / group'),false);assert.equal(text.includes('Annexure / section'),false);
+ }finally{await task.destroy();}
+});

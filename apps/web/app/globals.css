@@ -656,3 +656,9 @@ a { color: inherit; }
   .mvp-new-page .mvp-start-section { width: calc(100% - 32px); min-height: 0; grid-template-columns: 1fr; gap: 27px; padding: 32px 0 44px; }
   .mvp-new-page .mvp-start-copy h2 { font-size: 33px; }
 }
+
+.mvp-response-section { padding: 18px 16px 24px; }
+.mvp-response-annexure { margin: 0 0 18px; }
+.mvp-response-annexure h2 { margin: 0 0 9px; color: #172033; font-size: 20px; }
+.mvp-response-annexure p { margin: 5px 0; color: #26364c; font-size: 13px; }
+.mvp-response-section > h3 { margin: 0 0 12px; color: #172033; font-size: 15px; }

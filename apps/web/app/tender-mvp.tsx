@@ -10,6 +10,7 @@ import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type Proce
 import { consumeAnalysisStream } from "./analysis-events";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
+import { buildResponseSections } from "./response-sections";
 import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import type { CoverageReport, CoverageSourceRow, RejectedSuggestion } from "./coverage-ledger";
@@ -25,6 +26,7 @@ type Requirement = {
   sourceCells?: string[];
   sourceColumnMap?: Array<{header: string; role: string}>;
   sourceSectionTitle?: string;
+  sourceSectionHeadings?: string[];
   sourceSpecificationColumnIndex?: number;
   sourceSpecificationBlank?: boolean;
   remark?: string;
@@ -317,6 +319,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
+      if (responseSheet.layout === "sectioned" || responseSheet.rows.some(row => row.section)) {
+        const { createSectionedDocxBlob } = await import("./sectioned-exports");
+        downloadBlob(await createSectionedDocxBlob(responseSheet), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
+        return;
+      }
+
       const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, VerticalMergeType, WidthType } = await import("docx");
       const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19, indent = 0, headingPrefix?: string, verticalMerge?: "restart" | "continue") => {
         const displayText = verticalMerge === "continue" ? "" : text;
@@ -535,6 +543,13 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
+      if (responseSheet.layout === "sectioned" || responseSheet.rows.some(row => row.section)) {
+        const { createSectionedWorkbook } = await import("./sectioned-exports");
+        const buffer = await createSectionedWorkbook(responseSheet).xlsx.writeBuffer();
+        downloadBlob(new Blob([buffer as BlobPart], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.xlsx`);
+        return;
+      }
+
       const ExcelJS = await import("exceljs");
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Technical response", { views: [{ state: "frozen", ySplit: 1 }] });
@@ -824,14 +839,21 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           {sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}
         </div>
         <div className="mvp-sheet-scroll">
+          {buildResponseSections(responseSheet, true).map((section, sectionIndex, sections) => <section className="mvp-response-section" key={section.id}>
+            {section.annexure && section.annexure !== sections[sectionIndex - 1]?.annexure && <header className="mvp-response-annexure">
+              <h2>{section.annexure}</h2>
+              {section.titleLines.map((line, index) => <p key={index}>{line}</p>)}
+            </header>}
+            {section.heading && <h3>{section.heading}</h3>}
           <table className="mvp-sheet-table">
-            <thead><tr>{responseSheet.columns.map((column, index) => <th data-role={column.role} key={`${column.header}-${index}`}>{column.header}{column.role === "page" && <LockKeyhole size={12} aria-label="Locked citation" />}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
-            <tbody>{responseSheet.rows.map((row, rowIndex) => {
+            <thead><tr>{section.columns.map((column, index) => <th data-role={column.role} key={`${column.header}-${index}`}>{column.header}{column.role === "page" && <LockKeyhole size={12} aria-label="Locked citation" />}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
+            <tbody>{section.rows.map((row) => {
+              const rowIndex = responseSheet.rows.findIndex(item => item.id === row.id);
               const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
               const headingValues = responseHeadingMergeKeys(responseSheet);
               return <tr key={row.id} className={row.section ? "is-section-row" : undefined}>
                 {row.values.map((value, columnIndex) => {
-                  const column = responseSheet.columns[columnIndex];
+                  const column = section.columns[columnIndex];
                   const locked = column.role === "page";
                   const merge = column.role === "heading" ? verticalMergeAt(headingValues, rowIndex) : undefined;
                   if (merge === "continue") return null;
@@ -846,7 +868,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                         aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
                         rows={Math.min(4, Math.max(1, Math.ceil(value.length / (column.role === "requirement" ? 58 : 34))))}
                         value={value}
-                        onChange={(event) => updateSheetCell(row.id, columnIndex, event.target.value)}
+                        onChange={(event) => updateSheetCell(row.id, section.columnIndices[columnIndex], event.target.value)}
                       />}
                   </td>;
                 })}
@@ -863,6 +885,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               </tr>;
             })}</tbody>
           </table>
+          </section>)}
           {responseSheet.rows.length === 0 && <div className="mvp-sheet-empty"><p>All rows are removed from the export preview.</p><button type="button" className="mvp-text-button" onClick={resetResponseSheet}>Restore extracted rows</button></div>}
         </div>
         <footer className="mvp-sheet-footer">

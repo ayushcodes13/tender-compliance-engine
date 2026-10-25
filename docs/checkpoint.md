@@ -70,7 +70,7 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 **Status: LOCAL ACCEPTANCE VERIFIED; REMOTE CI / RELEASE GATE PENDING.**
 
 - [x] Real 42-page client PDF routes both full technical annexures, including continuation pages 22 and 26.
-- [x] Different table column layouts preserve literal source specifications/descriptions, section/equipment headings, and independent source citations in one grouped sheet; the optical-table group has 16 source rows per annexure.
+- [x] Different table column layouts preserve literal source specifications/descriptions. Source annexure labels/title lines and equipment headings sit above separate tables, with no annexure/equipment columns in the body; the optical-table group has 16 source rows per annexure. Source citations remain available in the UI.
 - [x] Page continuations and source-cell subpoints retain their complete text and every source link when joined for export.
 - [x] SHA-256 provenance matches the uploaded bytes after PDF.js parsing; unknown evidence remains unknown.
 - [x] PDF export preserves comparison signs, numerical precision, and units. Per the 2026-10-25 client clarification, the printable PDF omits the source-page column and page-number footer; locked source citations remain available in the UI.
@@ -80,3 +80,7 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 This checkpoint does not establish exhaustive extraction on unseen layouts, hosted OCR support, client production access controls, persistence, or a completed hosted deployment. See `docs/document-reliability-audit.md` for the evidence and limits.
 
 - [ ] Required remote CI passes. Keep this checkpoint title open until the PR checks pass; do not merge a failing required check.
+
+### Client print-layout clarification — 2026-10-25
+
+Use the tender's own annexure labels, title lines, and table/equipment headings as headings above the corresponding specification tables, in source order. Do not place those titles in body columns or add a generic document title, source filename, row-count introduction, or other wrapper to the printable output. Specification/description and OEM response fields form the table body; UI source validation remains available. The source titles are read from native positioned text, not invented from model metadata. UI, PDF, DOCX, and Excel use the same section projection.

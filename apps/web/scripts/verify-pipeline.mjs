@@ -6,6 +6,7 @@ import http from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import { jsPDF } from 'jspdf';
+import { buildResponseSections } from '../app/response-sections.ts';
 import { buildResponseSheet, updateResponseSheetCell, removeResponseSheetRow } from '../app/response-sheet.ts';
 import { consumeAnalysisStream } from '../app/analysis-events.ts';
 
@@ -110,6 +111,7 @@ try {
     const widths=page===1?[35,100,380]:[35,100,230,75,75];
     const sourceRows=[['A. Optical table',...widths.slice(1).map(()=>'')],['S. No.','Specification','Description',...(page===2?['Comply (Yes/No)','Remarks']:[])],
       ...Array.from({length:16},(_,index)=>[String(index+1),`Parameter ${index+1}`,`Required value ${index+1} mm`,...(page===2?['','']:[])])];
+    tables.setFontSize(11);tables.text(page===1?'Annexure I':'Annexure II',40,25);tables.text(page===1?'Technical Specifications for Optical Tables':'Technical Compliance Report for Optical Tables',40,45);
     tables.setFontSize(8);
     sourceRows.forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{tables.rect(x,70+row*26,widths[column],26);if(value)tables.text(value,x+3,85+row*26);x+=widths[column];});});
   }
@@ -117,10 +119,16 @@ try {
   const mixed=await analyze(tables);
   assert.equal(mixed.ok,true,mixed.error);
   assert.equal(mixed.analysis.normalizedTables,true);
+  assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
+  assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
   const grouped=buildResponseSheet(mixed.analysis);
   assert.equal(grouped.rows.length,33,'Both 16-row tables and the prose page retained');
   assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 1').length,16);
   assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 2').length,16);
+  const projected=buildResponseSections(grouped);
+  assert.deepEqual(projected.map(section=>section.rows.length),[16,16,1]);
+  assert.equal(projected[0].annexure,'Annexure I');assert.equal(projected[1].annexure,'Annexure II');
+  assert.ok(projected.every(section=>section.columns.every(column=>column.role!=='heading'&&column.role!=='page')));
   assert.ok(grouped.rows.slice(0,32).every(row=>row.values[0]==='A. Optical table'));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));

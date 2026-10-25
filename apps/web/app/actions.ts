@@ -4,7 +4,7 @@ import { PDF_FONT_OPTIONS } from "./pdf-runtime";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
 import { isClearlyAdministrativeClause } from "./extraction-rules";
-import { findAnnexureHeading, expandSelectedAnnexures } from "./annexure-routing";
+import { findAnnexureHeading, sourceAnnexureTitleLines, expandSelectedAnnexures } from "./annexure-routing";
 import { combinePageTranscripts, useComplianceSheetLayout, buildExtractionBatches } from "./document-input";
 import { extractStructuredTechnicalSection, type PdfRectangle, type SourceTextItem, type StructuredSection } from "./pdf-structure";
 import { shouldUseStructuredTableExtraction, technicalRoutingPages } from "./extraction-route";
@@ -36,6 +36,7 @@ type Requirement = {
   sourceCells?: string[];
   sourceColumnMap?: SourceColumn[];
   sourceSectionTitle?: string;
+  sourceSectionHeadings?: string[];
   sourceSpecificationColumnIndex?: number;
   sourceSpecificationBlank?: boolean;
   sourceRowIndex?: number;
@@ -645,7 +646,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     ])).values()].sort((a, b) => a.start_page - b.start_page || a.end_page - b.end_page);
     const sourceAnnexures = pages.flatMap((page) => {
       const title = findAnnexureHeading(page.positioned, page.height);
-      return title && locatePageQuote(title, page) ? [{ page: page.page, title }] : [];
+      const rows = title ? getVectorRows(page) : [];
+      const tableTop = rows.length ? Math.min(...rows.map(row => row.bbox.y)) : 0;
+      return title && locatePageQuote(title, page) ? [{ page: page.page, title,
+        headings: sourceAnnexureTitleLines(page.positioned, title, tableTop, page.rawText),
+      }] : [];
     });
     const modelSelectedPages = expandRoutedSections(uniqueSections, routingPages.map((page) => page.page));
     visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.map((section) => section.page), pages.map((page) => page.page));
@@ -1517,10 +1522,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       }
     }
     let activeSectionTitle: string | undefined;
+    let activeSectionHeadings: string[] = [];
     for (const sourcePage of pages) {
       const annexure = sourceAnnexures.find((section) => section.page === sourcePage.page);
-      if (annexure) activeSectionTitle = annexure.title;
-      for (const item of requirements.filter((item) => item.page === sourcePage.page)) item.sourceSectionTitle = activeSectionTitle;
+      if (annexure) { activeSectionTitle = annexure.title; activeSectionHeadings = annexure.headings; }
+      for (const item of requirements.filter((item) => item.page === sourcePage.page)) { item.sourceSectionTitle = activeSectionTitle; item.sourceSectionHeadings = activeSectionHeadings; }
     }
     const pageRejections = new Map<number, RejectedSuggestion[]>();
     for (const suggestion of rejectedSuggestionDetails) {

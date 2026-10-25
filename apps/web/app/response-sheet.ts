@@ -13,8 +13,11 @@ export type ResponseSheetRow = {
   section?: boolean;
   mergeScope?: string;
   exportGroupId?: string;
+  sectionHeadings?: string[];
+  headingId?: string;
+  sourceHeaders?: Record<number, string>;
 };
-export type ResponseSheet = { columns: ResponseSheetColumn[]; rows: ResponseSheetRow[] };
+export type ResponseSheet = { columns: ResponseSheetColumn[]; rows: ResponseSheetRow[]; layout?: "sectioned" };
 export type ResponseRequirement = {
   id: string;
   text: string;
@@ -27,6 +30,7 @@ export type ResponseRequirement = {
   sourceCells?: string[];
   sourceColumnMap?: Array<{header: string; role: string}>;
   sourceSectionTitle?: string;
+  sourceSectionHeadings?: string[];
   sourceSpecificationColumnIndex?: number;
   sourceSpecificationBlank?: boolean;
   exportGroupId?: string;
@@ -226,17 +230,24 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
   ];
   const rows: ResponseSheetRow[] = [];
   let group = "";
+  let groupId = "";
+  let previousWasTable = false;
   let section = "";
   for (const item of source.requirements) {
     if (item.sourceSectionTitle && item.sourceSectionTitle !== section) {
       section = item.sourceSectionTitle;
       group = "";
+      groupId = "";
     }
     if (item.rowType === "section" || item.rowType === "optional_heading") {
       group = item.quote;
+      groupId = item.id;
+      previousWasTable = Boolean(item.sourceColumnMap?.length);
       continue;
     }
     const mapping = item.sourceColumnMap ?? [];
+    if (!mapping.length && previousWasTable) { group = ""; groupId = `general-${item.page}`; }
+    previousWasTable = mapping.length > 0;
     const parameterIndex = mapping.findIndex((column) => column.role === "heading");
     const parameter = parameterIndex >= 0 ? item.sourceCells?.[parameterIndex] ?? "" : "";
     const specificationIndex = item.sourceSpecificationColumnIndex ?? mapping.findIndex((column) => column.role === "specification");
@@ -249,7 +260,13 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       ? [`${column.header}: ${item.sourceCells[index]}`] : []);
     rows.push({
       id: `${item.id}:0`, sourceRequirementId: item.id, sourceRequirementIds: [item.id],
-      mergeScope: section, exportGroupId: item.exportGroupId,
+      sourceHeaders: {
+        2: mapping[parameterIndex]?.header || "Specification",
+        3: mapping[specificationIndex]?.header || "Description",
+        4: mapping.find(column => column.role === "compliance")?.header || "Comply (Yes/No)",
+        6: mapping.find(column => column.role === "remark")?.header || "Remarks / Justifications",
+      },
+      mergeScope: section, exportGroupId: item.exportGroupId, sectionHeadings: item.sourceSectionHeadings, headingId: groupId,
       continuationOfPrevious: item.continuationOfPrevious === true
         && parameter === ""
         && mapping.every((column, index) => column.role !== "serial" || !item.sourceCells?.[index]?.trim()),
@@ -276,7 +293,7 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       previous.sourceRequirementIds.push(...row.sourceRequirementIds);
     } else continued.push(row);
   }
-  return {columns, rows: continued};
+  return {columns, rows: continued, layout: "sectioned"};
 }
 
 export function responseHeadingMergeKeys(sheet: ResponseSheet): string[] {

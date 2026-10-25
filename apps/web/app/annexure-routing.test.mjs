@@ -12,3 +12,9 @@ test('retains annexure tails across routing batches and stops at the next source
   assert.deepEqual(expandSelectedAnnexures([3],[20,23,27],pages),[3]);
   assert.deepEqual(expandSelectedAnnexures([40],[20,23,27,39],pages),[39,40,41,42]);
 });
+
+test('retains literal source title lines below an annexure and above the table',async()=>{
+ const {sourceAnnexureTitleLines}=await import('./annexure-routing.ts');
+ const items=[item('Institute header',10,10),item('Annexure I',10,60),item('Technical Specifications',10,80),item('for Optical Tables',10,100),item('A. Optical Table',10,130),item('Invented title',10,110)];
+ assert.deepEqual(sourceAnnexureTitleLines(items,'Annexure I',125,'Institute header Annexure I Technical Specifications for Optical Tables A. Optical Table'),['Technical Specifications','for Optical Tables']);
+});
