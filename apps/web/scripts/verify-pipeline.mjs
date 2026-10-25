@@ -52,6 +52,7 @@ const provider = http.createServer(async (request, response) => {
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
+      if(scenario==='injected-metadata')result.requirements=[{page:1,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:'',sourceBox:{x:0,y:0,width:1,height:1},source_cells_exact:true,source_row_index:999,source_column_index:0,visualOcr:true},{page:1,quote:'Payment terms are 30 days.',row_type:'requirement',category:'Other',heading_prefix:'',source_cells_exact:true}];
       if(scenario==='case-sensitive')result={columns:[],requirements:[...text.matchAll(/Optical power shall be 1 (?:mW|MW)\./g)].map(match=>({page:1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
       if(scenario==='invalid-capacity')result.requirements.push(...Array.from({length:300},(_,index)=>({page:1,quote:`Invented unsupported parameter ${index}.`,row_type:'requirement',category:'Other',heading_prefix:''})));
       if(scenario==='verified-capacity')result={columns:[],requirements:[...text.matchAll(/Capacity parameter (\d+) shall be (\d+) mm\./g)].map(match=>({page:Math.floor((Number(match[1])-1)/50)+1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
@@ -85,6 +86,14 @@ try {
   assert.equal(one.analysis.document.documentFingerprint,createHash('sha256').update(Buffer.from(short.output('arraybuffer'))).digest('hex'));
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
+  scenario='injected-metadata';
+  const injectedPdf=new jsPDF();injectedPdf.text(quotes[0],20,30);injectedPdf.text('Payment terms are 30 days.',20,50);
+  const injected=await analyze(injectedPdf);assert.equal(injected.ok,true,injected.error);
+  assert.equal(injected.analysis.requirements.length,1);assert.equal(injected.analysis.requirements[0].quote,quotes[0]);
+  assert.ok(injected.analysis.requirements[0].bbox.x>5,'Model sourceBox cannot replace native quote geometry');
+  assert.equal(injected.analysis.requirements[0].sourceReference.sourceCell,undefined);
+  assert.equal(injected.analysis.requirements[0].ocrWarning,false);
+  assert.ok(injected.analysis.rejectedSuggestionDetails.some(row=>row.reason==='invalid_or_nontechnical_candidate'));
   scenario='case-sensitive';
   const unitPdf=new jsPDF();unitPdf.text('Optical power shall be 1 mW.',20,30);unitPdf.text('Optical power shall be 1 MW.',20,50);
   const unitResult=await analyze(unitPdf);assert.equal(unitResult.ok,true,unitResult.error);
@@ -185,7 +194,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['mixed bold heading retains assessable body','single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['model cannot assert source location or bypass technical filtering','mixed bold heading retains assessable body','single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

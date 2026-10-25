@@ -2,6 +2,7 @@ import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
 import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
+import { modelCandidateFields } from "./model-candidate";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
@@ -748,7 +749,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
 
     type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
-    let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: "extraction" | "coverage"; allowedPages?: number[] }> = [];
+    let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: "extraction" | "coverage"; allowedPages?: number[]; trustedVectorRows?:boolean }> = [];
     let sourceColumns: SourceColumn[] = [];
     let coverageCheckIncomplete = false;
     let normalizedTables = false;
@@ -1143,7 +1144,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           status: result.modelInspectionComplete && expectedPageColumns.length > 0 ? "complete" : "incomplete",
         });
       }
-      parsedResponses = pageResults.map((result) => ({ ...result, origin: "extraction" as const }));
+      parsedResponses = pageResults.map((result) => ({ ...result, origin: "extraction" as const, trustedVectorRows:true }));
     } else if (visualSheetType === "compliance-sheet" && visualPages.length) {
       report("splitting selected table pages into overlapping visual reading regions", { stage: "mapping", message: "Reading the selected table layout" });
       const pageSegments = (await Promise.all(visualPages.map(async (page) =>
@@ -1391,8 +1392,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         total: 1,
       });
     }
-    const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction", allowedPages }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
-      ...candidate,
+    const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction", allowedPages, trustedVectorRows=false }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
+      ...(trustedVectorRows ? candidate : modelCandidateFields(candidate)),
       ...(page === undefined ? {} : { page }),
       ordinal,
       suggestionOrigin: origin,
