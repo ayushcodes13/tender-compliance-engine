@@ -81,10 +81,10 @@ export function mergeVisualHeadingRows<T extends VisualHeadingRow>(rows: T[]): T
 }
 
 export function discardContainedSuggestions<T extends { quote?: unknown; row_type?: string }>(draftQuotes: string[], suggestions: T[]): T[] {
-  const drafts = draftQuotes.map((quote) => quote.replace(/\s+/g, " ").trim().toLocaleLowerCase());
+  const drafts = draftQuotes.map((quote) => quote.replace(/\s+/g, " ").trim());
   return suggestions.filter((suggestion) => {
     if (typeof suggestion.quote !== "string") return false;
-    const candidate = suggestion.quote.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+    const candidate = suggestion.quote.replace(/\s+/g, " ").trim();
     if (!candidate) return false;
     // A structural label can be a separately formatted heading inside the
     // same source cell as its following requirements. Its words therefore
@@ -99,11 +99,15 @@ export function discardContainedSuggestionsByPage<T extends { page?: number; quo
   draftRows: Array<{ page?: number; quote?: unknown }>,
   suggestions: T[],
 ): T[] {
-  return suggestions.filter((suggestion) => Number.isInteger(suggestion.page)
-    && discardContainedSuggestions(
-      draftRows.filter((draft) => draft.page === suggestion.page && typeof draft.quote === "string").map((draft) => draft.quote as string),
-      [suggestion],
-    ).length > 0);
+  const normalize=(quote:string)=>quote.replace(/\s+/g," ").trim();
+  return suggestions.filter((suggestion) => {
+    if(!Number.isInteger(suggestion.page)||typeof suggestion.quote!=="string")return false;
+    const quotes=draftRows.filter(draft=>draft.page===suggestion.page&&typeof draft.quote==="string").map(draft=>draft.quote as string);
+    // Recovery has no new source-cell identity. An equal quote is already
+    // represented; separately located native cells are retained upstream.
+    if(quotes.some(quote=>normalize(quote)===normalize(suggestion.quote as string)))return false;
+    return discardContainedSuggestions(quotes,[suggestion]).length>0;
+  });
 }
 
 /** Exact, individually bordered source cells may legitimately repeat words found in another row. */
@@ -115,9 +119,9 @@ export function keepParsedSourceCandidate<T extends { quote?: unknown; row_type?
     || discardContainedSuggestions(samePageQuotes, [candidate]).length > 0;
 }
 
-export function sourceCandidateKey(page: number, quote: string, sourceCells?: string[]): string {
-  const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
-  return `${page}:${normalize(quote)}:${sourceCells?.length ? normalize(sourceCells.join(" | ")) : ""}`;
+export function sourceCandidateKey(page: number, quote: string, sourceCells?: string[], sourceRowIndex?: number): string {
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
+  return `${page}:${sourceRowIndex ?? ""}:${normalize(quote)}:${sourceCells?.length ? normalize(sourceCells.join(" | ")) : ""}`;
 }
 
 export function splitSourceQuote(source: string, parts: string[]): string[] {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, LockKeyhole, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -10,7 +10,8 @@ import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type Proce
 import { consumeAnalysisStream } from "./analysis-events";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
+import { buildResponseSections } from "./response-sections";
+import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import type { CoverageReport, CoverageSourceRow, RejectedSuggestion } from "./coverage-ledger";
 
@@ -23,9 +24,15 @@ type Requirement = {
   parameter?: string;
   specifications?: string[];
   sourceCells?: string[];
+  sourceColumnMap?: Array<{header: string; role: string}>;
+  sourceSectionTitle?: string;
+  sourceSectionHeadings?: string[];
+  sourceSpecificationColumnIndex?: number;
+  sourceSpecificationBlank?: boolean;
   remark?: string;
   rowType?: "section" | "requirement" | "optional_heading";
   headingPrefix?: string;
+  nativeHeadingPrefix?: string;
   mergeWithNext?: boolean;
   continuationOfPrevious?: boolean;
   sourceRowHeight?: number;
@@ -46,6 +53,7 @@ type Analysis = {
   pageCount: number;
   textPages: number;
   document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number };
+  normalizedTables?: boolean;
   sectionTitle?: string;
   sectionHeading?: string;
   sourceColumns?: Array<{ header: string; role: "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other" }>;
@@ -124,6 +132,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
+  const sourceDrawerRef = useRef<HTMLDialogElement>(null);
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [coverageFocus, setCoverageFocus] = useState<{ page: number; row: CoverageSourceRow } | null>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
   const processingStartedAtRef = useRef(0);
@@ -137,6 +147,13 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   }, [busy]);
 
   useEffect(() => () => activeRequestRef.current?.abort("upload screen closed"), []);
+
+  useEffect(() => {
+    const drawer = sourceDrawerRef.current;
+    if (!drawer) return;
+    if (sourceOpen && !drawer.open) drawer.showModal();
+    if (!sourceOpen && drawer.open) drawer.close();
+  }, [sourceOpen]);
 
   useGSAP(() => {
     const root = motionRoot.current;
@@ -179,7 +196,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           stagger: 0.09,
         });
       } else if (root.classList.contains("mvp-review-screen")) {
-        gsap.fromTo(".mvp-review-topbar, .mvp-review-summarybar, .mvp-workspace", { autoAlpha: 0, y: 10 }, {
+        gsap.fromTo(".mvp-review-topbar, .mvp-review-summarybar, .mvp-sheet-panel", { autoAlpha: 0, y: 10 }, {
           autoAlpha: 1,
           y: 0,
           duration: 0.36,
@@ -279,6 +296,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setCoverageFocus(null);
     setActiveId(item.id);
     setPage(item.page);
+    setSourceOpen(true);
   }
 
   function markReviewed() {
@@ -312,6 +330,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
+      if (responseSheet.layout === "sectioned" || responseSheet.rows.some(row => row.section)) {
+        const { createSectionedDocxBlob } = await import("./sectioned-exports");
+        downloadBlob(await createSectionedDocxBlob(responseSheet), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
+        return;
+      }
+
       const { AlignmentType, BorderStyle, Document, HeadingLevel, HeightRule, Packer, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlignTable, VerticalMergeType, WidthType } = await import("docx");
       const cell = (text: string, bold = false, alignment?: (typeof AlignmentType)[keyof typeof AlignmentType], size = 19, indent = 0, headingPrefix?: string, verticalMerge?: "restart" | "continue") => {
         const displayText = verticalMerge === "continue" ? "" : text;
@@ -413,7 +437,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const exportColumns = responseSheet.columns;
       const responseRows = responseSheet.rows;
       const headingColumnIndex = exportColumns.findIndex((column) => column.role === "heading");
-      const headingValues = responseRows.map((row) => headingColumnIndex < 0 ? "" : row.values[headingColumnIndex] ?? "");
+      const headingValues = responseHeadingMergeKeys(responseSheet);
       const rows = [
         new TableRow({ tableHeader: true, children: exportColumns.map((column) => cell(column.header, true, AlignmentType.CENTER)) }),
         ...responseRows.map((item, rowIndex) => new TableRow({
@@ -530,6 +554,13 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
+      if (responseSheet.layout === "sectioned" || responseSheet.rows.some(row => row.section)) {
+        const { createSectionedWorkbook } = await import("./sectioned-exports");
+        const buffer = await createSectionedWorkbook(responseSheet).xlsx.writeBuffer();
+        downloadBlob(new Blob([buffer as BlobPart], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.xlsx`);
+        return;
+      }
+
       const ExcelJS = await import("exceljs");
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Technical response", { views: [{ state: "frozen", ySplit: 1 }] });
@@ -547,7 +578,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       });
       worksheet.getRow(1).font = { bold: true, name: "Arial", size: 10, color: { argb: "FF24354D" } };
       const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-      const headingValues = responseSheet.rows.map((row) => headingColumn < 0 ? "" : row.values[headingColumn] ?? "");
+      const headingValues = responseHeadingMergeKeys(responseSheet);
       if (headingColumn >= 0) {
         responseSheet.rows.forEach((row, index) => {
           if (verticalMergeAt(headingValues, index) !== "restart") return [];
@@ -570,52 +601,19 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-      const wide = responseSheet.columns.length > 4;
-      const pdf = new jsPDF({ orientation: wide ? "landscape" : "portrait", unit: "pt", format: responseSheet.columns.length > 6 ? "a3" : "a4" });
-      const title = analysis.sheetTitle || "Tender Technical Requirements";
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(15);
-      pdf.text(title, 36, 34, { maxWidth: pdf.internal.pageSize.getWidth() - 72 });
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.text(`Source tender: ${analysis.filename} · ${responseSheet.rows.length} worksheet rows`, 36, 49);
-      const pdfSafe = (value: string) => value
-        .replace(/[•●]/g, "-")
-        .replace(/[–—−]/g, "-")
-        .replace(/[’‘]/g, "'")
-        .replace(/[“”]/g, '"')
-        .replace(/·/g, "-");
-      const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-      const headingValues = responseSheet.rows.map((row) => headingColumn < 0 ? "" : row.values[headingColumn] ?? "");
-      autoTableModule.default(pdf, {
-        startY: 60,
-        head: [responseSheet.columns.map((column) => pdfSafe(column.header))],
-        body: responseSheet.rows.map((row, rowIndex) => row.values.map((value, columnIndex) => pdfSafe(
-          columnIndex === headingColumn && verticalMergeAt(headingValues, rowIndex) === "continue" ? "" : value,
-        ))),
-        styles: { font: "helvetica", fontSize: responseSheet.columns.length > 6 ? 6 : 7.5, cellPadding: 4, overflow: "linebreak", valign: "top" },
-        headStyles: { fillColor: [36, 79, 187], textColor: 255, fontStyle: "bold" },
-        alternateRowStyles: { fillColor: [247, 249, 252] },
-        margin: { left: 36, right: 36, top: 60, bottom: 32 },
-        showHead: "everyPage",
-        didDrawPage: (data) => {
-          pdf.setFont("helvetica", "normal");
-          pdf.setFontSize(7);
-          pdf.text(`Page ${data.pageNumber}`, pdf.internal.pageSize.getWidth() - 36, pdf.internal.pageSize.getHeight() - 14, { align: "right" });
-          if (data.pageNumber > 1) {
-            pdf.setFont("helvetica", "bold");
-            pdf.setFontSize(11);
-            pdf.text(pdfSafe(`${title} (continued)`), 36, 34, { maxWidth: pdf.internal.pageSize.getWidth() - 72 });
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7);
-            pdf.text(pdfSafe(`Source tender: ${analysis.filename}`), 36, 49);
-          }
-        },
-      });
+      const [{ createResponsePdf }, fontResponse] = await Promise.all([
+        import("./pdf-export"), fetch("/fonts/DejaVuSans.ttf"),
+      ]);
+      if (!fontResponse.ok) throw new Error("The PDF font could not be loaded. Retry or download DOCX or Excel.");
+      const fontBytes = new Uint8Array(await fontResponse.arrayBuffer());
+      let binary = "";
+      for (let offset = 0; offset < fontBytes.length; offset += 8_192) {
+        binary += String.fromCharCode(...fontBytes.subarray(offset, offset + 8_192));
+      }
+      const pdf = createResponsePdf(responseSheet, analysis.sheetTitle || "Tender Technical Requirements", analysis.filename, btoa(binary));
       pdf.save(`${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.pdf`);
-    } catch {
-      setError("The PDF could not be created. Please try again.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The PDF could not be created. Please try again.");
     } finally {
       setExporting(false);
     }
@@ -734,7 +732,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     );
   }
 
-  const checkedCount = analysis.requirements.filter((item) => item.reviewed).length;
+  const reviewableRequirements = analysis.requirements.filter(item => item.rowType !== "section" && item.rowType !== "optional_heading");
+  const checkedCount = reviewableRequirements.filter((item) => item.reviewed).length;
   const coveragePagesToShow = analysis.coverage?.pages.filter((item) => item.selectedForExtraction
     || item.ocrNeeded
     || item.routingContextClipped
@@ -744,7 +743,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     || item.rejectedSuggestions > 0
     || Boolean(item.sourceTableRowsUnmapped)) ?? [];
   const pendingReviewByPage = new Map<number, number>();
-  for (const item of analysis.requirements) {
+  for (const item of reviewableRequirements) {
     if (!item.reviewed) pendingReviewByPage.set(item.page, (pendingReviewByPage.get(item.page) ?? 0) + 1);
   }
   const currentNeedsReviewCount = [...pendingReviewByPage.values()].reduce((total, count) => total + count, 0);
@@ -757,14 +756,72 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       <section className="mvp-review-summarybar">
         <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}</div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
-          <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{analysis.requirements.length}</strong><small>Source matched</small></span></div>
-          <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {analysis.requirements.length}</i></strong><small>Checked by you</small></span></div>
+          <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{reviewableRequirements.length}</strong><small>Source requirements</small></span></div>
+          <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {reviewableRequirements.length}</i></strong><small>Checked by you</small></span></div>
           <div><span className="mvp-stat-icon"><FileText size={15} /></span><span><strong>{analysis.pageCount}</strong><small>Tender pages</small></span></div>
         </div>
       </section>
-      <div className="mvp-workspace">
-        <section className="mvp-list-panel" aria-label="Extracted requirements">
-          <div className="mvp-panel-heading"><div><span className="mvp-panel-kicker">REVIEW LIST</span><h2>Requirements <span>{analysis.requirements.length}</span></h2></div><button className="mvp-text-button" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); }}><X size={15} /> New tender</button></div>
+      {responseSheet && <section className="mvp-sheet-panel" aria-label="Editable response sheet">
+        <div className="mvp-sheet-heading">
+          <div><span className="mvp-panel-kicker">EXPORT PREVIEW</span><h2>Response sheet <span>{responseSheet.rows.length} rows</span></h2><p>Edit the sheet before downloading. Click a citation to inspect the original page and highlighted source. Sheet edits apply to all downloads.</p></div>
+          <div className="mvp-sheet-heading-actions">{sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}<button type="button" className="mvp-text-button mvp-sheet-reset" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); setSourceOpen(false); }}>New tender</button></div>
+        </div>
+        <div className="mvp-sheet-scroll">
+          {buildResponseSections(responseSheet, true).map((section, sectionIndex, sections) => <section className="mvp-response-section" key={section.id}>
+            {section.annexure && section.annexure !== sections[sectionIndex - 1]?.annexure && <header className="mvp-response-annexure">
+              <h2>{section.annexure}</h2>
+              {section.titleLines.map((line, index) => <p key={index}>{line}</p>)}
+            </header>}
+            {section.heading && <h3>{section.heading}</h3>}
+          <table className="mvp-sheet-table">
+            <thead><tr>{section.columns.map((column, index) => <th data-role={column.role} key={`${column.header}-${index}`}>{column.role === "page" ? "Source" : column.header}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
+            <tbody>{section.rows.map((row) => {
+              const rowIndex = responseSheet.rows.findIndex(item => item.id === row.id);
+              const headingValues = responseHeadingMergeKeys(responseSheet);
+              return <tr key={row.id} className={row.section ? "is-section-row" : undefined}>
+                {row.values.map((value, columnIndex) => {
+                  const column = section.columns[columnIndex];
+                  const locked = column.role === "page";
+                  const merge = column.role === "heading" ? verticalMergeAt(headingValues, rowIndex) : undefined;
+                  if (merge === "continue") return null;
+                  let rowSpan = 1;
+                  if (merge === "restart") {
+                    while (rowIndex + rowSpan < headingValues.length && headingValues[rowIndex + rowSpan] === headingValues[rowIndex]) rowSpan += 1;
+                  }
+                  return <td data-role={column.role} key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
+                    {locked
+                      ? <div className="mvp-sheet-citations">{(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId, citationIndex) => {
+                          const item = analysis.requirements.find(requirement => requirement.id === sourceId);
+                          return item ? <button type="button" className={`mvp-sheet-source-link ${item.reviewed ? "is-checked" : ""} ${item.ocrWarning ? "is-ocr-warning" : ""}`} key={sourceId} aria-label={`View source for response row ${rowIndex + 1}, page ${item.page}, citation ${citationIndex + 1}`} title={item.ocrWarning ? "OCR source — verify transcription" : item.reviewed ? "Source checked" : "Inspect source"} onClick={() => openRequirement(item)}><FileText size={12} />p. {item.page}{row.sourceRequirementIds.length > 1 && <small>· {citationIndex + 1}</small>}{item.reviewed && <Check size={12} />}{item.ocrWarning && <span>OCR</span>}</button> : null;
+                        })}</div>
+                      : <textarea
+                        aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
+                        rows={Math.min(4, Math.max(1, Math.ceil(value.length / (column.role === "requirement" ? 58 : 34))))}
+                        value={value}
+                        onChange={(event) => updateSheetCell(row.id, section.columnIndices[columnIndex], event.target.value)}
+                      />}
+                  </td>;
+                })}
+                <td className="mvp-sheet-row-actions">
+                  <button type="button" className="mvp-sheet-remove" aria-label={`Remove response row ${rowIndex + 1}`} onClick={() => removeSheetRow(row.id)}><X size={15} /> Remove</button>
+                </td>
+              </tr>;
+            })}</tbody>
+          </table>
+          </section>)}
+          {responseSheet.rows.length === 0 && <div className="mvp-sheet-empty"><p>All rows are removed from the export preview.</p><button type="button" className="mvp-text-button" onClick={resetResponseSheet}>Restore extracted rows</button></div>}
+        </div>
+        <footer className="mvp-sheet-footer">
+          <span>{responseSheet.rows.length} rows · {sheetEdited ? "Unsaved edits apply to all downloads" : "Ready to review and download"}</span>
+          <div className="mvp-sheet-downloads">
+            <button type="button" className="mvp-export" onClick={exportDocx} disabled={exporting || responseSheet.rows.length === 0}><FileText size={16} /> Download DOCX</button>
+            <button type="button" className="mvp-export mvp-export-secondary" onClick={exportPdf} disabled={exporting || responseSheet.rows.length === 0}><FileText size={16} /> Download PDF</button>
+            <button type="button" className="mvp-export mvp-export-secondary" onClick={exportExcel} disabled={exporting || responseSheet.rows.length === 0}><FileSpreadsheet size={16} /> Download Excel</button>
+          </div>
+          {error && <p className="mvp-error" role="alert">{error}</p>}
+        </footer>
+      </section>}
+      <details className="mvp-review-context"><summary>Review notes and coverage</summary>
           <p className="mvp-review-note">{analysis.reviewNote}{analysis.extractionMode === "structured-table" ? "" : ` ${analysis.rejectedCandidates ? `${analysis.rejectedCandidates} unmatched model suggestions were left out.` : "Unmatched suggestions are left out."}`}</p>
           {analysis.coverage && <details className="mvp-coverage-ledger">
             <summary>
@@ -787,7 +844,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               {coveragePagesToShow.map((item) => {
                 const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
                 return <li key={item.page}>
-                  <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); }}>Open source page</button></div>
+                  <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); setSourceOpen(true); }}>Open source page</button></div>
                   <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrPerformed ? "Local OCR completed · verify transcription" : item.ocrNeeded ? "No selectable text · OCR unavailable or unreadable" : "Considered by router, not selected"}</span>
                   {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}
                   {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
@@ -802,7 +859,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                       return <div className="mvp-coverage-row-finding" key={`${item.page}-${row.rowNumber}`}>
                         <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status}{row.textTruncated ? " · excerpt shortened" : ""}</span>
                         <p>{row.cells.filter(Boolean).join(" | ") || "(No cell text available)"}</p>
-                        <button type="button" disabled={!row.bbox} onClick={() => { setCoverageFocus({ page: item.page, row }); setPage(item.page); }}>Inspect source row</button>
+                        <button type="button" disabled={!row.bbox} onClick={() => { setCoverageFocus({ page: item.page, row }); setPage(item.page); setSourceOpen(true); }}>Inspect source row</button>
                       </div>;
                     })}
                     {Boolean(item.sourceTableRowsNotShown) && <span className="is-warning">{item.sourceTableRowsNotShown} additional detected row(s) are not listed here; inspect the full page.</span>}
@@ -821,23 +878,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             </ul>
             {analysis.coverage.summary.unattributedRejectedSuggestions > 0 && <p className="is-warning">{countLabel(analysis.coverage.summary.unattributedRejectedSuggestions, "rejected suggestion")} had no usable source page reference.</p>}
           </details>}
-          <div className="mvp-requirement-list">
-            {analysis.requirements.map((item, index) => (
-              <button className={`mvp-requirement ${active?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => openRequirement(item)}>
-                <span className="mvp-req-topline"><span>REQ {String(index + 1).padStart(3, "0")}</span><span className={`mvp-citation-tag ${item.ocrWarning ? "is-ocr-warning" : ""}`}>Page {item.page} · {item.ocrWarning ? "OCR warning" : item.precision === "page-only" ? "page only" : "exact"}</span></span>
-                <span className={`mvp-req-text ${item.parameter ? "mvp-req-structured" : ""}`}>
-                  {item.parameter ? <><strong className="mvp-req-parameter">{item.parameter}</strong>{item.specifications?.map((specification, specIndex) => <span className={`mvp-req-spec ${item.quote.startsWith("•") ? "is-bullet" : ""}`} key={`${item.id}-spec-${specIndex}`}>{specification}</span>)}</> : item.text}
-                </span>
-                <span className="mvp-req-bottom"><span>{item.category}</span><span className={item.reviewed ? "mvp-reviewed" : "mvp-unreviewed"}>{item.reviewed ? "Checked" : "Needs review"}</span></span>
-              </button>
-            ))}
-          </div>
-        <div className="mvp-list-footer"><p>Choose a requirement to inspect its tender evidence. Make final sheet edits in the export preview below.</p></div>
-        </section>
-
+      </details>
+        <dialog ref={sourceDrawerRef} className="mvp-source-drawer" aria-labelledby="source-drawer-title" onClose={() => setSourceOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) sourceDrawerRef.current?.close(); }}>
         <section className="mvp-evidence-panel" aria-label="Cited tender source">
-          <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2>{coverageFocus?.page === page ? `Page ${page} source row` : active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.max(1, current - 1)); }} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.min(analysis.pageCount, current + 1)); }} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button></div></div>
-          {file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={coverageFocus?.page === page ? coverageFocus.row.bbox : active?.page === page ? active.bbox : null} highlightLabel={coverageFocus?.page === page ? "Detected source row not matched to an extraction candidate; inspect its meaning" : active?.ocrWarning ? "Approximate table-row box for visually transcribed text; verify the full row" : "Bounding box for cited source quote"} />}
+          <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2 id="source-drawer-title">{coverageFocus?.page === page ? `Page ${page} source row` : active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.max(1, current - 1)); }} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.min(analysis.pageCount, current + 1)); }} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button><button type="button" className="mvp-icon-button" aria-label="Close source drawer" onClick={() => sourceDrawerRef.current?.close()} autoFocus><X size={18} /></button></div></div>
+          {sourceOpen && file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={coverageFocus?.page === page ? coverageFocus.row.bbox : active?.page === page ? active.bbox : null} highlightLabel={coverageFocus?.page === page ? "Detected source row not matched to an extraction candidate; inspect its meaning" : active?.ocrWarning ? "Approximate table-row box for visually transcribed text; verify the full row" : "Bounding box for cited source quote"} />}
           <div className="mvp-citation-detail">
             <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.ocrWarning ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}</div>
             <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
@@ -845,64 +890,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={Boolean(coverageFocus?.page === page) || !active || page !== active.page || !active.bbox} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
           </div>
         </section>
-      </div>
-      {responseSheet && <section className="mvp-sheet-panel" aria-label="Editable response sheet">
-        <div className="mvp-sheet-heading">
-          <div><span className="mvp-panel-kicker">EXPORT PREVIEW</span><h2>Response sheet <span>{responseSheet.rows.length} rows</span></h2><p>Edit the sheet before downloading. Source page citations stay locked, and the original quote remains visible in Source evidence.</p></div>
-          {sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}
-        </div>
-        <div className="mvp-sheet-scroll">
-          <table className="mvp-sheet-table">
-            <thead><tr>{responseSheet.columns.map((column, index) => <th key={`${column.header}-${index}`}>{column.header}{column.role === "page" && <LockKeyhole size={12} aria-label="Locked citation" />}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
-            <tbody>{responseSheet.rows.map((row, rowIndex) => {
-              const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-              const headingValues = responseSheet.rows.map((item) => headingColumn < 0 ? "" : item.values[headingColumn] ?? "");
-              return <tr key={row.id} className={row.section ? "is-section-row" : undefined}>
-                {row.values.map((value, columnIndex) => {
-                  const column = responseSheet.columns[columnIndex];
-                  const locked = column.role === "page";
-                  const merge = column.role === "heading" ? verticalMergeAt(headingValues, rowIndex) : undefined;
-                  if (merge === "continue") return null;
-                  let rowSpan = 1;
-                  if (merge === "restart") {
-                    while (rowIndex + rowSpan < headingValues.length && headingValues[rowIndex + rowSpan] === value) rowSpan += 1;
-                  }
-                  return <td key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
-                    {locked
-                      ? <span className="mvp-sheet-source"><LockKeyhole size={12} />{value}</span>
-                      : <textarea
-                        aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
-                        rows={Math.min(4, Math.max(1, Math.ceil(value.length / (column.role === "requirement" ? 58 : 34))))}
-                        value={value}
-                        onChange={(event) => updateSheetCell(row.id, columnIndex, event.target.value)}
-                      />}
-                  </td>;
-                })}
-                <td className="mvp-sheet-row-actions">
-                  {(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId) => {
-                    const item = analysis.requirements.find((requirement) => requirement.id === sourceId);
-                    if (!item) return null;
-                    return <button type="button" className="mvp-sheet-source-link" key={`${row.id}-${sourceId}`} onClick={() => openRequirement(item)}>
-                      {row.sourceRequirementIds?.length > 1 ? `Page ${item.page}` : "View source"}
-                    </button>;
-                  })}
-                  <button type="button" className="mvp-sheet-remove" aria-label={`Remove response row ${rowIndex + 1}`} onClick={() => removeSheetRow(row.id)}><X size={15} /> Remove</button>
-                </td>
-              </tr>;
-            })}</tbody>
-          </table>
-          {responseSheet.rows.length === 0 && <div className="mvp-sheet-empty"><p>All rows are removed from the export preview.</p><button type="button" className="mvp-text-button" onClick={resetResponseSheet}>Restore extracted rows</button></div>}
-        </div>
-        <footer className="mvp-sheet-footer">
-          <span>{responseSheet.rows.length} rows · {sheetEdited ? "Unsaved edits apply to all downloads" : "Ready to review and download"}</span>
-          <div className="mvp-sheet-downloads">
-            <button type="button" className="mvp-export" onClick={exportDocx} disabled={exporting || responseSheet.rows.length === 0}><FileText size={16} /> Download DOCX</button>
-            <button type="button" className="mvp-export mvp-export-secondary" onClick={exportPdf} disabled={exporting || responseSheet.rows.length === 0}><FileText size={16} /> Download PDF</button>
-            <button type="button" className="mvp-export mvp-export-secondary" onClick={exportExcel} disabled={exporting || responseSheet.rows.length === 0}><FileSpreadsheet size={16} /> Download Excel</button>
-          </div>
-          {error && <p className="mvp-error" role="alert">{error}</p>}
-        </footer>
-      </section>}
+      </dialog>
     </main>
   );
 }

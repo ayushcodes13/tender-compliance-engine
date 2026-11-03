@@ -25,20 +25,47 @@ export function resolveModelProvider(env: Environment): ModelProviderResult {
   return { ok: true, config: { provider: "openai-compatible", baseUrl, model, apiKey } };
 }
 
+/** Per-analysis admission control: pages/crops cannot flood the provider. */
 export function createModelCompletionClient(config: ModelProviderConfig, fetcher: FetchLike = fetch) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const acquire = async (signal: AbortSignal) => {
+    signal.throwIfAborted();
+    if (active < 3) { active += 1; return; }
+    await new Promise<void>((resolve, reject) => {
+      const granted = () => { signal.removeEventListener("abort", aborted); resolve(); };
+      const aborted = () => {
+        const index = queue.indexOf(granted);
+        if (index >= 0) queue.splice(index, 1);
+        reject(signal.reason);
+      };
+      queue.push(granted);
+      signal.addEventListener("abort", aborted, { once: true });
+    });
+  };
+  const release = () => {
+    const next = queue.shift();
+    if (next) next();
+    else active -= 1;
+  };
   return {
-    fetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-      if (init?.method && init.method.toUpperCase() !== "POST") return Promise.reject(new Error("Model completion requests must use POST."));
-      if (init?.body !== undefined && typeof init.body !== "string") return Promise.reject(new Error("Model completion request body must be JSON text."));
-      return fetcher(`${config.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: new Headers({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
-        signal: init?.signal ?? AbortSignal.timeout(180_000),
-        body: init?.body,
-      }).catch((error: unknown) => {
+    async fetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      if (init?.method && init.method.toUpperCase() !== "POST") throw new Error("Model completion requests must use POST.");
+      if (init?.body !== undefined && typeof init.body !== "string") throw new Error("Model completion request body must be JSON text.");
+      const signal = init?.signal ?? AbortSignal.timeout(180_000);
+      await acquire(signal);
+      try {
+        signal.throwIfAborted();
+        return await fetcher(`${config.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: new Headers({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
+          signal,
+          body: init?.body,
+        });
+      } catch (error) {
         if (error instanceof TypeError) throw new ModelProviderConnectionError();
         throw error;
-      });
+      } finally { release(); }
     },
   };
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findColumnLayoutConflict, sameColumnLayout, validatePageColumnMap } from "./column-layout.ts";
+import { findColumnLayoutConflict, normalizeSingleContentColumn, sameColumnLayout, validatePageColumnMap } from "./column-layout.ts";
 
 test("validates a dynamic page schema against literal source headers", () => {
   const headers = ["S. No.", "Equipment", "Parameter", "Minimum", "Unit", "Remarks"];
@@ -65,4 +65,21 @@ test("identifies the page requiring review before incompatible layouts are combi
     { page: 4, columns: first },
     { page: 5, columns: [] },
   ]), undefined);
+});
+
+
+test('one technical content column remains a specification when its header was classified as a parameter heading',()=>{
+ const columns=[{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'},{header:'Compliance Y/N',role:'compliance'}];
+ const before=structuredClone(columns);const normalized=normalizeSingleContentColumn(columns);
+ assert.equal(normalized[0].role,'specification');assert.equal(normalized[0].header,'Technical Parameters NIQ');assert.deepEqual(columns,before);
+ assert.deepEqual(normalized.slice(1),columns.slice(1));
+ assert.equal(normalizeSingleContentColumn([{header:'Item',role:'heading'},{header:'Description',role:'other'}])[0].role,'heading');
+ const split=[{header:'Parameter',role:'heading'},{header:'Required value',role:'specification'}];
+ assert.deepEqual(normalizeSingleContentColumn(split),split);
+});
+
+
+test('literal header verification and layout identity preserve scientific unit case',()=>{
+ assert.equal(validatePageColumnMap([{header:'Power (MW)',role:'specification'}],['Power (mW)']),null);
+ assert.equal(sameColumnLayout([{header:'Power (mW)',role:'specification'}],[{header:'Power (MW)',role:'specification'}]),false);
 });

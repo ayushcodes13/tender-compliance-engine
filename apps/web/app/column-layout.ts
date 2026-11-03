@@ -1,12 +1,20 @@
 export type SourceColumnRole = "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other";
 export type SourceColumn = { header: string; role: SourceColumnRole };
 
+/** A lone content column holds requirements; a separate parameter column is optional. */
+export function normalizeSingleContentColumn(columns: SourceColumn[]): SourceColumn[] {
+  if(columns.some(column=>column.role==='specification'))return columns;
+  const content=columns.filter(column=>!['serial','quantity','compliance','deviation','remark'].includes(column.role));
+  if(content.length!==1||content[0].role!=='heading')return columns;
+  return columns.map(column=>column===content[0]?{...column,role:'specification'}:column);
+}
+
 const roles = new Set<SourceColumnRole>([
   "serial", "heading", "specification", "quantity", "remark", "compliance", "deviation", "other",
 ]);
 
 function normalizeHeader(value: string): string {
-  return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 /** Accept a model-proposed page layout only when every label is literal source text. */

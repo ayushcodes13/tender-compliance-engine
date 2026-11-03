@@ -28,3 +28,13 @@ test("keeps uncertain visual readings out of the quote text", () => {
 test("does not create an OCR completion when the image adds no text", () => {
   assert.equal(validateVisualRowTranscription("c) Ion pump", "c) Ion pump", "high"), null);
 });
+
+test('rejects changed numeric operators, signs, decimal values and unit case',()=>{
+  for(const [source,changed] of [
+    ['Capacity ≥ 300 kN','Capacity ≤ 300 kN with controller'],
+    ['Temperature -5 °C','Temperature 5 °C with sensor'],
+    ['Accuracy ±0.1 mm','Accuracy ±1 mm with gauge'],
+    ['Power 5 mW','Power 5 MW with supply'],
+  ])assert.equal(validateVisualRowTranscription(source,changed,'high'),null);
+  assert.equal(validateVisualRowTranscription('Capacity ≥ 300 kN','Capacity ≥ 300 kN with controller','high'),'Capacity ≥ 300 kN with controller');
+});

@@ -40,3 +40,9 @@ test("recognizes a table from repeated long horizontal and vertical borders", ()
   assert.equal(hasTableGridGeometry(borders, 200, 100), true);
   assert.equal(hasTableGridGeometry(borders.slice(0, 5), 200, 100), false);
 });
+
+test('normalizes negative rectangle dimensions used by top-origin PDF generators',()=>{
+  assert.deepEqual(extractPdfPathRectangles([4,4],[40,500,120,-30,200,500,-80,-30],operations),[
+    {x:40,y:470,width:120,height:30},{x:120,y:470,width:80,height:30},
+  ]);
+});

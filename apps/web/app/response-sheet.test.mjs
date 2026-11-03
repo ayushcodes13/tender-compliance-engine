@@ -108,3 +108,97 @@ test("merges blank page continuations but keeps a numbered requirement on the ne
   assert.equal(sheet.rows[2].values.at(-1), "Pages 25 and 26");
   assert.deepEqual(sheet.rows[2].sourceRequirementIds, ["req-10", "req-11"]);
 });
+
+test('normalizes different annexure layouts while keeping all 16 descriptions in their equipment group', () => {
+  const firstMap = [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'}];
+  const secondMap = [...firstMap,{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}];
+  const requirements = [];
+  for (const [annexure,page,map] of [['Annexure-I',20,firstMap],['Annexure-II',23,secondMap]]) {
+    requirements.push({id:`heading-${page}`,text:'A. T-SHAPE Optical Table System',quote:'A. T-SHAPE Optical Table System',page,rowType:'section',sourceSectionTitle:annexure});
+    for(let i=1;i<=16;i++) requirements.push({id:`${page}-${i}`,text:`≥ ${i} mm`,quote:`≥ ${i} mm`,page,rowType:'requirement',sourceSectionTitle:annexure,sourceColumnMap:map,sourceCells:[String(i),`Parameter ${i}`,`≥ ${i} mm`,'','']});
+  }
+  requirements.push({id:'b',text:'B. Vibration isolator set',quote:'B. Vibration isolator set',page:23,rowType:'section',sourceSectionTitle:'Annexure-II'});
+  requirements.push({id:'self-centering',text:'Self-centering option for better positioning',quote:'Self-centering option for better positioning',page:24,rowType:'requirement',sourceSectionTitle:'Annexure-II',sourceColumnMap:secondMap,sourceCells:['16','Additional requirements','Self-centering option for better positioning','','']});
+  const sheet=buildResponseSheet({normalizedTables:true,requirements});
+  assert.equal(sheet.rows.length,33);
+  assert.deepEqual(sheet.columns.map(c=>c.header),['Equipment / group','Annexure / section','Specification','Description','Comply (Yes/No)','Any deviation','Remarks / Justifications','Source page']);
+  assert.equal(sheet.rows.filter(r=>r.values[1]==='Annexure-I'&&r.values[0]==='A. T-SHAPE Optical Table System').length,16);
+  assert.equal(sheet.rows.filter(r=>r.values[1]==='Annexure-II'&&r.values[0]==='A. T-SHAPE Optical Table System').length,16);
+  assert.equal(sheet.rows.at(-1).values[0],'B. Vibration isolator set');
+  assert.equal(sheet.rows.at(-1).values[7],'Page 24');
+  assert.ok(sheet.rows.every(r=>r.values[4]===''&&r.values[5]===''));
+  assert.equal(sheet.rows[2].values[3],'≥ 3 mm');
+  assert.equal(sheet.columns.some(c=>c.header==='S. No.'),false);
+});
+
+test('reassembles source-cell subpoints and keeps separate annexure heading edits separate', () => {
+  const mapping=[{header:'Parameter',role:'heading'},{header:'Value',role:'specification'}];
+  const source={normalizedTables:true,requirements:[
+    {id:'h1',text:'A. Table',quote:'A. Table',page:20,rowType:'section',sourceSectionTitle:'Annexure I'},
+    {id:'p1',text:'First.',quote:'First.',page:20,exportGroupId:'cell1',sourceColumnMap:mapping,sourceCells:['Holes','First.'],sourceSectionTitle:'Annexure I'},
+    {id:'p2',text:'Second.',quote:'Second.',page:20,exportGroupId:'cell1',sourceColumnMap:mapping,sourceCells:['Holes','Second.'],sourceSectionTitle:'Annexure I'},
+    {id:'h2',text:'A. Table',quote:'A. Table',page:23,rowType:'section',sourceSectionTitle:'Annexure II'},
+    {id:'p3',text:'Third.',quote:'Third.',page:23,sourceColumnMap:mapping,sourceCells:['Holes','Third.'],sourceSectionTitle:'Annexure II'},
+  ]};
+  const sheet=buildResponseSheet(source);
+  assert.equal(sheet.rows.length,2);
+  assert.equal(sheet.rows[0].values[3],'First. Second.');
+  assert.deepEqual(sheet.rows[0].sourceRequirementIds,['p1','p2']);
+  const edited=updateResponseSheetCell(sheet,sheet.rows[0].id,0,'Edited table');
+  assert.equal(edited.rows[0].values[0],'Edited table');
+  assert.equal(edited.rows[1].values[0],'A. Table');
+});
+
+test('normalized continuation retains both citations and additional source columns', () => {
+  const mapping=[{header:'No.',role:'serial'},{header:'Item',role:'heading'},{header:'Required',role:'specification'},{header:'Maximum',role:'specification'},{header:'Quantity',role:'quantity'}];
+  const source={normalizedTables:true,requirements:[
+    {id:'h',text:'Table',quote:'Table',page:25,rowType:'section',sourceSectionTitle:'Annexure II'},
+    {id:'a',text:'First part',quote:'First part',page:25,sourceColumnMap:mapping,sourceCells:['1','Service','First part','90 days','2'],sourceSectionTitle:'Annexure II'},
+    {id:'b',text:'continued.',quote:'continued.',page:26,continuationOfPrevious:true,sourceColumnMap:mapping,sourceCells:['','','continued.','',''],sourceSectionTitle:'Annexure II'},
+  ]};
+  const sheet=buildResponseSheet(source);
+  assert.equal(sheet.rows.length,1);
+  assert.match(sheet.rows[0].values[3],/Maximum: 90 days/);
+  assert.match(sheet.rows[0].values[3],/Quantity: 2/);
+  assert.match(sheet.rows[0].values[3],/continued\./);
+  assert.equal(sheet.rows[0].values[7],'Pages 25 and 26');
+  assert.deepEqual(sheet.rows[0].sourceRequirementIds,['a','b']);
+});
+
+test('many verified subpoints from one source cell retain every citation without becoming hundreds of response rows',()=>{
+ const mapping=[{header:'Parameter',role:'heading'},{header:'Description',role:'specification'}];
+ const requirements=Array.from({length:300},(_,index)=>({
+  id:`subpoint-${index}`,text:`Constraint ${index} mm.`,quote:`Constraint ${index} mm.`,page:4,
+  exportGroupId:'source-cell-4-1',sourceColumnMap:mapping,sourceCells:['Instrument',`Constraint ${index} mm.`],
+ }));
+ const sheet=buildResponseSheet({normalizedTables:true,requirements});
+ assert.equal(sheet.rows.length,1);
+ assert.equal(sheet.rows[0].sourceRequirementIds.length,300);
+ assert.deepEqual(sheet.rows[0].sourceRequirementIds,requirements.map(row=>row.id));
+ for(const row of requirements)assert.ok(sheet.rows[0].values[3].includes(row.quote));
+});
+
+test('source response-column notes remain source context while every OEM response field starts blank',()=>{
+ const mapping=[{header:'Required specification',role:'specification'},{header:'Remark',role:'remark'},{header:'Compliance',role:'compliance'}];
+ const sheet=buildResponseSheet({normalizedTables:true,requirements:[{id:'r',page:2,text:'Dopant cell',quote:'Dopant cell',sourceColumnMap:mapping,sourceCells:['Dopant cell','1 EA','To be confirmed']} ]});
+ assert.equal(sheet.rows[0].values[3],'Dopant cell\nRemark: 1 EA\nCompliance: To be confirmed');
+ assert.deepEqual(sheet.rows[0].values.slice(4,7),['','','']);
+});
+
+test('a verified mixed-cell heading stays above an assessable body row with the original citation',()=>{
+ const title='16. Source shutter assembly';const full=title+' The system shall withstand 300 N.';
+ const source={normalizedTables:true,requirements:[{id:'mixed',page:26,text:full,quote:full,headingPrefix:title,nativeHeadingPrefix:title,rowType:'requirement',sourceColumnMap:[{header:'Technical Parameters',role:'specification'}],sourceCells:[full]}]};
+ const before=structuredClone(source),sheet=buildResponseSheet(source);
+ assert.equal(sheet.rows.length,1);assert.equal(sheet.rows[0].values[0],title);assert.equal(sheet.rows[0].values[3],'The system shall withstand 300 N.');
+ assert.deepEqual(sheet.rows[0].sourceRequirementIds,['mixed']);assert.deepEqual(source,before);
+});
+
+test('an unverified inline model prefix does not change the group of following sibling requirements',()=>{
+ const mapping=[{header:'Technical Parameters',role:'specification'}];
+ const source={normalizedTables:true,requirements:[
+  {id:'h',page:26,text:'15. MBE sources',quote:'15. MBE sources',rowType:'section'},
+  {id:'f',page:26,text:'f) Dopant cells Carbon source.',quote:'f) Dopant cells Carbon source.',rowType:'requirement',headingPrefix:'f) Dopant cells',sourceColumnMap:mapping,sourceCells:['f) Dopant cells Carbon source.']},
+  {id:'g',page:26,text:'g) All cells require cooling.',quote:'g) All cells require cooling.',rowType:'requirement',sourceColumnMap:mapping,sourceCells:['g) All cells require cooling.']},
+ ]};
+ const sheet=buildResponseSheet(source);assert.deepEqual(sheet.rows.map(row=>row.values[0]),['15. MBE sources','15. MBE sources']);assert.equal(sheet.rows[0].values[3],'f) Dopant cells Carbon source.');
+});

@@ -63,8 +63,8 @@ export function extractPdfPathRectangles(
       const [x, y, width, height] = coordinates.slice(coordinateIndex, coordinateIndex + 4);
       coordinateIndex += 4;
       commandIndex += 1;
-      if ([x, y, width, height].every(Number.isFinite) && width > minWidth && height > minHeight) {
-        rectangles.push({ x, y, width, height });
+      if ([x, y, width, height].every(Number.isFinite) && Math.abs(width) > minWidth && Math.abs(height) > minHeight) {
+        rectangles.push({ x: Math.min(x, x + width), y: Math.min(y, y + height), width: Math.abs(width), height: Math.abs(height) });
       }
       continue;
     }

@@ -99,10 +99,10 @@ export function PdfEvidenceViewer({
   useEffect(() => {
     const stage = stageRef.current;
     const canvas = canvasRef.current;
-    if (!stage || !canvas || !selectedBox || !scale) return;
+    if (!stage || !canvas || !selectedBox || !scale || status) return;
     const top = (selectedBox.y / 100) * Number.parseFloat(canvas.style.height || "0");
-    stage.scrollTo({ top: Math.max(0, top - stage.clientHeight * 0.38), behavior: "smooth" });
-  }, [selectedBox, scale]);
+    stage.scrollTo({ top: Math.max(0, top - stage.clientHeight * 0.38), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [selectedBox, scale, status]);
 
   return (
     <div className="mvp-pdf-stage" ref={stageRef}>

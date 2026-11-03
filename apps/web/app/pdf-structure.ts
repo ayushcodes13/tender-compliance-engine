@@ -5,6 +5,8 @@ export type SourceTextItem = {
   x: number;
   y: number;
   box: SourceBox | null;
+  fontName?: string;
+  bold?: boolean;
 };
 
 export type PdfRectangle = { x: number; y: number; width: number; height: number };

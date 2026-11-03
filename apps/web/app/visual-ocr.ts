@@ -10,8 +10,10 @@ export function validateVisualRowTranscription(
   const transcription = visualQuote.trim();
   if (confidence !== "high" || !source || !transcription || transcription.length > 5_000) return null;
 
-  const sourceTokens = source.match(/[\p{L}\p{N}]+/gu)?.map((token) => token.toLocaleLowerCase()) ?? [];
-  const visualTokens = transcription.match(/[\p{L}\p{N}]+/gu)?.map((token) => token.toLocaleLowerCase()) ?? [];
+  // Operators, signs, decimal separators and unit case carry technical meaning.
+  const tokens = (value: string) => value.match(/>=|<=|!=|[<>≤≥±=−–-]|\d+(?:[.,]\d+)*|[\p{L}\p{N}]+|[°%µμ]/gu) ?? [];
+  const sourceTokens = tokens(source);
+  const visualTokens = tokens(transcription);
   if (!sourceTokens.length || visualTokens.length <= sourceTokens.length) return null;
 
   let visualIndex = 0;
