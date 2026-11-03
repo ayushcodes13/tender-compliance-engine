@@ -125,7 +125,7 @@ The code inventory and disposition matrix are tracked in \`docs/extraction-gate-
 - [x] Inspect the merged \`main\` extraction decision loop and reproduce the overly broad administrative predicate on synthetic clauses. This confirms a predicate-level omission mechanism, not an adjudicated real-PDF failure.
 - [x] Narrow the hard screen so catalog, certificate, technical inspection and installation obligations can proceed to the unchanged strict page/text/geometry verification. Distinguish administrative rejections from invalid candidate text in the coverage reasons; preserve default human review.
 - [x] Add focused regression assertions and a scripted-provider PDF contract for accepted source-backed catalog text, rejected payment terms and untrusted model metadata.
-- [ ] Run complete unit tests, typecheck, optimized build and production pipeline contract on the branch. Connector-only edits do not establish these checks.
+- [x] GitHub Actions run [41682499234](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41682499234) at commit `7908d36fadfa6ce7c8b40373192b4bac4436a5d2` completed successfully: `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:pipeline`. The pipeline test uses a scripted provider; no local run was performed in this session.
 - [ ] Verify acceptance against real adjudicated tenders and measure requirement recall, false inclusions, citation accuracy and silent omissions; inspect documentary and technical-test passages on their original pages.
 - [ ] Required remote CI passes. The earlier GitHub billing/spending restriction is not evidence of a green CI result.
 
