@@ -7,6 +7,7 @@ import { PDF_FONT_OPTIONS } from "./pdf-runtime";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
 import { isClearlyAdministrativeClause } from "./extraction-rules";
+import { retainVerifiedRemark } from "./remark-verification";
 import { findAnnexureHeading, findTechnicalSectionHeading, sourceAnnexureTitleLines, sourceTableTextTop, expandSelectedAnnexures } from "./annexure-routing";
 import { combinePageTranscripts, useComplianceSheetLayout, buildExtractionBatches } from "./document-input";
 import { extractStructuredTechnicalSection, type PdfRectangle, type SourceTextItem, type StructuredSection } from "./pdf-structure";
@@ -1455,13 +1456,19 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         addRejection(pageNumber, "source_quote_or_location_not_verified", quote);
         continue;
       }
-      const remark = typeof candidate.remark === "string" ? candidate.remark.trim() : "";
-      const remarkBox = remark ? candidate.remarkBox ?? locatePageQuote(remark, sourcePage)?.bbox ?? null : null;
-      if (visualSheetType === "compliance-sheet" && remark && !remarkBox) {
-        rejected += 1;
-        addRejection(pageNumber, "remark_not_located_in_source", remark);
-        continue;
+      const suggestedRemark = typeof candidate.remark === "string" ? candidate.remark.trim() : "";
+      const remarkBox = suggestedRemark ? candidate.remarkBox ?? locatePageQuote(suggestedRemark, sourcePage)?.bbox ?? null : null;
+      const remarkDecision = retainVerifiedRemark({
+        remark: suggestedRemark,
+        requiresSourceLocation: visualSheetType === "compliance-sheet",
+        hasSourceLocation: Boolean(remarkBox),
+      });
+      if (remarkDecision.omittedUnverified) {
+        // A source-backed requirement must not be deleted because its
+        // optional remark is unverified; neither may that remark be exported.
+        routingWarnings.push(`PDF page ${pageNumber}: an unverified Remark field was omitted; inspect the original source table.`);
       }
+      const remark = remarkDecision.remark;
       const category = ["Performance", "Electrical", "Mechanical", "Environmental", "Testing", "Documentation", "Other"].includes(candidate.category || "") ? candidate.category! : "Other";
       const displayLines = visualSheetType === "compliance-sheet" && Array.isArray(candidate.display_lines)
         ? candidate.display_lines.map((line) => typeof line === "string" ? line.trim() : "").filter(Boolean)
