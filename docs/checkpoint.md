@@ -114,6 +114,19 @@ Where the model identifies a source heading but the native font runs prove a bol
 The production contract verifies the font boundary, requirement classification despite a model section label, full-cell provenance, and heading/body projection. Local reconciliation of the earlier real example-2 result promotes four such source cells and formats two already-assessable mixed cells; it produces 220 response rows, retaining every original quote/reference and all requirement IDs. One new body row joins its verified page-26/27 continuation with both citations. This is local source-metadata reconciliation, distinct from another live-model result. A further fresh API run succeeds with 265 candidates and verifies native full-cell citations for the source shutter/control-system paragraphs; model split counts still vary.
 
 
+### Evidence-quality separation for missing geometry — 2026-11-03
+
+A literal quote found on the selected native PDF page may lack an unambiguous bounding box (duplicate text, malformed position runs, or extraction-order differences). Previously the final \`actions.ts\` gate discarded it with the same reason used for unsupported model text. The existing \`page-only\` precision type was unused by the final candidate loop.
+
+- [x] Use a deterministic evidence-quality decision: \`exact\` requires literal native text plus location; \`page-only\` requires literal native text but has no verified highlight; \`visual-ocr\` remains a reviewer-warning state for OCR/identified visual evidence; unsupported model output still fails.
+- [x] Keep \`bbox: null\` and \`locationPrecision: approximate\` when the location is uncertain, even when native-text offsets are available. Never synthesize coordinates.
+- [x] Label page-only citations explicitly in the source drawer, enable deliberate human verification against the complete page, and keep all new candidates unchecked by default.
+- [x] Add deterministic classifier/source-reference contract tests covering every evidence state and the untrusted-suggestion rejection boundary.
+- [x] GitHub Actions [run 41683546174](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41683546174) completed successfully on commit `78eaefca22e4b4b6bb5a2c197986dd5fe6715dc6`: dependency installation, `npm test`, TypeScript check, optimized build and scripted production pipeline. This is not a real-model evaluation.
+- [ ] Real tender and browser review with a reliably reproduced text-match/no-box case, including source-page inspection, manual check and export. No real-provider recall claim until this is adjudicated.
+
+This is a conservative intermediate step, not the final evidence model. Some quotes still cannot be matched textually because of extraction-order or OCR differences. Do not add unsupported suggestions to the response sheet, and do not represent page-only/visual evidence as an exact highlighted citation.
+
 ### Optional Remark verification must not erase requirements — 2026-11-03
 
 The final candidate-verification loop previously removed an entire otherwise source-matched requirement when an optional model-suggested Remark field could not be located in the PDF. This is a code-level omission mechanism; its frequency in real tenders has not been measured.
@@ -129,3 +142,17 @@ This change does not authorize fabricated source remarks, infer missing remarks,
 ### Parser-owned citation metadata — 2026-10-26
 
 Model extraction and recovery payloads may supply only their public schema fields. Drop model-supplied bounding boxes, cell/row indices, exact-cell flags, native typography, transcription claims, and export IDs before source verification. Only the application frame that constructs candidates from native vector rows can retain parser-owned fields. The production contract injects a forged box and exact-cell flag beside a real clause and payment terms; the real clause keeps its native location and the administrative clause remains rejected. This closes an unchecked trust boundary, not a guarantee that model extraction is complete.
+
+
+### Phase 1 extraction acceptance gate audit — 2026-11-03
+
+The code inventory and disposition matrix are tracked in \`docs/extraction-gate-audit.md\`. This new priority is a scoped reliability correction ahead of manufacturer evidence evaluation. Checkpoint 73's real-document and remote-CI gates remain open.
+
+- [x] Inspect the merged \`main\` extraction decision loop and reproduce the overly broad administrative predicate on synthetic clauses. This confirms a predicate-level omission mechanism, not an adjudicated real-PDF failure.
+- [x] Narrow the hard screen so catalog, certificate, technical inspection and installation obligations can proceed to the unchanged strict page/text/geometry verification. Distinguish administrative rejections from invalid candidate text in the coverage reasons; preserve default human review.
+- [x] Add focused regression assertions and a scripted-provider PDF contract for accepted source-backed catalog text, rejected payment terms and untrusted model metadata.
+- [x] GitHub Actions run [41682499234](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41682499234) at commit `7908d36fadfa6ce7c8b40373192b4bac4436a5d2` completed successfully: `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:pipeline`. The pipeline test uses a scripted provider; no local run was performed in this session.
+- [ ] Verify acceptance against real adjudicated tenders and measure requirement recall, false inclusions, citation accuracy and silent omissions; inspect documentary and technical-test passages on their original pages.
+- [ ] Required remote CI passes. The earlier GitHub billing/spending restriction is not evidence of a green CI result.
+
+Follow-on focused PRs must address uncertain text/box evidence, independent table layouts, source-aware duplicate recovery, routing gaps and bounded incomplete processing. No OEM compliance evaluation is authorized by this checkpoint.
