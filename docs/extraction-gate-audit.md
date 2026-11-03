@@ -1,0 +1,53 @@
+# Extraction gate audit: Phase 1 reliability
+
+Date: 2026-11-03. Baseline: main at 3c84ccd7d60d4a7d1f460ae5b98e038b0354f8c3 (merged PR #282).
+
+**Evidence level:** code inspection and an isolated execution of the actual administrative regex against explicit strings. These are **not** results from adjudicated tender PDFs or the real provider. The production contract below uses a scripted provider; a real-document recall evaluation remains required.
+
+## Pipeline and trust boundaries
+
+PDF upload (\`actions.ts:analyzeTender\`) → PDF.js native text, geometry, and optional Tesseract OCR → model page routing / annexure expansion → vector source-cell extraction or bounded general/visual extraction → omission-recovery suggestions → containment/identity screening → page, administrative, quote, geometry, and remark verification → source references / coverage ledger → editable human-review response sheet → DOCX/PDF/XLSX exports.
+
+\`modelCandidateFields\` strips untrusted model-proposed source boxes, exact-cell flags, row indices and other parser-owned metadata. Only parser-constructed vector rows can carry \`source_cells_exact\`. Do not weaken this boundary.
+
+## Initial gate inventory
+
+Severity refers to possible consequence, not a measured occurrence rate. \`H?\` denotes a high-severity omission mechanism with unmeasured likelihood. The cited conditions were observed in current code; actual customer-document impact is unconfirmed unless stated.
+
+| Gate / code location | Exact decision and safety purpose | Possible exclusion; scope and visibility | Risk / disposition / required regression |
+| --- | --- | --- | --- |
+| File validation, \`actions.ts:analyzeTender\` | Empty/>4 MiB or non-\`%PDF-\` payload returns error; protects resource and file parsing. | Whole upload stops with explicit error; large valid PDFs cannot be processed. | H? **Retain limits**; later chunked/partial processing with explicit incomplete status. Test oversized and non-PDF upload. |
+| Page/text budget, \`actions.ts:analyzeTender\` | >120 PDF pages or >140,000 extracted characters returns error; bounds synchronous runtime. | Whole-document stop, surfaced to user; character threshold is evaluated while collecting pages. | H? **Retain budgets**, consider bounded reviewed partitions. Test boundary and no success-shaped partial output. |
+| OCR routing, \`actions.ts:analyzeTender\`, \`local-ocr.ts\` | No usable extracted text and unavailable local OCR returns error. | Scans may fail even when visually readable. Explicit error for total failure; OCR quality varies. | H? **Retain safety**, add transparent per-page inability; test scan-only, mixed native/OCR. |
+| Page selection, \`page-routing.ts:buildRoutingBatches\` / \`expandRoutedSections\`; \`actions.ts\` | Bounded excerpts, scored candidates, routed section pages; protects model budget. | Unusual narrative/annexure pages may never be presented to extraction; unselected pages have routing diagnostics but no recall denominator. | H? **Modify after evaluation**; test atypical unnumbered clauses, clipped text, bilingual continuations. |
+| Annexure boundary, \`annexure-routing.ts:findAnnexureHeading\` / \`expandSelectedAnnexures\` | Native positional heading patterns define section continuation. | Unusual/visual-only headings may lose continuation pages. Routing is disclosed, but downstream omissions may not be obvious. | H? **Modify conservatively**; test heading variations and adjacent annexures. |
+| Vector row exclusion, \`actions.ts:inspectVectorPage\`, \`vector-table.ts:isRepeatedTableHeader\` | Repeated header/empty specification is not emitted as a requirement; prevents header contamination. | Misclassified data rows can disappear before candidate acceptance. Source-row coverage diagnostics cover detected rows only. | H? **Modify with source row context**; test merged headers and technical rows with header-like text. |
+| Column map, \`column-layout.ts:validatePageColumnMap\`, \`findColumnLayoutConflict\`, \`actions.ts\` | Proposed headers must match source; incompatible table maps trigger fallback or explicit stop. Prevents invented or mixed schemas. | Genuine mixed tables can cause whole-run failure rather than independent reviewable schedules. Error is exposed. | H? **Retain literal validation**, adapt table-scoped outputs; test two distinct layouts and missing headers. |
+| Model and visual regions, \`actions.ts\` | Failed crop/request or invalid parsed results can stop extraction; 90-second model request deadline protects runtime. | Whole document may stop or extraction/audit is marked incomplete depending on path. Errors are surfaced; source coverage may remain partial. | H? **Modify recovery behavior**, keep explicit incomplete status; test failed region among successful regions. |
+| Recovery suppression, \`visual-table.ts:discardContainedSuggestionsByPage\` | Equal/contained same-page suggestions suppressed to avoid duplicate responses. | Independently assessable child obligations may be hidden when contained in a draft; a recovery candidate has no reliable native cell identity. Rejection ledger records many drops. | H? **Modify based on source structure**; test strict containment vs distinct subclause and repeated annexure. |
+| Candidate containment, \`visual-table.ts:keepParsedSourceCandidate\` / \`sourceCandidateKey\` | Text containment and source identity remove duplicate suggestions; exact parsed cells exempt from containment. | Same-page repeated prose or assessable subclauses may be removed. Rejection reason is currently \`duplicate_or_contained_suggestion\`. | H? **Modify** only after identity evaluation; test repeated literal text at distinct locations. |
+| Invalid candidate/page, \`actions.ts:analyzeTender\` verification loop | Unselected/invalid page; empty or >5,000-character quote rejected; protects scope and output bounds. | Legitimate long obligation/special citation may be omitted; individual rejection recorded. | M? **Retain limits**, separate reasons and support reviewable continuations. Test long quote and invalid page. |
+| Administrative hard rejection, \`extraction-rules.ts:isClearlyAdministrativeClause\` / \`actions.ts\` | Previously, regex-matched any occurrence of \`catalog\`, \`original images\`, \`statutory certificates\`, \`pre-dispatch inspection\` or installation prerequisites before verification. Protects against procurement-only suggestions. | **Reproduced predicate-level exclusion:** grounded-looking technical/documentary clauses are rejected regardless of supporting text. This does not prove a PDF-level omission rate. Prior reason combined invalid and nontechnical candidates. | **High / reproduced predicate; MODIFY IN THIS PR**: only clearly commercial/administrative phrases remain hard stops; ambiguous obligations proceed to strict source verification and remain unreviewed. Unit and production-contract regressions. |
+| Source/geometry verification, \`actions.ts\` and \`source-document.ts:findUniqueSourceText\` | Must match native/OCR text or validated visual transcription, and have a source box; OCR precision is distinct. Prevents unsupported citations. | Different reading order, math symbols, OCR noise or missing box can drop genuine candidates entirely; \`source_quote_or_location_not_verified\` disclosed. | H? **Retain strict exact claims**, introduce text-verified/location-uncertain or visual-review states in later PR; test noisy typography, repeated text, no box. |
+| Remark geometry, \`actions.ts\` | A compliance-sheet remark must be located in source or the candidate is discarded. | A real main quote can be lost due to an unrelated remark location problem; \`remark_not_located_in_source\` recorded. | M? **Modify**: preserve main verified requirement and downgrade remark separately; test uncertain remark. |
+| Verified response capacity, \`actions.ts\` | \`buildResponseSheet\` >250 rows returns explicit error after verification, no partial sheet. | Legitimately large tender stops; this limit no longer counts discarded suggestions. | M? **Retain protection**, add reviewable bounded batches later; test true 251-row case. |
+| Omission audit budget, \`actions.ts\` / \`coverage-ledger.ts\` | Model omission audit may be skipped/incomplete at bounded input or provider failure. | Missing rows not found; ledger distinguishes incomplete, but not a measured recall figure. | H? **Retain explicit status**, test truncated audit and visible incomplete warning. |
+| Rule-only preview, \`extraction-rules.ts:isTechnicalRequirementCandidate\` | Commercial/technical keyword screen is a conservative preview, **not** the model-acceptance predicate. | Preview can omit unfamiliar technical language. | M? **Retain separately labeled preview**, never use it as proof of recall; test niche terminology. |
+
+## Reproduced high-priority failure and proposed disposition
+
+Against the original regex in \`main\`:
+- \`The catalog shall include ingress-protection measurements and acceptance criteria.\` → rejected.
+- \`Statutory certificates for pressure vessels shall meet IS 2825.\` → rejected.
+- \`The equipment shall undergo pre-dispatch inspection at 5 bar pressure.\` → rejected.
+- \`The vendor shall provide price quotation including GST.\` → rejected (desired).
+
+These strings are **synthetic regression inputs**, not claimed PDF quotes. The changed rule preserves the first three *for subsequent source verification* while retaining the price/GST rejection. A strict source match and page box still gate acceptance. All accepted requirements start \`reviewed: false\`, including documentary obligations; they are **not** manufacturer compliance decisions.
+
+## Remaining work / evaluation plan
+
+1. Execute \`npm --prefix apps/web test\`, \`npm --prefix apps/web run typecheck\`, \`npm --prefix apps/web run build\`, and \`cd apps/web && npm run test:pipeline\`; confirm GitHub CI independently. A scripted provider is not a real extraction accuracy test.
+2. Construct a small adjudicated PDF set with physical pages, literal passages and exact citation boxes for catalog/certificate obligations, OCR noise, unusual prose, repeated wording and multiple table schemas. Count candidate recall, false inclusions, wrong citations/units, review states, whole-run stops and silent omissions.
+3. Follow-on PRs: evidence-quality state separation; independent table-schema handling; source-aware deduplication; routing and omission diagnostics; bounded partial processing. Never accept unsupported model text or imply OCR precision is exact.
+
+No private tender PDFs or provider credentials belong in the repository audit.
