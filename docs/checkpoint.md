@@ -113,6 +113,19 @@ Where the model identifies a source heading but the native font runs prove a bol
 
 The production contract verifies the font boundary, requirement classification despite a model section label, full-cell provenance, and heading/body projection. Local reconciliation of the earlier real example-2 result promotes four such source cells and formats two already-assessable mixed cells; it produces 220 response rows, retaining every original quote/reference and all requirement IDs. One new body row joins its verified page-26/27 continuation with both citations. This is local source-metadata reconciliation, distinct from another live-model result. A further fresh API run succeeds with 265 candidates and verifies native full-cell citations for the source shutter/control-system paragraphs; model split counts still vary.
 
+
+### Optional Remark verification must not erase requirements — 2026-11-03
+
+The final candidate-verification loop previously removed an entire otherwise source-matched requirement when an optional model-suggested Remark field could not be located in the PDF. This is a code-level omission mechanism; its frequency in real tenders has not been measured.
+
+- [x] Keep the existing strict source page/text/geometry verification for the primary requirement.
+- [x] Independently verify a Remark field before including it in a visual compliance-sheet response. Discard only an unverified optional Remark and warn the reviewer at the affected PDF page; do not export it.
+- [x] Add tests for verified, missing, empty, and out-of-scope remark decisions.
+- [ ] Execute GitHub CI unit/typecheck/build/scripted provider pipeline checks.
+- [ ] Review a real tender with valid requirement plus unlocatable optional remark; inspect that it survives unreviewed with a correct source page while the unsupported remark is not present in exports.
+
+This change does not authorize fabricated source remarks, infer missing remarks, or claim real-document recall.
+
 ### Parser-owned citation metadata — 2026-10-26
 
 Model extraction and recovery payloads may supply only their public schema fields. Drop model-supplied bounding boxes, cell/row indices, exact-cell flags, native typography, transcription claims, and export IDs before source verification. Only the application frame that constructs candidates from native vector rows can retain parser-owned fields. The production contract injects a forged box and exact-cell flag beside a real clause and payment terms; the real clause keeps its native location and the administrative clause remains rejected. This closes an unchecked trust boundary, not a guarantee that model extraction is complete.
