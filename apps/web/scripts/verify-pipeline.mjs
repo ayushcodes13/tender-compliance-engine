@@ -35,13 +35,18 @@ const provider = http.createServer(async (request, response) => {
     if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
-      result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[]};
+      result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
       const columns = ['single-content','mixed-native-heading'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>({row_index:Number(match[1]),row_type:Number(match[1])===2?'header':match[2].includes('Description')?'header':match[2].includes('A. Optical table')?'section':'requirement',category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false})),loose_headings:[],splits:[],visual_completions:[]};
       if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly'))row.row_type='section';}}
+    } else if (schema === 'technical_table_page_rows') {
+      const quote='The centrifuge shall accommodate 10 samples.';
+      result={columns:[],requirements:scenario==='unlocated-remark'&&text.includes(quote)?[{page:1,quote,remark:'Invented deviation: maximum 500 RPM.',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]};
+    } else if (schema === 'technical_table_missing_rows') {
+      result={columns:[],requirements:[]};
     } else if (schema === 'technical_text_missing_requirements') {
       result = {columns:[],requirements:[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
@@ -98,6 +103,16 @@ try {
   assert.equal(injected.analysis.requirements[1].sourceReference.locationPrecision,'exact');
   assert.equal(injected.analysis.requirements[1].sourceReference.sourceText,'The catalog shall specify ingress protection IP67.');
   assert.ok(injected.analysis.rejectedSuggestionDetails.some(row=>row.reason==='administrative_procurement_clause'));
+  scenario='unlocated-remark';
+  const remarkPdf=new jsPDF();remarkPdf.text('The centrifuge shall accommodate 10 samples.',20,30);
+  const remarkResult=await analyze(remarkPdf);assert.equal(remarkResult.ok,true,remarkResult.error);
+  assert.equal(remarkResult.analysis.requirements.length,1,'A valid source-backed requirement survives an unlocatable optional remark');
+  assert.equal(remarkResult.analysis.requirements[0].quote,'The centrifuge shall accommodate 10 samples.');
+  assert.equal(remarkResult.analysis.requirements[0].remark,undefined,'Unverified remarks cannot be returned or exported');
+  assert.equal(remarkResult.analysis.requirements[0].reviewed,false);
+  assert.ok(remarkResult.analysis.requirements[0].bbox,'The primary quote keeps its own source location');
+  assert.match(remarkResult.analysis.reviewNote,/unverified Remark field was omitted/);
+  assert.ok(!JSON.stringify(buildResponseSheet(remarkResult.analysis)).includes('Invented deviation'));
   scenario='case-sensitive';
   const unitPdf=new jsPDF();unitPdf.text('Optical power shall be 1 mW.',20,30);unitPdf.text('Optical power shall be 1 MW.',20,50);
   const unitResult=await analyze(unitPdf);assert.equal(unitResult.ok,true,unitResult.error);

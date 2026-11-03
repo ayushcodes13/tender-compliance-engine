@@ -127,6 +127,18 @@ A literal quote found on the selected native PDF page may lack an unambiguous bo
 
 This is a conservative intermediate step, not the final evidence model. Some quotes still cannot be matched textually because of extraction-order or OCR differences. Do not add unsupported suggestions to the response sheet, and do not represent page-only/visual evidence as an exact highlighted citation.
 
+### Optional Remark verification must not erase requirements — 2026-11-03
+
+The final candidate-verification loop previously removed an entire otherwise source-matched requirement when an optional model-suggested Remark field could not be located in the PDF. This is a code-level omission mechanism; its frequency in real tenders has not been measured.
+
+- [x] Keep the existing strict source page/text/geometry verification for the primary requirement.
+- [x] Independently verify a Remark field before including it in a visual compliance-sheet response. Discard only an unverified optional Remark and warn the reviewer at the affected PDF page; do not export it.
+- [x] Add tests for verified, missing, empty, and out-of-scope remark decisions.
+- [x] GitHub Actions [run 41684385667](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41684385667) completed successfully on commit `d0b4e94ea09f85a309994bdde67e4cf4dbcb622f`: unit tests, TypeScript check, production build and scripted PDF upload-to-sheet contract. Real PDF/provider accuracy remains unverified.
+- [ ] Review a real tender with valid requirement plus unlocatable optional remark; inspect that it survives unreviewed with a correct source page while the unsupported remark is not present in exports.
+
+This change does not authorize fabricated source remarks, infer missing remarks, or claim real-document recall.
+
 ### Parser-owned citation metadata — 2026-10-26
 
 Model extraction and recovery payloads may supply only their public schema fields. Drop model-supplied bounding boxes, cell/row indices, exact-cell flags, native typography, transcription claims, and export IDs before source verification. Only the application frame that constructs candidates from native vector rows can retain parser-owned fields. The production contract injects a forged box and exact-cell flag beside a real clause and payment terms; the real clause keeps its native location and the administrative clause remains rejected. This closes an unchecked trust boundary, not a guarantee that model extraction is complete.
