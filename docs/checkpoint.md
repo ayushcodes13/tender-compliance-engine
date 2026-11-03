@@ -113,6 +113,20 @@ Where the model identifies a source heading but the native font runs prove a bol
 
 The production contract verifies the font boundary, requirement classification despite a model section label, full-cell provenance, and heading/body projection. Local reconciliation of the earlier real example-2 result promotes four such source cells and formats two already-assessable mixed cells; it produces 220 response rows, retaining every original quote/reference and all requirement IDs. One new body row joins its verified page-26/27 continuation with both citations. This is local source-metadata reconciliation, distinct from another live-model result. A further fresh API run succeeds with 265 candidates and verifies native full-cell citations for the source shutter/control-system paragraphs; model split counts still vary.
 
+
+### Evidence-quality separation for missing geometry — 2026-11-03
+
+A literal quote found on the selected native PDF page may lack an unambiguous bounding box (duplicate text, malformed position runs, or extraction-order differences). Previously the final \`actions.ts\` gate discarded it with the same reason used for unsupported model text. The existing \`page-only\` precision type was unused by the final candidate loop.
+
+- [x] Use a deterministic evidence-quality decision: \`exact\` requires literal native text plus location; \`page-only\` requires literal native text but has no verified highlight; \`visual-ocr\` remains a reviewer-warning state for OCR/identified visual evidence; unsupported model output still fails.
+- [x] Keep \`bbox: null\` and \`locationPrecision: approximate\` when the location is uncertain, even when native-text offsets are available. Never synthesize coordinates.
+- [x] Label page-only citations explicitly in the source drawer, enable deliberate human verification against the complete page, and keep all new candidates unchecked by default.
+- [x] Add deterministic classifier/source-reference contract tests covering every evidence state and the untrusted-suggestion rejection boundary.
+- [ ] GitHub CI: unit tests, TypeScript, production build and scripted pipeline contract on this PR's latest head.
+- [ ] Real tender and browser review with a reliably reproduced text-match/no-box case, including source-page inspection, manual check and export. No real-provider recall claim until this is adjudicated.
+
+This is a conservative intermediate step, not the final evidence model. Some quotes still cannot be matched textually because of extraction-order or OCR differences. Do not add unsupported suggestions to the response sheet, and do not represent page-only/visual evidence as an exact highlighted citation.
+
 ### Parser-owned citation metadata — 2026-10-26
 
 Model extraction and recovery payloads may supply only their public schema fields. Drop model-supplied bounding boxes, cell/row indices, exact-cell flags, native typography, transcription claims, and export IDs before source verification. Only the application frame that constructs candidates from native vector rows can retain parser-owned fields. The production contract injects a forged box and exact-cell flag beside a real clause and payment terms; the real clause keeps its native location and the administrative clause remains rejected. This closes an unchecked trust boundary, not a guarantee that model extraction is complete.
