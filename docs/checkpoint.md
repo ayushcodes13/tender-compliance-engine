@@ -121,7 +121,7 @@ The final candidate-verification loop previously removed an entire otherwise sou
 - [x] Keep the existing strict source page/text/geometry verification for the primary requirement.
 - [x] Independently verify a Remark field before including it in a visual compliance-sheet response. Discard only an unverified optional Remark and warn the reviewer at the affected PDF page; do not export it.
 - [x] Add tests for verified, missing, empty, and out-of-scope remark decisions.
-- [ ] Execute GitHub CI unit/typecheck/build/scripted provider pipeline checks.
+- [x] GitHub Actions [run 41684385667](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41684385667) completed successfully on commit `d0b4e94ea09f85a309994bdde67e4cf4dbcb622f`: unit tests, TypeScript check, production build and scripted PDF upload-to-sheet contract. Real PDF/provider accuracy remains unverified.
 - [ ] Review a real tender with valid requirement plus unlocatable optional remark; inspect that it survives unreviewed with a correct source page while the unsupported remark is not present in exports.
 
 This change does not authorize fabricated source remarks, infer missing remarks, or claim real-document recall.
