@@ -49,6 +49,35 @@ test("LLM technical candidates are not rejected for lacking a known keyword", ()
   assert.equal(isClearlyAdministrativeClause("The vendor shall provide price quotation including GST."), true);
   assert.equal(isClearlyAdministrativeClause("The delivery schedule is ten months from purchase order."), true);
   assert.equal(isClearlyAdministrativeClause("The firm should arrange the pre-dispatch inspection prior to packing and dispatching."), true);
-  assert.equal(isClearlyAdministrativeClause("The articles shall be of the best quality and of the kind as per the requirement of the institution."), true);
+  assert.equal(isClearlyAdministrativeClause("The articles shall be of the best quality and of the kind as per the requirement of the institution."), false);
   assert.equal(isClearlyAdministrativeClause("The control software shall have a pre-dispatch test mode."), false);
+});
+
+test("source-verifiable documentary, installation and testing obligations are not keyword-deleted", () => {
+  const reviewable = [
+    "The catalog shall include ingress-protection measurements and acceptance criteria.",
+    "Statutory certificates for pressure vessels shall meet IS 2825.",
+    "The manufacturer shall provide original images of the X-ray weld inspection.",
+    "The equipment shall undergo pre-dispatch inspection at 5 bar pressure.",
+    "Pre-requisite installation requirement: earthing resistance must be below 1 ohm.",
+    "The supplier shall submit a product demonstration/catalogue showing sensor accuracy.",
+    "The manufacturer shall furnish test reports compliances for temperature endurance.",
+    "The articles shall be of the best quality and of the kind as per the requirement of the institution.",
+  ];
+  for (const clause of reviewable) {
+    assert.equal(isClearlyAdministrativeClause(clause), false, clause);
+  }
+});
+
+test("explicit tender and commercial instructions still fail the administrative hard screen", () => {
+  for (const clause of [
+    "The bidder shall submit its financial bid before the deadline.",
+    "The price bid must attach a product catalog.",
+    "The payment terms are net 30 days.",
+    "The firm should arrange the pre-dispatch inspection prior to packing and dispatching.",
+    "Bank guarantee shall be provided with the bid security.",
+    "The delivery location shall be the purchaser's office.",
+  ]) {
+    assert.equal(isClearlyAdministrativeClause(clause), true, clause);
+  }
 });
