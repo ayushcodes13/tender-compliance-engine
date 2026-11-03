@@ -226,7 +226,8 @@ export function buildRequirementSourceReference(input: {
     bbox: input.bbox ? { ...input.bbox } : null,
     bboxCoordinateSystem: "pdfjs-viewport-scale-1",
     extractionMethod: transcription ? input.transcriptionMethod ?? "visual-transcription" : "pdfjs-native-text",
-    locationPrecision: transcription ? "approximate" : match || sourceCell ? "exact" : "approximate",
+    // Text offsets or a source-cell ID are not proof of highlight geometry.
+    locationPrecision: !transcription && input.bbox && (match || sourceCell) ? "exact" : "approximate",
     ...(transcription ? { transcribedText: transcription } : {}),
     ...(transcription && input.ocrConfidence ? { ocrConfidence: input.ocrConfidence } : {}),
     ...(input.selectableTextContext ? { selectableTextContext: input.selectableTextContext } : {}),

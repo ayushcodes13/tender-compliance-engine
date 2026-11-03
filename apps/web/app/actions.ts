@@ -7,6 +7,7 @@ import { PDF_FONT_OPTIONS } from "./pdf-runtime";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, DOMMatrix, ImageData, loadImage, Path2D } from "@napi-rs/canvas";
 import { isClearlyAdministrativeClause } from "./extraction-rules";
+import { classifyCandidateEvidence } from "./candidate-evidence";
 import { findAnnexureHeading, findTechnicalSectionHeading, sourceAnnexureTitleLines, sourceTableTextTop, expandSelectedAnnexures } from "./annexure-routing";
 import { combinePageTranscripts, useComplianceSheetLayout, buildExtractionBatches } from "./document-input";
 import { extractStructuredTechnicalSection, type PdfRectangle, type SourceTextItem, type StructuredSection } from "./pdf-structure";
@@ -1455,7 +1456,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const visualOcr = candidate.visualOcr === true && (visualSheetType === "compliance-sheet" || normalizedTables);
       const pageEvidence = locatePageQuote(quote, sourcePage);
       const bbox = candidate.sourceBox ?? pageEvidence?.bbox ?? null;
-      if ((!nativeTextMatch && !ocrTextMatch && !visualOcr) || !bbox) {
+      const evidencePrecision = classifyCandidateEvidence({
+        nativeTextMatch, ocrTextMatch, visualTranscription: visualOcr, hasLocation: Boolean(bbox),
+      });
+      if (!evidencePrecision) {
         rejected += 1;
         addRejection(pageNumber, "source_quote_or_location_not_verified", quote);
         continue;
@@ -1535,13 +1539,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           sourceCellLocation,
         }),
         selectableTextQuote: visualOcr ? candidate.selectableTextQuote : undefined,
-        bbox: {
+        bbox: bbox ? {
           x: (Math.min(bbox.x, remarkBox?.x ?? bbox.x) / sourcePage.width) * 100,
           y: (Math.min(bbox.y, remarkBox?.y ?? bbox.y) / sourcePage.height) * 100,
           width: (Math.max(bbox.x + bbox.width, (remarkBox?.x ?? 0) + (remarkBox?.width ?? 0)) - Math.min(bbox.x, remarkBox?.x ?? bbox.x)) / sourcePage.width * 100,
           height: (Math.max(bbox.y + bbox.height, (remarkBox?.y ?? 0) + (remarkBox?.height ?? 0)) - Math.min(bbox.y, remarkBox?.y ?? bbox.y)) / sourcePage.height * 100,
-        },
-        precision: ocrGrounded ? "visual-ocr" : "exact",
+        } : null,
+        precision: evidencePrecision,
         ocrWarning: candidate.ocrWarning === true || ocrGrounded,
         reviewed: false,
       });
@@ -1649,7 +1653,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       sheetHeading: pages.some((page) => locatePageQuote("TECHNICAL SPECIFICATION:", page))
         ? "TECHNICAL SPECIFICATION:"
         : undefined,
-      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""}`,
+      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""}`,
     };
     const responseRows = buildResponseSheet(analysis).rows.length;
     if (responseRows > MAX_RESPONSE_ROWS) {

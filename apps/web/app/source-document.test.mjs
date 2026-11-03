@@ -144,3 +144,20 @@ test("does not report an unmatched model quote as source text", () => {
   assert.equal(reference.locationPrecision, "approximate");
   assert.equal(reference.startOffset, undefined);
 });
+
+test("literal text with no bounding box retains offsets but never claims an exact visual location", () => {
+  const document = createSourceDocumentModel(new Uint8Array([8]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId, physicalPdfPageNumber: 11,
+    width: 300, height: 400, sourceText: "The instrument shall withstand 5 bar.", positionedItems: [],
+  });
+  const reference = buildRequirementSourceReference({
+    document, page, quote: "The instrument shall withstand 5 bar.", bbox: null,
+  });
+  assert.equal(reference.sourceText, "The instrument shall withstand 5 bar.");
+  assert.equal(reference.locationPrecision, "approximate");
+  assert.equal(reference.bbox, null);
+  assert.equal(reference.physicalPdfPageNumber, 11);
+  assert.equal(reference.startOffset, 0);
+  assert.equal(reference.endOffset, "The instrument shall withstand 5 bar.".length);
+});
