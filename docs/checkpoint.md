@@ -122,7 +122,7 @@ A literal quote found on the selected native PDF page may lack an unambiguous bo
 - [x] Keep \`bbox: null\` and \`locationPrecision: approximate\` when the location is uncertain, even when native-text offsets are available. Never synthesize coordinates.
 - [x] Label page-only citations explicitly in the source drawer, enable deliberate human verification against the complete page, and keep all new candidates unchecked by default.
 - [x] Add deterministic classifier/source-reference contract tests covering every evidence state and the untrusted-suggestion rejection boundary.
-- [ ] GitHub CI: unit tests, TypeScript, production build and scripted pipeline contract on this PR's latest head.
+- [x] GitHub Actions [run 41683546174](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41683546174) completed successfully on commit `78eaefca22e4b4b6bb5a2c197986dd5fe6715dc6`: dependency installation, `npm test`, TypeScript check, optimized build and scripted production pipeline. This is not a real-model evaluation.
 - [ ] Real tender and browser review with a reliably reproduced text-match/no-box case, including source-page inspection, manual check and export. No real-provider recall claim until this is adjudicated.
 
 This is a conservative intermediate step, not the final evidence model. Some quotes still cannot be matched textually because of extraction-order or OCR differences. Do not add unsupported suggestions to the response sheet, and do not represent page-only/visual evidence as an exact highlighted citation.
