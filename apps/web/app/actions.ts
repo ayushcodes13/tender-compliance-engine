@@ -1429,9 +1429,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         addRejection(sourcePage ? pageNumber : null, "page_not_selected_by_router", quote);
         continue;
       }
-      if (!quote || quote.length > 5_000 || (candidate.source_cells_exact !== true && isClearlyAdministrativeClause(quote))) {
+      if (!quote || quote.length > 5_000) {
         rejected += 1;
-        addRejection(pageNumber, "invalid_or_nontechnical_candidate", quote);
+        addRejection(pageNumber, "invalid_candidate_text", quote);
+        continue;
+      }
+      if (candidate.source_cells_exact !== true && isClearlyAdministrativeClause(quote)) {
+        rejected += 1;
+        addRejection(pageNumber, "administrative_procurement_clause", quote);
         continue;
       }
       const normalizedQuote = normalize(quote);

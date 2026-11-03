@@ -116,3 +116,17 @@ The production contract verifies the font boundary, requirement classification d
 ### Parser-owned citation metadata — 2026-10-26
 
 Model extraction and recovery payloads may supply only their public schema fields. Drop model-supplied bounding boxes, cell/row indices, exact-cell flags, native typography, transcription claims, and export IDs before source verification. Only the application frame that constructs candidates from native vector rows can retain parser-owned fields. The production contract injects a forged box and exact-cell flag beside a real clause and payment terms; the real clause keeps its native location and the administrative clause remains rejected. This closes an unchecked trust boundary, not a guarantee that model extraction is complete.
+
+
+### Phase 1 extraction acceptance gate audit — 2026-11-03
+
+The code inventory and disposition matrix are tracked in \`docs/extraction-gate-audit.md\`. This new priority is a scoped reliability correction ahead of manufacturer evidence evaluation. Checkpoint 73's real-document and remote-CI gates remain open.
+
+- [x] Inspect the merged \`main\` extraction decision loop and reproduce the overly broad administrative predicate on synthetic clauses. This confirms a predicate-level omission mechanism, not an adjudicated real-PDF failure.
+- [x] Narrow the hard screen so catalog, certificate, technical inspection and installation obligations can proceed to the unchanged strict page/text/geometry verification. Distinguish administrative rejections from invalid candidate text in the coverage reasons; preserve default human review.
+- [x] Add focused regression assertions and a scripted-provider PDF contract for accepted source-backed catalog text, rejected payment terms and untrusted model metadata.
+- [x] GitHub Actions run [41682499234](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/41682499234) at commit `7908d36fadfa6ce7c8b40373192b4bac4436a5d2` completed successfully: `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:pipeline`. The pipeline test uses a scripted provider; no local run was performed in this session.
+- [ ] Verify acceptance against real adjudicated tenders and measure requirement recall, false inclusions, citation accuracy and silent omissions; inspect documentary and technical-test passages on their original pages.
+- [ ] Required remote CI passes. The earlier GitHub billing/spending restriction is not evidence of a green CI result.
+
+Follow-on focused PRs must address uncertain text/box evidence, independent table layouts, source-aware duplicate recovery, routing gaps and bounded incomplete processing. No OEM compliance evaluation is authorized by this checkpoint.
