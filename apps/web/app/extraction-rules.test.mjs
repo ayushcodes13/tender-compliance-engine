@@ -77,6 +77,9 @@ test("explicit tender and commercial instructions still fail the administrative 
     "The firm should arrange the pre-dispatch inspection prior to packing and dispatching.",
     "Bank guarantee shall be provided with the bid security.",
     "The delivery location shall be the purchaser's office.",
+    "(Indicate Compliance Status (Yes/No) for each and every point)",
+    "All points indicated above (Annexure - II) must be filled by the bidder and relevant documents (i.e. catalogue, literature etc.) should be submitted.",
+    "Quote must have a technical compliance report as prescribed in Annexure - II.",
   ]) {
     assert.equal(isClearlyAdministrativeClause(clause), true, clause);
   }

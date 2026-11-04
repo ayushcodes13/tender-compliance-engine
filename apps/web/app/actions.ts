@@ -1436,7 +1436,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         addRejection(pageNumber, "invalid_candidate_text", quote);
         continue;
       }
-      if (candidate.source_cells_exact !== true && isClearlyAdministrativeClause(quote)) {
+      if (isClearlyAdministrativeClause(quote)) {
         rejected += 1;
         addRejection(pageNumber, "administrative_procurement_clause", quote);
         continue;
