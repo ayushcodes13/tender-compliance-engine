@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findColumnLayoutConflict, normalizeSingleContentColumn, sameColumnLayout, validatePageColumnMap } from "./column-layout.ts";
+import { findColumnLayoutConflict, matchOcrHeaderTokens, normalizeSingleContentColumn, sameColumnLayout, validatePageColumnMap } from "./column-layout.ts";
 
 test("validates a dynamic page schema against literal source headers", () => {
   const headers = ["S. No.", "Equipment", "Parameter", "Minimum", "Unit", "Remarks"];
@@ -82,4 +82,18 @@ test('one technical content column remains a specification when its header was c
 test('literal header verification and layout identity preserve scientific unit case',()=>{
  assert.equal(validatePageColumnMap([{header:'Power (MW)',role:'specification'}],['Power (mW)']),null);
  assert.equal(sameColumnLayout([{header:'Power (mW)',role:'specification'}],[{header:'Power (MW)',role:'specification'}]),false);
+});
+
+test('matchOcrHeaderTokens verifies OCR table headers across noisy transcripts and interleaved lines', () => {
+  const ocrPageText = `
+    SIL. Item Description Compliance
+    No. (Yes/No)
+    1. Floor standing X-Band EPR Spectrometer System
+  `;
+  assert.equal(matchOcrHeaderTokens("Sl. No.", ocrPageText), true);
+  assert.equal(matchOcrHeaderTokens("Item Description", ocrPageText), true);
+  assert.equal(matchOcrHeaderTokens("Compliance (Yes/No)", ocrPageText), true);
+  assert.equal(matchOcrHeaderTokens("Invented Vendor Header", ocrPageText), false);
+  assert.equal(matchOcrHeaderTokens("", ocrPageText), false);
+  assert.equal(matchOcrHeaderTokens("Sl. No.", ""), false);
 });

@@ -16,7 +16,7 @@ import { displayLinesForQuote, type PositionedTextItem } from "./visual-lines";
 import { discardContainedSuggestions, discardContainedSuggestionsByPage, keepParsedSourceCandidate, sourceCandidateKey, splitSourceQuote } from "./visual-table";
 import { extractVectorTableRows, isRepeatedTableHeader } from "./vector-table";
 import { chooseRequirementColumn, sourceTableGroupHeading, sourceRequirementCell } from "./table-columns";
-import { findColumnLayoutConflict, normalizeSingleContentColumn, validatePageColumnMap, type SourceColumn } from "./column-layout";
+import { findColumnLayoutConflict, matchOcrHeaderTokens, normalizeSingleContentColumn, validatePageColumnMap, type SourceColumn } from "./column-layout";
 import { extractPdfPathRectangles, hasTableGridGeometry } from "./pdf-path-rectangles";
 import { validateVisualRowTranscription, type VisualOcrConfidence } from "./visual-ocr";
 import type { ProcessingProgress } from "./processing-progress";
@@ -178,6 +178,17 @@ function locatePageQuote(quote: string, page: {
       .flatMap((item) => item.ocrConfidenceLevel ? [item.ocrConfidenceLevel] : []))
     : null;
   return { bbox: ocrBox, method: "tesseract-ocr", ...(confidence ? { ocrConfidence: confidence } : {}) };
+}
+
+function matchesPageSourceText(header: string, page: {
+  rawText: string;
+  rawItemMap: number[];
+  positioned: PositionedItem[];
+  ocrText: string;
+  ocrRawItemMap: number[];
+  ocrPositioned: PositionedOcrLine[];
+}): boolean {
+  return Boolean(locatePageQuote(header, page)) || matchOcrHeaderTokens(header, page.rawText || page.ocrText || "");
 }
 
 type VisualPage = {
@@ -923,7 +934,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           if (typeof content === "string") {
             const mapped = parseJson(content) as { columns?: SourceColumn[] };
             const validColumns = validatePageColumnMap(mapped.columns, headerRows.flatMap((row) => row.cells), (header) =>
-          Boolean(locatePageQuote(header, sourcePage)));
+              matchesPageSourceText(header, sourcePage));
             if (validColumns && validColumns.length === Math.max(...headerRows.map((row) => row.cells.length))) {
               const columns = normalizeSingleContentColumn(validColumns);
               if(columns!==validColumns)routingWarnings.push(`PDF page ${sourcePage.page}: the single content column is treated as the specification column; verify the source table roles.`);
@@ -991,7 +1002,8 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             if (typeof content === "string") {
               const result = parseJson(content) as { columns?: SourceColumn[]; rows?: typeof rowLabels; splits?: typeof rowSplits; loose_headings?: typeof looseHeadings; visual_completions?: typeof visualCompletions };
               if (Array.isArray(result.columns) && result.columns.length) {
-                const validatedColumns = validatePageColumnMap(result.columns, sourceRows.flatMap((row) => row.cells));
+                const validatedColumns = validatePageColumnMap(result.columns, sourceRows.flatMap((row) => row.cells), (header) =>
+                  matchesPageSourceText(header, page));
                 if (validatedColumns && validatedColumns.length === sourceColumnCount) returnedColumns = normalizeSingleContentColumn(validatedColumns);
                 else invalidPageColumnMap = true;
               }
@@ -1219,7 +1231,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         const page = visualPages.find((candidatePage) => candidatePage.page === result.page);
         if (!page) continue;
         const columns = validatePageColumnMap(result.parsed.columns, [], (header) =>
-          Boolean(locatePageQuote(header, page)));
+          matchesPageSourceText(header, page));
         if (!columns) invalidFallbackMapPage = page.page;
         else fallbackLayoutMaps.push({ page: page.page, columns });
       }
