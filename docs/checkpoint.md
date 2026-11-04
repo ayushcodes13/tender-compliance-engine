@@ -156,3 +156,15 @@ The code inventory and disposition matrix are tracked in \`docs/extraction-gate-
 - [ ] Required remote CI passes. The earlier GitHub billing/spending restriction is not evidence of a green CI result.
 
 Follow-on focused PRs must address uncertain text/box evidence, independent table layouts, source-aware duplicate recovery, routing gaps and bounded incomplete processing. No OEM compliance evaluation is authorized by this checkpoint.
+
+### LLM-routed semantic extraction and elimination of brittle regex screens — 2026-11-04
+
+Deterministic regex keyword screens (`isClearlyAdministrativeClause`, `extraction-rules.ts`) proved brittle across diverse tender document layouts and introduced hardcoded domain biases. A pure LLM semantic routing and schema classification architecture was implemented:
+
+- [x] Removed `extraction-rules.ts` and brittle regex keyword matching.
+- [x] Expanded schema enums across `tender_requirements` and `visual_table_row_labels` to include explicit `instruction` and `header` row types.
+- [x] Strengthened LLM prompts in `extractGeneralPages` and `inspectVectorPage` with rigorous definitions separating assessable technical specifications (`requirement`) and structural headings (`section`) from bidder filling directives / submission guidelines (`instruction`) and table column labels (`header`).
+- [x] Cleanly exclude `instruction` and `header` rows in vector table row mapping and candidate verification.
+- [x] Preserved deterministic code strictly for provenance, exact verbatim quote verification against selectable PDF text, bounding boxes, and response sheet generation.
+- [x] Unit tests (`llm-semantic-classification.test.mjs`), typechecks, and pipeline integration tests all pass.
+
