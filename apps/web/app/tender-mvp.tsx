@@ -692,14 +692,14 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <a className="mvp-upload-back" href="/">Back to overview</a>
         </header>
         <section className="mvp-upload-page">
-          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum 4 MB</li><li>Up to 120 pages</li><li>Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable</li></ul></div>
+          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum 32 MB locally (4 MB hosted)</li><li>Up to 120 pages</li><li>Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable</li></ul></div>
           <div className="mvp-upload-card">
             <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span><span className="mvp-upload-private"><span /> Single browser session</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
                 <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} disabled={busy} />
                 <span className="mvp-upload-icon"><Upload size={20} /></span>
-                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>Choose a tender PDF</strong><span>PDF files up to 4 MB</span></>}
+                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>Choose a tender PDF</strong><span>PDF files up to 32 MB locally (4 MB hosted)</span></>}
                 <span className="mvp-browse-link">Select PDF <ArrowUpRight size={14} /></span>
               </label>
               <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
