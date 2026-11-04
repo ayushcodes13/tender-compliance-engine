@@ -168,3 +168,13 @@ Deterministic regex keyword screens (`isClearlyAdministrativeClause`, `extractio
 - [x] Preserved deterministic code strictly for provenance, exact verbatim quote verification against selectable PDF text, bounding boxes, and response sheet generation.
 - [x] Unit tests (`llm-semantic-classification.test.mjs`), typechecks, and pipeline integration tests all pass.
 
+### Environment-aware upload size limits (local 32 MB / hosted 4 MB) — 2026-11-05
+
+Real customer tender documents frequently exceed 4 MB (e.g. 7 MB+ documents with high-resolution imagery and appendices):
+
+- [x] Configured environment-aware payload limit in `apps/web/app/upload-limits.ts`: defaults to 32 MB for local development and on-premise runs, while retaining the 4 MB ceiling on hosted Vercel environments to satisfy serverless payload limits.
+- [x] Configured Next.js server actions `bodySizeLimit` in `apps/web/next.config.ts` dynamically (`isHosted ? "4.5mb" : "32mb"`).
+- [x] Updated upload validation in `apps/web/app/actions.ts` and client helper text in `apps/web/app/tender-mvp.tsx`.
+- [x] Added unit tests in `apps/web/app/upload-limits.test.mjs` verifying local, hosted Vercel, and custom `MAX_FILE_BYTES` overrides.
+
+

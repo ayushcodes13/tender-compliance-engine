@@ -66,7 +66,8 @@ type Requirement = {
 
 type ProgressCallback = (progress: ProcessingProgress) => void;
 
-const MAX_FILE_BYTES = 4 * 1024 * 1024;
+import { resolveMaxFileBytes, MAX_FILE_BYTES, LOCAL_MAX_FILE_BYTES } from "./upload-limits";
+
 const MAX_PAGES = 120;
 const MAX_TEXT_CHARS = 140_000;
 const MAX_RESPONSE_ROWS = 250;
@@ -253,8 +254,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     report("file validation", { stage: "uploading", message: "Checking the uploaded PDF" });
     const file = form.get("file");
     if (!(file instanceof File)) return { ok: false as const, error: "Choose a tender PDF to upload." };
-    if (file.size === 0 || file.size > MAX_FILE_BYTES) {
-      return { ok: false as const, error: "Choose a PDF smaller than 4 MB for this hosted MVP." };
+    const maxFileBytes = resolveMaxFileBytes();
+    if (file.size === 0 || file.size > maxFileBytes) {
+      const maxMb = Math.round(maxFileBytes / (1024 * 1024));
+      const targetEnv = (process.env.VERCEL === "1" || process.env.VERCEL_ENV) ? "hosted MVP" : "local environment";
+      return { ok: false as const, error: `Choose a PDF smaller than ${maxMb} MB for this ${targetEnv}.` };
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
