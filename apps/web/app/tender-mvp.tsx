@@ -789,18 +789,18 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             {section.heading && <h3>{section.heading}</h3>}
           <table className="mvp-sheet-table">
             <thead><tr>{section.columns.map((column, index) => <th data-role={column.role} key={`${column.header}-${index}`}>{column.role === "page" ? "Source" : column.header}</th>)}<th className="mvp-sheet-actions-heading">Row actions</th></tr></thead>
-            <tbody>{section.rows.map((row) => {
+            <tbody>{section.rows.map((row, sectionRowIndex) => {
               const rowIndex = responseSheet.rows.findIndex(item => item.id === row.id);
-              const headingValues = responseHeadingMergeKeys(responseSheet);
               return <tr key={row.id} className={row.section ? "is-section-row" : undefined}>
                 {row.values.map((value, columnIndex) => {
                   const column = section.columns[columnIndex];
                   const locked = column.role === "page";
-                  const merge = column.role === "heading" ? verticalMergeAt(headingValues, rowIndex) : undefined;
+                  const colValues = section.rows.map((r) => r.values[columnIndex]);
+                  const merge = column.role === "heading" ? verticalMergeAt(colValues, sectionRowIndex) : undefined;
                   if (merge === "continue") return null;
                   let rowSpan = 1;
                   if (merge === "restart") {
-                    while (rowIndex + rowSpan < headingValues.length && headingValues[rowIndex + rowSpan] === headingValues[rowIndex]) rowSpan += 1;
+                    while (sectionRowIndex + rowSpan < colValues.length && colValues[sectionRowIndex + rowSpan] === colValues[sectionRowIndex]) rowSpan += 1;
                   }
                   return <td data-role={column.role} key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
                     {locked

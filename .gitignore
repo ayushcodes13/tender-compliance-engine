@@ -48,7 +48,11 @@ test.db
 dump.rdb
 
 # Generated exports
+stress-test-fixtures/
 exports/
+output/
+examples/
+test.png
 *.xlsx
 *.docx
 

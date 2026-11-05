@@ -620,7 +620,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       };
       const pageSelection = await modelClient.fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        signal: modelRequestSignal(45_000),
+        signal: modelRequestSignal(90_000),
         body: JSON.stringify({
           model,
           response_format: { type: "json_schema", json_schema: { name: "technical_section_route", strict: true, schema } },
