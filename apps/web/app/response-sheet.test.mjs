@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell } from "./response-sheet.ts";
+import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints } from "./response-sheet.ts";
 
 const structured = {
   extractionMode: "structured-table",
@@ -400,4 +400,25 @@ test("guarantees both Compliance and Remarks columns exist even when source tabl
   assert.ok(headers2.some((h) => /compliance|comply/i.test(h)), "Contains added compliance column");
   assert.ok(headers2.some((h) => /remark|justification/i.test(h)), "Contains remarks column");
 });
+
+test("distinguishes physical PDF line wrapping from independent subclauses", () => {
+  // Physical line wrap: should NOT be split into two separate requirements
+  const wrapped = "The pump shall operate continuously at\nminimum pressure of 200 bar and 50 Hz.";
+  const subpointsWrapped = splitRequirementSubpoints(wrapped);
+  assert.equal(subpointsWrapped.length, 1);
+  assert.equal(subpointsWrapped[0], "The pump shall operate continuously at minimum pressure of 200 bar and 50 Hz.");
+
+  // Confirmed bullets / independent subclauses: SHOULD be split
+  const bulleted = "• Operating range: -1 ... +14 kG;\n• Center field setting resolution: 18 bit (60 mG);";
+  const subpointsBulleted = splitRequirementSubpoints(bulleted);
+  assert.equal(subpointsBulleted.length, 2);
+  assert.equal(subpointsBulleted[0], "• Operating range: -1 ... +14 kG;");
+  assert.equal(subpointsBulleted[1], "• Center field setting resolution: 18 bit (60 mG);");
+
+  // Numbered clauses: SHOULD be split
+  const numbered = "1. Mainframe controller tower version\n2. Power supply and cabling";
+  const subpointsNumbered = splitRequirementSubpoints(numbered);
+  assert.equal(subpointsNumbered.length, 2);
+});
+
 

@@ -49,6 +49,42 @@ export type ResponseSheetSource = {
   sheetHeading?: string;
 };
 
+function isListMarkerLine(line: string): boolean {
+  return /^[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢\-\*]\s+/i.test(line)
+    || /^(?:[0-9]+|[a-z]|[ivxlcdm]+)[\.\)]\s+/i.test(line)
+    || /^\([0-9a-zivxlcdm]+\)\s+/i.test(line);
+}
+
+export function recombinePhysicalWrappedLines(lines: string[]): string[] {
+  if (lines.length <= 1) return lines;
+  const combined: string[] = [];
+  let current = lines[0];
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const nextLine = lines[i];
+    const nextIsMarker = isListMarkerLine(nextLine);
+    const prevTerminatedWithDelim = /[;:]$/.test(current.trim());
+    const prevEndedSentence = /\.\s*$/.test(current.trim()) && /^[A-Z0-9]/.test(nextLine);
+
+    if (nextIsMarker || prevTerminatedWithDelim || prevEndedSentence) {
+      combined.push(current);
+      current = nextLine;
+    } else {
+      // It is a physical line wrap continuation of the same sentence
+      current = `${current} ${nextLine}`;
+    }
+  }
+  combined.push(current);
+  return combined;
+}
+
+function splitInlineSubpoints(text: string): string[] {
+  return text
+    .split(/(?=[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢]\s*|(?<=[;.]\s+)(?:[•●▪■◆«¢]|o\s+(?=[A-Z0-9])|[1-9]\.\s+(?=[A-Z])|\([a-z0-9]+\)\s+))/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 export function splitRequirementSubpoints(text: string): string[] {
   const rawLines = text
     .split(/\r?\n+/)
@@ -56,13 +92,11 @@ export function splitRequirementSubpoints(text: string): string[] {
     .filter(Boolean);
 
   if (rawLines.length > 1) {
-    return rawLines.flatMap((line) => splitRequirementSubpoints(line));
+    const recombined = recombinePhysicalWrappedLines(rawLines);
+    return recombined.flatMap((line) => splitInlineSubpoints(line));
   }
 
-  return text
-    .split(/(?=[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢]\s*|(?<=[;.]\s+)(?:[•●▪■◆«¢]|o\s+(?=[A-Z0-9])|[1-9]\.\s+(?=[A-Z])|\([a-z0-9]+\)\s+))/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  return splitInlineSubpoints(text);
 }
 
 function splitHeadingPrefix(text: string, headingPrefix?: string): { heading: string; remainder: string } | null {

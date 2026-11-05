@@ -94,6 +94,15 @@ test("alignExactTokenSequence strictly rejects hallucinations", () => {
   assert.equal(alignExactTokenSequence(hallucination, doc), null);
 });
 
+test("alignExactTokenSequence declines ambiguous repeated passages on the same page when requireUnique is set", () => {
+  const doc = "Item 1: Quantity: 1 EA with standard warranty.\nItem 2: Quantity: 1 EA with standard warranty.";
+  const query = "Quantity: 1 EA";
+  // With requireUnique: true, duplicate occurrences must return null to avoid ambiguous/wrong-row highlighting
+  assert.equal(alignExactTokenSequence(query, doc, { requireUnique: true }), null);
+  // Without requireUnique, returns the first occurrence
+  assert.ok(alignExactTokenSequence(query, doc, { requireUnique: false }));
+});
+
 test("locateQuoteSequenceAlignment calculates exact multi-line bounding boxes", () => {
   const lines = [
     "Header information",

@@ -189,7 +189,7 @@ export function findUniqueSourceText(rawText: string, quote: string): { startOff
   }
 
   // Token sequence alignment fallback for OCR / symbol variations
-  const match = alignTokenSequence(quote, rawText);
+  const match = alignTokenSequence(quote, rawText, { requireUnique: true });
   if (match) {
     return {
       startOffset: match.startOffset,

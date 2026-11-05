@@ -706,6 +706,20 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.filter(section=>section.annexure).map((section) => section.page), pages.map((page) => page.page));
     const addedContinuationPages = visualPageNumbers.filter((page) => !modelSelectedPages.includes(page));
     if (addedContinuationPages.length) routingWarnings.push(`Source annexure boundaries retained PDF pages ${formatPageNumbers(addedContinuationPages)} in addition to model-routed pages. These continuation pages require review too.`);
+
+    // Audit unselected pages for technical indicators to prevent router false-negatives
+    const unselectedPages = pages.filter((page) => !visualPageNumbers.includes(page.page));
+    const suspiciousExcluded = unselectedPages.filter((page) => {
+      const text = (page.rawText || page.text || "").toLowerCase();
+      const techTerms = (text.match(/\b(?:technical\s+specification|technical\s+parameters|compliance\s+sheet|acceptance\s+test|operating\s+range|tolerance|bandwidth|sensitivity)\b/g) || []).length;
+      const unitMatches = (text.match(/\b(?:\d+\s*(?:ghz|mhz|khz|hz|bar|mbar|rpm|kw|mw|db|usec|msec|points))\b/g) || []).length;
+      return (techTerms >= 2 && unitMatches >= 2) || (page.hasVectorTableGeometry && unitMatches >= 3);
+    });
+    if (suspiciousExcluded.length > 0) {
+      routingWarnings.push(
+        `Audit alert: Excluded PDF pages ${formatPageNumbers(suspiciousExcluded.map((p) => p.page))} contain dense technical indicators or parameters. Inspect these excluded pages manually to verify no requirements were omitted.`
+      );
+    }
     if (!visualPageNumbers.length) {
       await pdf.destroy();
       return { ok: false as const, error: "The configured model found no technical requirement pages. Review the tender manually or choose a narrower technical section." };
@@ -1703,6 +1717,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       positioned: page.positioned,
       ocrText: page.ocrText,
       ocrPositioned: page.ocrPositioned,
+      ocrRawItemMap: page.ocrRawItemMap,
       ocrPerformed: page.ocrPerformed,
     }));
 

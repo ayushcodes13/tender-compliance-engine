@@ -214,33 +214,50 @@ export function checkVisual(
   const ocrText = (page.ocrText || "").toLowerCase();
   if (!ocrText.trim()) return { matched: false, bbox: null };
 
-  // 1. Direct normalized substring check in OCR transcript
+  // 1. Spatial sequence alignment over positioned OCR items
+  if (page.ocrRawItemMap && page.ocrPositioned && page.ocrPositioned.length > 0) {
+    const box = locateQuoteSequenceAlignment(quote, page.ocrText || "", page.ocrRawItemMap, page.ocrPositioned as any);
+    if (box) {
+      const match = alignTokenSequence(quote, page.ocrText || "");
+      let confidence: "high" | "medium" | "low" = "high";
+      if (match) {
+        const used = new Set<number>();
+        for (let i = match.startOffset; i < match.endOffset; i += 1) {
+          const itemIdx = page.ocrRawItemMap[i];
+          if (itemIdx !== undefined && itemIdx >= 0) used.add(itemIdx);
+        }
+        const items = [...used].map((idx) => page.ocrPositioned![idx]).filter(Boolean);
+        if (items.some((item) => item.ocrConfidenceLevel === "low")) confidence = "low";
+        else if (items.some((item) => item.ocrConfidenceLevel === "medium")) confidence = "medium";
+      }
+      return { matched: true, bbox: box, ocrConfidence: confidence };
+    }
+  }
+
+  // 2. Direct normalized substring check in OCR transcript
   const normalizedOcr = normalizeWhitespace(ocrText);
   if (normalizedOcr.includes(target)) {
     let bbox: BoundingBox | null = null;
-    let confidence: "high" | "medium" | "low" = "high";
+    let confidence: "high" | "medium" | "low" = "medium";
     if (page.ocrPositioned && page.ocrPositioned.length > 0) {
-      const idx = ocrText.indexOf(target);
-      const matchingItems = idx >= 0
-        ? page.ocrPositioned.filter((item) => (item.start ?? 0) <= idx + target.length && (item.end ?? 0) >= idx)
-        : [];
-      if (matchingItems.length > 0) {
-        const x = Math.min(...matchingItems.map((item) => item.box.x));
-        const y = Math.min(...matchingItems.map((item) => item.box.y));
-        const right = Math.max(...matchingItems.map((item) => item.box.x + item.box.width));
-        const bottom = Math.max(...matchingItems.map((item) => item.box.y + item.box.height));
-        bbox = { x, y, width: right - x, height: bottom - y };
-        if (matchingItems.some((item) => item.ocrConfidenceLevel === "low")) confidence = "low";
-        else if (matchingItems.some((item) => item.ocrConfidenceLevel === "medium")) confidence = "medium";
+      const match = alignTokenSequence(quote, page.ocrText || "");
+      if (match) {
+        const matchingItems = page.ocrPositioned.filter((item) =>
+          (item.start ?? 0) < match.endOffset && (item.end ?? 0) > match.startOffset
+        );
+        if (matchingItems.length > 0) {
+          const x = Math.min(...matchingItems.map((item) => item.box.x));
+          const y = Math.min(...matchingItems.map((item) => item.box.y));
+          const right = Math.max(...matchingItems.map((item) => item.box.x + item.box.width));
+          const bottom = Math.max(...matchingItems.map((item) => item.box.y + item.box.height));
+          bbox = { x, y, width: right - x, height: bottom - y };
+          if (matchingItems.some((item) => item.ocrConfidenceLevel === "low")) confidence = "low";
+          else if (matchingItems.some((item) => item.ocrConfidenceLevel === "medium")) confidence = "medium";
+          else confidence = "high";
+        }
       }
     }
-    return { matched: true, bbox, ocrConfidence: confidence };
-  }
-
-  // 2. Token sequence alignment over OCR items
-  if (page.ocrRawItemMap && page.ocrPositioned && page.ocrPositioned.length > 0) {
-    const box = locateQuoteSequenceAlignment(quote, page.ocrText || "", page.ocrRawItemMap, page.ocrPositioned as any);
-    if (box) return { matched: true, bbox: box, ocrConfidence: "high" };
+    return { matched: true, bbox, ocrConfidence: bbox ? confidence : "low" };
   }
 
   // 3. OCR-tolerant line-level matching (handles ± vs +, em-dash vs en-dash, bullet artifacts)

@@ -96,4 +96,6 @@ test('matchOcrHeaderTokens verifies OCR table headers across noisy transcripts a
   assert.equal(matchOcrHeaderTokens("Invented Vendor Header", ocrPageText), false);
   assert.equal(matchOcrHeaderTokens("", ocrPageText), false);
   assert.equal(matchOcrHeaderTokens("Sl. No.", ""), false);
+  // Strict token boundary: "10" must not match inside "1000"
+  assert.equal(matchOcrHeaderTokens("Serial 10", "Serial 1000 is listed in general notes."), false);
 });
