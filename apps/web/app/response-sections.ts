@@ -28,7 +28,7 @@ export function buildResponseSections(sheet:ResponseSheet, includeCitations=fals
       continue;
     }
     const annexure=annexureIndex>=0 ? row.values[annexureIndex]??'' : '';
-    const rawHeading=sectioned&&headingIndex>=0 ? row.values[headingIndex]??'' : sourceHeading;
+    const rawHeading=sectioned&&headingIndex>=0 ? row.values[headingIndex]??'' : (headingIndex>=0&&row.values[headingIndex] ? row.values[headingIndex] : sourceHeading);
     const compareHeading=(text:string)=>text.replace(/^[\s•▪●\uF0B7]+/,'').replace(/\s+/g,' ').trim();
     const heading=[annexure,...row.sectionHeadings??[]].some(title=>compareHeading(title)===compareHeading(rawHeading)) ? '' : rawHeading;
     const headingId=sectioned?row.headingId:sourceHeadingId;

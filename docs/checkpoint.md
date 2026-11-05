@@ -177,4 +177,26 @@ Real customer tender documents frequently exceed 4 MB (e.g. 7 MB+ documents with
 - [x] Updated upload validation in `apps/web/app/actions.ts` and client helper text in `apps/web/app/tender-mvp.tsx`.
 - [x] Added unit tests in `apps/web/app/upload-limits.test.mjs` verifying local, hosted Vercel, and custom `MAX_FILE_BYTES` overrides.
 
+### Tiered validation ladder and hierarchical response sheet — 2026-11-05
+
+A formal 3-tier validation ladder and hierarchical response sheet architecture were implemented to support complex multi-level tender specifications and audit requirements:
+
+- [x] **Tiered validation ladder (`apps/web/app/tiered-validation.ts`)**:
+  - **Tier 1 (Verbatim Check)**: Deterministic string matching on native PDF selectable text with exact bounding box derivation.
+  - **Tier 2 (Visual Check)**: Fallback on OCR transcript and token-level containment on cited page to handle scanned pages, character noise, and table cell wrapping.
+  - **Tier 3 (Human Review)**: Items ungrounded in verbatim and visual checks are not dropped or fabricated; they are explicitly flagged with `verdict: "needs_human_review"`, `precision: "unverified"`, and `needsHumanReview: true`.
+  - Runs over all candidate requirements before returning analysis to the user, producing summary counts and per-requirement validation tags.
+- [x] **Hierarchical response sheet (`apps/web/app/response-sheet.ts` & `apps/web/app/response-sections.ts`)**:
+  - Dynamically captures both Main Section / Unit (e.g. `Microwave Unit`, `Console`, `Magnet Unit`) and Subsystem / Parameter (e.g. `Microwave Bridge`, `Microwave Power`, `Automatic Frequency Control (AFC)`, `Magnetic Field Controller`), eliminating heading latching.
+  - Generates multi-level columns `[Section / Unit, Subsystem / Parameter, Tender requirement, Compliance (Yes / No), Remarks / Justifications, Source page]`.
+  - Replaces vague single `"OEM response"` fallback column with mandatory deterministic fields: `Compliance (Yes / No)` and `Remarks / Justifications`.
+- [x] **Review workspace & verification UI (`apps/web/app/tender-mvp.tsx`)**:
+  - Displays validation status breakdown in summary statistics (`Tier 1/2 verified` vs `Tier 3 human review`).
+  - Distinguishes Tier 3 unverified citations in the sheet drawer and citation badges (`REVIEW` tag with explicit inspection instructions).
+- [x] **Tests & verification**:
+  - Added unit test suite `apps/web/app/tiered-validation.test.mjs` (6 tests).
+  - Added hierarchy tests in `response-sheet.test.mjs` and `response-sections.test.mjs`.
+  - All 173 unit tests, scripted pipeline test (`verify-pipeline.mjs`), and Next.js production build (`next build`) pass.
+
+
 

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
+import { runTieredValidation } from "./tiered-validation";
 import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
 import { modelCandidateFields } from "./model-candidate";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
@@ -59,7 +60,9 @@ type Requirement = {
   sourceReference: RequirementSourceReference;
   selectableTextQuote?: string;
   bbox: Box | null;
-  precision: "exact" | "visual-ocr" | "page-only";
+  precision: "exact" | "visual-ocr" | "page-only" | "unverified";
+  verdict?: "verbatim_pass" | "visual_pass" | "needs_human_review";
+  needsHumanReview?: boolean;
   ocrWarning?: boolean;
   reviewed: boolean;
 };
@@ -1666,6 +1669,48 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         || !pages.some((page) => page.page === item.page)).length,
     });
     report("source verification complete", { stage: "verifying", message: `Verified ${requirements.length} source-linked rows` });
+
+    // Run Tiered Validation Ladder (Tier 1 Verbatim -> Tier 2 Visual -> Tier 3 Human Review)
+    const pageEvidenceSources = pages.map((page) => ({
+      page: page.page,
+      rawText: page.rawText,
+      rawItemMap: page.rawItemMap,
+      positioned: page.positioned,
+      ocrText: page.ocrText,
+      ocrPositioned: page.ocrPositioned,
+      ocrPerformed: page.ocrPerformed,
+    }));
+
+    const tieredCandidates = requirements.map((req) => ({
+      id: req.id,
+      quote: req.quote,
+      text: req.text,
+      page: req.page,
+      rowType: req.rowType,
+    }));
+
+    const { results: validationResults, summary: validationSummary } = runTieredValidation(
+      tieredCandidates,
+      pageEvidenceSources,
+    );
+
+    for (const req of requirements) {
+      const v = validationResults.get(req.id);
+      if (v) {
+        req.verdict = v.verdict;
+        req.needsHumanReview = v.needsHumanReview;
+        if (v.bbox && !req.bbox) {
+          const sourcePage = pages.find((p) => p.page === req.page);
+          req.bbox = {
+            x: (v.bbox.x / (sourcePage?.width || 1)) * 100,
+            y: (v.bbox.y / (sourcePage?.height || 1)) * 100,
+            width: (v.bbox.width / (sourcePage?.width || 1)) * 100,
+            height: (v.bbox.height / (sourcePage?.height || 1)) * 100,
+          };
+        }
+      }
+    }
+
     const analysis = {
       filename: file.name,
       pageCount: pdf.numPages,
@@ -1677,6 +1722,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       rejectedCandidates: rejected,
       rejectedSuggestionDetails,
       coverage,
+      validationSummary,
       extractionMode: visualSheetType === "compliance-sheet" ? "visual-compliance-sheet" as const : undefined,
       // Prefer the exact document-level sheet title and technical section heading
       // when present. Model-suggested metadata can otherwise mistake a column
@@ -1687,7 +1733,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       sheetHeading: pages.some((page) => locatePageQuote("TECHNICAL SPECIFICATION:", page))
         ? "TECHNICAL SPECIFICATION:"
         : undefined,
-      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""}`,
+      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""} Tiered validation: ${validationSummary.verbatimPass} verbatim verified, ${validationSummary.visualPass} visual/OCR verified, ${validationSummary.needsHumanReview} flagged for human review.`,
     };
     const responseRows = buildResponseSheet(analysis).rows.length;
     if (responseRows > MAX_RESPONSE_ROWS) {

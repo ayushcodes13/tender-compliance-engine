@@ -53,3 +53,38 @@ test('each single-content table has an independent edit-column projection',()=>{
  assert.deepEqual(sections.map(section=>section.rows[0].values[0]),['≥ 300 mm','6 EA','±0.1 mm']);
  assert.notEqual(sections[0].columnIndices,sections[1].columnIndices);assert.deepEqual(sheet,before);
 });
+
+test('multi-level response sheet projects main section as section heading and subsystem as table column', () => {
+  const sheet = {
+    columns: [
+      { header: 'Section / Unit', role: 'heading' },
+      { header: 'Subsystem / Parameter', role: 'heading' },
+      { header: 'Tender requirement', role: 'requirement' },
+      { header: 'Compliance (Yes / No)', role: 'response' },
+      { header: 'Remarks / Justifications', role: 'response' },
+      { header: 'Source page', role: 'page' },
+    ],
+    rows: [
+      { id: '1', sourceRequirementId: 'r1', sourceRequirementIds: ['r1'], values: ['Microwave Unit', 'Microwave Bridge', 'Frequency 9.5 GHz', '', '', 'Page 2'] },
+      { id: '2', sourceRequirementId: 'r2', sourceRequirementIds: ['r2'], values: ['Microwave Unit', 'Microwave Power', 'Power 200 mW', '', '', 'Page 2'] },
+      { id: '3', sourceRequirementId: 'r3', sourceRequirementIds: ['r3'], values: ['Console', 'Magnetic Field Controller', 'Field -1 to +14 kG', '', '', 'Page 3'] },
+    ],
+  };
+
+  const sections = buildResponseSections(sheet);
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].heading, 'Microwave Unit');
+  assert.deepEqual(sections[0].columns.map((c) => c.header), [
+    'Subsystem / Parameter',
+    'Tender requirement',
+    'Compliance (Yes / No)',
+    'Remarks / Justifications',
+  ]);
+  assert.equal(sections[0].rows.length, 2);
+  assert.equal(sections[0].rows[0].values[0], 'Microwave Bridge');
+  assert.equal(sections[0].rows[1].values[0], 'Microwave Power');
+
+  assert.equal(sections[1].heading, 'Console');
+  assert.equal(sections[1].rows.length, 1);
+  assert.equal(sections[1].rows[0].values[0], 'Magnetic Field Controller');
+});

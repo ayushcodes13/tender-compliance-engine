@@ -64,38 +64,93 @@ function splitHeadingPrefix(text: string, headingPrefix?: string): { heading: st
   return match ? { heading: match[0].trim(), remainder: text.slice(match[0].length) } : null;
 }
 
+export function isMajorUnitHeading(title: string): boolean {
+  const clean = title.replace(/^[\d\.\s\-\:\(]+|[ivxlcdm]+[\.\)]\s*/i, "").trim().toLowerCase();
+  if (/^(?:microwave\s+unit|console|epr\s+software|magnet\s+unit|digital\s+variable\s+temperature|warranty|experience|optional|general|technical\s+specification)/i.test(clean)) return true;
+  if (/\b(?:unit|console|system|software|mainframe|package)\b/i.test(clean) && !/\b(?:magnetic\s+field\s+controller|temperature\s+controller|acquisition\s+controller)\b/i.test(clean)) return true;
+  if (/^\d+\.\s+[A-Z]/.test(title.trim())) return true;
+  return false;
+}
+
+function detectMultiLevelHeadings(requirements: ResponseRequirement[]): boolean {
+  let sectionCount = 0;
+  for (const item of requirements) {
+    if (item.rowType === "section" || item.rowType === "optional_heading") {
+      sectionCount++;
+      if (sectionCount >= 2) return true;
+    }
+    if ((item.headingPrefix || item.parameter) && sectionCount >= 1) return true;
+  }
+  return false;
+}
+
 export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
   if (source.normalizedTables) return buildGroupedTableSheet(source);
   const structured = source.extractionMode === "structured-table";
-  const sourceColumns = structured
-    ? [
-      { header: "Parameter", role: "heading" as const },
-      { header: "Required Specification", role: "specification" as const },
-      { header: "Compliance (Yes / No)", role: "compliance" as const },
-      { header: "Any remarks", role: "remark" as const },
-    ]
-    : source.sourceColumns?.length
-      ? source.sourceColumns
-      : [{ header: "Tender specification", role: "specification" as const }];
-  const hasHeadingColumn = sourceColumns.some((column) => column.role === "heading");
-  const columns: ResponseSheetColumn[] = sourceColumns.flatMap((column, index): ResponseSheetColumn[] => {
-    if (column.role === "heading") return [{ header: column.header || "Heading", role: "heading", sourceIndex: index }];
-    if (column.role === "specification") return hasHeadingColumn
-      ? [{ header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }]
-      : [{ header: "Heading", role: "heading" }, { header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }];
-    return [{ header: column.header || `Source column ${index + 1}`, role: "source", sourceIndex: index }];
-  });
-  if (!sourceColumns.some((column) => ["compliance", "deviation", "remark"].includes(column.role))) {
-    columns.push({ header: "OEM response", role: "response" });
+  const hasMultiLevel = !source.sourceColumns?.length && !structured && detectMultiLevelHeadings(source.requirements);
+
+  let columns: ResponseSheetColumn[];
+  if (structured) {
+    columns = [
+      { header: "Parameter", role: "heading" },
+      { header: "Required Specification", role: "requirement" },
+      { header: "Compliance (Yes / No)", role: "response" },
+      { header: "Any remarks", role: "response" },
+    ];
+  } else if (hasMultiLevel) {
+    columns = [
+      { header: "Section / Unit", role: "heading" },
+      { header: "Subsystem / Parameter", role: "heading" },
+      { header: "Tender requirement", role: "requirement" },
+    ];
+  } else if (source.sourceColumns?.length) {
+    const hasHeadingColumn = source.sourceColumns.some((column) => column.role === "heading");
+    columns = source.sourceColumns.flatMap((column, index): ResponseSheetColumn[] => {
+      if (column.role === "heading") return [{ header: column.header || "Heading", role: "heading", sourceIndex: index }];
+      if (column.role === "specification") return hasHeadingColumn
+        ? [{ header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }]
+        : [{ header: "Heading", role: "heading" }, { header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }];
+      return [{ header: column.header || `Source column ${index + 1}`, role: "source", sourceIndex: index }];
+    });
+  } else {
+    columns = [
+      { header: "Heading", role: "heading" },
+      { header: "Tender requirement", role: "requirement" },
+    ];
+  }
+
+  // Ensure deterministic compliance and remarks response columns are always present instead of ambiguous fallback
+  const rawSourceColumns = source.sourceColumns ?? [];
+  const hasSourceResponse = rawSourceColumns.some((column) => ["compliance", "deviation", "remark"].includes(column.role));
+  if (!structured && !hasSourceResponse) {
+    const hasCompliance = columns.some((column) => /comply|compliance/i.test(column.header));
+    const hasRemark = columns.some((column) => /remark|comment|deviation/i.test(column.header));
+    if (!hasCompliance) {
+      columns.push({ header: "Compliance (Yes / No)", role: "response" });
+    }
+    if (!hasRemark) {
+      columns.push({ header: "Remarks / Justifications", role: "response" });
+    }
   }
   columns.push({ header: "Source page", role: "page" });
-  const sourceHeadingIndex = sourceColumns.findIndex((column) => column.role === "heading");
-  const sourceSerialIndex = sourceColumns.findIndex((column) => column.role === "serial");
+
+  const headingColumns = columns.filter((col) => col.role === "heading");
+  const isMultiHeading = headingColumns.length >= 2;
+  const sourceHeadingIndex = source.sourceColumns?.findIndex((column) => column.role === "heading") ?? -1;
+  const sourceSerialIndex = source.sourceColumns?.findIndex((column) => column.role === "serial") ?? -1;
 
   const rows: ResponseSheetRow[] = [];
-  const addRow = (item: ResponseRequirement, heading: string, requirement: string, rowIndex: number, section = false) => {
+  const addRow = (item: ResponseRequirement, mainHeading: string, subHeading: string, requirement: string, rowIndex: number, section = false) => {
+    let headingSeen = 0;
     const values = columns.map((column) => {
-      if (column.role === "heading") return column.sourceIndex === undefined ? heading : item.sourceCells?.[column.sourceIndex] || heading;
+      if (column.role === "heading") {
+        if (column.sourceIndex !== undefined) return item.sourceCells?.[column.sourceIndex] || subHeading || mainHeading;
+        headingSeen++;
+        if (isMultiHeading) {
+          return headingSeen === 1 ? mainHeading : (subHeading || "General");
+        }
+        return subHeading || mainHeading;
+      }
       if (column.role === "requirement") return requirement;
       if (column.role === "response") return "";
       if (column.role === "page") return `Page ${item.page}`;
@@ -114,25 +169,27 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     });
   };
 
-  let activeHeading = source.sheetProductTitle || source.sectionTitle || "";
+  let activeMainSection = source.sheetProductTitle || source.sectionTitle || "";
+  let activeSubSection = "";
   const structuralLabel = /^(?:section|part|chapter|annex(?:ure)?|schedule)\s*(?:[-:.)]?\s*)?(?:[ivxlcdm]+|\d+|[a-z])\s*[.:)-]?$/i;
+
   if (structured) {
     for (const item of source.requirements) {
       const heading = item.parameter ?? item.text;
       let rowIndex = 0;
       for (const specification of item.specifications?.length ? item.specifications : [item.quote]) {
         for (const subpoint of splitRequirementSubpoints(specification)) {
-          addRow(item, heading, subpoint.replace(/^\s*[•●]\s*/, ""), rowIndex++);
+          addRow(item, heading, heading, subpoint.replace(/^\s*[•●]\s*/, ""), rowIndex++);
         }
       }
     }
     return { columns, rows };
   }
 
-  let productHeading = "";
   let previousSourceHeading = "";
-  for (const originalItem of source.requirements) {
-    let item = originalItem;
+  for (let itemIdx = 0; itemIdx < source.requirements.length; itemIdx++) {
+    let item = source.requirements[itemIdx];
+    const nextItem = source.requirements[itemIdx + 1];
     const sourceHeading = item.sourceCells?.[sourceHeadingIndex]?.trim() ?? "";
     if (sourceHeading) previousSourceHeading = sourceHeading;
     else if (item.continuationOfPrevious && previousSourceHeading && sourceHeadingIndex >= 0) {
@@ -144,35 +201,34 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     }
     const label = item.text.trim();
     if (structuralLabel.test(label)) continue;
-    if (item.rowType === "optional_heading") {
-      if (productHeading) addRow(item, productHeading, label, 0, true);
-      else {
-        activeHeading = label;
-        addRow(item, label, "", 0, true);
-      }
-      continue;
-    }
-    if (item.rowType === "section") {
-      if (productHeading) addRow(item, productHeading, label, 0, true);
-      else if (!/^\d+(?:\.\d+)*\s/.test(label)) {
-        productHeading = label;
-        activeHeading = label;
-        addRow(item, label, "", 0, true);
+
+    if (item.rowType === "optional_heading" || item.rowType === "section") {
+      const isNextAlsoSection = nextItem && (nextItem.rowType === "section" || nextItem.rowType === "optional_heading");
+      if (isMajorUnitHeading(label) || (isNextAlsoSection && activeMainSection !== label && !activeSubSection)) {
+        activeMainSection = label.replace(/^[\d\.\s\-]+/, "").replace(/[\:\-]+$/, "").trim();
+        activeSubSection = "";
       } else {
-        activeHeading = label;
-        addRow(item, label, "", 0, true);
+        activeSubSection = label.replace(/^[\d\.\s\-a-z\(\)]+[\.\:]\s*/i, "").replace(/[\:\-]+$/, "").trim();
       }
       continue;
     }
+
     const split = splitHeadingPrefix(label, item.headingPrefix);
     const requirement = split?.remainder.trim() || label;
     if (split?.heading.trim()) {
-      productHeading ||= split.heading.trim();
-      activeHeading = productHeading;
+      activeSubSection = split.heading.trim();
+    } else if (item.parameter?.trim()) {
+      activeSubSection = item.parameter.trim();
     }
-    const heading = productHeading || activeHeading || source.sheetHeading || "Tender requirement";
-    splitRequirementSubpoints(requirement).forEach((subpoint, rowIndex) => addRow(item, heading, subpoint, rowIndex));
+
+    const mainHeading = activeMainSection || source.sheetHeading || "Tender requirement";
+    const subHeading = activeSubSection || mainHeading;
+
+    splitRequirementSubpoints(requirement).forEach((subpoint, rowIndex) => {
+      addRow(item, mainHeading, subHeading, subpoint, rowIndex);
+    });
   }
+
   if (source.extractionMode === "visual-compliance-sheet") {
     const requirementIndex = columns.findIndex((column) => column.role === "requirement");
     const pageIndex = columns.findIndex((column) => column.role === "page");
@@ -250,8 +306,8 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
     const mapping = item.sourceColumnMap ?? [];
     if (!mapping.length && previousWasTable) { group = ""; groupId = `general-${item.page}`; }
     previousWasTable = mapping.length > 0;
-    const split=splitHeadingPrefix(item.quote,item.nativeHeadingPrefix);
-    if(split?.remainder.trim()) { group=split.heading;groupId=item.id; }
+    const split = splitHeadingPrefix(item.quote, item.nativeHeadingPrefix);
+    if (split?.remainder.trim()) { group = split.heading; groupId = item.id; }
     const parameterIndex = mapping.findIndex((column) => column.role === "heading");
     const parameter = parameterIndex >= 0 ? item.sourceCells?.[parameterIndex] ?? "" : "";
     const specificationIndex = item.sourceSpecificationColumnIndex ?? mapping.findIndex((column) => column.role === "specification");
@@ -266,7 +322,7 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       id: `${item.id}:0`, sourceRequirementId: item.id, sourceRequirementIds: [item.id],
       includeParameterColumn: mapping.length ? parameterIndex >= 0 : item.sourceCells?.length ? undefined : false,
       sourceHeaders: {
-        ...(parameterIndex >= 0 ? {2: mapping[parameterIndex].header} : {}),
+        ...(parameterIndex >= 0 ? { 2: mapping[parameterIndex].header } : {}),
         3: mapping[specificationIndex]?.header || "Description",
         4: mapping.find(column => column.role === "compliance")?.header || "Comply (Yes/No)",
         6: mapping.find(column => column.role === "remark")?.header || "Remarks / Justifications",
@@ -298,7 +354,7 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       previous.sourceRequirementIds.push(...row.sourceRequirementIds);
     } else continued.push(row);
   }
-  return {columns, rows: continued, layout: "sectioned"};
+  return { columns, rows: continued, layout: "sectioned" };
 }
 
 export function responseHeadingMergeKeys(sheet: ResponseSheet): string[] {

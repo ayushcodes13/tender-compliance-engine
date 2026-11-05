@@ -202,3 +202,45 @@ test('an unverified inline model prefix does not change the group of following s
  ]};
  const sheet=buildResponseSheet(source);assert.deepEqual(sheet.rows.map(row=>row.values[0]),['15. MBE sources','15. MBE sources']);assert.equal(sheet.rows[0].values[3],'f) Dopant cells Carbon source.');
 });
+
+test("creates multi-level hierarchy (Section/Unit and Subsystem/Parameter) and mandatory response columns", () => {
+  const source = {
+    requirements: [
+      { id: "h1", text: "Microwave Unit", quote: "Microwave Unit", rowType: "section", page: 2 },
+      { id: "s1", text: "Microwave Bridge", quote: "Microwave Bridge", rowType: "section", page: 2 },
+      { id: "r1", text: "Working frequency range: 9.2 — 9.9 GHz;", quote: "Working frequency range: 9.2 — 9.9 GHz;", page: 2 },
+      { id: "s2", text: "Microwave Power", quote: "Microwave Power", rowType: "section", page: 2 },
+      { id: "r2", text: "Output microwave power: 200 mW", quote: "Output microwave power: 200 mW", page: 2 },
+      { id: "h2", text: "Console", quote: "Console", rowType: "section", page: 3 },
+      { id: "s3", text: "Magnetic Field Controller", quote: "Magnetic Field Controller", rowType: "section", page: 3 },
+      { id: "r3", text: "Operating range: -1 to +14 kG", quote: "Operating range: -1 to +14 kG", page: 3 },
+    ],
+  };
+
+  const sheet = buildResponseSheet(source);
+  assert.deepEqual(
+    sheet.columns.map((c) => c.header),
+    [
+      "Section / Unit",
+      "Subsystem / Parameter",
+      "Tender requirement",
+      "Compliance (Yes / No)",
+      "Remarks / Justifications",
+      "Source page",
+    ],
+  );
+  assert.equal(sheet.rows.length, 3);
+  assert.equal(sheet.rows[0].values[0], "Microwave Unit");
+  assert.equal(sheet.rows[0].values[1], "Microwave Bridge");
+  assert.equal(sheet.rows[0].values[2], "Working frequency range: 9.2 — 9.9 GHz;");
+  assert.equal(sheet.rows[0].values[3], "");
+  assert.equal(sheet.rows[0].values[4], "");
+
+  assert.equal(sheet.rows[1].values[0], "Microwave Unit");
+  assert.equal(sheet.rows[1].values[1], "Microwave Power");
+  assert.equal(sheet.rows[1].values[2], "Output microwave power: 200 mW");
+
+  assert.equal(sheet.rows[2].values[0], "Console");
+  assert.equal(sheet.rows[2].values[1], "Magnetic Field Controller");
+  assert.equal(sheet.rows[2].values[2], "Operating range: -1 to +14 kG");
+});
