@@ -5,6 +5,8 @@ import {
   checkVisual,
   validateCandidateEvidence,
   runTieredValidation,
+  normalizeOcrComparable,
+  locateOcrQuoteTolerant,
 } from "./tiered-validation.ts";
 
 test("Tier 1: checkVerbatim passes on exact matching native text and derives bounding box", () => {
@@ -127,4 +129,82 @@ test("runTieredValidation validates all candidates and aggregates summary", () =
   assert.equal(results.get("c2")?.verdict, "visual_pass");
   assert.equal(results.get("c3")?.verdict, "needs_human_review");
   assert.equal(results.get("c3")?.needsHumanReview, true);
+});
+
+test("normalizeOcrComparable reconciles OCR symbol substitutions and bullet glyphs", () => {
+  // Dashes
+  assert.equal(normalizeOcrComparable("0 — 60 dB"), "0 - 60 db");
+  assert.equal(normalizeOcrComparable("0 – 60 dB"), "0 - 60 db");
+  assert.equal(normalizeOcrComparable("0 - 60 dB"), "0 - 60 db");
+
+  // Plus-minus
+  assert.equal(normalizeOcrComparable("±0.5 dB"), "+0.5 db");
+  assert.equal(normalizeOcrComparable("+/- 0.5 dB"), "+ 0.5 db");
+  assert.equal(normalizeOcrComparable("200 mW ± 20mW"), "200 mw + 20mw");
+
+  // Bullet artifacts
+  assert.equal(normalizeOcrComparable("« Microwave attenuator;"), "microwave attenuator");
+  assert.equal(normalizeOcrComparable("• Max output microwave power: 600 mW;"), "max output microwave power 600 mw");
+  assert.equal(normalizeOcrComparable("¢ High linearity;"), "high linearity");
+});
+
+test("locateOcrQuoteTolerant locates bounding boxes across OCR lines with symbol noise", () => {
+  const ocrPositioned = [
+    { text: "Microwave Power", box: { x: 80, y: 340, width: 120, height: 15 }, ocrConfidenceLevel: "high" },
+    { text: "« Max output microwave power in unleveled mode: 600 mW;", box: { x: 100, y: 360, width: 350, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "Output microwave power in leveled mode: 200 mW + 20mW", box: { x: 100, y: 375, width: 340, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "Microwave power meter;", box: { x: 100, y: 390, width: 150, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "« Microwave attenuator: 0 — 60 dB in 1 dB steps;", box: { x: 100, y: 405, width: 310, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "« Attenuation precision: +0.5 dB;", box: { x: 100, y: 420, width: 220, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "« Automatic phase correction over attenuation range;", box: { x: 100, y: 435, width: 330, height: 12 }, ocrConfidenceLevel: "high" },
+  ];
+
+  // 1. Symbol difference: ± vs +
+  const matchPlusMinus = locateOcrQuoteTolerant("Output microwave power in leveled mode: 200 mW ± 20mW", ocrPositioned);
+  assert.ok(matchPlusMinus);
+  assert.equal(matchPlusMinus.bbox.y, 375);
+  assert.equal(matchPlusMinus.confidence, "high");
+
+  // 2. Dash difference: en-dash – vs em-dash —
+  const matchDash = locateOcrQuoteTolerant("Microwave attenuator: 0 – 60 dB in 1 dB steps;", ocrPositioned);
+  assert.ok(matchDash);
+  assert.equal(matchDash.bbox.y, 405);
+
+  // 3. Precision ±0.5 dB vs +0.5 dB
+  const matchPrecision = locateOcrQuoteTolerant("Attenuation precision: ±0.5 dB;", ocrPositioned);
+  assert.ok(matchPrecision);
+  assert.equal(matchPrecision.bbox.y, 420);
+
+  // 4. Multi-line window
+  const multiLineLines = [
+    { text: "Compact system controller mainframe (tower version),", box: { x: 50, y: 100, width: 200, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "including cabling and system power supply.", box: { x: 50, y: 115, width: 180, height: 12 }, ocrConfidenceLevel: "high" },
+  ];
+  const matchMulti = locateOcrQuoteTolerant("Compact system controller mainframe (tower version), including cabling and system power supply.", multiLineLines);
+  assert.ok(matchMulti);
+  assert.equal(matchMulti.bbox.y, 100);
+  assert.equal(matchMulti.bbox.height, 27);
+});
+
+test("Tier 2: checkVisual tolerates OCR symbol noise and assigns bounding box", () => {
+  const page = {
+    page: 2,
+    rawText: "",
+    ocrText: "« Attenuation precision: +0.5 dB;\n« Microwave attenuator: 0 — 60 dB in 1 dB steps;",
+    ocrPositioned: [
+      { text: "« Attenuation precision: +0.5 dB;", box: { x: 100, y: 420, width: 220, height: 12 }, ocrConfidenceLevel: "high" },
+      { text: "« Microwave attenuator: 0 — 60 dB in 1 dB steps;", box: { x: 100, y: 405, width: 310, height: 12 }, ocrConfidenceLevel: "high" },
+    ],
+    ocrPerformed: true,
+  };
+
+  const result1 = checkVisual("Attenuation precision: ±0.5 dB;", page);
+  assert.equal(result1.matched, true);
+  assert.ok(result1.bbox);
+  assert.equal(result1.bbox.y, 420);
+
+  const result2 = checkVisual("Microwave attenuator: 0 – 60 dB in 1 dB steps;", page);
+  assert.equal(result2.matched, true);
+  assert.ok(result2.bbox);
+  assert.equal(result2.bbox.y, 405);
 });

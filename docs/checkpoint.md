@@ -199,5 +199,16 @@ A formal 3-tier validation ladder and hierarchical response sheet architecture w
   - Added hierarchy tests in `response-sheet.test.mjs` and `response-sections.test.mjs`.
   - All 173 unit tests, scripted pipeline test (`verify-pipeline.mjs`), and Next.js production build (`next build`) pass.
 
+### OCR symbol tolerance and completeness fix — 2026-11-06
+
+Investigated and resolved an issue where valid technical specifications in scanned PDFs were dropped during candidate verification due to minor OCR character substitutions (e.g. `±` vs `+`, em-dash `—` vs en-dash `–`, bullet artifacts `«` / `¢`):
+
+- [x] **Symbol reconciliation (`normalizeOcrComparable`)**: Normalizes em-dashes (`—`), en-dashes (`–`), minus signs (`−`), plus-minus (`±` / `+/-`), bullet artifacts (`«`, `¢`, `•`), and word-boundary punctuation.
+- [x] **Tolerant line-level bounding box resolver (`locateOcrQuoteTolerant`)**: Performs single-line and multi-line window searching against `ocrPositioned` lines to compute exact bounding boxes even when character noise exists.
+- [x] **Candidate verification gate**: Updated `actions.ts` candidate filter so that vision-transcribed technical specifications matching OCR transcript via `normalizeOcrComparable` are verified as visual OCR evidence rather than rejected.
+- [x] **Tier 2 visual validation**: Updated `checkVisual` in `tiered-validation.ts` to derive bounding boxes and confidence using `locateOcrQuoteTolerant`.
+- [x] **Verification**: Added 3 unit tests in `tiered-validation.test.mjs` (178 unit tests passing). Verified 100% extraction of all 6 specifications under `Microwave Power` on the real ESR tender PDF.
+
+
 
 
