@@ -224,6 +224,27 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     const mainHeading = activeMainSection || source.sheetHeading || "Tender requirement";
     const subHeading = activeSubSection || mainHeading;
 
+    if (hasMultiLevel) {
+      const lastRow = rows.at(-1);
+      const requirementIndex = columns.findIndex((col) => col.role === "requirement");
+      const pageIndex = columns.findIndex((col) => col.role === "page");
+      const cleanSub = subHeading || "General";
+      if (lastRow && lastRow.values[0] === mainHeading && lastRow.values[1] === cleanSub) {
+        if (requirementIndex >= 0) {
+          lastRow.values[requirementIndex] = [lastRow.values[requirementIndex], requirement].filter(Boolean).join("\n");
+        }
+        if (pageIndex >= 0) {
+          const prevPages = [...lastRow.values[pageIndex].matchAll(/\d+/g)].map((m) => Number(m[0]));
+          if (!prevPages.includes(item.page)) {
+            const allPages = [...prevPages, item.page].sort((a, b) => a - b);
+            lastRow.values[pageIndex] = allPages.length > 1 ? `Pages ${allPages.join(" and ")}` : `Page ${item.page}`;
+          }
+        }
+        lastRow.sourceRequirementIds.push(item.id);
+        continue;
+      }
+    }
+
     splitRequirementSubpoints(requirement).forEach((subpoint, rowIndex) => {
       addRow(item, mainHeading, subHeading, subpoint, rowIndex);
     });

@@ -189,6 +189,7 @@ A formal 3-tier validation ladder and hierarchical response sheet architecture w
 - [x] **Hierarchical response sheet (`apps/web/app/response-sheet.ts` & `apps/web/app/response-sections.ts`)**:
   - Dynamically captures both Main Section / Unit (e.g. `Microwave Unit`, `Console`, `Magnet Unit`) and Subsystem / Parameter (e.g. `Microwave Bridge`, `Microwave Power`, `Automatic Frequency Control (AFC)`, `Magnetic Field Controller`), eliminating heading latching.
   - Generates multi-level columns `[Section / Unit, Subsystem / Parameter, Tender requirement, Compliance (Yes / No), Remarks / Justifications, Source page]`.
+  - Consolidates multiple repeated specification points under the same subsystem into a single assessable response row rather than repeating the subsystem column across multiple rows, preserving all source IDs and citations.
   - Replaces vague single `"OEM response"` fallback column with mandatory deterministic fields: `Compliance (Yes / No)` and `Remarks / Justifications`.
 - [x] **Review workspace & verification UI (`apps/web/app/tender-mvp.tsx`)**:
   - Displays validation status breakdown in summary statistics (`Tier 1/2 verified` vs `Tier 3 human review`).
