@@ -73,13 +73,41 @@ export function isMajorUnitHeading(title: string): boolean {
 }
 
 function detectMultiLevelHeadings(requirements: ResponseRequirement[]): boolean {
-  let sectionCount = 0;
-  for (const item of requirements) {
-    if (item.rowType === "section" || item.rowType === "optional_heading") {
-      sectionCount++;
+  let activeMain = "";
+  let activeSub = "";
+
+  for (let i = 0; i < requirements.length; i++) {
+    const item = requirements[i];
+    const sectionCount = item.sourceSectionHeadings?.length ?? 0;
+    if (sectionCount >= 2) return true;
+    if (item.sourceSectionTitle) {
+      if (item.parameter && item.parameter !== item.sourceSectionTitle) return true;
       if (sectionCount >= 2) return true;
     }
     if ((item.headingPrefix || item.parameter) && sectionCount >= 1) return true;
+
+    if (item.rowType === "section" || item.rowType === "optional_heading") {
+      const label = item.text.trim();
+      const nextItem = requirements[i + 1];
+      const isNextAlsoSection = nextItem && (nextItem.rowType === "section" || nextItem.rowType === "optional_heading");
+      if (isMajorUnitHeading(label) || (isNextAlsoSection && activeMain !== label && !activeSub)) {
+        activeMain = label.replace(/^[\d\.\s\-]+/, "").replace(/[\:\-]+$/, "").trim();
+        activeSub = "";
+      } else {
+        activeSub = label.replace(/^[\d\.\s\-a-z\(\)]+[\.\:]\s*/i, "").replace(/[\:\-]+$/, "").trim();
+      }
+    } else {
+      const split = splitHeadingPrefix(item.text.trim(), item.headingPrefix);
+      if (split?.heading.trim()) {
+        activeSub = split.heading.trim();
+      } else if (item.parameter?.trim()) {
+        activeSub = item.parameter.trim();
+      }
+    }
+
+    if (activeMain && activeSub && activeMain !== activeSub) {
+      return true;
+    }
   }
   return false;
 }
@@ -87,7 +115,7 @@ function detectMultiLevelHeadings(requirements: ResponseRequirement[]): boolean 
 export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
   if (source.normalizedTables) return buildGroupedTableSheet(source);
   const structured = source.extractionMode === "structured-table";
-  const hasMultiLevel = !source.sourceColumns?.length && !structured && detectMultiLevelHeadings(source.requirements);
+  const hasMultiLevel = !structured && detectMultiLevelHeadings(source.requirements);
 
   let columns: ResponseSheetColumn[];
   if (structured) {
@@ -98,11 +126,22 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
       { header: "Any remarks", role: "response" },
     ];
   } else if (hasMultiLevel) {
-    columns = [
+    const serialCol = source.sourceColumns?.find((c) => c.role === "serial");
+    const serialIndex = source.sourceColumns?.findIndex((c) => c.role === "serial") ?? -1;
+    const specCol = source.sourceColumns?.find((c) => c.role === "specification");
+    const specIndex = source.sourceColumns?.findIndex((c) => c.role === "specification") ?? -1;
+
+    columns = [];
+    if (serialCol && serialIndex >= 0) {
+      columns.push({ header: serialCol.header || "Sl. No.", role: "source", sourceIndex: serialIndex });
+    }
+    columns.push(
       { header: "Section / Unit", role: "heading" },
       { header: "Subsystem / Parameter", role: "heading" },
-      { header: "Tender requirement", role: "requirement" },
-    ];
+      { header: specCol?.header || "Tender requirement", role: "requirement", ...(specIndex >= 0 ? { sourceIndex: specIndex } : {}) },
+      { header: "Compliance (Yes / No)", role: "response" },
+      { header: "Remarks / Justifications", role: "response" },
+    );
   } else if (source.sourceColumns?.length) {
     const hasHeadingColumn = source.sourceColumns.some((column) => column.role === "heading");
     columns = source.sourceColumns.flatMap((column, index): ResponseSheetColumn[] => {
@@ -110,6 +149,12 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
       if (column.role === "specification") return hasHeadingColumn
         ? [{ header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }]
         : [{ header: "Heading", role: "heading" }, { header: column.header || "Tender requirement", role: "requirement", sourceIndex: index }];
+      if (column.role === "compliance") {
+        return [{ header: column.header || "Compliance (Yes / No)", role: "response" }];
+      }
+      if (column.role === "remark" || column.role === "deviation") {
+        return [{ header: column.header || "Remarks / Justifications", role: "response" }];
+      }
       return [{ header: column.header || `Source column ${index + 1}`, role: "source", sourceIndex: index }];
     });
   } else {
@@ -119,10 +164,10 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     ];
   }
 
-  // Ensure deterministic compliance and remarks response columns are always present instead of ambiguous fallback
+  // Ensure deterministic compliance and remarks response columns are always present when missing
   const rawSourceColumns = source.sourceColumns ?? [];
   const hasSourceResponse = rawSourceColumns.some((column) => ["compliance", "deviation", "remark"].includes(column.role));
-  if (!structured && !hasSourceResponse) {
+  if (!structured && !hasMultiLevel && !hasSourceResponse) {
     const hasCompliance = columns.some((column) => /comply|compliance/i.test(column.header));
     const hasRemark = columns.some((column) => /remark|comment|deviation/i.test(column.header));
     if (!hasCompliance) {
@@ -225,13 +270,26 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     const subHeading = activeSubSection || mainHeading;
 
     if (hasMultiLevel) {
+      const subpoints = splitRequirementSubpoints(requirement);
+      const combinedRequirement = subpoints.join("\n");
       const lastRow = rows.at(-1);
       const requirementIndex = columns.findIndex((col) => col.role === "requirement");
       const pageIndex = columns.findIndex((col) => col.role === "page");
+      const headingIndices = columns
+        .map((col, idx) => (col.role === "heading" ? idx : -1))
+        .filter((idx) => idx !== -1);
+      const mainHeadingIdx = headingIndices[0];
+      const subHeadingIdx = headingIndices[1];
       const cleanSub = subHeading || "General";
-      if (lastRow && lastRow.values[0] === mainHeading && lastRow.values[1] === cleanSub) {
+      if (
+        lastRow &&
+        mainHeadingIdx !== undefined &&
+        subHeadingIdx !== undefined &&
+        lastRow.values[mainHeadingIdx] === mainHeading &&
+        lastRow.values[subHeadingIdx] === cleanSub
+      ) {
         if (requirementIndex >= 0) {
-          lastRow.values[requirementIndex] = [lastRow.values[requirementIndex], requirement].filter(Boolean).join("\n");
+          lastRow.values[requirementIndex] = [lastRow.values[requirementIndex], combinedRequirement].filter(Boolean).join("\n");
         }
         if (pageIndex >= 0) {
           const prevPages = [...lastRow.values[pageIndex].matchAll(/\d+/g)].map((m) => Number(m[0]));
@@ -243,6 +301,9 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
         lastRow.sourceRequirementIds.push(item.id);
         continue;
       }
+
+      addRow(item, mainHeading, subHeading, combinedRequirement, 0);
+      continue;
     }
 
     splitRequirementSubpoints(requirement).forEach((subpoint, rowIndex) => {
