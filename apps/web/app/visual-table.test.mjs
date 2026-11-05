@@ -136,6 +136,15 @@ test("preserves complete independent obligations within composite multi-clause r
   assert.deepEqual(kept, [independentCandidate]);
 });
 
+test("preserves independent parameter-value clauses without obligation verbs", () => {
+  const compositeDraft = "Operating pressure: 200 bar; Pumping speed: 600 L/s.";
+  const candidate = { quote: "Pumping speed: 600 L/s." };
+  const bareValue = { quote: "200 bar" };
+
+  const kept = discardContainedSuggestions([compositeDraft], [candidate, bareValue]);
+  assert.deepEqual(kept, [candidate]);
+});
+
 test("keeps an exact source cell even when its wording is contained in another requirement", () => {
   assert.equal(keepParsedSourceCandidate(
     { quote: "thick steel", source_cells_exact: true },

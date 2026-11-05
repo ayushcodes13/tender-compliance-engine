@@ -2,7 +2,7 @@ import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
 import { runTieredValidation, normalizeOcrComparable, locateOcrQuoteTolerant } from "./tiered-validation";
-import { alignTokenSequence, locateQuoteSequenceAlignment } from "./token-sequence-alignment";
+import { alignTokenSequence, locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment";
 import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
 import { modelCandidateFields } from "./model-candidate";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
@@ -122,32 +122,11 @@ function locateQuoteExact(
   rawItemMap: number[],
   positioned: Array<{ start: number; end: number; box: Box }>,
 ): Box | null {
-  const target = normalize(quote);
-  if (!target) return null;
+  const match = findUniqueTokenBoundedMatch(rawText, quote);
+  if (!match) return null;
 
-  let searchable = "";
-  const rawOffsets: number[] = [];
-  let inWhitespace = false;
-  for (let i = 0; i < rawText.length; i += 1) {
-    const char = rawText[i];
-    if (/\s/.test(char)) {
-      if (!inWhitespace) {
-        searchable += " ";
-        rawOffsets.push(i);
-      }
-      inWhitespace = true;
-    } else {
-      searchable += char;
-      rawOffsets.push(i);
-      inWhitespace = false;
-    }
-  }
-
-  const start = searchable.indexOf(target);
-  if (start < 0) return null;
-  if (searchable.indexOf(target, start + target.length) >= 0) return null;
-  const rawStart = rawOffsets[start];
-  const rawEnd = rawOffsets[start + target.length - 1] + 1;
+  const rawStart = match.startOffset;
+  const rawEnd = match.endOffset;
   const used = new Set<number>();
   for (let i = rawStart; i < rawEnd; i += 1) {
     const itemIndex = rawItemMap[i];
@@ -1514,8 +1493,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         continue;
       }
       seen.add(key);
-      const nativeTextMatch = normalize(sourcePage.rawText).includes(normalizedQuote)
-        || Boolean(alignTokenSequence(quote, sourcePage.rawText));
+      const nativeTextMatch = Boolean(findUniqueTokenBoundedMatch(sourcePage.rawText, quote));
       const ocrComparableTarget = normalizeOcrComparable(quote);
       const ocrComparableText = normalizeOcrComparable(sourcePage.ocrText);
       const ocrTextMatch = !nativeTextMatch && (

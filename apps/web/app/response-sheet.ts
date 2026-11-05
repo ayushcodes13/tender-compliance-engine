@@ -63,10 +63,11 @@ export function recombinePhysicalWrappedLines(lines: string[]): string[] {
   for (let i = 1; i < lines.length; i += 1) {
     const nextLine = lines[i];
     const nextIsMarker = isListMarkerLine(nextLine);
-    const prevTerminatedWithDelim = /[;:]$/.test(current.trim());
+    const prevTerminatedWithSemicolon = /;$/.test(current.trim());
+    const prevTerminatedWithColon = /:$/.test(current.trim()) && (nextIsMarker || /^[A-Za-z0-9\s\-/()]{2,40}:/.test(nextLine));
     const prevEndedSentence = /\.\s*$/.test(current.trim()) && /^[A-Z0-9]/.test(nextLine);
 
-    if (nextIsMarker || prevTerminatedWithDelim || prevEndedSentence) {
+    if (nextIsMarker || prevTerminatedWithSemicolon || prevTerminatedWithColon || prevEndedSentence) {
       combined.push(current);
       current = nextLine;
     } else {

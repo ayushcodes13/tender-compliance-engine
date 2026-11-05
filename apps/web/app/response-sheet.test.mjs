@@ -419,6 +419,12 @@ test("distinguishes physical PDF line wrapping from independent subclauses", () 
   const numbered = "1. Mainframe controller tower version\n2. Power supply and cabling";
   const subpointsNumbered = splitRequirementSubpoints(numbered);
   assert.equal(subpointsNumbered.length, 2);
+
+  // Parameter ending with colon followed by bare value: should NOT be split into two rows
+  const colonWrapped = "Minimum operating pressure:\n200 bar";
+  const subpointsColon = splitRequirementSubpoints(colonWrapped);
+  assert.equal(subpointsColon.length, 1);
+  assert.equal(subpointsColon[0], "Minimum operating pressure: 200 bar");
 });
 
 

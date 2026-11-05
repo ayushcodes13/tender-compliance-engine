@@ -90,8 +90,9 @@ function isCompleteClauseInDraft(candidate: string, draft: string): boolean {
     || /^\([0-9a-zivxlcdm]+\)\s+/i.test(candidate);
 
   const hasObligationVerb = /\b(?:shall|must|will|should|requires|required|provides|provided|supports|supported|includes|included|equipped)\b/i.test(candidate);
+  const hasParameterValue = /^[A-Za-z0-9\s\-/()]{2,40}:\s*\S+/.test(candidate) && /\d/.test(candidate);
 
-  if (!hasMarker && !hasObligationVerb) return false;
+  if (!hasMarker && !hasObligationVerb && !hasParameterValue) return false;
 
   // Check prefix boundary (start of string or preceded by terminal punctuation or bullet)
   const isPrefixBoundary = idx === 0

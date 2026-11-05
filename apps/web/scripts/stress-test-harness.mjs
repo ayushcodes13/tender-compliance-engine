@@ -246,7 +246,13 @@ async function runHarness() {
   return allPassed;
 }
 
-runHarness().catch((err) => {
-  console.error('Fatal harness error:', err);
-  process.exit(1);
-});
+runHarness()
+  .then((success) => {
+    if (!success) {
+      process.exit(1);
+    }
+  })
+  .catch((err) => {
+    console.error('Fatal harness error:', err);
+    process.exit(1);
+  });

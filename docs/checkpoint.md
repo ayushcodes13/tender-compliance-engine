@@ -297,6 +297,35 @@ Systematically resolved the failure modes identified in the comprehensive advers
   - TypeScript clean (`npm run typecheck`).
   - Production build passing (`npm run build`).
 
+### P0 Engineering Units, Signed Numbers, and Native Token Boundary Enforcement — 2026-11-06
+
+Directly resolved the critical false verbatim pass vectors and provenance gaps identified in code review:
+
+- [x] **P0 — SI Unit Case Sensitivity & Technical Operator Protection (`apps/web/app/token-sequence-alignment.ts` & `apps/web/app/tiered-validation.ts`)**:
+  - Maintained SI prefix case sensitivity (`mW` vs `MW`, `mA` vs `MA`, `mHz` vs `MHz`, `mbar` vs `Mbar`). A claim of `5 MW` will never pass when the source specifies `5 mW`.
+  - Preserved signed negative numbers: `-20 °C` is strictly distinguished from `20 °C` (does not strip leading minus when followed by a digit).
+  - Preserved tolerance distinctions: `±5%` is strictly distinguished from positive offset `+5%`.
+- [x] **P0 — Token Boundary Enforcement in Native Text Matching (`apps/web/app/token-sequence-alignment.ts`, `apps/web/app/actions.ts`, & `apps/web/app/source-document.ts`)**:
+  - Implemented `findUniqueTokenBoundedMatch`: enforces word boundaries (`\b` / non-alphanumeric check) on both start and end of matched spans.
+  - Replaced unconstrained `.includes()` in the acceptance gate and `checkVerbatim`: `500 bar` will never match inside `1500 bar` or `5000 bar`.
+- [x] **P1 — Complete Overlapping Repeated-Passage Protection (`apps/web/app/token-sequence-alignment.ts`)**:
+  - Removed query length skip-ahead in `alignExactTokenSequence`: counts all occurrences contiguously including overlapping matches (`pump pump` in `pump pump pump`).
+  - When `requireUnique: true` is set, declines ambiguous citations with multiple occurrences on the page.
+- [x] **P1 — Non-Sequential OCR Validator Fallback Elimination (`apps/web/app/tiered-validation.ts`)**:
+  - Removed unordered token-containment fallback from `checkVisual`. Claims like `The output power shall be 500 mW` will never pass against `The output power shall be 200 mW. Calibration reference: 500 mW.`
+- [x] **P1 — Standalone Parameter-Value Requirement Recovery (`apps/web/app/visual-table.ts`)**:
+  - Enhanced `isCompleteClauseInDraft`: recognizes standalone parameter-value requirements (`Pumping speed: 600 L/s.` within `Operating pressure: 200 bar; Pumping speed: 600 L/s.`) without requiring modal verbs like `shall`/`must`.
+- [x] **P1 — Stress Test Runner Nonzero Exit Code (`apps/web/scripts/stress-test-harness.mjs`)**:
+  - Script explicitly calls `process.exit(1)` when any stress case fails quality thresholds.
+- [x] **P2 — Parameter-Colon Line Recombination (`apps/web/app/response-sheet.ts`)**:
+  - Parameters wrapped across lines (`Minimum operating pressure:\n200 bar`) are recombined into single rows rather than splitting on the colon.
+- [x] **Verification**:
+  - 204 unit tests passing (`npm test`).
+  - 17 pipeline contract cases passing (`npm run test:pipeline`).
+  - TypeScript clean (`npm run typecheck`).
+  - Production build passing (`npm run build`).
+
+
 
 
 
