@@ -55,17 +55,39 @@ export function createModelCompletionClient(config: ModelProviderConfig, fetcher
       const signal = init?.signal ?? AbortSignal.timeout(180_000);
       await acquire(signal);
       try {
-        signal.throwIfAborted();
-        return await fetcher(`${config.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: new Headers({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
-          signal,
-          body: init?.body,
-        });
-      } catch (error) {
-        if (error instanceof TypeError) throw new ModelProviderConnectionError();
-        throw error;
-      } finally { release(); }
+        let lastError: unknown;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            signal.throwIfAborted();
+            const response = await fetcher(`${config.baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: new Headers({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
+              signal,
+              body: init?.body,
+            });
+            if (response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) {
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+                continue;
+              }
+            }
+            return response;
+          } catch (error) {
+            lastError = error;
+            if (error instanceof DOMException && error.name === "AbortError") throw error;
+            if (attempt < 2 && (error instanceof TypeError || (error instanceof Error && error.name === "AbortError" && !signal.aborted))) {
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              continue;
+            }
+            if (error instanceof TypeError) throw new ModelProviderConnectionError();
+            throw error;
+          }
+        }
+        if (lastError instanceof TypeError) throw new ModelProviderConnectionError();
+        throw lastError;
+      } finally {
+        release();
+      }
     },
   };
 }
