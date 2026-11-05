@@ -269,6 +269,35 @@ Per explicit engineering directive to permanently eliminate long-term correctnes
   - 17 pipeline contract cases passing (`npm run test:pipeline`).
   - TypeScript clean (`npm run typecheck`).
 
+### Adversarial Audit Resolutions — Semantic Grounding, Subpoint Splitting & Provenance Hardening — 2026-11-06
+
+Systematically resolved the failure modes identified in the comprehensive adversarial review:
+
+- [x] **Semantic Subpoint Splitting vs Physical Line Wrapping (`apps/web/app/response-sheet.ts` & `apps/web/app/tender-mvp.tsx`)**:
+  - Distinguishes physical PDF line wrapping from semantic requirement boundaries (`recombinePhysicalWrappedLines`).
+  - Physical sentence wraps (e.g. `The pump shall operate continuously at \n minimum pressure of 200 bar and 50 Hz.`) are recombined into single requirements rather than being split into incomplete fragments with separate compliance decisions.
+  - Splits only on confirmed bullet points, numbered/lettered clauses, or terminal punctuation followed by capitalized clauses.
+- [x] **OCR Validation Confidence & Position Map Grounding (`apps/web/app/tiered-validation.ts` & `apps/web/app/actions.ts`)**:
+  - Propagated `ocrRawItemMap` from `pages` into `pageEvidenceSources` in `actions.ts` so spatial token alignment is fully active in production.
+  - Corrected `checkVisual`: Never defaults to `"high"` confidence when no bounding box is derived or when unpositioned; derives confidence strictly from matched positioned OCR regions.
+- [x] **Granular Independent Obligations Preserved in Recovery (`apps/web/app/visual-table.ts`)**:
+  - Updated `discardContainedSuggestions`: Distinguishes complete standalone obligations from truncated partial fragments.
+  - Complete independent clauses in multi-clause composite rows (e.g. `VFD shall support Modbus TCP.` in `The motor shall have 5 kW rating. VFD shall support Modbus TCP.`) are preserved for granular evaluation, while truncated phrases (e.g. `c) Effusion cells: Capacity`) are rejected.
+- [x] **Edit-Aware Provenance & Review Invalidation (`apps/web/app/tender-mvp.tsx`)**:
+  - When a reviewer edits the text of a requirement in the response sheet, the checked review state on that requirement is automatically invalidated (`reviewed: false`), requiring explicit re-review of the modified text.
+- [x] **Token-Bounded OCR Header Verification (`apps/web/app/column-layout.ts`)**:
+  - Enforced strict word boundaries (`\b`) and proximate line window matching in `matchOcrHeaderTokens`. Prevents `Serial 10` from matching `Serial 1000`.
+- [x] **Repeated Passage Ambiguity Protection (`apps/web/app/token-sequence-alignment.ts`)**:
+  - Added `requireUnique` protection to `alignExactTokenSequence`: If an exact passage appears multiple times on the same page, declines ambiguous selection to prevent highlighting the wrong source row.
+- [x] **Excluded Technical Page Routing Audit (`apps/web/app/actions.ts`)**:
+  - Scans unselected pages for dense technical units and parameter keywords, alerting the reviewer in `routingWarnings` if excluded pages appear to contain technical specifications.
+- [x] **Verification**:
+  - 195 unit tests passing (`npm test`).
+  - 17 pipeline contract cases passing (`npm run test:pipeline`).
+  - TypeScript clean (`npm run typecheck`).
+  - Production build passing (`npm run build`).
+
+
 
 
 

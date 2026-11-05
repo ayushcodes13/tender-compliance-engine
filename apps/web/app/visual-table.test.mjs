@@ -127,6 +127,15 @@ test("drops a partial visual suggestion when a longer accepted quote already cov
   assert.deepEqual(kept, [{ quote: "a) Motorized phosphorus cracker source" }]);
 });
 
+test("preserves complete independent obligations within composite multi-clause rows", () => {
+  const compositeDraft = "The motor shall have 5 kW rating. VFD shall support Modbus TCP.";
+  const independentCandidate = { quote: "VFD shall support Modbus TCP." };
+  const truncatedFragment = { quote: "The motor shall have" };
+
+  const kept = discardContainedSuggestions([compositeDraft], [independentCandidate, truncatedFragment]);
+  assert.deepEqual(kept, [independentCandidate]);
+});
+
 test("keeps an exact source cell even when its wording is contained in another requirement", () => {
   assert.equal(keepParsedSourceCandidate(
     { quote: "thick steel", source_cells_exact: true },

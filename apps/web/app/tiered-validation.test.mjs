@@ -71,6 +71,20 @@ test("Tier 2: checkVisual handles OCR token noise like sl vs sil", () => {
   assert.equal(result.matched, true);
 });
 
+test("Tier 2: checkVisual never defaults to high confidence when no spatial region supports it", () => {
+  const page = {
+    page: 5,
+    rawText: "",
+    ocrText: "The pump must\ndeliver 200 bar.",
+    ocrPerformed: true,
+  };
+
+  const result = checkVisual("The pump must deliver 200 bar.", page);
+  assert.equal(result.matched, true);
+  assert.equal(result.bbox, null);
+  assert.notEqual(result.ocrConfidence, "high");
+});
+
 test("Tier 3: falls back to needs_human_review when text fails verbatim and visual checks", () => {
   const page = {
     page: 4,

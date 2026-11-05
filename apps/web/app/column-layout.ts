@@ -9,25 +9,33 @@ export function normalizeSingleContentColumn(columns: SourceColumn[]): SourceCol
   return columns.map(column=>column===content[0]?{...column,role:'specification'}:column);
 }
 
-/** Check whether a candidate header's tokens exist in raw or OCR page text (resilient to line wrapping and OCR noise like 'sl' -> 'sil'). */
+function matchesTokenWithBoundaries(token: string, text: string): boolean {
+  if (token === "sl") {
+    return /\b(?:sl|sil|s1|si)\b/i.test(text);
+  }
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
+/** Check whether a candidate header's tokens exist in raw or OCR page text within a coherent header window with strict token boundaries. */
 export function matchOcrHeaderTokens(header: string, pageText: string): boolean {
   if (!pageText || !header.trim()) return false;
   const lowerHeader = header.toLowerCase().replace(/\s+/g, " ").trim();
-  const lowerPageText = pageText.toLowerCase();
-  if (lowerHeader && lowerPageText.includes(lowerHeader)) return true;
   const tokens = lowerHeader.replace(/[^a-z0-9]/g, " ").split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return false;
-  return tokens.every((token) => {
-    if (token === "sl") {
-      return (
-        lowerPageText.includes("sl") ||
-        lowerPageText.includes("sil") ||
-        lowerPageText.includes("s1") ||
-        lowerPageText.includes("si")
-      );
-    }
-    return lowerPageText.includes(token);
-  });
+
+  const lines = pageText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const combinedWindow = i + 1 < lines.length ? `${lines[i]} ${lines[i + 1]}` : lines[i];
+    const allTokensMatch = tokens.every((token) => matchesTokenWithBoundaries(token, combinedWindow));
+    if (allTokensMatch) return true;
+  }
+
+  return false;
 }
 
 const roles = new Set<SourceColumnRole>([

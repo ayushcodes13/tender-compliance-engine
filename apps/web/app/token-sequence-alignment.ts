@@ -89,14 +89,17 @@ export function tokenSimilarity(t1: string, t2: string): number {
 
 /**
  * Aligns a query quote against a document text stream using deterministic exact token sequence matching.
- * Returns the character start and end offsets in documentText, or null if no exact token sequence match exists.
+ * Returns the character start and end offsets in documentText, or null if no exact token sequence match exists
+ * (or if requireUnique is true and multiple occurrences exist).
  *
  * Every single token in the query MUST match the corresponding document token with exact equality (===).
  */
 export function alignExactTokenSequence(
   query: string,
   documentText: string,
+  options?: { requireUnique?: boolean },
 ): SequenceAlignmentMatch | null {
+  const requireUnique = options?.requireUnique ?? false;
   const Q = tokenizeText(query);
   const D = tokenizeText(documentText);
 
@@ -104,7 +107,8 @@ export function alignExactTokenSequence(
     return null;
   }
 
-  // Find exact 1:1 contiguous sequence match
+  const matches: SequenceAlignmentMatch[] = [];
+
   for (let i = 0; i <= D.length - Q.length; i += 1) {
     let exactMatch = true;
     for (let k = 0; k < Q.length; k += 1) {
@@ -115,16 +119,24 @@ export function alignExactTokenSequence(
     }
 
     if (exactMatch) {
-      return {
+      matches.push({
         startOffset: D[i].start,
         endOffset: D[i + Q.length - 1].end,
         score: 1.0,
         matchedTokensCount: Q.length,
-      };
+      });
+      if (requireUnique && matches.length > 1) {
+        return null;
+      }
+      i += Math.max(0, Q.length - 1);
     }
   }
 
-  return null;
+  if (requireUnique && matches.length > 1) {
+    return null;
+  }
+
+  return matches[0] ?? null;
 }
 
 /** Backward compatibility alias */
@@ -133,18 +145,20 @@ export const alignTokenSequence = alignExactTokenSequence;
 /**
  * Locates the bounding box for a quote in a spatially-mapped page
  * using deterministic exact token sequence alignment.
+ * Requires uniqueness by default to prevent highlighting ambiguous repeated passages.
  */
 export function locateQuoteSequenceAlignment(
   quote: string,
   rawText: string,
   rawItemMap: number[],
   positioned: Array<{ start: number; end: number; box: BoundingBox }>,
+  options?: { requireUnique?: boolean },
 ): BoundingBox | null {
   if (!quote?.trim() || !rawText?.trim() || !positioned || positioned.length === 0) {
     return null;
   }
 
-  const match = alignExactTokenSequence(quote, rawText);
+  const match = alignExactTokenSequence(quote, rawText, { requireUnique: options?.requireUnique ?? true });
   if (!match) return null;
 
   const used = new Set<number>();

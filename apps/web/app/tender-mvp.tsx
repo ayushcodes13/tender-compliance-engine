@@ -11,7 +11,7 @@ import { consumeAnalysisStream } from "./analysis-events";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
-import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, type ResponseSheet } from "./response-sheet";
+import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import type { CoverageReport, CoverageSourceRow, RejectedSuggestion } from "./coverage-ledger";
 
@@ -98,12 +98,6 @@ function coverageRowReviewMessage(row: CoverageSourceRow): string {
   return `${countLabel(row.candidateSuggestions, "candidate")} from this source row matched the source. Check that the extracted wording and grouping preserve the full row meaning.`;
 }
 
-function splitRequirementSubpoints(text: string): string[] {
-  return text
-    .split(/(?=[\uF0B7\u2022\u25CF\u25AA]\s*|(?<=\s)o\s+(?!C\b)(?=[A-Z0-9])|(?<=\s)[1-9]\.\s+(?=[A-Z]))/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -317,8 +311,29 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   function updateSheetCell(rowId: string, columnIndex: number, value: string) {
     if (!responseSheet) return;
+    const column = responseSheet.columns[columnIndex];
+    const targetRow = responseSheet.rows.find((r) => r.id === rowId);
     setResponseSheet(updateResponseSheetCell(responseSheet, rowId, columnIndex, value));
     setSheetEdited(true);
+
+    // If a requirement's wording was edited, invalidate its verified review state
+    // so the reviewer must explicitly re-review the modified wording
+    if (column?.role === "requirement" && targetRow && targetRow.values[columnIndex] !== value) {
+      if (analysis) {
+        const linkedIds = new Set([targetRow.sourceRequirementId, ...(targetRow.sourceRequirementIds || [])].filter(Boolean));
+        if (linkedIds.size > 0) {
+          setAnalysis({
+            ...analysis,
+            requirements: analysis.requirements.map((item) => {
+              if (linkedIds.has(item.id) && item.reviewed) {
+                return { ...item, reviewed: false };
+              }
+              return item;
+            }),
+          });
+        }
+      }
+    }
   }
 
   function removeSheetRow(rowId: string) {

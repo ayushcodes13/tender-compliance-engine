@@ -80,6 +80,33 @@ export function mergeVisualHeadingRows<T extends VisualHeadingRow>(rows: T[]): T
   return merged;
 }
 
+function isCompleteClauseInDraft(candidate: string, draft: string): boolean {
+  const idx = draft.indexOf(candidate);
+  if (idx < 0) return false;
+
+  // Must have independent obligation structure (bullet/number marker, or terminal punctuation + requirement modal)
+  const hasMarker = /^[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢\-\*]\s+/i.test(candidate)
+    || /^(?:[0-9]+|[a-z]|[ivxlcdm]+)[\.\)]\s+/i.test(candidate)
+    || /^\([0-9a-zivxlcdm]+\)\s+/i.test(candidate);
+
+  const hasObligationVerb = /\b(?:shall|must|will|should|requires|required|provides|provided|supports|supported|includes|included|equipped)\b/i.test(candidate);
+
+  if (!hasMarker && !hasObligationVerb) return false;
+
+  // Check prefix boundary (start of string or preceded by terminal punctuation or bullet)
+  const isPrefixBoundary = idx === 0
+    || /[;.!\n]\s*$/.test(draft.slice(0, idx))
+    || /[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢\-\*]\s*$/.test(draft.slice(0, idx));
+
+  // Check suffix boundary (end of string or followed by terminal punctuation or bullet)
+  const afterIdx = idx + candidate.length;
+  const isSuffixBoundary = afterIdx >= draft.length
+    || /^\s*[;.!\n]/.test(draft.slice(afterIdx))
+    || /^\s*[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢\-\*]/.test(draft.slice(afterIdx));
+
+  return isPrefixBoundary && isSuffixBoundary;
+}
+
 export function discardContainedSuggestions<T extends { quote?: unknown; row_type?: string }>(draftQuotes: string[], suggestions: T[]): T[] {
   const drafts = draftQuotes.map((quote) => quote.replace(/\s+/g, " ").trim());
   return suggestions.filter((suggestion) => {
@@ -91,7 +118,19 @@ export function discardContainedSuggestions<T extends { quote?: unknown; row_typ
     // also occur inside the larger draft quote, but the heading still needs
     // its own visible row in the response sheet.
     if (suggestion.row_type === "section" || suggestion.row_type === "optional_heading") return true;
-    return !drafts.some((draft) => draft.length > candidate.length && draft.includes(candidate));
+
+    for (const draft of drafts) {
+      if (draft.length > candidate.length && draft.includes(candidate)) {
+        // If candidate is a complete independent clause or sentence within a multi-clause draft,
+        // preserve it so it can be assessed as an independent obligation.
+        // Otherwise, it is a partial/truncated fragment and should be discarded.
+        if (isCompleteClauseInDraft(candidate, draft) && candidate.split(/\s+/).length >= 2) {
+          continue;
+        }
+        return false;
+      }
+    }
+    return true;
   });
 }
 
