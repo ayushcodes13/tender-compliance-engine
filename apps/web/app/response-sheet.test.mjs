@@ -244,3 +244,30 @@ test("creates multi-level hierarchy (Section/Unit and Subsystem/Parameter) and m
   assert.equal(sheet.rows[2].values[1], "Magnetic Field Controller");
   assert.equal(sheet.rows[2].values[2], "Operating range: -1 to +14 kG");
 });
+
+test("consolidates multiple repeated points under the same subsystem into only one row", () => {
+  const source = {
+    requirements: [
+      { id: "h1", text: "EPR Software", quote: "EPR Software", rowType: "section", page: 3 },
+      { id: "s1", text: "Workstation", quote: "Workstation", rowType: "section", page: 3 },
+      { id: "p1", text: "OS: Linux;", quote: "OS: Linux;", page: 3 },
+      { id: "p2", text: "Interfaces: USB, Ethernet;", quote: "Interfaces: USB, Ethernet;", page: 3 },
+      { id: "p3", text: "DVD-R/W;", quote: "DVD-R/W;", page: 3 },
+      { id: "p4", text: "TFT-Monitor;", quote: "TFT-Monitor;", page: 3 },
+      { id: "s2", text: "Acquisition Controller", quote: "Acquisition Controller", rowType: "section", page: 3 },
+      { id: "p5", text: "Controls all spectrometer devices;", quote: "Controls all spectrometer devices;", page: 3 },
+    ],
+  };
+
+  const sheet = buildResponseSheet(source);
+  // Instead of 5 rows where Workstation is repeated 4 times, Workstation forms exactly 1 row
+  assert.equal(sheet.rows.length, 2);
+  assert.equal(sheet.rows[0].values[0], "EPR Software");
+  assert.equal(sheet.rows[0].values[1], "Workstation");
+  assert.equal(sheet.rows[0].values[2], "OS: Linux;\nInterfaces: USB, Ethernet;\nDVD-R/W;\nTFT-Monitor;");
+  assert.deepEqual(sheet.rows[0].sourceRequirementIds, ["p1", "p2", "p3", "p4"]);
+
+  assert.equal(sheet.rows[1].values[0], "EPR Software");
+  assert.equal(sheet.rows[1].values[1], "Acquisition Controller");
+  assert.equal(sheet.rows[1].values[2], "Controls all spectrometer devices;");
+});
