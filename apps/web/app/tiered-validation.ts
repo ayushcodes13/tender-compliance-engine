@@ -37,7 +37,7 @@ export type PageEvidenceSource = {
   positioned?: Array<{ start: number; end: number; box: BoundingBox }>;
   ocrText?: string;
   ocrRawItemMap?: number[];
-  ocrPositioned?: Array<{ start: number; end: number; box: BoundingBox; ocrConfidenceLevel?: "high" | "medium" | "low" }>;
+  ocrPositioned?: Array<{ start?: number; end?: number; box: BoundingBox; text?: string; ocrConfidenceLevel?: "high" | "medium" | "low" }>;
   ocrPerformed?: boolean;
 };
 
@@ -61,6 +61,87 @@ export type ValidationSummary = {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Normalizes text for OCR comparison by reconciling common OCR symbol substitutions:
+ * - Em-dash (—), en-dash (–), minus (−), horizontal bar (―) -> hyphen (-)
+ * - Plus-minus (±), (+/-), (+ / -) -> (+)
+ * - Bullet artifacts («, ¢, •, ●, ▪, ■, ◆, ★, *, ›, ») -> stripped
+ * - Word-boundary punctuation (, ; : .) -> space
+ * - Whitespace normalized and lowercased
+ */
+export function normalizeOcrComparable(value: string): string {
+  if (!value) return "";
+  return value
+    .replace(/[\u2014\u2013\u2212\u2015]/g, "-")
+    .replace(/[\u00b1]|(\+\s*\/\s*-)/g, "+")
+    .replace(/[«¢•●▪■◆★*›»]/g, "")
+    .replace(/[;:,.]+(\s|$)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Searches OCR positioned lines with symbol tolerance and multi-line windowing
+ * to locate the exact bounding box and confidence for a candidate quote.
+ */
+export function locateOcrQuoteTolerant(
+  quote: string,
+  ocrPositioned: Array<{ start?: number; end?: number; box: BoundingBox; text?: string; ocrConfidenceLevel?: "high" | "medium" | "low" }>,
+): { bbox: BoundingBox; confidence: "high" | "medium" | "low" } | null {
+  const normQuote = normalizeOcrComparable(quote);
+  if (!normQuote || !ocrPositioned || ocrPositioned.length === 0) return null;
+
+  // 1. Single line: line matches or contains quote
+  for (const item of ocrPositioned) {
+    if (!item.text) continue;
+    const normLine = normalizeOcrComparable(item.text);
+    if (normLine === normQuote || normLine.includes(normQuote)) {
+      return { bbox: item.box, confidence: item.ocrConfidenceLevel || "medium" };
+    }
+  }
+
+  // 2. Multi-line window (2 to 4 consecutive lines)
+  for (let i = 0; i < ocrPositioned.length; i += 1) {
+    let windowText = "";
+    const windowBoxes: BoundingBox[] = [];
+    const confidences: Array<"high" | "medium" | "low"> = [];
+    for (let j = i; j < Math.min(ocrPositioned.length, i + 4); j += 1) {
+      const item = ocrPositioned[j];
+      if (!item.text) continue;
+      windowText += (windowText ? " " : "") + item.text;
+      windowBoxes.push(item.box);
+      if (item.ocrConfidenceLevel) confidences.push(item.ocrConfidenceLevel);
+      const normWindow = normalizeOcrComparable(windowText);
+      if (normWindow.includes(normQuote)) {
+        const x = Math.min(...windowBoxes.map((b) => b.x));
+        const y = Math.min(...windowBoxes.map((b) => b.y));
+        const right = Math.max(...windowBoxes.map((b) => b.x + b.width));
+        const bottom = Math.max(...windowBoxes.map((b) => b.y + b.height));
+        return {
+          bbox: { x, y, width: right - x, height: bottom - y },
+          confidence: confidences.includes("low") ? "low" : confidences.includes("medium") ? "medium" : "high",
+        };
+      }
+    }
+  }
+
+  // 3. Token containment across candidate line
+  const qTokens = normQuote.split(" ").filter((t) => t.length >= 2 || /\d/.test(t));
+  if (qTokens.length >= 2) {
+    for (const item of ocrPositioned) {
+      if (!item.text) continue;
+      const lineTokens = normalizeOcrComparable(item.text).split(" ");
+      const matchedTokens = qTokens.filter((t) => lineTokens.includes(t));
+      if (matchedTokens.length === qTokens.length) {
+        return { bbox: item.box, confidence: item.ocrConfidenceLevel || "medium" };
+      }
+    }
+  }
+
+  return null;
 }
 
 /** Check if text matches natively with deterministic bounding box calculation */
@@ -138,7 +219,7 @@ export function checkVisual(
     if (page.ocrPositioned && page.ocrPositioned.length > 0) {
       const idx = ocrText.indexOf(target);
       const matchingItems = idx >= 0
-        ? page.ocrPositioned.filter((item) => item.start <= idx + target.length && item.end >= idx)
+        ? page.ocrPositioned.filter((item) => (item.start ?? 0) <= idx + target.length && (item.end ?? 0) >= idx)
         : [];
       if (matchingItems.length > 0) {
         const x = Math.min(...matchingItems.map((item) => item.box.x));
@@ -153,7 +234,22 @@ export function checkVisual(
     return { matched: true, bbox, ocrConfidence: confidence };
   }
 
-  // 2. Token-based containment check (for multi-line wrapped cells and OCR character noise)
+  // 2. OCR-tolerant line-level matching (handles ± vs +, em-dash vs en-dash, bullet artifacts)
+  if (page.ocrPositioned && page.ocrPositioned.length > 0) {
+    const tolerantMatch = locateOcrQuoteTolerant(quote, page.ocrPositioned);
+    if (tolerantMatch) {
+      return { matched: true, bbox: tolerantMatch.bbox, ocrConfidence: tolerantMatch.confidence };
+    }
+  }
+
+  // 3. Full-text normalized OCR comparison
+  const compOcr = normalizeOcrComparable(ocrText);
+  const compTarget = normalizeOcrComparable(quote);
+  if (compTarget && compOcr.includes(compTarget)) {
+    return { matched: true, bbox: null, ocrConfidence: "medium" };
+  }
+
+  // 4. Token-based containment check (for multi-line wrapped cells and OCR character noise)
   const tokens = target
     .replace(/[^a-z0-9]/g, " ")
     .split(/\s+/)

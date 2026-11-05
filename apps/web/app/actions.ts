@@ -1,7 +1,7 @@
 import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
-import { runTieredValidation } from "./tiered-validation";
+import { runTieredValidation, normalizeOcrComparable, locateOcrQuoteTolerant } from "./tiered-validation";
 import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
 import { modelCandidateFields } from "./model-candidate";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
@@ -174,13 +174,19 @@ function locatePageQuote(quote: string, page: {
   const nativeBox = locateQuote(quote, page.rawText, page.rawItemMap, page.positioned);
   if (nativeBox) return { bbox: nativeBox, method: "pdfjs-native-text" };
   const ocrBox = locateQuote(quote, page.ocrText, page.ocrRawItemMap, page.ocrPositioned);
-  if (!ocrBox) return null;
-  const match = findUniqueSourceText(page.ocrText, quote);
-  const confidence = match
-    ? combineOcrConfidence(page.ocrPositioned.filter((item) => item.start < match.endOffset && item.end > match.startOffset)
-      .flatMap((item) => item.ocrConfidenceLevel ? [item.ocrConfidenceLevel] : []))
-    : null;
-  return { bbox: ocrBox, method: "tesseract-ocr", ...(confidence ? { ocrConfidence: confidence } : {}) };
+  if (ocrBox) {
+    const match = findUniqueSourceText(page.ocrText, quote);
+    const confidence = match
+      ? combineOcrConfidence(page.ocrPositioned.filter((item) => item.start < match.endOffset && item.end > match.startOffset)
+        .flatMap((item) => item.ocrConfidenceLevel ? [item.ocrConfidenceLevel] : []))
+      : null;
+    return { bbox: ocrBox, method: "tesseract-ocr", ...(confidence ? { ocrConfidence: confidence } : {}) };
+  }
+  const tolerantMatch = locateOcrQuoteTolerant(quote, page.ocrPositioned);
+  if (tolerantMatch) {
+    return { bbox: tolerantMatch.bbox, method: "tesseract-ocr", ocrConfidence: tolerantMatch.confidence };
+  }
+  return null;
 }
 
 function matchesPageSourceText(header: string, page: {
@@ -1483,12 +1489,17 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       }
       seen.add(key);
       const nativeTextMatch = normalize(sourcePage.rawText).includes(normalizedQuote);
-      const ocrTextMatch = !nativeTextMatch && normalize(sourcePage.ocrText).includes(normalizedQuote);
+      const ocrComparableTarget = normalizeOcrComparable(quote);
+      const ocrComparableText = normalizeOcrComparable(sourcePage.ocrText);
+      const ocrTextMatch = !nativeTextMatch && (
+        normalize(sourcePage.ocrText).includes(normalizedQuote) ||
+        (ocrComparableTarget.length > 0 && ocrComparableText.includes(ocrComparableTarget))
+      );
       const visualOcr = candidate.visualOcr === true && (visualSheetType === "compliance-sheet" || normalizedTables);
       const pageEvidence = locatePageQuote(quote, sourcePage);
       const bbox = candidate.sourceBox ?? pageEvidence?.bbox ?? null;
       const evidencePrecision = classifyCandidateEvidence({
-        nativeTextMatch, ocrTextMatch, visualTranscription: visualOcr, hasLocation: Boolean(bbox),
+        nativeTextMatch, ocrTextMatch: ocrTextMatch || Boolean(pageEvidence), visualTranscription: visualOcr, hasLocation: Boolean(bbox),
       });
       if (!evidencePrecision) {
         rejected += 1;
