@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -44,7 +44,9 @@ type Requirement = {
   sourceReference: RequirementSourceReference;
   selectableTextQuote?: string;
   bbox: BoundingBox | null;
-  precision: "exact" | "visual-ocr" | "page-only";
+  precision: "exact" | "visual-ocr" | "page-only" | "unverified";
+  verdict?: "verbatim_pass" | "visual_pass" | "needs_human_review";
+  needsHumanReview?: boolean;
   ocrWarning?: boolean;
   reviewed: boolean;
 };
@@ -61,6 +63,12 @@ type Analysis = {
   sheetHeading?: string;
   sheetProductTitle?: string;
   requirements: Requirement[];
+  validationSummary?: {
+    total: number;
+    verbatimPass: number;
+    visualPass: number;
+    needsHumanReview: number;
+  };
   rejectedCandidates: number;
   rejectedSuggestionDetails?: RejectedSuggestion[];
   coverage?: CoverageReport;
@@ -757,6 +765,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}</div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
           <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{reviewableRequirements.length}</strong><small>Source requirements</small></span></div>
+          {analysis.validationSummary && (
+            <div><span className="mvp-stat-icon"><ShieldCheck size={15} /></span><span><strong>{analysis.validationSummary.verbatimPass + analysis.validationSummary.visualPass}<i> / {analysis.validationSummary.total}</i></strong><small>Tier 1/2 verified</small></span></div>
+          )}
+          {analysis.validationSummary && analysis.validationSummary.needsHumanReview > 0 && (
+            <div><span className="mvp-stat-icon mvp-stat-icon-warn"><AlertTriangle size={15} /></span><span><strong>{analysis.validationSummary.needsHumanReview}</strong><small>Tier 3 human review</small></span></div>
+          )}
           <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {reviewableRequirements.length}</i></strong><small>Checked by you</small></span></div>
           <div><span className="mvp-stat-icon"><FileText size={15} /></span><span><strong>{analysis.pageCount}</strong><small>Tender pages</small></span></div>
         </div>
@@ -792,7 +806,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                     {locked
                       ? <div className="mvp-sheet-citations">{(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId, citationIndex) => {
                           const item = analysis.requirements.find(requirement => requirement.id === sourceId);
-                          return item ? <button type="button" className={`mvp-sheet-source-link ${item.reviewed ? "is-checked" : ""} ${item.ocrWarning || item.precision === "page-only" ? "is-ocr-warning" : ""}`} key={sourceId} aria-label={`View source for response row ${rowIndex + 1}, page ${item.page}, citation ${citationIndex + 1}`} title={item.ocrWarning ? "OCR source — verify transcription" : item.precision === "page-only" ? "Text verified on page; exact highlight unavailable" : item.reviewed ? "Source checked" : "Inspect source"} onClick={() => openRequirement(item)}><FileText size={12} />p. {item.page}{row.sourceRequirementIds.length > 1 && <small>· {citationIndex + 1}</small>}{item.reviewed && <Check size={12} />}{item.ocrWarning && <span>OCR</span>}{item.precision === "page-only" && <span>PAGE</span>}</button> : null;
+                          return item ? <button type="button" className={`mvp-sheet-source-link ${item.reviewed ? "is-checked" : ""} ${item.needsHumanReview || item.ocrWarning || item.precision === "page-only" ? "is-ocr-warning" : ""}`} key={sourceId} aria-label={`View source for response row ${rowIndex + 1}, page ${item.page}, citation ${citationIndex + 1}`} title={item.needsHumanReview ? "Tier 3: Unverified quote — marked for human review" : item.ocrWarning ? "Tier 2: OCR source — verify transcription" : item.precision === "page-only" ? "Text verified on page; exact highlight unavailable" : item.reviewed ? "Source checked" : "Tier 1: Verbatim verified source"} onClick={() => openRequirement(item)}><FileText size={12} />p. {item.page}{row.sourceRequirementIds.length > 1 && <small>· {citationIndex + 1}</small>}{item.reviewed && <Check size={12} />}{item.needsHumanReview ? <span>REVIEW</span> : item.ocrWarning ? <span>OCR</span> : item.precision === "page-only" ? <span>PAGE</span> : null}</button> : null;
                         })}</div>
                       : <textarea
                         aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
@@ -884,10 +898,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2 id="source-drawer-title">{coverageFocus?.page === page ? `Page ${page} source row` : active && active.page === page ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.max(1, current - 1)); }} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.min(analysis.pageCount, current + 1)); }} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button><button type="button" className="mvp-icon-button" aria-label="Close source drawer" onClick={() => sourceDrawerRef.current?.close()} autoFocus><X size={18} /></button></div></div>
           {sourceOpen && file && <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={coverageFocus?.page === page ? coverageFocus.row.bbox : active?.page === page ? active.bbox : null} highlightLabel={coverageFocus?.page === page ? "Detected source row not matched to an extraction candidate; inspect its meaning" : active?.ocrWarning ? "Approximate table-row box for visually transcribed text; verify the full row" : "Bounding box for cited source quote"} />}
           <div className="mvp-citation-detail">
-            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.ocrWarning || active?.precision === "page-only" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}</div>
+            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.needsHumanReview || active?.ocrWarning || active?.precision === "page-only" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}</div>
             <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
             {coverageFocus?.page !== page && active?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{active.selectableTextQuote}</p></div>}
-            <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.precision === "page-only" ? "The quote appears in this page text, but no exact highlight is available. Verify it manually." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={Boolean(coverageFocus?.page === page) || !active || page !== active.page || (!active.bbox && active.precision === "exact")} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
+            <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.needsHumanReview ? "This quote could not be verified automatically; inspect and verify manually against the page." : page === active?.page && active?.precision === "page-only" ? "The quote appears in this page text, but no exact highlight is available. Verify it manually." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={Boolean(coverageFocus?.page === page) || !active || page !== active.page || (!active.bbox && active.precision === "exact")} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
           </div>
         </section>
       </dialog>
