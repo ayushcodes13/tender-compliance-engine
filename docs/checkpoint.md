@@ -250,31 +250,25 @@ Hardened extraction against complex layout archetypes and polished B2B deliverab
   - TypeScript clean (`npm run typecheck`).
   - Automated stress harness 100% pass rate (`npm run test:stress`).
 
-### Strict Semantic Token Grounding & Response Column Edge Case Fix — 2026-11-06
+### Complete Removal of Fuzzy Matching — Zero Fuzzy Tolerance — 2026-11-06
 
-Resolved critical alignment false-positive vulnerabilities and mandatory response column edge cases identified in engineering code review:
+Per explicit engineering directive to permanently eliminate long-term correctness risks, all fuzzy matching algorithms (Levenshtein edit distance, percentage similarity scoring, and token-skipping lookaheads) have been entirely removed from the engine:
 
-- [x] **P0 — Strict Semantic Grounding & False Positive Elimination (`apps/web/app/token-sequence-alignment.ts`)**:
-  - Implemented `hasSemanticAgreement` requiring exact equality for numbers, units, directional operators, and negation polarity before accepting any alignment match.
-  - Successfully rejects adversarial false positives despite high lexical similarity:
-    - `Pressure must be at least 500 bar` vs `Pressure must be at least 200 bar` (rejected).
-    - `Motor operates at 500 RPM` vs `Motor operates at 200 RPM` (rejected).
-    - `Minimum 10 samples` vs `Maximum 10 samples` (rejected).
-    - `Laser power shall be 500 mW` vs `Laser power shall be 500 bar` (rejected).
-    - `With chiller` vs `Without chiller` (rejected).
-  - Preserves OCR typographical symbol and multi-line wrapping tolerance when numbers and semantic constraints agree (`200 mW ± 20mW` $\leftrightarrow$ `200 mW + 20mW`).
-- [x] **P0 — Verbatim Check Integrity (`apps/web/app/tiered-validation.ts`)**:
-  - Removed fuzzy sequence alignment fallback from `checkVerbatim`; Tier 1 Verbatim Check strictly requires exact literal native text (or exact normalized whitespace).
-  - Sequence alignment is scoped to Tier 2 Visual Check (`visual_pass`) and explicitly flagged for human inspection.
-- [x] **P1 — Explicit Distinction Between Rejections and Tier 3 Human Review**:
-  - Made the distinction between unsupported suggestions (which are rejected and excluded from the sheet to avoid consuming review capacity or fabricating citations) and Tier 3 unverified candidates (which are page-grounded but unhighlighted, flagged with `needsHumanReview: true` for human review).
-- [x] **P2 — Mandatory Response Columns Guarantee (`apps/web/app/response-sheet.ts`)**:
-  - Removed the restriction that omitted missing response columns when any source response column existed.
-  - If a tender defines only `Compliance`, `Remarks / Justifications` is automatically added; if it defines only `Remarks`, `Compliance (Yes / No)` is automatically added.
+- [x] **Complete Fuzzy Elimination (`apps/web/app/token-sequence-alignment.ts`)**:
+  - Removed `levenshteinDistance` calculation completely.
+  - Implemented strict binary token similarity (`tokenSimilarity(t1, t2) = (t1 === t2 ? 1.0 : 0.0)`).
+  - Implemented `alignExactTokenSequence` requiring contiguous, 100% exact 1:1 token sequence equality between query and source text.
+  - Replaced heuristic thresholds (0.70 / 0.80) with deterministic exact matching while preserving deterministic canonicalization (case folding, whitespace collapse, and standardizing Unicode typography like `—`/`–`/`−` $\rightarrow$ `-` and `±`/`+/-` $\rightarrow$ `+`).
+- [x] **Adversarial & Unit Verification (`apps/web/app/token-sequence-alignment.test.mjs`)**:
+  - Validated exact rejection of altered numbers (`500 bar` vs `200 bar`, `500 RPM` vs `200 RPM`).
+  - Validated exact rejection of conflicting directional operators (`Minimum` vs `Maximum`).
+  - Validated exact rejection of typos and altered words (`attenuator` vs `attenuater`).
+  - Verified exact multi-line bounding box derivations across wrapped lines and paragraph spans.
 - [x] **Verification**:
-  - 193 unit tests passing (`npm test`), including 5 adversarial test cases in `token-sequence-alignment.test.mjs` and column edge case tests in `response-sheet.test.mjs`.
+  - 191 unit tests passing (`npm test`).
   - 17 pipeline contract cases passing (`npm run test:pipeline`).
   - TypeScript clean (`npm run typecheck`).
+
 
 
 
