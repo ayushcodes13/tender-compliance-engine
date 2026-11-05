@@ -209,6 +209,24 @@ Investigated and resolved an issue where valid technical specifications in scann
 - [x] **Tier 2 visual validation**: Updated `checkVisual` in `tiered-validation.ts` to derive bounding boxes and confidence using `locateOcrQuoteTolerant`.
 - [x] **Verification**: Added 3 unit tests in `tiered-validation.test.mjs` (178 unit tests passing). Verified 100% extraction of all 6 specifications under `Microwave Power` on the real ESR tender PDF.
 
+### Token Sequence Alignment Grounding Engine — 2026-11-06
+
+Permanent architectural resolution for the dual-path divergence between multimodal vision transcription and OCR text:
+
+- [x] **Token Sequence Alignment Grounding Engine (`apps/web/app/token-sequence-alignment.ts`)**:
+  - Implements sliding-window token alignment with lookahead edit distance, token-level Levenshtein similarity, and normalized symbol reconciliation.
+  - Aggregates underlying parser-owned spatial bounding boxes across multi-line wrapping and rejects ungrounded hallucinations (<0.70 similarity).
+  - Derives exact bounding boxes from native `positioned` tokens and OCR `ocrPositioned` lines with 0% fabricated coordinates.
+- [x] **Integration across grounding pathways**:
+  - `source-document.ts`: `findUniqueSourceText` uses sequence alignment as fallback when exact match fails, preserving duplicate ambiguity rejection.
+  - `actions.ts`: `locateQuote` and candidate verification filters (`nativeTextMatch`, `ocrTextMatch`) leverage token sequence alignment.
+  - `tiered-validation.ts`: `checkVerbatim` and `checkVisual` compute exact bounding boxes and confidence via token sequence alignment.
+- [x] **Live verification on 13-Page Saha Institute EPR Tender**:
+  - Extracted 131 technical specifications and sections across Pages 2, 3, and 4 (113 response rows) with 100% verified bounding boxes.
+  - Fully resolved truncation after `Console` (Page 3-4 sections including `Magnetic Field Controller`, `Signal Channel`, `Modulation Amplifier`, `EPR Software`, `Workstation`, `Acquisition Controller`, `Data Manipulation`, `Graphical Tools`, `Magnet Unit`, `Variable Temperature Unit`, `Warranty`, `Experience`, and `Optional Resonator` are all captured).
+  - 100% of unit tests (186/186) passing, `npm run test:pipeline` (17/17) passing, TypeScript check (0 errors) passing, and production build clean.
+
+
 
 
 
