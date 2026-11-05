@@ -18,7 +18,7 @@
  *    -> verdict: "needs_human_review", precision: "unverified", needsHumanReview: true.
  */
 
-import { alignTokenSequence, locateQuoteSequenceAlignment } from "./token-sequence-alignment.ts";
+import { alignTokenSequence, locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment.ts";
 
 export type BoundingBox = { x: number; y: number; width: number; height: number };
 
@@ -79,6 +79,7 @@ export function normalizeOcrComparable(value: string): string {
     .replace(/[\u2014\u2013\u2212\u2015]/g, "-")
     .replace(/[\u00b1]|(\+\s*\/\s*-)/g, "+")
     .replace(/[«¢•●▪■◆★*›»]/g, "")
+    .replace(/\b(?:sil|s1|si)\b/gi, "sl")
     .replace(/[;:,.]+(\s|$)/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -151,56 +152,34 @@ export function checkVerbatim(
   quote: string,
   page: PageEvidenceSource,
 ): { matched: boolean; bbox: BoundingBox | null } {
-  const target = normalizeWhitespace(quote).toLowerCase();
-  if (!target || !page.rawText?.trim()) return { matched: false, bbox: null };
+  if (!quote?.trim() || !page.rawText?.trim()) return { matched: false, bbox: null };
 
-  const rawText = page.rawText;
-  let searchable = "";
-  const rawOffsets: number[] = [];
-  let inWhitespace = false;
+  const match = findUniqueTokenBoundedMatch(page.rawText, quote);
+  if (!match) return { matched: false, bbox: null };
 
-  for (let i = 0; i < rawText.length; i += 1) {
-    const char = rawText[i];
-    if (/\s/.test(char)) {
-      if (!inWhitespace) {
-        searchable += " ";
-        rawOffsets.push(i);
-      }
-      inWhitespace = true;
-    } else {
-      searchable += char.toLowerCase();
-      rawOffsets.push(i);
-      inWhitespace = false;
+  // Calculate bounding box if positional data exists
+  if (page.rawItemMap && page.positioned && page.positioned.length > 0) {
+    const rawStart = match.startOffset;
+    const rawEnd = match.endOffset;
+    const used = new Set<number>();
+    for (let i = rawStart; i < rawEnd; i += 1) {
+      const itemIndex = page.rawItemMap[i];
+      if (itemIndex !== undefined && itemIndex >= 0) used.add(itemIndex);
+    }
+    const boxes = [...used]
+      .map((index) => page.positioned![index]?.box)
+      .filter((box): box is BoundingBox => Boolean(box && box.width > 0 && box.height > 0));
+
+    if (boxes.length > 0) {
+      const x = Math.min(...boxes.map((b) => b.x));
+      const y = Math.min(...boxes.map((b) => b.y));
+      const right = Math.max(...boxes.map((b) => b.x + b.width));
+      const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+      return { matched: true, bbox: { x, y, width: right - x, height: bottom - y } };
     }
   }
 
-  const start = searchable.indexOf(target);
-  if (start >= 0) {
-    // Calculate bounding box if positional data exists
-    if (page.rawItemMap && page.positioned && page.positioned.length > 0) {
-      const rawStart = rawOffsets[start];
-      const rawEnd = rawOffsets[start + target.length - 1] + 1;
-      const used = new Set<number>();
-      for (let i = rawStart; i < rawEnd; i += 1) {
-        const itemIndex = page.rawItemMap[i];
-        if (itemIndex !== undefined && itemIndex >= 0) used.add(itemIndex);
-      }
-      const boxes = [...used]
-        .map((index) => page.positioned![index]?.box)
-        .filter((box): box is BoundingBox => Boolean(box && box.width > 0 && box.height > 0));
-
-      if (boxes.length > 0) {
-        const x = Math.min(...boxes.map((b) => b.x));
-        const y = Math.min(...boxes.map((b) => b.y));
-        const right = Math.max(...boxes.map((b) => b.x + b.width));
-        const bottom = Math.max(...boxes.map((b) => b.y + b.height));
-        return { matched: true, bbox: { x, y, width: right - x, height: bottom - y } };
-      }
-    }
-    return { matched: true, bbox: null };
-  }
-
-  return { matched: false, bbox: null };
+  return { matched: true, bbox: null };
 }
 
 /** Check if text is grounded in OCR transcript or visual tokens */
@@ -278,31 +257,6 @@ export function checkVisual(
   const compOcr = normalizeOcrComparable(ocrText);
   const compTarget = normalizeOcrComparable(quote);
   if (compTarget && compOcr.includes(compTarget)) {
-    return { matched: true, bbox: null, ocrConfidence: "medium" };
-  }
-
-  // 6. Token-based containment check (for multi-line wrapped cells and OCR character noise)
-  const tokens = target
-    .replace(/[^a-z0-9]/g, " ")
-    .split(/\s+/)
-    .filter((token) => token.length >= 2 || /\d/.test(token));
-
-  if (tokens.length === 0) return { matched: false, bbox: null };
-
-  const ocrNormalized = ocrText.replace(/[^a-z0-9]/g, " ");
-  const allTokensPresent = tokens.every((token) => {
-    if (token === "sl") {
-      return (
-        ocrNormalized.includes("sl") ||
-        ocrNormalized.includes("sil") ||
-        ocrNormalized.includes("s1") ||
-        ocrNormalized.includes("si")
-      );
-    }
-    return ocrNormalized.includes(token);
-  });
-
-  if (allTokensPresent) {
     return { matched: true, bbox: null, ocrConfidence: "medium" };
   }
 

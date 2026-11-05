@@ -7,16 +7,24 @@ import {
   alignExactTokenSequence,
   alignTokenSequence,
   locateQuoteSequenceAlignment,
+  findUniqueTokenBoundedMatch,
+  hasTechnicalAgreement,
 } from "./token-sequence-alignment.ts";
 
-test("normalizeToken reconciles typographic variations and punctuation", () => {
+test("normalizeToken reconciles typographic variations while preserving signs, units, and tolerances", () => {
   assert.equal(normalizeToken("0—60"), "0-60");
   assert.equal(normalizeToken("0–60"), "0-60");
-  assert.equal(normalizeToken("±0.5dB"), "+0.5db");
-  assert.equal(normalizeToken("+/-0.5"), "+0.5");
+  assert.equal(normalizeToken("±0.5dB"), "±0.5dB");
+  assert.equal(normalizeToken("+/-0.5"), "±0.5");
+  assert.equal(normalizeToken("-20°C"), "-20°C");
   assert.equal(normalizeToken("«Microwave;"), "microwave");
   assert.equal(normalizeToken("•Power:"), "power");
   assert.equal(normalizeToken("(128,000)"), "128,000");
+  // Case sensitive SI units preserved
+  assert.equal(normalizeToken("MW"), "MW");
+  assert.equal(normalizeToken("mW"), "mW");
+  assert.equal(normalizeToken("MA"), "MA");
+  assert.equal(normalizeToken("mA"), "mA");
 });
 
 test("tokenSimilarity enforces strict binary token equality without fuzzy thresholds", () => {
@@ -41,18 +49,18 @@ test("tokenizeText produces spatially-bound tokens with exact offsets", () => {
   assert.equal(tokens[2].norm, "600");
 
   assert.equal(tokens[3].raw, "mW;");
-  assert.equal(tokens[3].norm, "mw");
+  assert.equal(tokens[3].norm, "mW");
 });
 
 test("alignExactTokenSequence matches queries across line breaks and OCR symbol differences", () => {
-  const doc = "Tender Section. Output microwave power\nin leveled mode: 200 mW + 20mW for testing.";
+  const doc = "Tender Section. Output microwave power\nin leveled mode: 200 mW +/- 20mW for testing.";
   const query = "Output microwave power in leveled mode: 200 mW ± 20mW";
 
   const match = alignExactTokenSequence(query, doc);
   assert.ok(match);
   assert.equal(match.score, 1.0);
   const matchedText = doc.slice(match.startOffset, match.endOffset);
-  assert.equal(matchedText, "Output microwave power\nin leveled mode: 200 mW + 20mW");
+  assert.equal(matchedText, "Output microwave power\nin leveled mode: 200 mW +/- 20mW");
 });
 
 test("alignExactTokenSequence matches queries with dash differences", () => {
@@ -92,6 +100,45 @@ test("alignExactTokenSequence strictly rejects hallucinations", () => {
   const doc = "High Sensitivity CW-EPR Resonator with microwave bridge.";
   const hallucination = "Quantum entanglement generator with cryogenic vacuum chamber";
   assert.equal(alignExactTokenSequence(hallucination, doc), null);
+});
+
+test("P0: strictly rejects SI prefix case mismatches (MW vs mW, MA vs mA)", () => {
+  const docMW = "Transmitter output power 5 mW in leveled mode.";
+  const claimMW = "Transmitter output power 5 MW in leveled mode.";
+  assert.equal(alignExactTokenSequence(claimMW, docMW), null);
+  assert.equal(findUniqueTokenBoundedMatch(docMW, claimMW), null);
+
+  const docMA = "Maximum operating current: 20 mA at 24V.";
+  const claimMA = "Maximum operating current: 20 MA at 24V.";
+  assert.equal(alignExactTokenSequence(claimMA, docMA), null);
+  assert.equal(findUniqueTokenBoundedMatch(docMA, claimMA), null);
+});
+
+test("P0: strictly rejects signed number differences (-20 vs 20)", () => {
+  const doc = "Temperature operating range: -20 °C to +50 °C.";
+  const claim = "Temperature operating range: 20 °C to +50 °C.";
+  assert.equal(alignExactTokenSequence(claim, doc), null);
+  assert.equal(findUniqueTokenBoundedMatch(doc, claim), null);
+});
+
+test("P0: strictly rejects tolerance operator mismatch (±5% vs +5%)", () => {
+  const doc = "Frequency stability tolerance: ±5% under load.";
+  const claim = "Frequency stability tolerance: +5% under load.";
+  assert.equal(alignExactTokenSequence(claim, doc), null);
+  assert.equal(findUniqueTokenBoundedMatch(doc, claim), null);
+});
+
+test("P0: strictly rejects number inside another number (500 bar inside 1500 bar)", () => {
+  const doc = "The hydraulic test pressure must be 1500 bar under continuous load.";
+  const claim = "500 bar";
+  assert.equal(findUniqueTokenBoundedMatch(doc, claim), null);
+});
+
+test("P1: declines overlapping repeated passages with requireUnique: true (pump pump in pump pump pump)", () => {
+  const doc = "pump pump pump";
+  const claim = "pump pump";
+  assert.equal(alignExactTokenSequence(claim, doc, { requireUnique: true }), null);
+  assert.equal(findUniqueTokenBoundedMatch(doc, claim), null);
 });
 
 test("alignExactTokenSequence declines ambiguous repeated passages on the same page when requireUnique is set", () => {

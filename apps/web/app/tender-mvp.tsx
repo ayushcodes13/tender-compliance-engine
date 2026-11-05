@@ -49,6 +49,9 @@ type Requirement = {
   needsHumanReview?: boolean;
   ocrWarning?: boolean;
   reviewed: boolean;
+  isRevised?: boolean;
+  revisedText?: string;
+  originalSourceText?: string;
 };
 type Analysis = {
   filename: string;
@@ -316,17 +319,23 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setResponseSheet(updateResponseSheetCell(responseSheet, rowId, columnIndex, value));
     setSheetEdited(true);
 
-    // If a requirement's wording was edited, invalidate its verified review state
-    // so the reviewer must explicitly re-review the modified wording
-    if (column?.role === "requirement" && targetRow && targetRow.values[columnIndex] !== value) {
+    // If a requirement, heading, or source wording was edited, invalidate its verified review state
+    // and keep immutable original source wording
+    if ((column?.role === "requirement" || column?.role === "heading" || column?.role === "source") && targetRow && targetRow.values[columnIndex] !== value) {
       if (analysis) {
         const linkedIds = new Set([targetRow.sourceRequirementId, ...(targetRow.sourceRequirementIds || [])].filter(Boolean));
         if (linkedIds.size > 0) {
           setAnalysis({
             ...analysis,
             requirements: analysis.requirements.map((item) => {
-              if (linkedIds.has(item.id) && item.reviewed) {
-                return { ...item, reviewed: false };
+              if (linkedIds.has(item.id)) {
+                return {
+                  ...item,
+                  reviewed: false,
+                  isRevised: true,
+                  revisedText: column.role === "requirement" ? value : item.revisedText,
+                  originalSourceText: item.originalSourceText || item.text,
+                };
               }
               return item;
             }),

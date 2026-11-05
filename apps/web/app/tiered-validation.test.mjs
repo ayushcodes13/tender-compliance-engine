@@ -37,6 +37,37 @@ test("Tier 1: checkVerbatim fails when quote is not in native rawText", () => {
   assert.equal(result.bbox, null);
 });
 
+test("Tier 1: checkVerbatim strictly rejects number inside another number (500 bar inside 1500 bar)", () => {
+  const page = {
+    page: 1,
+    rawText: "Operating pressure must reach 1500 bar under continuous load.",
+  };
+  const result = checkVerbatim("500 bar", page);
+  assert.equal(result.matched, false);
+  assert.equal(result.bbox, null);
+});
+
+test("Tier 1: checkVerbatim strictly rejects SI prefix case mismatches (5 MW vs 5 mW)", () => {
+  const page = {
+    page: 1,
+    rawText: "Transmitter output power shall be 5 mW in leveled mode.",
+  };
+  const result = checkVerbatim("output power shall be 5 MW", page);
+  assert.equal(result.matched, false);
+  assert.equal(result.bbox, null);
+});
+
+test("Tier 2: checkVisual strictly rejects claim when exact sequence is absent despite scattered token presence", () => {
+  const page = {
+    page: 2,
+    rawText: "",
+    ocrText: "The output power shall be 200 mW. Calibration reference: 500 mW.",
+    ocrPerformed: true,
+  };
+  const result = checkVisual("The output power shall be 500 mW.", page);
+  assert.equal(result.matched, false);
+});
+
 test("Tier 2: checkVisual passes on OCR text when native text is missing", () => {
   const page = {
     page: 2,

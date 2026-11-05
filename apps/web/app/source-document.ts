@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { alignTokenSequence } from "./token-sequence-alignment.ts";
+import { alignTokenSequence, findUniqueTokenBoundedMatch } from "./token-sequence-alignment.ts";
 
 export type SourceBox = { x: number; y: number; width: number; height: number };
 
@@ -159,45 +159,7 @@ export function buildSourcePageModel(input: {
 }
 
 export function findUniqueSourceText(rawText: string, quote: string): { startOffset: number; endOffset: number; sourceText: string } | null {
-  const target = quote.replace(/\s+/g, " ").trim();
-  if (!target) return null;
-
-  let searchable = "";
-  const rawOffsets: number[] = [];
-  let inWhitespace = false;
-  for (let index = 0; index < rawText.length; index += 1) {
-    const char = rawText[index];
-    if (/\s/.test(char)) {
-      if (!inWhitespace) {
-        searchable += " ";
-        rawOffsets.push(index);
-      }
-      inWhitespace = true;
-    } else {
-      searchable += char;
-      rawOffsets.push(index);
-      inWhitespace = false;
-    }
-  }
-  const start = searchable.indexOf(target);
-  if (start >= 0) {
-    // If it appears more than once, it is ambiguous and not unique
-    if (searchable.indexOf(target, start + target.length) >= 0) return null;
-    const startOffset = rawOffsets[start];
-    const endOffset = rawOffsets[start + target.length - 1] + 1;
-    return { startOffset, endOffset, sourceText: rawText.slice(startOffset, endOffset) };
-  }
-
-  // Token sequence alignment fallback for OCR / symbol variations
-  const match = alignTokenSequence(quote, rawText, { requireUnique: true });
-  if (match) {
-    return {
-      startOffset: match.startOffset,
-      endOffset: match.endOffset,
-      sourceText: rawText.slice(match.startOffset, match.endOffset),
-    };
-  }
-  return null;
+  return findUniqueTokenBoundedMatch(rawText, quote);
 }
 
 export function buildRequirementSourceReference(input: {
