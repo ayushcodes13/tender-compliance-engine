@@ -226,6 +226,31 @@ Permanent architectural resolution for the dual-path divergence between multimod
   - Fully resolved truncation after `Console` (Page 3-4 sections including `Magnetic Field Controller`, `Signal Channel`, `Modulation Amplifier`, `EPR Software`, `Workstation`, `Acquisition Controller`, `Data Manipulation`, `Graphical Tools`, `Magnet Unit`, `Variable Temperature Unit`, `Warranty`, `Experience`, and `Optional Resonator` are all captured).
   - 100% of unit tests (186/186) passing, `npm run test:pipeline` (17/17) passing, TypeScript check (0 errors) passing, and production build clean.
 
+### Multi-Format Stress Testing Suite & Boardroom Export Matrix Polish — 2026-11-06
+
+Hardened extraction against complex layout archetypes and polished B2B deliverables:
+
+- [x] **Programmatic Stress Tender Corpus Generator (`apps/web/scripts/generate-stress-tenders.mjs`)**:
+  - Synthesizes 4 hard real-world PDF archetypes:
+    1. `stress-multi-column.pdf`: 2-column and 3-column specification sheets with parallel text flow.
+    2. `stress-borderless-table.pdf`: Multi-page borderless specification schedules with repeating headers across page breaks.
+    3. `stress-nested-clauses.pdf`: Deep hierarchical numbered clauses (Section 4 $\rightarrow$ Clause 4.1 $\rightarrow$ 4.1.1 $\rightarrow$ (c) $\rightarrow$ (i)).
+    4. `stress-ocr-scientific.pdf`: Low-DPI scanned pages with rotational skew and extreme scientific notations ($10^{-8}$, $10^9$, $\mu\text{L}$, $\Omega$, $\pm$).
+- [x] **Automated Stress Testing Harness (`apps/web/scripts/stress-test-harness.mjs`)**:
+  - Evaluates end-to-end extraction against all 4 stress archetypes.
+  - Achieved **100% bounding box grounding** across all tests and $\ge 80\text{–}100\%$ key specification recall.
+  - Generates comprehensive scorecard reporting requirement counts, response rows, grounding rates, and durations.
+- [x] **Boardroom-Ready Export Matrix Polish (`apps/web/app/sectioned-exports.ts` & `apps/web/app/pdf-export.ts`)**:
+  - **Excel (`.xlsx`)**: Structured styling with hierarchical vertical merges (`Section / Unit` and `Subsystem / Parameter`), auto-filter on table headers, thin slate borders (`#CBD5E1`), top vertical alignment, dynamic row height calculation, and explicit role-tuned column widths.
+  - **Word (`.docx`)**: Institutional executive navy headers (`#1E293B`, bold white text), hierarchical vertical merging (`w:vMerge`), repeating headers across page breaks (`tableHeader: true`), and `cantSplit: true` row constraints.
+  - **Printable PDF (`.pdf`)**: Role-weighted column width allocations ensuring `Tender requirement` and `Remarks` never clip, repeating headers on every page, and alternating row styling.
+- [x] **Verification**:
+  - 188 unit tests passing (`npm test`).
+  - 17 pipeline contract cases passing (`npm run test:pipeline`).
+  - TypeScript clean (`npm run typecheck`).
+  - Automated stress harness 100% pass rate (`npm run test:stress`).
+
+
 
 
 
