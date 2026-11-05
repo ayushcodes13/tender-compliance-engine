@@ -11,6 +11,7 @@
  * - Handles multi-line table wraps and trailing punctuation
  * - Derives exact bounding boxes from the underlying spatially-bound tokens
  * - Strictly rejects hallucinations (similarity score < 0.70)
+ * - Strictly rejects semantic false positives (changed numbers, units, directional operators, or negation)
  */
 
 export type BoundingBox = {
@@ -106,6 +107,135 @@ export function tokenizeText(text: string): SpatiallyBoundToken[] {
   return tokens;
 }
 
+const COMMON_TECHNICAL_UNITS = new Set([
+  'bar', 'mbar', 'rpm', 'mw', 'kw', 'w', 'db', 'dbc', 'kg', 'g', 'mg', 'mm', 'cm',
+  'm', 's', 'sec', 'msec', 'usec', 'hz', 'khz', 'mhz', 'ghz', 'k', 'c', 'v', 'mv',
+  'a', 'ma', 'ul', 'ml', 'l', 'ohm', 'spins', 'points', 'bit', 'psi', 'pa', 'kpa', 'mpa',
+]);
+
+/**
+ * Extracts normalized numbers from a list of tokens.
+ * Handles decimals and comma thousand separators (e.g. "1,000" -> "1000", "500" -> "500", "0.5" -> "0.5").
+ */
+export function extractNormalizedNumbers(tokens: SpatiallyBoundToken[]): string[] {
+  const nums: string[] = [];
+  for (const t of tokens) {
+    const raw = t.raw.replace(/,/g, '');
+    const matches = raw.match(/\d+(?:\.\d+)?/g);
+    if (matches) {
+      for (const m of matches) {
+        nums.push(m.includes('.') ? String(parseFloat(m)) : m);
+      }
+    }
+  }
+  return nums;
+}
+
+/**
+ * Identifies directional inequality operators in a token sequence.
+ */
+export function getInequalityDirection(tokens: SpatiallyBoundToken[]): 'min' | 'max' | 'none' {
+  const minWords = new Set(['min', 'minimum', 'least', 'greater', '>=', '>', 'above']);
+  const maxWords = new Set(['max', 'maximum', 'most', 'less', '<=', '<', 'below']);
+  let hasMin = false;
+  let hasMax = false;
+  for (const t of tokens) {
+    const norm = t.norm;
+    if (minWords.has(norm)) hasMin = true;
+    if (maxWords.has(norm)) hasMax = true;
+  }
+  if (hasMin && !hasMax) return 'min';
+  if (hasMax && !hasMin) return 'max';
+  return 'none';
+}
+
+/**
+ * Checks for negation markers in a token sequence.
+ */
+export function hasNegation(tokens: SpatiallyBoundToken[]): boolean {
+  const negWords = new Set(['not', 'no', 'never', 'without', 'except', 'excluding', 'non']);
+  return tokens.some((t) => negWords.has(t.norm));
+}
+
+/**
+ * Extracts technical physical units from a token sequence.
+ */
+export function extractTechnicalUnits(tokens: SpatiallyBoundToken[]): string[] {
+  const units: string[] = [];
+  for (const t of tokens) {
+    const unitPart = t.norm.replace(/[^a-z]/g, '');
+    if (COMMON_TECHNICAL_UNITS.has(unitPart)) {
+      units.push(unitPart);
+    }
+  }
+  return units;
+}
+
+/**
+ * Evaluates semantic agreement between query and candidate window.
+ * Strictly rejects adversarial false positives:
+ * 1. Numbers must agree exactly (e.g. 500 bar vs 200 bar is rejected).
+ * 2. Directional operators must not contradict (e.g. minimum vs maximum is rejected).
+ * 3. Negation polarity must match (e.g. without vs with is rejected).
+ * 4. Technical units must agree.
+ */
+export function hasSemanticAgreement(
+  queryTokens: SpatiallyBoundToken[],
+  windowTokens: SpatiallyBoundToken[],
+): boolean {
+  // 1. Critical Numbers Agreement
+  const qNums = extractNormalizedNumbers(queryTokens);
+  const wNums = extractNormalizedNumbers(windowTokens);
+  if (qNums.length > 0) {
+    for (const qn of qNums) {
+      if (!wNums.includes(qn)) {
+        return false;
+      }
+    }
+    if (wNums.length > 0) {
+      for (const wn of wNums) {
+        if (!qNums.includes(wn)) {
+          return false;
+        }
+      }
+    }
+  }
+
+  // 2. Directional Inequality Agreement (min vs max)
+  const qDir = getInequalityDirection(queryTokens);
+  const wDir = getInequalityDirection(windowTokens);
+  if (qDir !== 'none' && wDir !== 'none' && qDir !== wDir) {
+    return false;
+  }
+
+  // 3. Negation Polarity Agreement
+  const qNeg = hasNegation(queryTokens);
+  const wNeg = hasNegation(windowTokens);
+  if (qNeg !== wNeg) {
+    return false;
+  }
+
+  // 4. Technical Units Agreement
+  const qUnits = extractTechnicalUnits(queryTokens);
+  const wUnits = extractTechnicalUnits(windowTokens);
+  if (qUnits.length > 0) {
+    for (const qu of qUnits) {
+      if (!wUnits.includes(qu)) {
+        return false;
+      }
+    }
+    if (wUnits.length > 0) {
+      for (const wu of wUnits) {
+        if (!qUnits.includes(wu)) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 /**
  * Aligns a query quote against a document text stream using sliding window sequence alignment.
  * Returns the character start and end offsets in documentText, or null if no valid match.
@@ -140,6 +270,11 @@ export function alignTokenSequence(
     for (let len = minLen; len <= maxLen && i + len <= D.length; len += 1) {
       const window = D.slice(i, i + len);
 
+      // Perform semantic agreement check first; do not allow number or operator divergence
+      if (!hasSemanticAgreement(Q, window)) {
+        continue;
+      }
+
       let matchedWeight = 0;
       let wIdx = 0;
       for (let qIdx = 0; qIdx < Q.length; qIdx += 1) {
@@ -172,6 +307,11 @@ export function alignTokenSequence(
   }
 
   if (bestScore >= minScore && bestSpan) {
+    const finalWindow = D.slice(bestSpan.startIdx, bestSpan.endIdx + 1);
+    if (!hasSemanticAgreement(Q, finalWindow)) {
+      return null;
+    }
+
     return {
       startOffset: D[bestSpan.startIdx].start,
       endOffset: D[bestSpan.endIdx].end,

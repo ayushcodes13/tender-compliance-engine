@@ -174,11 +174,9 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
   }
 
   // Ensure deterministic compliance and remarks response columns are always present when missing
-  const rawSourceColumns = source.sourceColumns ?? [];
-  const hasSourceResponse = rawSourceColumns.some((column) => ["compliance", "deviation", "remark"].includes(column.role));
-  if (!structured && !hasMultiLevel && !hasSourceResponse) {
+  if (!structured && !hasMultiLevel) {
     const hasCompliance = columns.some((column) => /comply|compliance/i.test(column.header));
-    const hasRemark = columns.some((column) => /remark|comment|deviation/i.test(column.header));
+    const hasRemark = columns.some((column) => /remark|comment|deviation|justification/i.test(column.header));
     if (!hasCompliance) {
       columns.push({ header: "Compliance (Yes / No)", role: "response" });
     }
