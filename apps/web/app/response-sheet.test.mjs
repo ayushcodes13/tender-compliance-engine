@@ -52,7 +52,7 @@ test("keeps source-defined columns and creates distinct IDs for split requiremen
     ],
     requirements: [{ id: "req-2", text: "Product performance • accuracy", headingPrefix: "Product", quote: "Product performance • accuracy", page: 8 }],
   });
-  assert.deepEqual(sheet.columns.map((column) => column.header), ["Heading", "Technical Parameters", "Remarks", "Source page"]);
+  assert.deepEqual(sheet.columns.map((column) => column.header), ["Heading", "Technical Parameters", "Remarks", "Compliance (Yes / No)", "Source page"]);
   assert.equal(sheet.rows.length, 2);
   assert.notEqual(sheet.rows[0].id, sheet.rows[1].id);
   assert.deepEqual(sheet.rows.map((row) => row.values[1]), ["performance", "• accuracy"]);
@@ -370,3 +370,34 @@ test("handles multi-level hierarchy when tender table has sourceColumns (Sl. No.
   assert.equal(sheet.rows[4].values[6], "Page 3");
   assert.deepEqual(sheet.rows[4].sourceRequirementIds, ["r5"]);
 });
+
+test("guarantees both Compliance and Remarks columns exist even when source table has only one", () => {
+  // Source table with ONLY compliance column
+  const sheetOnlyCompliance = buildResponseSheet({
+    sourceColumns: [
+      { header: "Specification", role: "specification" },
+      { header: "Comply (Yes/No)", role: "compliance" },
+    ],
+    requirements: [
+      { id: "r1", text: "Spec 1", quote: "Spec 1", page: 1, sourceCells: ["Spec 1", ""] },
+    ],
+  });
+  const headers1 = sheetOnlyCompliance.columns.map((c) => c.header);
+  assert.ok(headers1.some((h) => /compliance|comply/i.test(h)), "Contains compliance column");
+  assert.ok(headers1.some((h) => /remark|justification/i.test(h)), "Contains added remarks column");
+
+  // Source table with ONLY remark column
+  const sheetOnlyRemark = buildResponseSheet({
+    sourceColumns: [
+      { header: "Specification", role: "specification" },
+      { header: "Vendor Remarks", role: "remark" },
+    ],
+    requirements: [
+      { id: "r2", text: "Spec 2", quote: "Spec 2", page: 1, sourceCells: ["Spec 2", ""] },
+    ],
+  });
+  const headers2 = sheetOnlyRemark.columns.map((c) => c.header);
+  assert.ok(headers2.some((h) => /compliance|comply/i.test(h)), "Contains added compliance column");
+  assert.ok(headers2.some((h) => /remark|justification/i.test(h)), "Contains remarks column");
+});
+

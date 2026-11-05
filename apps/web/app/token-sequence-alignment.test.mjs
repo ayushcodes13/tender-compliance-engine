@@ -7,6 +7,7 @@ import {
   tokenizeText,
   alignTokenSequence,
   locateQuoteSequenceAlignment,
+  hasSemanticAgreement,
 } from "./token-sequence-alignment.ts";
 
 test("normalizeToken reconciles typographic variations and punctuation", () => {
@@ -81,6 +82,47 @@ test("alignTokenSequence rejects hallucinations and ungrounded clauses", () => {
 
   const match = alignTokenSequence(hallucination, doc);
   assert.equal(match, null);
+});
+
+test("ADVERSARIAL: alignTokenSequence rejects changed numerical values despite high similarity", () => {
+  // Case 1: 500 bar vs 200 bar (0.90 lexical overlap)
+  const doc1 = "The hydraulic test pressure must be at least 200 bar under continuous load.";
+  const claim1 = "The hydraulic test pressure must be at least 500 bar under continuous load.";
+  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects 500 bar vs 200 bar");
+
+  // Case 2: 500 RPM vs 200 RPM (0.91 lexical overlap)
+  const doc2 = "The high speed motor operates at 200 RPM during standard cycle.";
+  const claim2 = "The high speed motor operates at 500 RPM during standard cycle.";
+  assert.equal(alignTokenSequence(claim2, doc2), null, "Rejects 500 RPM vs 200 RPM");
+
+  // Case 3: 10 GHz vs 18 GHz
+  const doc3 = "Microwave bridge center frequency: 10 GHz with low noise Gunn diode.";
+  const claim3 = "Microwave bridge center frequency: 18 GHz with low noise Gunn diode.";
+  assert.equal(alignTokenSequence(claim3, doc3), null, "Rejects 18 GHz vs 10 GHz");
+});
+
+test("ADVERSARIAL: alignTokenSequence rejects conflicting directional operators", () => {
+  // Case 1: minimum vs maximum
+  const doc1 = "The automated sample carousel capacity: Maximum 10 samples per carousel.";
+  const claim1 = "The automated sample carousel capacity: Minimum 10 samples per carousel.";
+  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects Minimum vs Maximum");
+
+  // Case 2: at least vs at most
+  const doc2 = "Operating duration shall be at most 24 hours without maintenance.";
+  const claim2 = "Operating duration shall be at least 24 hours without maintenance.";
+  assert.equal(alignTokenSequence(claim2, doc2), null, "Rejects at least vs at most");
+});
+
+test("ADVERSARIAL: alignTokenSequence rejects conflicting negation polarity", () => {
+  const doc1 = "The spectrometer shall be supplied with external closed-loop chiller.";
+  const claim1 = "The spectrometer shall be supplied without external closed-loop chiller.";
+  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects without vs with");
+});
+
+test("ADVERSARIAL: alignTokenSequence rejects mismatched technical units", () => {
+  const doc1 = "Maximum laser output: 500 mW in continuous wave mode.";
+  const claim1 = "Maximum laser output: 500 bar in continuous wave mode.";
+  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects 500 bar vs 500 mW");
 });
 
 test("locateQuoteSequenceAlignment calculates exact multi-line bounding boxes", () => {

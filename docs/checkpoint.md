@@ -250,6 +250,33 @@ Hardened extraction against complex layout archetypes and polished B2B deliverab
   - TypeScript clean (`npm run typecheck`).
   - Automated stress harness 100% pass rate (`npm run test:stress`).
 
+### Strict Semantic Token Grounding & Response Column Edge Case Fix — 2026-11-06
+
+Resolved critical alignment false-positive vulnerabilities and mandatory response column edge cases identified in engineering code review:
+
+- [x] **P0 — Strict Semantic Grounding & False Positive Elimination (`apps/web/app/token-sequence-alignment.ts`)**:
+  - Implemented `hasSemanticAgreement` requiring exact equality for numbers, units, directional operators, and negation polarity before accepting any alignment match.
+  - Successfully rejects adversarial false positives despite high lexical similarity:
+    - `Pressure must be at least 500 bar` vs `Pressure must be at least 200 bar` (rejected).
+    - `Motor operates at 500 RPM` vs `Motor operates at 200 RPM` (rejected).
+    - `Minimum 10 samples` vs `Maximum 10 samples` (rejected).
+    - `Laser power shall be 500 mW` vs `Laser power shall be 500 bar` (rejected).
+    - `With chiller` vs `Without chiller` (rejected).
+  - Preserves OCR typographical symbol and multi-line wrapping tolerance when numbers and semantic constraints agree (`200 mW ± 20mW` $\leftrightarrow$ `200 mW + 20mW`).
+- [x] **P0 — Verbatim Check Integrity (`apps/web/app/tiered-validation.ts`)**:
+  - Removed fuzzy sequence alignment fallback from `checkVerbatim`; Tier 1 Verbatim Check strictly requires exact literal native text (or exact normalized whitespace).
+  - Sequence alignment is scoped to Tier 2 Visual Check (`visual_pass`) and explicitly flagged for human inspection.
+- [x] **P1 — Explicit Distinction Between Rejections and Tier 3 Human Review**:
+  - Made the distinction between unsupported suggestions (which are rejected and excluded from the sheet to avoid consuming review capacity or fabricating citations) and Tier 3 unverified candidates (which are page-grounded but unhighlighted, flagged with `needsHumanReview: true` for human review).
+- [x] **P2 — Mandatory Response Columns Guarantee (`apps/web/app/response-sheet.ts`)**:
+  - Removed the restriction that omitted missing response columns when any source response column existed.
+  - If a tender defines only `Compliance`, `Remarks / Justifications` is automatically added; if it defines only `Remarks`, `Compliance (Yes / No)` is automatically added.
+- [x] **Verification**:
+  - 193 unit tests passing (`npm test`), including 5 adversarial test cases in `token-sequence-alignment.test.mjs` and column edge case tests in `response-sheet.test.mjs`.
+  - 17 pipeline contract cases passing (`npm run test:pipeline`).
+  - TypeScript clean (`npm run typecheck`).
+
+
 
 
 

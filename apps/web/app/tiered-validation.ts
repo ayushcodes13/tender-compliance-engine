@@ -200,14 +200,6 @@ export function checkVerbatim(
     return { matched: true, bbox: null };
   }
 
-  // 2. Token sequence alignment fallback for native selectable text
-  if (page.rawItemMap && page.positioned && page.positioned.length > 0) {
-    const box = locateQuoteSequenceAlignment(quote, page.rawText, page.rawItemMap, page.positioned);
-    if (box) return { matched: true, bbox: box };
-  }
-  const seqMatch = alignTokenSequence(quote, page.rawText);
-  if (seqMatch) return { matched: true, bbox: null };
-
   return { matched: false, bbox: null };
 }
 
