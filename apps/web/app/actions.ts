@@ -2,6 +2,7 @@ import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
 import { runTieredValidation, normalizeOcrComparable, locateOcrQuoteTolerant } from "./tiered-validation";
+import { alignTokenSequence, locateQuoteSequenceAlignment } from "./token-sequence-alignment";
 import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
 import { modelCandidateFields } from "./model-candidate";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
@@ -115,7 +116,7 @@ function boxForItem(item: TextItem, viewport: { convertToViewportPoint: (x: numb
   return { x, y, width, height };
 }
 
-function locateQuote(
+function locateQuoteExact(
   quote: string,
   rawText: string,
   rawItemMap: number[],
@@ -161,6 +162,17 @@ function locateQuote(
   const right = Math.max(...boxes.map((box) => box.x + box.width));
   const bottom = Math.max(...boxes.map((box) => box.y + box.height));
   return { x, y, width: right - x, height: bottom - y };
+}
+
+function locateQuote(
+  quote: string,
+  rawText: string,
+  rawItemMap: number[],
+  positioned: Array<{ start: number; end: number; box: Box }>,
+): Box | null {
+  const exact = locateQuoteExact(quote, rawText, rawItemMap, positioned);
+  if (exact) return exact;
+  return locateQuoteSequenceAlignment(quote, rawText, rawItemMap, positioned);
 }
 
 function locatePageQuote(quote: string, page: {
@@ -1488,12 +1500,14 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         continue;
       }
       seen.add(key);
-      const nativeTextMatch = normalize(sourcePage.rawText).includes(normalizedQuote);
+      const nativeTextMatch = normalize(sourcePage.rawText).includes(normalizedQuote)
+        || Boolean(alignTokenSequence(quote, sourcePage.rawText));
       const ocrComparableTarget = normalizeOcrComparable(quote);
       const ocrComparableText = normalizeOcrComparable(sourcePage.ocrText);
       const ocrTextMatch = !nativeTextMatch && (
         normalize(sourcePage.ocrText).includes(normalizedQuote) ||
-        (ocrComparableTarget.length > 0 && ocrComparableText.includes(ocrComparableTarget))
+        (ocrComparableTarget.length > 0 && ocrComparableText.includes(ocrComparableTarget)) ||
+        Boolean(alignTokenSequence(quote, sourcePage.ocrText))
       );
       const visualOcr = candidate.visualOcr === true && (visualSheetType === "compliance-sheet" || normalizedTables);
       const pageEvidence = locatePageQuote(quote, sourcePage);

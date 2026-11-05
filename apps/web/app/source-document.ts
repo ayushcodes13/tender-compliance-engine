@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { alignTokenSequence } from "./token-sequence-alignment.ts";
 
 export type SourceBox = { x: number; y: number; width: number; height: number };
 
@@ -179,10 +180,24 @@ export function findUniqueSourceText(rawText: string, quote: string): { startOff
     }
   }
   const start = searchable.indexOf(target);
-  if (start < 0 || searchable.indexOf(target, start + target.length) >= 0) return null;
-  const startOffset = rawOffsets[start];
-  const endOffset = rawOffsets[start + target.length - 1] + 1;
-  return { startOffset, endOffset, sourceText: rawText.slice(startOffset, endOffset) };
+  if (start >= 0) {
+    // If it appears more than once, it is ambiguous and not unique
+    if (searchable.indexOf(target, start + target.length) >= 0) return null;
+    const startOffset = rawOffsets[start];
+    const endOffset = rawOffsets[start + target.length - 1] + 1;
+    return { startOffset, endOffset, sourceText: rawText.slice(startOffset, endOffset) };
+  }
+
+  // Token sequence alignment fallback for OCR / symbol variations
+  const match = alignTokenSequence(quote, rawText);
+  if (match) {
+    return {
+      startOffset: match.startOffset,
+      endOffset: match.endOffset,
+      sourceText: rawText.slice(match.startOffset, match.endOffset),
+    };
+  }
+  return null;
 }
 
 export function buildRequirementSourceReference(input: {
