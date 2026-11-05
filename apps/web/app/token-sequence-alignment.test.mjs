@@ -2,12 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeToken,
-  levenshteinDistance,
   tokenSimilarity,
   tokenizeText,
+  alignExactTokenSequence,
   alignTokenSequence,
   locateQuoteSequenceAlignment,
-  hasSemanticAgreement,
 } from "./token-sequence-alignment.ts";
 
 test("normalizeToken reconciles typographic variations and punctuation", () => {
@@ -20,22 +19,13 @@ test("normalizeToken reconciles typographic variations and punctuation", () => {
   assert.equal(normalizeToken("(128,000)"), "128,000");
 });
 
-test("levenshteinDistance calculates correct edit distance", () => {
-  assert.equal(levenshteinDistance("kitten", "sitting"), 3);
-  assert.equal(levenshteinDistance("flaw", "lawn"), 2);
-  assert.equal(levenshteinDistance("same", "same"), 0);
-  assert.equal(levenshteinDistance("", "abc"), 3);
-});
-
-test("tokenSimilarity scores matching and near-matching tokens", () => {
+test("tokenSimilarity enforces strict binary token equality without fuzzy thresholds", () => {
   assert.equal(tokenSimilarity("microwave", "microwave"), 1.0);
-  // Short tokens require exact match to avoid false positive
   assert.equal(tokenSimilarity("10", "11"), 0.0);
   assert.equal(tokenSimilarity("db", "gb"), 0.0);
-  // Longer tokens with 1 typo match with high similarity
-  assert.ok(tokenSimilarity("attenuator", "attenuater") >= 0.85);
-  // Completely different tokens return 0
-  assert.equal(tokenSimilarity("attenuator", "spectrometer"), 0.0);
+  // Zero fuzzy matching: even a 1-character typo returns 0.0
+  assert.equal(tokenSimilarity("attenuator", "attenuater"), 0.0);
+  assert.equal(tokenSimilarity("500", "200"), 0.0);
 });
 
 test("tokenizeText produces spatially-bound tokens with exact offsets", () => {
@@ -54,83 +44,62 @@ test("tokenizeText produces spatially-bound tokens with exact offsets", () => {
   assert.equal(tokens[3].norm, "mw");
 });
 
-test("alignTokenSequence matches queries with OCR symbol differences", () => {
-  const doc = "Tender Section. Output microwave power in leveled mode: 200 mW + 20mW for testing.";
+test("alignExactTokenSequence matches queries across line breaks and OCR symbol differences", () => {
+  const doc = "Tender Section. Output microwave power\nin leveled mode: 200 mW + 20mW for testing.";
   const query = "Output microwave power in leveled mode: 200 mW ± 20mW";
 
-  const match = alignTokenSequence(query, doc);
+  const match = alignExactTokenSequence(query, doc);
   assert.ok(match);
-  assert.ok(match.score >= 0.90);
+  assert.equal(match.score, 1.0);
   const matchedText = doc.slice(match.startOffset, match.endOffset);
-  assert.equal(matchedText, "Output microwave power in leveled mode: 200 mW + 20mW");
+  assert.equal(matchedText, "Output microwave power\nin leveled mode: 200 mW + 20mW");
 });
 
-test("alignTokenSequence matches queries with dash differences", () => {
+test("alignExactTokenSequence matches queries with dash differences", () => {
   const doc = "Specifications:\n« Microwave attenuator: 0 — 60 dB in 1 dB steps;\nNext line.";
   const query = "• Microwave attenuator: 0 – 60 dB in 1 dB steps;";
 
-  const match = alignTokenSequence(query, doc);
+  const match = alignExactTokenSequence(query, doc);
   assert.ok(match);
-  assert.ok(match.score >= 0.90);
+  assert.equal(match.score, 1.0);
   const matchedText = doc.slice(match.startOffset, match.endOffset);
   assert.equal(matchedText, "Microwave attenuator: 0 — 60 dB in 1 dB steps;");
 });
 
-test("alignTokenSequence rejects hallucinations and ungrounded clauses", () => {
-  const doc = "High Sensitivity CW-EPR Resonator with microwave bridge.";
-  const hallucination = "Quantum entanglement generator with cryogenic vacuum chamber";
-
-  const match = alignTokenSequence(hallucination, doc);
-  assert.equal(match, null);
-});
-
-test("ADVERSARIAL: alignTokenSequence rejects changed numerical values despite high similarity", () => {
-  // Case 1: 500 bar vs 200 bar (0.90 lexical overlap)
+test("alignExactTokenSequence strictly rejects altered numbers", () => {
   const doc1 = "The hydraulic test pressure must be at least 200 bar under continuous load.";
   const claim1 = "The hydraulic test pressure must be at least 500 bar under continuous load.";
-  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects 500 bar vs 200 bar");
+  assert.equal(alignExactTokenSequence(claim1, doc1), null);
 
-  // Case 2: 500 RPM vs 200 RPM (0.91 lexical overlap)
   const doc2 = "The high speed motor operates at 200 RPM during standard cycle.";
   const claim2 = "The high speed motor operates at 500 RPM during standard cycle.";
-  assert.equal(alignTokenSequence(claim2, doc2), null, "Rejects 500 RPM vs 200 RPM");
-
-  // Case 3: 10 GHz vs 18 GHz
-  const doc3 = "Microwave bridge center frequency: 10 GHz with low noise Gunn diode.";
-  const claim3 = "Microwave bridge center frequency: 18 GHz with low noise Gunn diode.";
-  assert.equal(alignTokenSequence(claim3, doc3), null, "Rejects 18 GHz vs 10 GHz");
+  assert.equal(alignExactTokenSequence(claim2, doc2), null);
 });
 
-test("ADVERSARIAL: alignTokenSequence rejects conflicting directional operators", () => {
-  // Case 1: minimum vs maximum
+test("alignExactTokenSequence strictly rejects conflicting directional operators", () => {
   const doc1 = "The automated sample carousel capacity: Maximum 10 samples per carousel.";
   const claim1 = "The automated sample carousel capacity: Minimum 10 samples per carousel.";
-  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects Minimum vs Maximum");
-
-  // Case 2: at least vs at most
-  const doc2 = "Operating duration shall be at most 24 hours without maintenance.";
-  const claim2 = "Operating duration shall be at least 24 hours without maintenance.";
-  assert.equal(alignTokenSequence(claim2, doc2), null, "Rejects at least vs at most");
+  assert.equal(alignExactTokenSequence(claim1, doc1), null);
 });
 
-test("ADVERSARIAL: alignTokenSequence rejects conflicting negation polarity", () => {
-  const doc1 = "The spectrometer shall be supplied with external closed-loop chiller.";
-  const claim1 = "The spectrometer shall be supplied without external closed-loop chiller.";
-  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects without vs with");
+test("alignExactTokenSequence strictly rejects altered words and typos", () => {
+  const doc1 = "Automatic phase correction over attenuation range;";
+  const claim1 = "Automatic phase correction over attenuater range;";
+  assert.equal(alignExactTokenSequence(claim1, doc1), null);
 });
 
-test("ADVERSARIAL: alignTokenSequence rejects mismatched technical units", () => {
-  const doc1 = "Maximum laser output: 500 mW in continuous wave mode.";
-  const claim1 = "Maximum laser output: 500 bar in continuous wave mode.";
-  assert.equal(alignTokenSequence(claim1, doc1), null, "Rejects 500 bar vs 500 mW");
+test("alignExactTokenSequence strictly rejects hallucinations", () => {
+  const doc = "High Sensitivity CW-EPR Resonator with microwave bridge.";
+  const hallucination = "Quantum entanglement generator with cryogenic vacuum chamber";
+  assert.equal(alignExactTokenSequence(hallucination, doc), null);
 });
 
 test("locateQuoteSequenceAlignment calculates exact multi-line bounding boxes", () => {
   const lines = [
-    "Line 1: Header information",
-    "Line 2: Compact system controller mainframe (tower version),",
-    "Line 3: including cabling and system power supply and Ethernet.",
-    "Line 4: Footer information",
+    "Header information",
+    "Compact system controller mainframe (tower version),",
+    "including cabling and system power supply and Ethernet.",
+    "Footer information",
   ];
 
   let rawText = "";
@@ -155,6 +124,6 @@ test("locateQuoteSequenceAlignment calculates exact multi-line bounding boxes", 
 
   assert.ok(box);
   assert.equal(box.x, 50);
-  assert.equal(box.y, 125); // Starts at line index 1 (y = 125)
-  assert.equal(box.height, 43); // Spans line index 1 and 2 (height = (150+18) - 125 = 43)
+  assert.equal(box.y, 125);
+  assert.equal(box.height, 43);
 });
