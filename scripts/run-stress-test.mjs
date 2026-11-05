@@ -44,11 +44,17 @@ const testSuites = [
       if (!headers.includes("Section / Unit") || !headers.includes("Subsystem / Parameter")) {
         throw new Error(`Expected 'Section / Unit' and 'Subsystem / Parameter' in headers, got: ${headers.join(", ")}`);
       }
-      // Subsystems should consolidate repeated points into fewer consolidated rows
-      if (sheet.rows.length >= data.analysis.requirements.length) {
-        throw new Error(`Expected row consolidation (${sheet.rows.length} rows vs ${data.analysis.requirements.length} requirements)`);
+      // Each requirement/specification must have its own row with compliance & remarks
+      const compCol = sheet.columns.findIndex((c) => /compliance/i.test(c.header));
+      const remCol = sheet.columns.findIndex((c) => /remark/i.test(c.header));
+      if (compCol < 0 || remCol < 0) {
+        throw new Error(`Missing compliance or remark columns in ${headers.join(", ")}`);
       }
-      console.log(`  ✓ Multi-level hierarchy verified: ${data.analysis.requirements.length} requirements consolidated into ${sheet.rows.length} subsystem rows`);
+      const dataReqs = data.analysis.requirements.filter((r) => r.rowType !== "section" && r.rowType !== "optional_heading");
+      if (sheet.rows.length < dataReqs.length) {
+        throw new Error(`Expected separate subrows per requirement (${sheet.rows.length} rows vs ${dataReqs.length} data requirements)`);
+      }
+      console.log(`  ✓ Multi-level hierarchy verified: ${sheet.rows.length} subrows with individual compliance/remarks areas across ${sections.length} sections`);
     },
   },
   {
@@ -143,13 +149,16 @@ async function main() {
   const results = [];
   let failures = 0;
 
-  for (let i = 0; i < testSuites.length; i++) {
+  const filter = process.argv[2];
+  const suites = filter ? testSuites.filter((s) => s.file.includes(filter)) : testSuites;
+
+  for (let i = 0; i < suites.length; i++) {
     try {
-      const res = await runTest(testSuites[i], i);
+      const res = await runTest(suites[i], i);
       results.push(res);
     } catch (err) {
-      console.error(`\n❌ FAILED [${testSuites[i].file}]:`, err.message);
-      results.push({ file: testSuites[i].file, ok: false, error: err.message });
+      console.error(`\n❌ FAILED [${suites[i].file}]:`, err.message);
+      results.push({ file: suites[i].file, ok: false, error: err.message });
       failures++;
     }
   }

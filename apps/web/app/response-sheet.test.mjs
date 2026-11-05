@@ -245,7 +245,7 @@ test("creates multi-level hierarchy (Section/Unit and Subsystem/Parameter) and m
   assert.equal(sheet.rows[2].values[2], "Operating range: -1 to +14 kG");
 });
 
-test("consolidates multiple repeated points under the same subsystem into only one row", () => {
+test("maintains individual subrows per requirement under the same subsystem with distinct compliance and remarks cells", () => {
   const source = {
     requirements: [
       { id: "h1", text: "EPR Software", quote: "EPR Software", rowType: "section", page: 3 },
@@ -260,16 +260,32 @@ test("consolidates multiple repeated points under the same subsystem into only o
   };
 
   const sheet = buildResponseSheet(source);
-  // Instead of 5 rows where Workstation is repeated 4 times, Workstation forms exactly 1 row
-  assert.equal(sheet.rows.length, 2);
+  // Each requirement forms its own subrow with its own compliance/remarks area
+  assert.equal(sheet.rows.length, 5);
   assert.equal(sheet.rows[0].values[0], "EPR Software");
   assert.equal(sheet.rows[0].values[1], "Workstation");
-  assert.equal(sheet.rows[0].values[2], "OS: Linux;\nInterfaces: USB, Ethernet;\nDVD-R/W;\nTFT-Monitor;");
-  assert.deepEqual(sheet.rows[0].sourceRequirementIds, ["p1", "p2", "p3", "p4"]);
+  assert.equal(sheet.rows[0].values[2], "OS: Linux;");
+  assert.deepEqual(sheet.rows[0].sourceRequirementIds, ["p1"]);
 
   assert.equal(sheet.rows[1].values[0], "EPR Software");
-  assert.equal(sheet.rows[1].values[1], "Acquisition Controller");
-  assert.equal(sheet.rows[1].values[2], "Controls all spectrometer devices;");
+  assert.equal(sheet.rows[1].values[1], "Workstation");
+  assert.equal(sheet.rows[1].values[2], "Interfaces: USB, Ethernet;");
+  assert.deepEqual(sheet.rows[1].sourceRequirementIds, ["p2"]);
+
+  assert.equal(sheet.rows[2].values[0], "EPR Software");
+  assert.equal(sheet.rows[2].values[1], "Workstation");
+  assert.equal(sheet.rows[2].values[2], "DVD-R/W;");
+  assert.deepEqual(sheet.rows[2].sourceRequirementIds, ["p3"]);
+
+  assert.equal(sheet.rows[3].values[0], "EPR Software");
+  assert.equal(sheet.rows[3].values[1], "Workstation");
+  assert.equal(sheet.rows[3].values[2], "TFT-Monitor;");
+  assert.deepEqual(sheet.rows[3].sourceRequirementIds, ["p4"]);
+
+  assert.equal(sheet.rows[4].values[0], "EPR Software");
+  assert.equal(sheet.rows[4].values[1], "Acquisition Controller");
+  assert.equal(sheet.rows[4].values[2], "Controls all spectrometer devices;");
+  assert.deepEqual(sheet.rows[4].sourceRequirementIds, ["p5"]);
 });
 
 test("handles multi-level hierarchy when tender table has sourceColumns (Sl. No., Item Description, Compliance)", () => {
@@ -307,32 +323,50 @@ test("handles multi-level hierarchy when tender table has sourceColumns (Sl. No.
     ],
   );
 
-  // 3 consolidated rows: Microwave Bridge (2 points merged), Microwave Power (1 point), Workstation (2 points merged)
-  assert.equal(sheet.rows.length, 3);
+  // 5 individual subrows across the subsystems
+  assert.equal(sheet.rows.length, 5);
 
-  // Row 0: Microwave Bridge
+  // Row 0: Microwave Bridge - freq range
   assert.equal(sheet.rows[0].values[1], "Microwave Unit");
   assert.equal(sheet.rows[0].values[2], "Microwave Bridge");
-  assert.equal(sheet.rows[0].values[3], "Working frequency range: 9.2 — 9.9 GHz;\nFrequency stability: +/- 10 kHz");
+  assert.equal(sheet.rows[0].values[3], "Working frequency range: 9.2 — 9.9 GHz;");
   assert.equal(sheet.rows[0].values[4], "");
   assert.equal(sheet.rows[0].values[5], "");
   assert.equal(sheet.rows[0].values[6], "Page 2");
-  assert.deepEqual(sheet.rows[0].sourceRequirementIds, ["r1", "r2"]);
+  assert.deepEqual(sheet.rows[0].sourceRequirementIds, ["r1"]);
 
-  // Row 1: Microwave Power
+  // Row 1: Microwave Bridge - freq stability
   assert.equal(sheet.rows[1].values[1], "Microwave Unit");
-  assert.equal(sheet.rows[1].values[2], "Microwave Power");
-  assert.equal(sheet.rows[1].values[3], "Output microwave power: 200 mW");
+  assert.equal(sheet.rows[1].values[2], "Microwave Bridge");
+  assert.equal(sheet.rows[1].values[3], "Frequency stability: +/- 10 kHz");
   assert.equal(sheet.rows[1].values[4], "");
   assert.equal(sheet.rows[1].values[5], "");
-  assert.deepEqual(sheet.rows[1].sourceRequirementIds, ["r3"]);
+  assert.equal(sheet.rows[1].values[6], "Page 2");
+  assert.deepEqual(sheet.rows[1].sourceRequirementIds, ["r2"]);
 
-  // Row 2: Console -> Workstation
-  assert.equal(sheet.rows[2].values[1], "Console");
-  assert.equal(sheet.rows[2].values[2], "Workstation");
-  assert.equal(sheet.rows[2].values[3], "Linux OS\nDVD-R/W");
+  // Row 2: Microwave Power
+  assert.equal(sheet.rows[2].values[1], "Microwave Unit");
+  assert.equal(sheet.rows[2].values[2], "Microwave Power");
+  assert.equal(sheet.rows[2].values[3], "Output microwave power: 200 mW");
   assert.equal(sheet.rows[2].values[4], "");
   assert.equal(sheet.rows[2].values[5], "");
-  assert.equal(sheet.rows[2].values[6], "Page 3");
-  assert.deepEqual(sheet.rows[2].sourceRequirementIds, ["r4", "r5"]);
+  assert.deepEqual(sheet.rows[2].sourceRequirementIds, ["r3"]);
+
+  // Row 3: Console -> Workstation - Linux
+  assert.equal(sheet.rows[3].values[1], "Console");
+  assert.equal(sheet.rows[3].values[2], "Workstation");
+  assert.equal(sheet.rows[3].values[3], "Linux OS");
+  assert.equal(sheet.rows[3].values[4], "");
+  assert.equal(sheet.rows[3].values[5], "");
+  assert.equal(sheet.rows[3].values[6], "Page 3");
+  assert.deepEqual(sheet.rows[3].sourceRequirementIds, ["r4"]);
+
+  // Row 4: Console -> Workstation - DVD
+  assert.equal(sheet.rows[4].values[1], "Console");
+  assert.equal(sheet.rows[4].values[2], "Workstation");
+  assert.equal(sheet.rows[4].values[3], "DVD-R/W");
+  assert.equal(sheet.rows[4].values[4], "");
+  assert.equal(sheet.rows[4].values[5], "");
+  assert.equal(sheet.rows[4].values[6], "Page 3");
+  assert.deepEqual(sheet.rows[4].sourceRequirementIds, ["r5"]);
 });

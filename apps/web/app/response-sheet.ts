@@ -49,9 +49,18 @@ export type ResponseSheetSource = {
   sheetHeading?: string;
 };
 
-function splitRequirementSubpoints(text: string): string[] {
+export function splitRequirementSubpoints(text: string): string[] {
+  const rawLines = text
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (rawLines.length > 1) {
+    return rawLines.flatMap((line) => splitRequirementSubpoints(line));
+  }
+
   return text
-    .split(/(?=[\uF0B7\u2022\u25CF\u25AA]\s*|(?<=\s)o\s+(?!C\b)(?=[A-Z0-9])|(?<=\s)[1-9]\.\s+(?=[A-Z]))/)
+    .split(/(?=[\uF0B7\u2022\u25CF\u25AA•●▪■◆«¢]\s*|(?<=[;.]\s+)(?:[•●▪■◆«¢]|o\s+(?=[A-Z0-9])|[1-9]\.\s+(?=[A-Z])|\([a-z0-9]+\)\s+))/)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -269,46 +278,13 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     const mainHeading = activeMainSection || source.sheetHeading || "Tender requirement";
     const subHeading = activeSubSection || mainHeading;
 
-    if (hasMultiLevel) {
-      const subpoints = splitRequirementSubpoints(requirement);
-      const combinedRequirement = subpoints.join("\n");
-      const lastRow = rows.at(-1);
-      const requirementIndex = columns.findIndex((col) => col.role === "requirement");
-      const pageIndex = columns.findIndex((col) => col.role === "page");
-      const headingIndices = columns
-        .map((col, idx) => (col.role === "heading" ? idx : -1))
-        .filter((idx) => idx !== -1);
-      const mainHeadingIdx = headingIndices[0];
-      const subHeadingIdx = headingIndices[1];
-      const cleanSub = subHeading || "General";
-      if (
-        lastRow &&
-        mainHeadingIdx !== undefined &&
-        subHeadingIdx !== undefined &&
-        lastRow.values[mainHeadingIdx] === mainHeading &&
-        lastRow.values[subHeadingIdx] === cleanSub
-      ) {
-        if (requirementIndex >= 0) {
-          lastRow.values[requirementIndex] = [lastRow.values[requirementIndex], combinedRequirement].filter(Boolean).join("\n");
-        }
-        if (pageIndex >= 0) {
-          const prevPages = [...lastRow.values[pageIndex].matchAll(/\d+/g)].map((m) => Number(m[0]));
-          if (!prevPages.includes(item.page)) {
-            const allPages = [...prevPages, item.page].sort((a, b) => a - b);
-            lastRow.values[pageIndex] = allPages.length > 1 ? `Pages ${allPages.join(" and ")}` : `Page ${item.page}`;
-          }
-        }
-        lastRow.sourceRequirementIds.push(item.id);
-        continue;
+    const specs = item.specifications?.length ? item.specifications : [requirement];
+    let rowIndex = 0;
+    for (const spec of specs) {
+      for (const subpoint of splitRequirementSubpoints(spec)) {
+        addRow(item, mainHeading, subHeading, subpoint, rowIndex++);
       }
-
-      addRow(item, mainHeading, subHeading, combinedRequirement, 0);
-      continue;
     }
-
-    splitRequirementSubpoints(requirement).forEach((subpoint, rowIndex) => {
-      addRow(item, mainHeading, subHeading, subpoint, rowIndex);
-    });
   }
 
   if (source.extractionMode === "visual-compliance-sheet") {
