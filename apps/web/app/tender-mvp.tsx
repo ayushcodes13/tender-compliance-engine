@@ -444,15 +444,18 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           : [{ header: "Tender specification", role: "specification" as const }];
       const exportColumns = responseSheet.columns;
       const responseRows = responseSheet.rows;
-      const headingColumnIndex = exportColumns.findIndex((column) => column.role === "heading");
-      const headingValues = responseHeadingMergeKeys(responseSheet);
+      const headingColumnIndices = exportColumns
+        .map((column, index) => (column.role === "heading" ? index : -1))
+        .filter((index) => index >= 0);
       const rows = [
         new TableRow({ tableHeader: true, children: exportColumns.map((column) => cell(column.header, true, AlignmentType.CENTER)) }),
         ...responseRows.map((item, rowIndex) => new TableRow({
           cantSplit: true,
           children: item.values.map((value, columnIndex) => {
-            const merge = columnIndex === headingColumnIndex
-              ? verticalMergeAt(headingValues, rowIndex)
+            const isHeading = headingColumnIndices.includes(columnIndex);
+            const colValues = responseRows.map((r) => r.values[columnIndex]);
+            const merge = isHeading
+              ? verticalMergeAt(colValues, rowIndex)
               : undefined;
             return cell(value, item.section, undefined, 19, 0, undefined, merge);
           }),
@@ -585,13 +588,15 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         row.font = { ...row.font, name: "Arial", size: 10 };
       });
       worksheet.getRow(1).font = { bold: true, name: "Arial", size: 10, color: { argb: "FF24354D" } };
-      const headingColumn = responseSheet.columns.findIndex((column) => column.role === "heading");
-      const headingValues = responseHeadingMergeKeys(responseSheet);
-      if (headingColumn >= 0) {
+      const headingColumns = responseSheet.columns
+        .map((column, idx) => (column.role === "heading" ? idx : -1))
+        .filter((idx) => idx >= 0);
+      for (const headingColumn of headingColumns) {
+        const colValues = responseSheet.rows.map((r) => r.values[headingColumn]);
         responseSheet.rows.forEach((row, index) => {
-          if (verticalMergeAt(headingValues, index) !== "restart") return [];
+          if (verticalMergeAt(colValues, index) !== "restart") return;
           let end = index;
-          while (end + 1 < headingValues.length && headingValues[end + 1] === headingValues[index]) end += 1;
+          while (end + 1 < colValues.length && colValues[end + 1] === colValues[index]) end += 1;
           if (end > index) worksheet.mergeCells(index + 2, headingColumn + 1, end + 2, headingColumn + 1);
         });
       }
