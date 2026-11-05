@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test app/*.test.mjs",
-    "test:pipeline": "node --experimental-strip-types scripts/verify-pipeline.mjs"
+    "test:pipeline": "node --experimental-strip-types scripts/verify-pipeline.mjs",
+    "test:stress": "node --experimental-strip-types scripts/stress-test-harness.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
