@@ -18,6 +18,8 @@ Keep the product in TypeScript and retain PDF.js as the production parser while 
 
 Treat a tender as a canonical, source-preserving inventory before interpreting it. The inventory should retain source document/version identity, physical page, exact text or OCR transcript, text and cell geometry when known, table candidates, OCR confidence, and unknown/approximate markers. Interpretation creates atomic requirement proposals that point back to inventory regions. Independent deterministic checks then measure grounding, completeness, numeric fidelity, and recoverable omissions. A human-reviewed requirement set projects into the editable response matrix and its exports without combining independent response decisions.
 
+Requirement citations carry stable page-scoped source element IDs in addition to offsets and locations. Native text references link every parser text block overlapped by the exact source span; table references link the table, row, and cell; OCR references link only OCR regions containing an exact transcript match. A visual transcription without a deterministic text-to-region match keeps its geometric evidence approximate and does not receive a fabricated text element link. These are parser element IDs, not semantic paragraph/list/section IDs; hierarchy reconstruction remains a separate open step.
+
 The next engineering steps are:
 
 1. Make inventory construction explicit and independently inspectable, retaining native text, OCR regions, raster image regions, and page geometry for hybrid pages. The current step records approximate PDF.js image draw bounds and exposes them for human page review; semantic region classification and canonical section/paragraph/list relationships remain open.
