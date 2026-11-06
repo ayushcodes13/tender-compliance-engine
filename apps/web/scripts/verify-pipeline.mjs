@@ -35,7 +35,7 @@ const provider = http.createServer(async (request, response) => {
     if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
-      result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[]};
+      result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
       const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
@@ -109,6 +109,19 @@ try {
   assert.equal(one.analysis.document.inventoryIntegrity,'structurally-verified');
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
+  scenario='cross-section-conflict';
+  const conflictPdf=new jsPDF();conflictPdf.text('Technical specifications for X-Band EPR spectrometer system',20,30);conflictPdf.text(quotes[0],20,50);conflictPdf.addPage();conflictPdf.text('Advanced Spectrofluorometer compliance sheet',20,30);
+  const conflict=await analyze(conflictPdf);assert.equal(conflict.ok,true,conflict.error);
+  assert.match(conflict.analysis.reviewNote,/Possible cross-section inconsistency on PDF pages 1 and 2/);
+  assert.match(conflict.analysis.reviewNote,/neither source is treated as authoritative/);
+  assert.ok(conflict.analysis.coverage.pages.some(page=>page.page===1&&page.routerMarkedUncertain));
+  assert.ok(conflict.analysis.coverage.pages.some(page=>page.page===2&&page.routerMarkedUncertain));
+  assert.ok(conflict.analysis.coverage.pages.some(page=>page.page===1&&page.selectedForExtraction));
+  assert.ok(conflict.analysis.coverage.pages.some(page=>page.page===2&&page.selectedForExtraction));
+  scenario='unsupported-section-conflict';
+  const unsupportedConflict=await analyze(conflictPdf);assert.equal(unsupportedConflict.ok,true,unsupportedConflict.error);
+  assert.doesNotMatch(unsupportedConflict.analysis.reviewNote,/Possible cross-section inconsistency on PDF pages/);
+  assert.match(unsupportedConflict.analysis.reviewNote,/could not be verified against both cited page transcripts/);
   scenario='injected-metadata';
   const injectedPdf=new jsPDF();injectedPdf.text(quotes[0],20,30);injectedPdf.text('The catalog shall specify ingress protection IP67.',20,50);injectedPdf.text('Payment terms are 30 days.',20,70);
   const injected=await analyze(injectedPdf);assert.equal(injected.ok,true,injected.error);
@@ -273,7 +286,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

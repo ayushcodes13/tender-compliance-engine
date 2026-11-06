@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "status": "assistant-reviewed-source-conflict; human-adjudication-pending",
+  "documentId": "saha",
+  "sourceSha256": "ff72ab64cd94d9507ec1c169ce064315bcc862a5c0e663984aa0a3e69af347b6",
+  "sourceCases": [
+    {
+      "page": 1,
+      "quote": "Supply of “Floor standing X-Band EPR Spectrometer System” at SINP",
+      "sourceType": "tender equipment subject"
+    },
+    {
+      "page": 5,
+      "quote": "“An advanced Spectrofluorometer equipped with modular facilities capable of monitoring chiral fluorescence”",
+      "sourceType": "Annexure II compliance-sheet equipment subject"
+    }
+  ],
+  "expectedDisposition": "flag both source sections for human reconciliation without selecting an authoritative title",
+  "visualInspection": "Page 1 names a floor-standing X-Band EPR spectrometer. The Annexure II compliance-sheet title on page 5 names an advanced spectrofluorometer. The NIT number on page 5 still names the X-Band EPR spectrometer system.",
+  "limitations": [
+    "The source PDF is local and is not redistributed.",
+    "This is an assistant-reviewed source discrepancy, not an adjudicated determination of which title is correct.",
+    "No live-model detection result is recorded; the automated pipeline contract uses a scripted source-conflict proposal."
+  ]
+}

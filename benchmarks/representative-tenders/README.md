@@ -18,6 +18,8 @@ The follow-up `heldout-manifest-2026-11-07.json` and `heldout-results-2026-11-07
 
 `saha-ocr-adversarial-v0.3.json` records a third case from page 4: the printed magnet threshold `≥6.5 kG` is transcribed as `>6.5 kG` at 70.7 numeric-token confidence by the application's PSM 3 path (medium before the new signal). Numeric values with bare `<` or `>` OCR operators are now marked low confidence while preserving the transcript and score; this also flags valid strict inequalities for human review. The source PDF remains local, and this individual case is not an OCR accuracy estimate.
 
+`saha-cross-section-conflict-v0.1.json` records the visible title mismatch between page 1's X-Band EPR spectrometer subject and the Annexure II compliance-sheet title on page 5 naming a spectrofluorometer; page 5's NIT number still refers to the EPR system. Routing can propose a two-page conflict warning, but both quoted passages must match their page transcripts before they appear as a conflict. This record documents a source discrepancy only; the conflicting title has not been adjudicated and no live-model detection result is claimed.
+
 ## Reading the baseline
 
 The six documents contain 183 PDF pages. The current PDF.js/vector-table path and PyMuPDF `find_tables` strategies were compared in shadow mode. Counts are candidate geometry statistics only; they do not measure correct table detection. No OCR was run in the PyMuPDF comparison. The Shah document is image-only and therefore has no selectable text for either parser to interpret without OCR.
