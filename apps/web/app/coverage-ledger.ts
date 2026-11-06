@@ -1,4 +1,4 @@
-import type { SourcePageOcrSkipReason, SourcePageOcrStatus } from "./source-document.ts";
+import type { SourceBox, SourcePageOcrSkipReason, SourcePageOcrStatus } from "./source-document.ts";
 
 export type CoverageAuditStatus = "not_run" | "incomplete" | "no_gaps_reported" | "possible_gaps_reported";
 export type ExtractionStatus = "not_selected" | "complete" | "incomplete";
@@ -54,6 +54,7 @@ export type PageCoverageRecord = {
   auditStatus: CoverageAuditStatus;
   possibleOmissionSuggestions: number;
   hasRasterImageContent: boolean;
+  imageRegions: Array<{ id: string; bbox: SourceBox; areaRatio: number }>;
   ocrRecommended: boolean;
   ocrStatus: SourcePageOcrStatus;
   ocrSkipReason?: SourcePageOcrSkipReason;

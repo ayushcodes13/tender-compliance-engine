@@ -22,6 +22,7 @@ import { findColumnLayoutConflict, matchOcrHeaderTokens, normalizeSingleContentC
 import { extractPdfPathRectangles, hasTableGridGeometry } from "./pdf-path-rectangles";
 import { separateVisualCompletionProposal, type VisualOcrConfidence } from "./visual-ocr";
 import { hasRasterImageOperators, shouldRunPageOcr } from "./ocr-routing";
+import { collectPdfImageRegions } from "./pdf-image-regions";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
@@ -369,10 +370,29 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       }
       const text = normalize(rawText);
       const operators = await page.getOperatorList();
+      const imageRegions = collectPdfImageRegions({
+        fnArray: operators.fnArray,
+        argsArray: operators.argsArray,
+        codes: {
+          save: OPS.save,
+          restore: OPS.restore,
+          transform: OPS.transform,
+          paintFormXObjectBegin: OPS.paintFormXObjectBegin,
+          paintFormXObjectEnd: OPS.paintFormXObjectEnd,
+          image: [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject],
+          imageGroup: [OPS.paintImageMaskXObjectGroup, OPS.paintInlineImageXObjectGroup],
+          imageRepeat: [OPS.paintImageXObjectRepeat],
+          imageMaskRepeat: [OPS.paintImageMaskXObjectRepeat],
+        },
+        viewportTransform: viewport.transform,
+        pageSize: { width: viewport.width, height: viewport.height },
+      });
       const hasRasterImageContent = hasRasterImageOperators(operators.fnArray, [
         OPS.paintImageXObject,
         OPS.paintInlineImageXObject,
         OPS.paintImageMaskXObject,
+        OPS.paintImageMaskXObjectGroup,
+        OPS.paintInlineImageXObjectGroup,
         OPS.paintImageXObjectRepeat,
         OPS.paintImageMaskXObjectRepeat,
       ]);
@@ -380,7 +400,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const textAreaRatio = pageArea > 0
         ? positioned.reduce((total, item) => total + item.box.width * item.box.height, 0) / pageArea
         : 0;
-      const ocrRecommended = shouldRunPageOcr({ selectableText: text, textAreaRatio, hasRasterImageContent });
+      const ocrRecommended = shouldRunPageOcr({
+        selectableText: text,
+        textAreaRatio,
+        hasRasterImageContent,
+        imageRegions,
+        nativeTextBoxes: positioned.map((item) => item.box),
+      });
       let ocrResult: OcrPageText = { text: "", lines: [] };
       let ocrStatus: SourcePageModel["ocrStatus"] = ocrRecommended ? "not-attempted" : "not-recommended";
       let ocrSkipReason: SourcePageModel["ocrSkipReason"];
@@ -486,6 +512,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         ocrRecommended,
         ocrStatus,
         ocrSkipReason,
+        imageRegions,
         ocrRegions: ocrResult.lines,
       });
       sourceDocument.pages.push(sourceModel);
@@ -1693,6 +1720,16 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         auditStatus,
         possibleOmissionSuggestions: audit?.possibleOmissions ?? 0,
         hasRasterImageContent: page.sourceModel.hasRasterImageContent,
+        imageRegions: page.sourceModel.imageRegions.map((region) => ({
+          id: region.id,
+          bbox: {
+            x: region.bbox.x / page.width * 100,
+            y: region.bbox.y / page.height * 100,
+            width: region.bbox.width / page.width * 100,
+            height: region.bbox.height / page.height * 100,
+          },
+          areaRatio: region.areaRatio,
+        })),
         ocrRecommended: page.sourceModel.ocrRecommended,
         ocrStatus: page.sourceModel.ocrStatus,
         ...(page.sourceModel.ocrSkipReason ? { ocrSkipReason: page.sourceModel.ocrSkipReason } : {}),

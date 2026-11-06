@@ -337,6 +337,8 @@ a { color: inherit; }
 .mvp-pdf-status { position: absolute; inset: 0; display: grid; place-items: center; color: #697583; font-size: 11px; }
 .mvp-pdf-page { position: relative; align-self: flex-start; max-width: 100%; background: #fff; box-shadow: 0 2px 12px rgba(23,35,54,.13), 0 0 0 1px rgba(22,33,48,.06); }
 .mvp-pdf-page canvas { display: block; max-width: none; }
+.mvp-pdf-image-region { position: absolute; z-index: 1; border: 1px dashed rgba(27, 110, 143, .9); background: rgba(32, 145, 179, .035); pointer-events: none; }
+.mvp-image-region-note { margin: 0; padding: 8px 18px; color: #486174; font-size: 11px; line-height: 1.45; }
 .mvp-pdf-highlight { position: absolute; z-index: 2; border: 2px solid #d19327; border-radius: 1px; background: rgba(255,213,91,.27); box-shadow: 0 0 0 2px rgba(255,255,255,.65); pointer-events: none; }
 .mvp-pdf-zoom { position: sticky; bottom: 0; align-self: flex-end; margin-left: -100px; padding: 5px 8px; border-radius: 3px; background: rgba(25,38,58,.86); color: white; font-size: 9px; pointer-events: none; }
 .mvp-citation-detail { flex-shrink: 0; padding: 12px 17px 14px; border-top: 1px solid #e1e4e4; background: #fff; }

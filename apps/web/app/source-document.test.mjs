@@ -131,6 +131,23 @@ test("stores local OCR regions separately from native text with approximate cita
   assert.equal(reference.startOffset, undefined);
 });
 
+test("stores raster image regions with stable page-scoped identities and approximate boxes", () => {
+  const document = createSourceDocumentModel(new Uint8Array([11]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 2,
+    width: 600,
+    height: 800,
+    sourceText: "Tender header",
+    positionedItems: [],
+    imageRegions: [{ bbox: { x: 20, y: 100, width: 400, height: 500 }, areaRatio: 5 / 12, operator: "image" }],
+  });
+  assert.equal(page.imageRegions[0].id, `${page.id}:image:1`);
+  assert.deepEqual(page.imageRegions[0].bbox, { x: 20, y: 100, width: 400, height: 500 });
+  assert.equal(page.imageRegions[0].areaRatio, 5 / 12);
+  assert.equal(page.imageRegions[0].bboxPrecision, "approximate");
+});
+
 test("records native and OCR evidence together on a mixed-content page", () => {
   const document = createSourceDocumentModel(new Uint8Array([10]), 1);
   const page = buildSourcePageModel({

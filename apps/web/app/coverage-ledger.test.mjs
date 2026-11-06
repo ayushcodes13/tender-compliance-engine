@@ -34,6 +34,7 @@ const record = (page, overrides = {}) => ({
   auditStatus: "not_run",
   possibleOmissionSuggestions: 0,
   hasRasterImageContent: false,
+  imageRegions: [],
   ocrRecommended: false,
   ocrStatus: "not-recommended",
   ocrNeeded: false,
@@ -114,6 +115,12 @@ test("preserves explicit incomplete and not-run states instead of inferring succ
   assert.equal(report.summary.auditPagesIncomplete, 1);
   assert.equal(report.summary.auditPagesNotRun, 1);
   assert.equal(report.summary.auditPagesWithNoGapsReported, 0);
+});
+
+test("retains approximate page image-region bounds in the coverage report", () => {
+  const imageRegions = [{ id: "doc:page:4:image:1", bbox: { x: 12, y: 8, width: 64, height: 72 }, areaRatio: 0.31 }];
+  const report = buildCoverageReport([record(4, { hasRasterImageContent: true, imageRegions })]);
+  assert.deepEqual(report.pages[0].imageRegions, imageRegions);
 });
 
 test("lists source table rows with disposition and page-relative evidence boxes", () => {
