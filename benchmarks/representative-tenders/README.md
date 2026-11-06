@@ -41,6 +41,8 @@ Before any quality claim, annotate every expected obligation on each selected te
 - The model run used the configured local provider, whose secret is deliberately not recorded. The 295-second client limit is part of the run conditions, not a provider SLA.
 - Do not commit source tenders, full extracted document text, credentials, or provider request/response dumps.
 
+`npm run test:pipeline` also reports a deliberately mutated checker contract: the scripted first extraction omits one source sentence, the separate audit response returns that literal sentence, and source verification permits it into the sheet; a changed numeric value proposed for a real source requirement is rejected while the original source-backed requirement remains. The current fixture reports 1/1 scripted omission recovery and 1/1 corrupted-value rejection. These are integration-contract results from a scripted provider, not evidence that a live model discovers omissions or a real-tender recall score.
+
 ## Limitations
 
 The set is small and convenience-sampled, not statistically representative. The gold annotations are partial and manual. The original six-document model run timed out or failed on four documents, does not include token/cost telemetry, and cannot support a recall comparison. The IIT Guwahati analysis completed but nine pages were not omission-audited and all 114 output rows require human review. The public source did not state a reuse license; the source PDF is therefore kept local and not redistributed. More independent public tenders and a complete annotation protocol remain necessary.
