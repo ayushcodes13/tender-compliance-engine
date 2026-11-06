@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "dd0c2c72ad4759114318280c15d406d257290874",
+  "runDate": "2026-11-07",
+  "environment": {
+    "node": "22.x",
+    "python": "3.9.6",
+    "pymupdf": "1.26.5",
+    "ocr": "Tesseract 5.5.3",
+    "application": "local Next.js API on 127.0.0.1:3001",
+    "model": "configured GPT-6 Luna compatible endpoint; credentials omitted",
+    "requestWallClockLimitSeconds": 295,
+    "costTelemetry": false
+  },
+  "parserShadow": {
+    "note": "find_tables results are raw candidates, not precision/recall. PDF.js counts reproduce production raster/OCR-trigger/vector-grid/vector-row diagnostics. No source text is stored.",
+    "documents": {
+      "gandhinagar": {
+        "pdfjs": { "rasterPages": 2, "ocrTriggerPages": 0, "gridPages": 19, "rowPages": 16, "vectorRows": 204 },
+        "pymupdf": {
+          "lines": { "pages": 19, "tables": 26, "rows": 342 },
+          "lines_strict": { "pages": 16, "tables": 20, "rows": 240 },
+          "text": { "pages": 40, "tables": 40, "rows": 1963 }
+        }
+      },
+      "madras": {
+        "pdfjs": { "rasterPages": 3, "ocrTriggerPages": 1, "gridPages": 24, "rowPages": 24, "vectorRows": 162 },
+        "pymupdf": {
+          "lines": { "pages": 24, "tables": 31, "rows": 183 },
+          "lines_strict": { "pages": 24, "tables": 28, "rows": 161 },
+          "text": { "pages": 31, "tables": 31, "rows": 1657 }
+        }
+      },
+      "saha": {
+        "pdfjs": { "rasterPages": 13, "ocrTriggerPages": 13, "gridPages": 7, "rowPages": 0, "vectorRows": 0 },
+        "pymupdf": {
+          "lines": { "pages": 0, "tables": 0, "rows": 0 },
+          "lines_strict": { "pages": 0, "tables": 0, "rows": 0 },
+          "text": { "pages": 0, "tables": 0, "rows": 0 }
+        }
+      },
+      "iisc": {
+        "pdfjs": { "rasterPages": 18, "ocrTriggerPages": 5, "gridPages": 6, "rowPages": 6, "vectorRows": 59 },
+        "pymupdf": {
+          "lines": { "pages": 5, "tables": 6, "rows": 43 },
+          "lines_strict": { "pages": 5, "tables": 6, "rows": 43 },
+          "text": { "pages": 18, "tables": 18, "rows": 716 }
+        }
+      },
+      "iitd": {
+        "pdfjs": { "rasterPages": 0, "ocrTriggerPages": 0, "gridPages": 29, "rowPages": 28, "vectorRows": 333 },
+        "pymupdf": {
+          "lines": { "pages": 28, "tables": 32, "rows": 787 },
+          "lines_strict": { "pages": 28, "tables": 30, "rows": 357 },
+          "text": { "pages": 37, "tables": 37, "rows": 1816 }
+        }
+      },
+      "indore": {
+        "pdfjs": { "rasterPages": 6, "ocrTriggerPages": 2, "gridPages": 29, "rowPages": 8, "vectorRows": 12 },
+        "pymupdf": {
+          "lines": { "pages": 16, "tables": 17, "rows": 104 },
+          "lines_strict": { "pages": 13, "tables": 14, "rows": 14 },
+          "text": { "pages": 40, "tables": 40, "rows": 1872 }
+        }
+      }
+    }
+  },
+  "modelAnalysis": {
+    "note": "Runs use the current local model configuration and were initiated with a 295-second client timeout. Incomplete runs are not successful analyses. Coverage audit not run is not evidence that a page has no requirements.",
+    "completed": 2,
+    "incompleteAtClientLimit": 3,
+    "applicationTimeLimitFailures": 1,
+    "documents": {
+      "iisc": {
+        "outcome": "completed",
+        "elapsedSeconds": 203,
+        "pages": 18,
+        "responseRows": 12,
+        "acceptedCandidates": 12,
+        "selectedTechnicalPages": 1,
+        "pagesNotOmissionAudited": 17,
+        "ocrPagesProcessed": 5,
+        "knownTableRows": 8,
+        "knownTableRowsMapped": 7,
+        "possibleOmissionSuggestions": 5,
+        "manualGoldenCases": ["iisc-pages-7-8-missed-obligations", "iisc-page-10-wafer-chuck-bullets-merged"]
+      },
+      "indore": {
+        "outcome": "completed",
+        "elapsedSeconds": 192,
+        "pages": 41,
+        "responseRows": 102,
+        "acceptedCandidates": 102,
+        "selectedTechnicalPages": 5,
+        "pagesNotOmissionAudited": 36,
+        "ocrPagesProcessed": 2,
+        "knownTableRows": 1,
+        "pagesWithKnownTableRows": 5,
+        "candidateSuggestions": 116,
+        "sourceMatchedSuggestions": 102,
+        "rejectedSuggestions": 16,
+        "possibleOmissionSuggestions": 2,
+        "manualGoldenCases": ["indore-pages-17-20-overload-conflict", "indore-page-20-context-example", "indore-page-35-support-obligation-missed", "indore-page-35-administrative-form-text"]
+      },
+      "iitd": { "outcome": "incomplete", "elapsedSeconds": 295, "lastStage": "extracting", "reason": "client_wall_clock_limit" },
+      "gandhinagar": { "outcome": "incomplete", "elapsedSeconds": 295, "lastStage": "extracting", "reason": "client_wall_clock_limit" },
+      "madras": { "outcome": "incomplete", "elapsedSeconds": 295, "lastStage": "extracting", "reason": "client_wall_clock_limit" },
+      "saha": { "outcome": "failed", "elapsedSeconds": 151, "lastStage": "extracting", "reason": "application_time_limit" }
+    }
+  },
+  "qualityClaims": {
+    "requirementRecall": null,
+    "citationPrecision": null,
+    "numericFidelity": null,
+    "unseenGeneralization": null,
+    "reason": "No exhaustive annotations or independently held-out tenders are available in this baseline."
+  }
+}
