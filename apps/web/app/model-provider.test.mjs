@@ -71,3 +71,27 @@ test('bounds in-flight requests and never sends aborted queued work', async () =
   assert.equal(peak,3);
   assert.equal(sent,4);
 });
+
+test('starts the execution timeout only after a queued request is admitted', async () => {
+  const admissions = [];
+  const releaseRequests = [];
+  const client = createModelCompletionClient(
+    { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' },
+    async (_input, init) => {
+      admissions.push(init.signal);
+      await new Promise((resolve) => releaseRequests.push(resolve));
+      return new Response('{}');
+    },
+    { maxConcurrent: 1, executionTimeoutMs: 500 },
+  );
+  const first = client.fetch('ignored');
+  await new Promise((resolve) => setImmediate(resolve));
+  const queued = client.fetch('ignored');
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  releaseRequests.shift()();
+  while (admissions.length < 2) await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(admissions[1].aborted, false, 'queued time did not consume its execution window');
+  releaseRequests.shift()();
+  await Promise.all([first, queued]);
+});

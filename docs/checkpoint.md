@@ -36,6 +36,8 @@ Excel export now splits long cell contents across bounded-height physical rows i
 
 Sectioned DOCX and XLSX exports now include the existing locked source-page column, so recipients can trace requirements back to the tender. Printable PDF intentionally keeps omitting that column and its page-number footer, per the 2026-10-25 client clarification; the source page remains available in the review UI. Tests inspect the generated DOCX/XLSX content and preserve the PDF omission check.
 
+Model calls now keep analysis cancellation active while waiting for a concurrency slot, then start their 90-second execution timeout only after admission. This prevents queue wait from consuming the provider's execution window; the regression test holds a request in the queue longer than the execution window's remaining time and verifies it still receives a fresh window. A separate wall-clock budget for the complete analysis is not added by this change.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
