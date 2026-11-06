@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion } from "./coverage-ledger.ts";
+import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion, resolveRoutingDisposition } from "./coverage-ledger.ts";
 
 test("explains why unsupported candidate text is excluded and directs reviewers to the source", () => {
   assert.equal(
@@ -15,6 +15,9 @@ test("explains why unsupported candidate text is excluded and directs reviewers 
 
 const record = (page, overrides = {}) => ({
   page,
+  routingDisposition: "selected",
+  routingReason: "Selected by the test router.",
+  routerMarkedUncertain: false,
   selectableTextAvailable: true,
   routingInputIncluded: true,
   routingContextClipped: false,
@@ -115,6 +118,66 @@ test("preserves explicit incomplete and not-run states instead of inferring succ
   assert.equal(report.summary.auditPagesIncomplete, 1);
   assert.equal(report.summary.auditPagesNotRun, 1);
   assert.equal(report.summary.auditPagesWithNoGapsReported, 0);
+});
+
+test("keeps uncertain, unrouted, and textless pages distinct from selected pages", () => {
+  assert.deepEqual(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: true,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: true,
+    matchingSections: [{ title: "Technical specifications", reason: "Contains equipment limits" }],
+  }), {
+    disposition: "selected",
+    reason: "Technical specifications: Contains equipment limits The router also marked this page uncertain.",
+  });
+  assert.deepEqual(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: false,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: true,
+    matchingSections: [],
+  }), {
+    disposition: "uncertain",
+    reason: "The router marked this page uncertain; it was not included in extraction and needs source review.",
+  });
+  assert.deepEqual(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: false,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: false,
+    matchingSections: [],
+  }), {
+    disposition: "unrouted",
+    reason: "No section range or uncertainty disposition was returned for this page; do not treat it as confirmed irrelevant.",
+  });
+  assert.equal(resolveRoutingDisposition({
+    hasRoutingText: false,
+    selectedForExtraction: false,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: false,
+    matchingSections: [],
+  }).disposition, "no_text");
+  assert.equal(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: true,
+    selectedByAnnexureContinuation: true,
+    markedUncertain: false,
+    matchingSections: [],
+  }).reason, "Retained as a page in a parser-detected annexure continuation.");
+});
+
+test("reports per-page router dispositions in document totals", () => {
+  const report = buildCoverageReport([
+    record(1),
+    record(2, { routingDisposition: "uncertain", selectedForExtraction: false }),
+    record(3, { routingDisposition: "unrouted", selectedForExtraction: false }),
+    record(4, { routingDisposition: "no_text", selectableTextAvailable: false, routingInputIncluded: false, selectedForExtraction: false }),
+    record(5, { routingDisposition: "selected", routerMarkedUncertain: true }),
+  ]);
+  assert.equal(report.summary.routingPagesUncertain, 2);
+  assert.equal(report.summary.routingPagesUnrouted, 1);
+  assert.equal(report.summary.routingPagesWithoutText, 1);
 });
 
 test("retains approximate page image-region bounds in the coverage report", () => {

@@ -808,7 +808,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   </li>)}
                 </ul>}
                 {failureDiagnostics.rejectedSuggestionsNotShown > 0 && <p>{failureDiagnostics.rejectedSuggestionsNotShown} additional rejected suggestions are summarized in the coverage count but not listed here.</p>}
-                {failureDiagnostics.candidateSuggestions === 0 && failureDiagnostics.reviewPageNumbers.length > 0 && <div className="mvp-coverage-review-pages"><strong>Selected source pages</strong><div>{failureDiagnostics.reviewPageNumbers.map((sourcePage) => <button type="button" key={sourcePage} onClick={() => { setPage(sourcePage); setSourceOpen(true); }}>Inspect PDF page {sourcePage}</button>)}</div>{failureDiagnostics.reviewPagesNotShown > 0 && <span>{failureDiagnostics.reviewPagesNotShown} additional selected pages are not listed.</span>}</div>}
+                {failureDiagnostics.candidateSuggestions === 0 && failureDiagnostics.reviewPageNumbers.length > 0 && <div className="mvp-coverage-review-pages"><strong>Source pages to inspect</strong><div>{failureDiagnostics.reviewPageNumbers.map((sourcePage) => <button type="button" key={sourcePage} onClick={() => { setPage(sourcePage); setSourceOpen(true); }}>Inspect PDF page {sourcePage}</button>)}</div>{failureDiagnostics.reviewPagesNotShown > 0 && <span>{failureDiagnostics.reviewPagesNotShown} additional pages are not listed.</span>}</div>}
               </section>}
             </form>
             <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Review every quote</span><span><ShieldCheck size={15} /> Nothing marked checked for you</span></div>
@@ -828,6 +828,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const reviewableRequirements = analysis.requirements.filter(item => item.rowType !== "section" && item.rowType !== "optional_heading");
   const checkedCount = reviewableRequirements.filter((item) => item.reviewed).length;
   const coveragePagesToShow = analysis.coverage?.pages.filter((item) => item.selectedForExtraction
+    || item.routingDisposition !== "selected"
+    || item.routerMarkedUncertain
     || item.hasRasterImageContent
     || item.imageRegions.length > 0
     || item.ocrNeeded
@@ -934,6 +936,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <p className="mvp-coverage-caveat">Counts describe what the parser, router, and page audit actually processed. A model audit reporting no gaps does not prove that the tender is complete.</p>
             <dl className="mvp-coverage-summary">
               <div><dt>Router input</dt><dd>{analysis.coverage.summary.routingPages} of {analysis.coverage.summary.documentPages} pages with native or OCR text</dd></div>
+              <div><dt>Routing dispositions</dt><dd>{countLabel(analysis.coverage.summary.selectedTechnicalPages, "page")} selected · {countLabel(analysis.coverage.summary.routingPagesUncertain, "uncertain page")} · {countLabel(analysis.coverage.summary.routingPagesUnrouted, "unrouted page")} · {countLabel(analysis.coverage.summary.routingPagesWithoutText, "page without text")}</dd></div>
               <div><dt>Source table rows</dt><dd>{countLabel(analysis.coverage.summary.tableRowsDetected, "row")} detected · {countLabel(analysis.coverage.summary.tableRowsMappedToCandidates, "row")} mapped · {countLabel(analysis.coverage.summary.tableRowsExcludedAsHeaders, "header")} · {countLabel(analysis.coverage.summary.tableRowsEmpty, "empty row")} · {countLabel(analysis.coverage.summary.tableRowsUnmapped, "nonempty row")} unmapped, across {countLabel(analysis.coverage.summary.tablePagesWithKnownRowCount, "page")} with detected row geometry</dd></div>
               <div><dt>Suggestions and review</dt><dd>{countLabel(analysis.coverage.summary.candidateSuggestions, "model suggestion")} · {countLabel(analysis.coverage.summary.sourceMatchedRows, "source matched row")} including headings · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(currentNeedsReviewCount, "row")} awaiting your review</dd></div>
               <div><dt>Page audits</dt><dd>{analysis.coverage.summary.auditPagesWithNoGapsReported} reported no gaps · {analysis.coverage.summary.auditPagesWithPossibleGaps} flagged possible gaps · {analysis.coverage.summary.auditPagesIncomplete} incomplete · {analysis.coverage.summary.auditPagesNotRun} not run</dd></div>
@@ -949,11 +952,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                 const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
                 return <li key={item.page}>
                   <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); setSourceOpen(true); }}>Open source page</button></div>
+                  <span className={item.routingDisposition === "selected" && !item.routerMarkedUncertain ? "" : "is-warning"}>Router disposition: {item.routingDisposition.replace(/_/g, " ")}{item.routerMarkedUncertain && item.routingDisposition === "selected" ? " · also marked uncertain" : ""} · {item.routingReason}</span>
                   <span>{item.ocrStatus === "text-found" ? "Local OCR produced text · verify transcription"
                     : item.ocrStatus === "no-text-found" ? "Local OCR completed without finding text"
                       : item.ocrStatus === "failed" ? "Local OCR failed"
                         : item.ocrStatus === "not-attempted" ? `OCR recommended but not attempted${item.ocrSkipReason ? ` · ${item.ocrSkipReason.replaceAll("-", " ")}` : ""}`
-                          : item.hasRasterImageContent ? "Raster image present · OCR not recommended" : item.selectedForExtraction ? "Selected for extraction" : "Considered by router, not selected"}</span>
+                          : item.hasRasterImageContent ? "Raster image present · OCR not recommended" : item.selectedForExtraction ? "Selected for extraction" : "Not selected for extraction"}</span>
                   {item.imageRegions.length > 0 && <span>{countLabel(item.imageRegions.length, "raster image region")} detected · approximate bounds; inspect whether any contain technical content</span>}
                   {item.ocrSkipReason && item.ocrStatus !== "not-attempted" && <span className="is-warning">Some image regions were not OCR processed ({item.ocrSkipReason.replaceAll("-", " ")}); inspect remaining regions.</span>}
                   {(item.ocrStatus === "not-attempted" || item.ocrStatus === "no-text-found" || item.ocrStatus === "failed") && <span className="is-warning">Check this source page visually; OCR state does not establish that the image contains no requirement.</span>}
