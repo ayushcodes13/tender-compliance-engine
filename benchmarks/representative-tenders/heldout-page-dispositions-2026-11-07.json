@@ -104,7 +104,9 @@
         "India local office or authorized associate",
         "Five years of after-sales service and spare parts beyond initial warranty",
         "Manual, calibration, and acceptance demonstration"
-      ]
+      ],
+      "sourceObligationGroupsEnumerated": 7,
+      "runComparison": "Three groups were previously recorded as missed; four are reported present in the earlier review summary, but their exact response text and row-to-source links were not retained for re-verification."
     },
     {
       "page": 12,

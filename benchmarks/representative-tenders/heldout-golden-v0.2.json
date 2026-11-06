@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 2,
+  "status": "partial-source-review-human-adjudication-pending",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "pageCoordinateUnits": "PDF points",
+  "boundsFormat": "x-y-width-height",
+  "boundsProvenance": "PyMuPDF native text search bounds, parser-reported and visually checked against rendered PDF page 11",
+  "boundsReviewStatus": "assistant-checked; pending human adjudication",
+  "cases": [
+    {
+      "id": "iitg-page-11-five-year-amc-omitted",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 20.51,
+        "width": 344.28,
+        "height": 40.28
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "service-requirement",
+        "summary": "Require a separately priced five-year AMC covering service visits, yearly calibration, routine maintenance, spare parts, and consumables.",
+        "independentlyAnswerable": true
+      },
+      "observed": "No AMC obligation candidate was present among the 114 saved response rows.",
+      "disposition": "missed-by-extraction",
+      "evidence": "IIT Guwahati official PDF, tender reference IITG/RND/T140/25-26, physical PDF page 11; rendered page visually checked."
+    },
+    {
+      "id": "iitg-page-11-local-after-sales-presence-omitted",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 74.65,
+        "width": 252.52,
+        "height": 26.12
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "service-requirement",
+        "summary": "Supplier must have a local office or authorized associate in India to provide timely after-sales support and maintenance.",
+        "independentlyAnswerable": true
+      },
+      "observed": "No local-office or authorized-associate obligation candidate was present among the 114 saved response rows.",
+      "disposition": "missed-by-extraction",
+      "evidence": "IIT Guwahati official PDF, tender reference IITG/RND/T140/25-26, physical PDF page 11; rendered page visually checked."
+    },
+    {
+      "id": "iitg-page-11-five-year-parts-support-omitted",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 101.29,
+        "width": 344.28,
+        "height": 39.8
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "service-requirement",
+        "summary": "Provide after-sales service and spare-parts availability for at least five years beyond the initial warranty.",
+        "independentlyAnswerable": true
+      },
+      "observed": "No beyond-warranty after-sales and spare-parts availability obligation candidate was present among the 114 saved response rows.",
+      "disposition": "missed-by-extraction",
+      "evidence": "IIT Guwahati official PDF, tender reference IITG/RND/T140/25-26, physical PDF page 11; rendered page visually checked."
+    },
+    {
+      "id": "iitg-page-11-operation-maintenance-manual-copies",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 141.61,
+        "width": 344.32,
+        "height": 39.8
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "documentation-requirement",
+        "summary": "Provide a comprehensive operation and maintenance manual in one soft copy and one hard copy.",
+        "independentlyAnswerable": true
+      },
+      "disposition": "reported-present-in-prior-review-summary",
+      "observed": "The prior manual-review summary lists operation and maintenance manuals in soft and hard copy among neighboring obligations present in the saved output.",
+      "observationLimit": "The exact response row text, citation, and row ID were not retained for re-verification."
+    },
+    {
+      "id": "iitg-page-11-calibration-certificate",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 181.93,
+        "width": 343.88,
+        "height": 40.04
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "calibration-documentation-requirement",
+        "summary": "Provide a calibration certificate verifying compliance with relevant standards and machine performance.",
+        "independentlyAnswerable": true
+      },
+      "disposition": "reported-present-in-prior-review-summary",
+      "observed": "The prior manual-review summary lists a calibration certificate among neighboring obligations present in the saved output.",
+      "observationLimit": "The exact response row text, citation, and row ID were not retained for re-verification."
+    },
+    {
+      "id": "iitg-page-11-installation-function-demonstration",
+      "page": 11,
+      "region": "Acceptance Criteria in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 237.13,
+        "width": 331.36,
+        "height": 27.11
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "acceptance-requirement",
+        "summary": "Demonstrate all system functionalities after successful installation at the institute.",
+        "independentlyAnswerable": true
+      },
+      "disposition": "reported-present-in-prior-review-summary",
+      "observed": "The prior manual-review summary reports that demonstration of system functionality after installation was included.",
+      "observationLimit": "The exact response row text, citation, and row ID were not retained for re-verification."
+    },
+    {
+      "id": "iitg-page-11-service-visit-demonstration",
+      "page": 11,
+      "region": "Acceptance Criteria in the technical specification table",
+      "bounds": {
+        "x": 207.05,
+        "y": 264.76,
+        "width": 331.15,
+        "height": 40.88
+      },
+      "boundsPrecision": "parser-reported-text-bound",
+      "expected": {
+        "kind": "acceptance-requirement",
+        "summary": "Conduct functional demonstrations during service visits to verify operation and performance-standard adherence.",
+        "independentlyAnswerable": true
+      },
+      "disposition": "reported-present-in-prior-review-summary",
+      "observed": "The prior manual-review summary reports that demonstrations during service visits were included.",
+      "observationLimit": "The exact response row text, citation, and row ID were not retained for re-verification."
+    }
+  ],
+  "pageScope": {
+    "page": 11,
+    "reviewStatus": "assistant-reviewed-source-expectations; human-adjudication-pending",
+    "expectedObligationGroups": 7,
+    "observedAgainstSavedRun": "Three groups are recorded as missed. Four are reported present in the earlier manual-review summary; exact saved row text and row-to-source links were not retained, so those positives are summary-only.",
+    "notARecallScore": true
+  },
+  "caseEvidenceLimit": "Positive dispositions rely on the prior manual-review summary in heldout-results-2026-11-07.json; no saved output row IDs or exact candidate quotes were available to reverify. Negative dispositions record the prior direct page-11 comparison."
+}
