@@ -22,11 +22,21 @@ export function resolveTesseractLanguage(configured = process.env.TESSERACT_LANG
 
 export type OcrConfidence = "high" | "medium" | "low";
 
+export type OcrWord = {
+  start: number;
+  end: number;
+  text: string;
+  bbox: { x: number; y: number; width: number; height: number };
+  confidence: number;
+  confidenceLevel: OcrConfidence;
+};
+
 export type OcrLine = {
   text: string;
   bbox: { x: number; y: number; width: number; height: number };
   confidence: number;
   confidenceLevel: OcrConfidence;
+  words: OcrWord[];
 };
 
 export type OcrPageText = {
@@ -94,6 +104,7 @@ export type PositionedOcrLine = {
   text: string;
   box: OcrLine["bbox"];
   ocrConfidenceLevel: OcrConfidence;
+  words: Array<OcrWord & { start: number; end: number }>;
 };
 
 export function buildOcrTextPositionMap(lines: OcrLine[]): {
@@ -112,13 +123,44 @@ export function buildOcrTextPositionMap(lines: OcrLine[]): {
     const start = offset;
     offset += line.text.length;
     for (let index = start; index < offset; index += 1) rawItemMap[index] = positioned.length;
-    positioned.push({ start, end: offset, text: line.text, box: line.bbox, ocrConfidenceLevel: line.confidenceLevel });
+    positioned.push({
+      start,
+      end: offset,
+      text: line.text,
+      box: line.bbox,
+      ocrConfidenceLevel: line.confidenceLevel,
+      words: line.words.map((word) => ({ ...word, start: start + word.start, end: start + word.end })),
+    });
   }
   return { text: lines.map((line) => line.text).join("\n"), rawItemMap, positioned };
 }
 
 function confidenceLevel(confidence: number): OcrConfidence {
   return confidence >= 85 ? "high" : confidence >= 60 ? "medium" : "low";
+}
+
+const ENGINEERING_UNITS = new Set([
+  "%", "°c", "°f", "k", "mm", "cm", "m", "µm", "um", "nm", "in", "inch", "inches", "ft",
+  "pa", "kpa", "mpa", "gpa", "bar", "mbar", "psi", "atm", "torr", "kn", "n", "mn",
+  "v", "mv", "kv", "a", "ma", "ka", "w", "mw", "kw", "va", "kva", "hz", "khz", "mhz", "ghz",
+  "db", "dbc", "rpm", "rps", "l/s", "l/min", "ml/min", "m³/h", "kg", "g", "mg", "s", "ms", "min", "h", "hr",
+]);
+
+function isEngineeringUnit(token: string): boolean {
+  const normalized = token.trim().replace(/^[([{]+|[.,;:)}\]]+$/g, "").toLowerCase();
+  return ENGINEERING_UNITS.has(normalized);
+}
+
+function criticalValueConfidence(words: OcrWord[], average: number): number {
+  const critical = new Set<number>();
+  words.forEach((word, index) => {
+    if (/[0-9<>≤≥±=]/u.test(word.text) || /[+−-]\s*\d/u.test(word.text)) {
+      critical.add(index);
+      if (isEngineeringUnit(words[index + 1]?.text ?? "")) critical.add(index + 1);
+    }
+  });
+  if (!critical.size) return average;
+  return Math.min(...[...critical].map((index) => words[index].confidence));
 }
 
 export function parseTesseractTsv(
@@ -154,16 +196,32 @@ export function parseTesseractTsv(
   const scaleY = pageSize.height / imageSize.height;
   const lines = [...groups.values()].map((words) => {
     words.sort((left, right) => left.left - right.left);
-    const confidence = words.reduce((total, word) => total + word.confidence, 0) / words.length;
+    const averageConfidence = words.reduce((total, word) => total + word.confidence, 0) / words.length;
     const left = Math.min(...words.map((word) => word.left));
     const top = Math.min(...words.map((word) => word.top));
     const right = Math.max(...words.map((word) => word.right));
     const bottom = Math.max(...words.map((word) => word.bottom));
+    let textOffset = 0;
+    const positionedWords: OcrWord[] = words.map((word, index) => {
+      if (index) textOffset += 1;
+      const start = textOffset;
+      textOffset += word.text.length;
+      return {
+        start,
+        end: textOffset,
+        text: word.text,
+        bbox: { x: word.left * scaleX, y: word.top * scaleY, width: (word.right - word.left) * scaleX, height: (word.bottom - word.top) * scaleY },
+        confidence: word.confidence,
+        confidenceLevel: confidenceLevel(word.confidence),
+      };
+    });
+    const confidence = criticalValueConfidence(positionedWords, averageConfidence);
     return {
       text: words.map((word) => word.text).join(" "),
       bbox: { x: left * scaleX, y: top * scaleY, width: (right - left) * scaleX, height: (bottom - top) * scaleY },
       confidence,
       confidenceLevel: confidenceLevel(confidence),
+      words: positionedWords,
       top,
       left,
     };
