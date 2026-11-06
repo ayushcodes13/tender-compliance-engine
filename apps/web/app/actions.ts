@@ -28,7 +28,7 @@ import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRendere
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
-import { buildCoverageReport, collectSourceTableCoverageRows, resolveRoutingDisposition, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
+import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRequirements, resolveRoutingDisposition, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
@@ -1060,6 +1060,16 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       report("matching source text to visible vector table rows", { stage: "extracting", message: "Reading each table row and splitting independent subpoints", current: 0, total: vectorPages.length });
       const inspectVectorPage = async (page: (typeof visualPages)[number]) => {
         const sourceRows = getVectorRows(page);
+        const sourceTable = page.sourceModel.tables[0];
+        const sourceRowsWithIds = sourceRows.map((row, rowIndex) => {
+          const sourceRow = sourceTable?.rows[rowIndex];
+          return {
+            ...row,
+            sourceTableId: sourceTable?.id,
+            sourceRowId: sourceRow?.id,
+            sourceElementIds: sourceRow ? [sourceTable!.id, sourceRow.id, ...sourceRow.cells.map((cell) => cell.id)] : [],
+          };
+        });
         const precedingPage = pages.find((candidatePage) => candidatePage.page === page.page - 1 && candidatePage.visualImage);
         let pageColumns = sourceColumns;
         const sourceColumnCount = Math.max(...sourceRows.map((row) => row.cells.length));
@@ -1220,7 +1230,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         }));
         const sourceRowsExcludedAsHeaders = excludedSourceRowIndices.size;
         const sourceRowsEmpty = sourceRows.filter((row) => row.cells.every((cell) => !cell.trim())).length;
-        const tableCoverageRows = collectSourceTableCoverageRows(sourceRows, candidateCountBySourceRow, excludedSourceRowIndices, page);
+        const tableCoverageRows = collectSourceTableCoverageRows(sourceRowsWithIds, candidateCountBySourceRow, excludedSourceRowIndices, page);
         for (const heading of looseHeadings) {
           if (typeof heading.quote !== "string" || !["section", "optional_heading"].includes(heading.row_type ?? "")) continue;
           const sourceBox = locateQuote(heading.quote, page.rawText, page.rawItemMap, page.positioned);
@@ -1755,11 +1765,16 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         sourceTableRowsExcludedAsHeaders: extraction?.sourceTableRowsExcludedAsHeaders ?? null,
         sourceTableRowsEmpty: extraction?.sourceTableRowsEmpty ?? null,
         sourceTableRowsUnmapped: extraction?.sourceTableRowsUnmapped ?? null,
-        sourceTableCoverageRows: (extraction?.sourceTableCoverageRows ?? []).map((row) => ({
-          ...row,
-          sourceMatchedCandidates: requirements.filter((item) => item.page === page.page
-            && (item.sourceRowIndex ?? item.sourceReference.sourceCell?.rowIndex) === row.rowNumber - 1).length,
-        })),
+        sourceTableCoverageRows: linkSourceRowsToRequirements(
+          extraction?.sourceTableCoverageRows ?? [],
+          page.page,
+          requirements.map((item) => ({
+            id: item.id,
+            page: item.page,
+            sourceRowIndex: item.sourceRowIndex ?? item.sourceReference.sourceCell?.rowIndex,
+            sourceElementIds: item.sourceReference.sourceElementIds,
+          })),
+        ),
         sourceTableRowsNotShown: extraction?.sourceTableRowsNotShown ?? 0,
         candidateSuggestions: unfilteredCandidates.filter((candidate) => candidate.page === page.page && candidate.suggestionOrigin === "extraction").length,
         sourceMatchedRows: requirements.filter((item) => item.page === page.page).length,
