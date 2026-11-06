@@ -47,6 +47,13 @@
       "artifact": "heldout-page-dispositions-2026-11-07.json",
       "limit": "Page relevance classifications are not human-adjudicated. This does not compare every expected obligation with model output or establish recall; owner review is still required."
     },
+    "page11ObligationReview": {
+      "sourceObligationGroupsEnumerated": 7,
+      "recordedMisses": 3,
+      "reportedPresentInPriorSummary": 4,
+      "artifact": "heldout-golden-v0.2.json",
+      "limit": "Positive dispositions rely on the earlier summary; exact response text, row IDs, and row-to-source links were not retained for re-verification."
+    },
     "missedObligations": [
       "Five-year annual maintenance contract with the stated service, calibration, maintenance, spares, and consumables coverage.",
       "Local office or authorized associate in India for after-sales support and maintenance.",
