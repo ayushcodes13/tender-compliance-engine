@@ -71,7 +71,7 @@ const provider = http.createServer(async (request, response) => {
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
 const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],{
-  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna'},stdio:['ignore','pipe','pipe'],
+  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password'},stdio:['ignore','pipe','pipe'],
 });
 let logs='';child.stdout.on('data',chunk=>{logs+=chunk;});child.stderr.on('data',chunk=>{logs+=chunk;});
 try {
@@ -79,13 +79,20 @@ try {
   let ready=false;
   for(let attempt=0;attempt<100;attempt++) {
     if(child.exitCode!==null) throw new Error('Test app exited: '+logs.slice(-1500));
-    try {if((await fetch(base,{signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
+    try {if((await fetch(base,{headers:{authorization:`Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`},signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   assert.ok(ready,'Test app ready');
+  const unauthenticatedPage = await fetch(base);
+  assert.equal(unauthenticatedPage.status, 401, 'The application UI rejects anonymous requests');
+  const unauthenticated = await fetch(`${base}/api/analyze`, { method: 'POST', body: new FormData() });
+  assert.equal(unauthenticated.status, 401, 'The upload endpoint rejects anonymous requests before parsing or analysis');
+  assert.match(unauthenticated.headers.get('www-authenticate') ?? '', /^Basic /);
   async function analyze(pdf) {
     const body=new FormData();body.set('file',new File([pdf.output('arraybuffer')],'synthetic-tender.pdf',{type:'application/pdf'}));
-    return consumeAnalysisStream(await fetch(base+'/api/analyze',{method:'POST',body}),{onProgress:()=>{}});
+    const response = await fetch(base+'/api/analyze',{method:'POST',body,headers:{authorization:`Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`}});
+    assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
+    return consumeAnalysisStream(response,{onProgress:()=>{}});
   }
   const short=new jsPDF();short.text(quotes[0],20,30);
   const one=await analyze(short);

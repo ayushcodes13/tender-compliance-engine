@@ -26,6 +26,8 @@ The new audit identifies reliability work that supersedes the older deployment-f
 
 The independent-response change supersedes the earlier 2025-10-25 response-capacity note where it says verified subpoints from one source cell should be reassembled into one response row. Every accepted, independently assessable split stays in its own response row with its own source requirement ID and blank OEM decision fields. Page continuations of one obligation and presentation headings may still merge. The existing 250-response-row limit applies after this projection and stops oversized analyses without partial output.
 
+The unauthenticated-upload finding now has a production Basic-auth gate, with a fail-closed response when its password is missing. This does not implement a global quota or cross-instance concurrency limit; those remain open because the single-app MVP has no shared state store, and process-local counters would not provide a global guarantee on serverless deployments.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
