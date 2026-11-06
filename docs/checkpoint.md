@@ -38,6 +38,12 @@ Sectioned DOCX and XLSX exports now include the existing locked source-page colu
 
 Model calls now keep analysis cancellation active while waiting for a concurrency slot, then start their 90-second execution timeout only after admission. This prevents queue wait from consuming the provider's execution window; the regression test holds a request in the queue longer than the execution window's remaining time and verifies it still receives a fresh window. A separate wall-clock budget for the complete analysis is not added by this change.
 
+### Evidence-first redesign sequence update — 2026-11-07
+
+The additional adversarial audit was written against `c198300`, before PRs #309–316. Rechecking current `main` confirms its listed hybrid OCR, independent response rows, production access gate, visual-completion separation, value-level OCR confidence, long-cell Excel splitting, DOCX/XLSX page citations, and queue-timeout findings have each been addressed in separate PRs. Global per-user/tenant quotas and cross-instance concurrency remain open; this single-user app has no shared state, and a local in-memory limiter would not satisfy that guarantee. Printable PDF page citations remain intentionally omitted under the earlier user clarification; DOCX and XLSX include them.
+
+The user's broader document-intelligence redesign changes the next-work sequence. Keep custom-domain DNS and hosted preview access as open release gates, but proceed with the evidence baseline and architecture before deployment work. The six-document parser/model run and partial human-adjudicated cases are recorded in `benchmarks/representative-tenders/`; the results show only 2 of 6 local analyses completed within the 295-second client limit and do not establish recall. The next implementation checkpoint is a complete source inventory and independently annotated golden/held-out set, followed by measured parser and extraction changes. The baseline is explicitly not complete: it has only partial goldens, no additional unseen tender, and no cost telemetry. See `docs/architecture/ADR-0001-document-intelligence-redesign.md` for the staged architecture decision and trade-offs.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**

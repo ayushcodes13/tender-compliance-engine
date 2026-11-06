@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "status": "partial-manual-adjudication",
+  "reviewedAt": "2026-11-07",
+  "sourceCommit": "dd0c2c72ad4759114318280c15d406d257290874",
+  "cases": [
+    {
+      "id": "iisc-pages-7-8-missed-obligations",
+      "documentId": "iisc",
+      "page": 7,
+      "region": "Warranty, optional AMC, and spares/manual/BOM paragraphs",
+      "sourceLocation": { "pageCoordinateUnits": "PDF points", "geometry": null, "geometryNote": "Paragraph bounds were not measured; region is page-local and visually inspected." },
+      "expected": [
+        { "kind": "requirement", "summary": "Minimum one-year warranty", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "Free consumables, spares, and software during the warranty period", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "Replace or rectify within 30 days, with warranty extension for delay", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "Optional AMC for at least three years", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "Provide spares, manuals, and bill of materials", "independentlyAnswerable": true }
+      ],
+      "observed": "Page not selected by baseline router; no extraction or omission audit ran.",
+      "disposition": "missed-by-routing",
+      "evidence": "Rendered and visually inspected source page 7."
+    },
+    {
+      "id": "iisc-page-8-missed-obligations",
+      "documentId": "iisc",
+      "page": 8,
+      "region": "Delivery/installation, acceptance, shipment, and training paragraphs",
+      "sourceLocation": { "pageCoordinateUnits": "PDF points", "geometry": null, "geometryNote": "Paragraph bounds were not measured; region is page-local and visually inspected." },
+      "expected": [
+        { "kind": "requirement", "summary": "Deliver, install, and make equipment functional within three months", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "Demonstrate specifications during acceptance", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "No partial shipment", "independentlyAnswerable": true },
+        { "kind": "requirement", "summary": "Provide technical training", "independentlyAnswerable": true }
+      ],
+      "observed": "Page not selected by baseline router; no extraction or omission audit ran.",
+      "disposition": "missed-by-routing",
+      "evidence": "Rendered and visually inspected source page 8."
+    },
+    {
+      "id": "iisc-page-10-wafer-chuck-bullets-merged",
+      "documentId": "iisc",
+      "page": 10,
+      "region": "Wafer Chuck table row, specification cell, five bullets",
+      "sourceLocation": {
+        "pageCoordinateUnits": "PDF points",
+        "tableBounds": [85.29645, 200.0193, 509.7845, 528.43998],
+        "specificationCellBounds": [240.1205, 260.21945, 509.78453, 345.53947],
+        "geometryPrecision": "parser-detected cell bounds; manually confirmed visually"
+      },
+      "expected": [{ "kind": "five-separate-requirements", "independentlyAnswerable": true }],
+      "observed": "Baseline represented the five bullets in one response candidate.",
+      "disposition": "merged-independent-obligations",
+      "evidence": "Rendered and visually inspected source page 10 and table-cell geometry."
+    },
+    {
+      "id": "indore-pages-17-20-overload-conflict",
+      "documentId": "indore",
+      "page": 17,
+      "region": "Load-cell overload protection specification",
+      "sourceLocation": {
+        "pageCoordinateUnits": "PDF points",
+        "tableBounds": [30.12, 180.12, 559.86, 786.6],
+        "specificationCellBounds": [63.84, 215.88, 375.72, 786.6],
+        "geometryPrecision": "parser-detected cell bounds; manually confirmed visually"
+      },
+      "expected": [{ "kind": "source-requirement", "value": "800%", "action": "retain and flag source conflict" }],
+      "observed": "Page 20 contains a separately stated 500% value in Additional Technical Specifications and Terms & Conditions.",
+      "disposition": "retain-both-and-flag-conflict",
+      "relatedPages": [20],
+      "evidence": "Rendered and visually inspected source pages 17 and 20."
+    },
+    {
+      "id": "indore-page-20-context-example",
+      "documentId": "indore",
+      "page": 20,
+      "region": "Frame stiffness explanatory text, 10 kN equipment and 50 kN/mm example",
+      "sourceLocation": {
+        "pageCoordinateUnits": "PDF points",
+        "technicalSpecificationsCellBounds": [63.84, 45.24, 375.72, 256.68],
+        "termsAndConditionsCellBounds": [63.84, 256.68, 375.72, 527.92],
+        "geometryPrecision": "parser-detected cell bounds; manually confirmed visually"
+      },
+      "expected": [{ "kind": "context-or-ambiguous", "action": "do-not-promote-without-review" }],
+      "observed": "Baseline included the explanatory example wording in an extracted requirement.",
+      "disposition": "context-misclassified-as-requirement",
+      "evidence": "Rendered and visually inspected source page 20."
+    },
+    {
+      "id": "indore-page-35-support-obligation-missed",
+      "documentId": "indore",
+      "page": 35,
+      "region": "Declaration Regarding Sales and Support",
+      "sourceLocation": {
+        "pageCoordinateUnits": "PDF points",
+        "headingBounds": [152.28, 107.58, 450.32, 120.97],
+        "obligationParagraphSearchBounds": [70.92, 518, 450.32, 547],
+        "geometryPrecision": "native selectable text search bounds; paragraph spans multiple line boxes"
+      },
+      "expected": [{ "kind": "requirement", "summary": "OEM must not be subject to end-of-sale or end-of-support within the next 10 years", "independentlyAnswerable": true }],
+      "observed": "Baseline did not extract the support-period obligation.",
+      "disposition": "missed-by-extraction",
+      "evidence": "Rendered and visually inspected source page 35."
+    },
+    {
+      "id": "indore-page-35-administrative-form-text",
+      "documentId": "indore",
+      "page": 35,
+      "region": "Engineer-employment certification and boilerplate declaration",
+      "sourceLocation": {
+        "pageCoordinateUnits": "PDF points",
+        "boilerplateHeadingBounds": [70.92, 591.54, 402.22, 604.93],
+        "geometry": null,
+        "geometryNote": "Administrative clause bounds were not measured; region is page-local and visually inspected."
+      },
+      "expected": [{ "kind": "administrative-form-text", "action": "exclude-from-technical-requirements-or-flag-for-review" }],
+      "observed": "Baseline accepted two form clauses as requirements.",
+      "disposition": "false-technical-requirements",
+      "evidence": "Rendered and visually inspected source page 35."
+    }
+  ]
+}

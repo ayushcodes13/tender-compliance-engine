@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "dd0c2c72ad4759114318280c15d406d257290874",
+  "runDate": "2026-11-07",
+  "documents": [
+    {
+      "id": "gandhinagar",
+      "filename": "FinalTenderDocument.pdf",
+      "pathHint": "/Users/devayushrout/Desktop/FinalTenderDocument.pdf",
+      "pages": 42,
+      "bytes": 994795,
+      "sha256": "be39fd08ab61011d7281c7f355b61864b28b091001712fbdeecd1c5181e3c491"
+    },
+    {
+      "id": "madras",
+      "filename": "Tendernotice_1.pdf",
+      "pathHint": "/Users/devayushrout/Downloads/Tendernotice_1.pdf",
+      "pages": 32,
+      "bytes": 1480876,
+      "sha256": "7e8f042fd10d4edd7572c41b2f946b61db9b93853dff81b72579901df1bde7ca"
+    },
+    {
+      "id": "saha",
+      "filename": "Tender for ESR  EPR From SHAH Institute Kolkata.pdf",
+      "pathHint": "/Users/devayushrout/Downloads/Tender for ESR  EPR From SHAH Institute Kolkata.pdf",
+      "pages": 13,
+      "bytes": 8302257,
+      "sha256": "ff72ab64cd94d9507ec1c169ce064315bcc862a5c0e663984aa0a3e69af347b6",
+      "nativeText": false
+    },
+    {
+      "id": "iisc",
+      "filename": "input 1.pdf",
+      "pathHint": "/Users/devayushrout/Desktop/tender-compliance-engine/examples/input 1.pdf",
+      "pages": 18,
+      "bytes": 353497,
+      "sha256": "7e381ceb3acbc7b08abe1c958cd793972ce89831d94d1586f9a84eab55640d2f"
+    },
+    {
+      "id": "iitd",
+      "filename": "input 2.pdf",
+      "pathHint": "/Users/devayushrout/Desktop/tender-compliance-engine/examples/input 2.pdf",
+      "pages": 37,
+      "bytes": 824675,
+      "sha256": "e2eac72281a707a8855646f70acbd5a35e5ff680ecb0b25cb48375f990780b7d"
+    },
+    {
+      "id": "indore",
+      "filename": "input 3.pdf",
+      "pathHint": "/Users/devayushrout/Desktop/tender-compliance-engine/examples/input 3.pdf",
+      "pages": 41,
+      "bytes": 2153673,
+      "sha256": "607966f4e1957c9921216734fce3d69c1dc6ea19d9979a45f217cbd0c2c1777e"
+    }
+  ]
+}
