@@ -15,9 +15,21 @@
   "shadowParser": {
     "nativeTextPages": 15,
     "strategies": {
-      "lines": { "pagesWithTables": 8, "tables": 9, "rows": 41 },
-      "lines_strict": { "pagesWithTables": 8, "tables": 8, "rows": 40 },
-      "text": { "pagesWithTables": 15, "tables": 15, "rows": 699 }
+      "lines": {
+        "pagesWithTables": 8,
+        "tables": 9,
+        "rows": 41
+      },
+      "lines_strict": {
+        "pagesWithTables": 8,
+        "tables": 8,
+        "rows": 40
+      },
+      "text": {
+        "pagesWithTables": 15,
+        "tables": 15,
+        "rows": 699
+      }
     },
     "interpretation": "Candidate geometry counts only; no table correctness/precision metric was measured."
   },
@@ -25,7 +37,14 @@
     "outcome": "completed",
     "elapsedSeconds": 288,
     "documentPages": 15,
-    "selectedTechnicalPages": [6, 7, 8, 9, 10, 11],
+    "selectedTechnicalPages": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
     "pagesNotOmissionAudited": 9,
     "ocrPagesProcessed": 0,
     "candidateSuggestions": 125,
@@ -65,7 +84,13 @@
       "Calibration certificate.",
       "Demonstration of system functionality after installation and during service visits."
     ],
-    "limits": "A manually inspected source region, not an exhaustive page-by-page recall adjudication. The nine unaudited pages cannot be treated as requirement-free."
+    "limits": "A manually inspected source region, not an exhaustive page-by-page recall adjudication. The nine unaudited pages cannot be treated as requirement-free.",
+    "page6To7ObligationReview": {
+      "sourceObligationGroupsEnumerated": 30,
+      "artifact": "heldout-golden-v0.3.json",
+      "runDisposition": "not-evaluated-saved-row-text-unavailable",
+      "limit": "Assistant-reviewed partial source annotations; no row-level comparison or recall score. Numeric ambiguities and approximate table bounds remain pending human adjudication."
+    }
   },
   "qualityClaims": {
     "requirementRecall": null,
