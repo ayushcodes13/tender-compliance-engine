@@ -1,8 +1,8 @@
 import "server-only";
 
 import { buildResponseSheet } from "./response-sheet";
-import { runTieredValidation, normalizeOcrComparable, locateOcrQuoteTolerant } from "./tiered-validation";
-import { alignTokenSequence, locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment";
+import { runTieredValidation, matchesOcrQuote, locateOcrQuoteTolerant } from "./tiered-validation";
+import { locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment";
 import { confirmedNativeHeadingPrefix, nativeFontBold } from "./native-typography";
 import { modelCandidateFields } from "./model-candidate";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime";
@@ -1494,13 +1494,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       }
       seen.add(key);
       const nativeTextMatch = Boolean(findUniqueTokenBoundedMatch(sourcePage.rawText, quote));
-      const ocrComparableTarget = normalizeOcrComparable(quote);
-      const ocrComparableText = normalizeOcrComparable(sourcePage.ocrText);
-      const ocrTextMatch = !nativeTextMatch && (
-        normalize(sourcePage.ocrText).includes(normalizedQuote) ||
-        (ocrComparableTarget.length > 0 && ocrComparableText.includes(ocrComparableTarget)) ||
-        Boolean(alignTokenSequence(quote, sourcePage.ocrText))
-      );
+      const ocrTextMatch = !nativeTextMatch && matchesOcrQuote(quote, sourcePage.ocrText);
       const visualOcr = candidate.visualOcr === true && (visualSheetType === "compliance-sheet" || normalizedTables);
       const pageEvidence = locatePageQuote(quote, sourcePage);
       const bbox = candidate.sourceBox ?? pageEvidence?.bbox ?? null;

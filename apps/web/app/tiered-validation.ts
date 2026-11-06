@@ -18,7 +18,7 @@
  *    -> verdict: "needs_human_review", precision: "unverified", needsHumanReview: true.
  */
 
-import { alignTokenSequence, locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment.ts";
+import { alignTokenSequence, findUniqueTokenBoundedMatch, normalizeToken } from "./token-sequence-alignment.ts";
 
 export type BoundingBox = { x: number; y: number; width: number; height: number };
 
@@ -61,29 +61,33 @@ export type ValidationSummary = {
   needsHumanReview: number;
 };
 
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
 /**
  * Normalizes text for OCR comparison by reconciling common OCR symbol substitutions:
- * - Em-dash (—), en-dash (–), minus (−), horizontal bar (―) -> hyphen (-)
- * - Plus-minus (±), (+/-), (+ / -) -> (+)
+ * - Equivalent dash glyphs are normalized while numeric range separators remain explicit
+ * - Plus-minus variants (±, +/-) remain distinct from positive plus signs
  * - Bullet artifacts («, ¢, •, ●, ▪, ■, ◆, ★, *, ›, ») -> stripped
  * - Word-boundary punctuation (, ; : .) -> space
- * - Whitespace normalized and lowercased
+ * - Ordinary words compare case-insensitively; case-sensitive engineering units retain their spelling
  */
 export function normalizeOcrComparable(value: string): string {
   if (!value) return "";
   return value
-    .replace(/[\u2014\u2013\u2212\u2015]/g, "-")
-    .replace(/[\u00b1]|(\+\s*\/\s*-)/g, "+")
-    .replace(/[«¢•●▪■◆★*›»]/g, "")
+    .replace(/[«¢•●▪■◆★*›»]/g, " ")
+    .replace(/\+\s*\/\s*-|±/g, " ± ")
+    .replace(/(?<=\d)[\u2014\u2013\u2212\u2015-](?=\d)/g, " OCRRANGEDASH ")
+    .replace(/(^|\s)[\u2014\u2013\u2212\u2015-]+(?=\s|$)/g, "$1 OCRRANGEDASH ")
     .replace(/\b(?:sil|s1|si)\b/gi, "sl")
-    .replace(/[;:,.]+(\s|$)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+    .split(/\s+/)
+    .map(normalizeToken)
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Exact contiguous OCR token match after safe OCR-only glyph normalization. */
+export function matchesOcrQuote(quote: string, sourceText: string): boolean {
+  const target = normalizeOcrComparable(quote);
+  const source = normalizeOcrComparable(sourceText);
+  return Boolean(target && source && alignTokenSequence(target, source));
 }
 
 /**
@@ -97,11 +101,11 @@ export function locateOcrQuoteTolerant(
   const normQuote = normalizeOcrComparable(quote);
   if (!normQuote || !ocrPositioned || ocrPositioned.length === 0) return null;
 
-  // 1. Single line: line matches or contains quote
+  // 1. A contiguous sequence on one line (allowing other text before/after)
   for (const item of ocrPositioned) {
     if (!item.text) continue;
     const normLine = normalizeOcrComparable(item.text);
-    if (normLine === normQuote || normLine.includes(normQuote)) {
+    if (matchesOcrQuote(normQuote, normLine)) {
       return { bbox: item.box, confidence: item.ocrConfidenceLevel || "medium" };
     }
   }
@@ -118,7 +122,7 @@ export function locateOcrQuoteTolerant(
       windowBoxes.push(item.box);
       if (item.ocrConfidenceLevel) confidences.push(item.ocrConfidenceLevel);
       const normWindow = normalizeOcrComparable(windowText);
-      if (normWindow.includes(normQuote)) {
+      if (matchesOcrQuote(normQuote, normWindow)) {
         const x = Math.min(...windowBoxes.map((b) => b.x));
         const y = Math.min(...windowBoxes.map((b) => b.y));
         const right = Math.max(...windowBoxes.map((b) => b.x + b.width));
@@ -127,19 +131,6 @@ export function locateOcrQuoteTolerant(
           bbox: { x, y, width: right - x, height: bottom - y },
           confidence: confidences.includes("low") ? "low" : confidences.includes("medium") ? "medium" : "high",
         };
-      }
-    }
-  }
-
-  // 3. Token containment across candidate line
-  const qTokens = normQuote.split(" ").filter((t) => t.length >= 2 || /\d/.test(t));
-  if (qTokens.length >= 2) {
-    for (const item of ocrPositioned) {
-      if (!item.text) continue;
-      const lineTokens = normalizeOcrComparable(item.text).split(" ");
-      const matchedTokens = qTokens.filter((t) => lineTokens.includes(t));
-      if (matchedTokens.length === qTokens.length) {
-        return { bbox: item.box, confidence: item.ocrConfidenceLevel || "medium" };
       }
     }
   }
@@ -187,59 +178,34 @@ export function checkVisual(
   quote: string,
   page: PageEvidenceSource,
 ): { matched: boolean; bbox: BoundingBox | null; ocrConfidence?: "high" | "medium" | "low" } {
-  const target = normalizeWhitespace(quote).toLowerCase();
+  const target = normalizeOcrComparable(quote);
   if (!target) return { matched: false, bbox: null };
 
-  const ocrText = (page.ocrText || "").toLowerCase();
-  if (!ocrText.trim()) return { matched: false, bbox: null };
+  const ocrText = page.ocrText || "";
+  const comparableOcr = normalizeOcrComparable(ocrText);
+  if (!comparableOcr) return { matched: false, bbox: null };
 
-  // 1. Spatial sequence alignment over positioned OCR items
-  if (page.ocrRawItemMap && page.ocrPositioned && page.ocrPositioned.length > 0) {
-    const box = locateQuoteSequenceAlignment(quote, page.ocrText || "", page.ocrRawItemMap, page.ocrPositioned as any);
-    if (box) {
-      const match = alignTokenSequence(quote, page.ocrText || "");
-      let confidence: "high" | "medium" | "low" = "high";
-      if (match) {
-        const used = new Set<number>();
-        for (let i = match.startOffset; i < match.endOffset; i += 1) {
-          const itemIdx = page.ocrRawItemMap[i];
-          if (itemIdx !== undefined && itemIdx >= 0) used.add(itemIdx);
-        }
-        const items = [...used].map((idx) => page.ocrPositioned![idx]).filter(Boolean);
-        if (items.some((item) => item.ocrConfidenceLevel === "low")) confidence = "low";
-        else if (items.some((item) => item.ocrConfidenceLevel === "medium")) confidence = "medium";
-      }
-      return { matched: true, bbox: box, ocrConfidence: confidence };
+  // Preserve transcript-only OCR matches and derive a box from known text offsets
+  // when OCR line text is unavailable. Verify the exact matched occurrence with
+  // the strict OCR comparator before trusting offsets from the looser tokenizer.
+  const transcriptMatch = alignTokenSequence(quote, ocrText);
+  if (transcriptMatch && matchesOcrQuote(quote, ocrText.slice(transcriptMatch.startOffset, transcriptMatch.endOffset))) {
+    const matchingItems = (page.ocrPositioned ?? []).filter((item) =>
+      (item.start ?? 0) < transcriptMatch.endOffset && (item.end ?? 0) > transcriptMatch.startOffset
+    );
+    if (matchingItems.length > 0) {
+      const x = Math.min(...matchingItems.map((item) => item.box.x));
+      const y = Math.min(...matchingItems.map((item) => item.box.y));
+      const right = Math.max(...matchingItems.map((item) => item.box.x + item.box.width));
+      const bottom = Math.max(...matchingItems.map((item) => item.box.y + item.box.height));
+      const confidence = matchingItems.some((item) => item.ocrConfidenceLevel === "low") ? "low"
+        : matchingItems.some((item) => item.ocrConfidenceLevel === "medium") ? "medium" : "high";
+      return { matched: true, bbox: { x, y, width: right - x, height: bottom - y }, ocrConfidence: confidence };
     }
   }
 
-  // 2. Direct normalized substring check in OCR transcript
-  const normalizedOcr = normalizeWhitespace(ocrText);
-  if (normalizedOcr.includes(target)) {
-    let bbox: BoundingBox | null = null;
-    let confidence: "high" | "medium" | "low" = "medium";
-    if (page.ocrPositioned && page.ocrPositioned.length > 0) {
-      const match = alignTokenSequence(quote, page.ocrText || "");
-      if (match) {
-        const matchingItems = page.ocrPositioned.filter((item) =>
-          (item.start ?? 0) < match.endOffset && (item.end ?? 0) > match.startOffset
-        );
-        if (matchingItems.length > 0) {
-          const x = Math.min(...matchingItems.map((item) => item.box.x));
-          const y = Math.min(...matchingItems.map((item) => item.box.y));
-          const right = Math.max(...matchingItems.map((item) => item.box.x + item.box.width));
-          const bottom = Math.max(...matchingItems.map((item) => item.box.y + item.box.height));
-          bbox = { x, y, width: right - x, height: bottom - y };
-          if (matchingItems.some((item) => item.ocrConfidenceLevel === "low")) confidence = "low";
-          else if (matchingItems.some((item) => item.ocrConfidenceLevel === "medium")) confidence = "medium";
-          else confidence = "high";
-        }
-      }
-    }
-    return { matched: true, bbox, ocrConfidence: bbox ? confidence : "low" };
-  }
-
-  // 3. OCR-tolerant line-level matching (handles ± vs +, em-dash vs en-dash, bullet artifacts)
+  // 1. OCR-tolerant line-level matching. Only safe glyph and known OCR token
+  // normalizations apply; order, numeric signs, and engineering-unit case stay strict.
   if (page.ocrPositioned && page.ocrPositioned.length > 0) {
     const tolerantMatch = locateOcrQuoteTolerant(quote, page.ocrPositioned);
     if (tolerantMatch) {
@@ -247,16 +213,8 @@ export function checkVisual(
     }
   }
 
-  // 4. Token sequence alignment on full OCR text
-  const seqMatch = alignTokenSequence(quote, page.ocrText || "");
-  if (seqMatch) {
-    return { matched: true, bbox: null, ocrConfidence: "medium" };
-  }
-
-  // 5. Full-text normalized OCR comparison
-  const compOcr = normalizeOcrComparable(ocrText);
-  const compTarget = normalizeOcrComparable(quote);
-  if (compTarget && compOcr.includes(compTarget)) {
+  // 2. Full-text comparison still requires a contiguous token sequence.
+  if (matchesOcrQuote(target, comparableOcr)) {
     return { matched: true, bbox: null, ocrConfidence: "medium" };
   }
 

@@ -6,6 +6,7 @@ import {
   validateCandidateEvidence,
   runTieredValidation,
   normalizeOcrComparable,
+  matchesOcrQuote,
   locateOcrQuoteTolerant,
 } from "./tiered-validation.ts";
 
@@ -66,6 +67,38 @@ test("Tier 2: checkVisual strictly rejects claim when exact sequence is absent d
   };
   const result = checkVisual("The output power shall be 500 mW.", page);
   assert.equal(result.matched, false);
+});
+
+test("OCR grounding preserves unit case, signed values, and tolerance operators", () => {
+  assert.equal(matchesOcrQuote("5 MW", "5 mW"), false);
+  assert.equal(matchesOcrQuote("-20 °C", "20 °C"), false);
+  assert.equal(matchesOcrQuote("±5%", "+5%"), false);
+  assert.equal(matchesOcrQuote("500 bar", "1500 bar"), false);
+  assert.equal(matchesOcrQuote("output power shall be 500 mW", "output power shall be 200 mW; calibration reference 500 mW"), false);
+  assert.equal(checkVisual("5 MW", { page: 8, rawText: "", ocrText: "5 mW", ocrPerformed: true }).matched, false);
+  assert.equal(checkVisual("±5%", { page: 8, rawText: "", ocrText: "+5%", ocrPerformed: true }).matched, false);
+  assert.equal(locateOcrQuoteTolerant("5 MW", [{ text: "5 mW", box: { x: 1, y: 2, width: 20, height: 10 } }]), null);
+  assert.equal(locateOcrQuoteTolerant("±5%", [{ text: "+5%", box: { x: 1, y: 2, width: 20, height: 10 } }]), null);
+});
+
+test("OCR line grounding rejects reordered evidence even when every token appears", () => {
+  const line = { text: "500 mW is the calibration reference; output power shall be 200 mW", box: { x: 1, y: 2, width: 300, height: 12 }, ocrConfidenceLevel: "high" };
+  assert.equal(locateOcrQuoteTolerant("output power shall be 500 mW", [line]), null);
+  assert.equal(checkVisual("output power shall be 500 mW", {
+    page: 7, rawText: "", ocrText: line.text, ocrPositioned: [line], ocrPerformed: true,
+  }).matched, false);
+});
+
+test("OCR matching does not attach a range quote to an earlier occurrence missing its dash", () => {
+  const lines = [
+    { text: "0 60 dB", start: 0, end: 7, box: { x: 1, y: 2, width: 40, height: 10 }, ocrConfidenceLevel: "high" },
+    { text: "0 — 60 dB", start: 9, end: 18, box: { x: 1, y: 20, width: 50, height: 10 }, ocrConfidenceLevel: "high" },
+  ];
+  const result = checkVisual("0 - 60 dB", {
+    page: 9, rawText: "", ocrText: "0 60 dB 0 — 60 dB", ocrPositioned: lines, ocrPerformed: true,
+  });
+  assert.equal(result.matched, true);
+  assert.equal(result.bbox?.y, 20);
 });
 
 test("Tier 2: checkVisual passes on OCR text when native text is missing", () => {
@@ -176,20 +209,21 @@ test("runTieredValidation validates all candidates and aggregates summary", () =
   assert.equal(results.get("c3")?.needsHumanReview, true);
 });
 
-test("normalizeOcrComparable reconciles OCR symbol substitutions and bullet glyphs", () => {
-  // Dashes
-  assert.equal(normalizeOcrComparable("0 — 60 dB"), "0 - 60 db");
-  assert.equal(normalizeOcrComparable("0 – 60 dB"), "0 - 60 db");
-  assert.equal(normalizeOcrComparable("0 - 60 dB"), "0 - 60 db");
-
-  // Plus-minus
-  assert.equal(normalizeOcrComparable("±0.5 dB"), "+0.5 db");
-  assert.equal(normalizeOcrComparable("+/- 0.5 dB"), "+ 0.5 db");
-  assert.equal(normalizeOcrComparable("200 mW ± 20mW"), "200 mw + 20mw");
+test("normalizeOcrComparable reconciles safe OCR glyphs without erasing technical distinctions", () => {
+  assert.equal(normalizeOcrComparable("0 — 60 dB"), "0 ocrrangedash 60 dB");
+  assert.equal(normalizeOcrComparable("0 – 60 dB"), "0 ocrrangedash 60 dB");
+  assert.equal(normalizeOcrComparable("0 - 60 dB"), "0 ocrrangedash 60 dB");
+  assert.equal(normalizeOcrComparable("±0.5 dB"), "± 0.5 dB");
+  assert.equal(normalizeOcrComparable("+/- 0.5 dB"), "± 0.5 dB");
+  assert.equal(normalizeOcrComparable("200 mW ± 20mW"), "200 mW ± 20mW");
+  assert.notEqual(normalizeOcrComparable("5 MW"), normalizeOcrComparable("5 mW"));
+  assert.notEqual(normalizeOcrComparable("±5%"), normalizeOcrComparable("+5%"));
+  assert.equal(matchesOcrQuote("0 - 60 dB", "0—60 dB"), true);
+  assert.equal(matchesOcrQuote("0 - 60 dB", "0 60 dB"), false);
 
   // Bullet artifacts
   assert.equal(normalizeOcrComparable("« Microwave attenuator;"), "microwave attenuator");
-  assert.equal(normalizeOcrComparable("• Max output microwave power: 600 mW;"), "max output microwave power 600 mw");
+  assert.equal(normalizeOcrComparable("• Max output microwave power: 600 mW;"), "max output microwave power 600 mW");
   assert.equal(normalizeOcrComparable("¢ High linearity;"), "high linearity");
 });
 
@@ -197,14 +231,14 @@ test("locateOcrQuoteTolerant locates bounding boxes across OCR lines with symbol
   const ocrPositioned = [
     { text: "Microwave Power", box: { x: 80, y: 340, width: 120, height: 15 }, ocrConfidenceLevel: "high" },
     { text: "« Max output microwave power in unleveled mode: 600 mW;", box: { x: 100, y: 360, width: 350, height: 12 }, ocrConfidenceLevel: "high" },
-    { text: "Output microwave power in leveled mode: 200 mW + 20mW", box: { x: 100, y: 375, width: 340, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "Output microwave power in leveled mode: 200 mW +/- 20mW", box: { x: 100, y: 375, width: 340, height: 12 }, ocrConfidenceLevel: "high" },
     { text: "Microwave power meter;", box: { x: 100, y: 390, width: 150, height: 12 }, ocrConfidenceLevel: "high" },
     { text: "« Microwave attenuator: 0 — 60 dB in 1 dB steps;", box: { x: 100, y: 405, width: 310, height: 12 }, ocrConfidenceLevel: "high" },
-    { text: "« Attenuation precision: +0.5 dB;", box: { x: 100, y: 420, width: 220, height: 12 }, ocrConfidenceLevel: "high" },
+    { text: "« Attenuation precision: +/-0.5 dB;", box: { x: 100, y: 420, width: 220, height: 12 }, ocrConfidenceLevel: "high" },
     { text: "« Automatic phase correction over attenuation range;", box: { x: 100, y: 435, width: 330, height: 12 }, ocrConfidenceLevel: "high" },
   ];
 
-  // 1. Symbol difference: ± vs +
+  // 1. Equivalent symbol form: ± vs +/-
   const matchPlusMinus = locateOcrQuoteTolerant("Output microwave power in leveled mode: 200 mW ± 20mW", ocrPositioned);
   assert.ok(matchPlusMinus);
   assert.equal(matchPlusMinus.bbox.y, 375);
@@ -215,7 +249,7 @@ test("locateOcrQuoteTolerant locates bounding boxes across OCR lines with symbol
   assert.ok(matchDash);
   assert.equal(matchDash.bbox.y, 405);
 
-  // 3. Precision ±0.5 dB vs +0.5 dB
+  // 3. Equivalent symbol form in a precision value
   const matchPrecision = locateOcrQuoteTolerant("Attenuation precision: ±0.5 dB;", ocrPositioned);
   assert.ok(matchPrecision);
   assert.equal(matchPrecision.bbox.y, 420);
@@ -235,9 +269,9 @@ test("Tier 2: checkVisual tolerates OCR symbol noise and assigns bounding box", 
   const page = {
     page: 2,
     rawText: "",
-    ocrText: "« Attenuation precision: +0.5 dB;\n« Microwave attenuator: 0 — 60 dB in 1 dB steps;",
+    ocrText: "« Attenuation precision: +/-0.5 dB;\n« Microwave attenuator: 0 — 60 dB in 1 dB steps;",
     ocrPositioned: [
-      { text: "« Attenuation precision: +0.5 dB;", box: { x: 100, y: 420, width: 220, height: 12 }, ocrConfidenceLevel: "high" },
+      { text: "« Attenuation precision: +/-0.5 dB;", box: { x: 100, y: 420, width: 220, height: 12 }, ocrConfidenceLevel: "high" },
       { text: "« Microwave attenuator: 0 — 60 dB in 1 dB steps;", box: { x: 100, y: 405, width: 310, height: 12 }, ocrConfidenceLevel: "high" },
     ],
     ocrPerformed: true,

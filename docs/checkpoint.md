@@ -335,6 +335,18 @@ Directly resolved the critical false verbatim pass vectors and provenance gaps i
   - TypeScript clean (`npm run typecheck`).
   - Production build passing (`npm run build`).
 
+### OCR grounding keeps the same technical distinctions — 2026-11-06
+
+The OCR acceptance path still had a separate permissive comparator after the native-text checks were tightened. It lowercased engineering units, collapsed `±` into `+`, and could accept all quote tokens even when they appeared out of order on one OCR line.
+
+- [x] Use contiguous token-sequence matching for OCR candidate acceptance, validation, and positioned-line location. Removed unordered token-presence matching and substring checks that could match a numeric fragment inside a larger value.
+- [x] Reuse the engineering token normalizer so `mW`/`MW`, negative values, and `±`/`+` remain distinct. Normalize `±` and `+/-` as equivalent while preserving their difference from plain `+`; continue reconciling dash glyphs, bullets, and the known `sil`/`sl` OCR variant.
+- [x] Derive OCR boxes only from parser-provided offsets or positioned lines. Verify the specific matched occurrence before using its offsets, so an earlier token-similar passage cannot receive the highlight. Exact text with no trustworthy location remains a text-only visual match.
+- [x] Add regressions for reordered OCR phrases, `500` inside `1500`, SI unit case, signed values, tolerance operators, and line-level OCR grounding.
+- [x] Verification: 208 unit tests, TypeScript check, production build, and 17 scripted pipeline contract cases pass. The four-case stress harness passed its configured thresholds with 100% box grounding; the scanned scientific-notation case had 80% key-phrase recall and missed `10^9`.
+
+OCR and stress results remain bounded by the tested synthetic documents and installed OCR runtime; they do not establish real-document recall.
+
 
 
 
