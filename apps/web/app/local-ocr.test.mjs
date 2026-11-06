@@ -52,6 +52,23 @@ test("low-confidence numeric and adjacent unit tokens cannot be hidden by a high
   assert.equal(unitLine.confidenceLevel, "low");
 });
 
+test("flags a high-confidence bare degree after a number as possible superscript OCR confusion", () => {
+  const header = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
+  const rows = [
+    "5\t1\t1\t1\t1\t1\t0\t0\t90\t20\t98\tAFC",
+    "5\t1\t1\t1\t1\t2\t95\t0\t110\t20\t98\tstability:",
+    "5\t1\t1\t1\t1\t3\t210\t0\t50\t30\t92.1\t10°;",
+    "5\t1\t1\t1\t2\t1\t0\t50\t40\t20\t98\tTemperature:",
+    "5\t1\t1\t1\t2\t2\t45\t50\t55\t20\t98\t20°C",
+  ];
+  const result = parseTesseractTsv([header, ...rows].join("\n"), { width: 400, height: 100 }, { width: 400, height: 100 });
+
+  assert.equal(result.lines[0].text, "AFC stability: 10°;");
+  assert.equal(result.lines[0].confidence, 92.1, "the numeric OCR score is preserved");
+  assert.equal(result.lines[0].confidenceLevel, "low", "possible exponent/degree confusion requires reviewer attention");
+  assert.equal(result.lines[1].confidenceLevel, "high", "a conventional Celsius unit is not flagged");
+});
+
 test("returns empty OCR text for malformed TSV or invalid image dimensions", () => {
   assert.deepEqual(parseTesseractTsv("not tsv", { width: 100, height: 100 }, { width: 100, height: 100 }), { text: "", lines: [] });
   assert.deepEqual(parseTesseractTsv("header", { width: 100, height: 100 }, { width: 0, height: 100 }), { text: "", lines: [] });
