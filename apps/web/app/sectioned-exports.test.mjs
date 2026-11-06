@@ -15,8 +15,11 @@ test('Word annexures and table headings are paragraphs outside specification tab
     assert.ok(table.includes('Specification'));
     assert.equal(table.includes('Annexure I'), false);
     assert.equal(table.includes('Optical Table'), false);
-    assert.equal(table.includes('Source page'), false);
+    assert.ok(table.includes('Source page'));
   }
+  assert.ok(xml.includes('Page 20'));
+  assert.ok(xml.includes('Page 21'));
+  assert.ok(xml.includes('Page 23'));
   assert.ok(xml.indexOf('Annexure I') < xml.indexOf('<w:tbl>'));
   assert.ok(xml.includes('Technical Specifications for Optical Tables'));
   assert.equal(xml.includes('Source tender:'), false);
@@ -67,7 +70,8 @@ test('Excel places source headings in standalone merged rows and retains specifi
   assert.ok(rows.some((row) => row[1] === 'A. Optical Table'));
   assert.ok(rows.some((row) => row[1] === 'Specification' && row[2] === 'Description'));
   assert.ok(rows.some((row) => row[2] === '≥ 300 mm'));
-  assert.equal(rows.some((row) => row.includes('Source page') || row.includes('Page 20')), false);
+  assert.ok(rows.some((row) => row.includes('Source page')));
+  assert.ok(rows.some((row) => row.includes('Page 20')));
 
   // Confirms auto-filter is configured
   assert.ok(sheet.autoFilter, 'Excel worksheet has auto-filter defined');

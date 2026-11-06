@@ -34,6 +34,8 @@ Local Tesseract parsing now retains per-word confidence and geometry. A line con
 
 Excel export now splits long cell contents across bounded-height physical rows instead of capping one oversized row and clipping its tail. Continuation rows preserve the source wording in order and vertically merge the OEM response fields so the requirement still has one response decision. The spreadsheet regression test checks the generated worksheet values, row heights, and merged response field.
 
+Sectioned DOCX and XLSX exports now include the existing locked source-page column, so recipients can trace requirements back to the tender. Printable PDF intentionally keeps omitting that column and its page-number footer, per the 2026-10-25 client clarification; the source page remains available in the review UI. Tests inspect the generated DOCX/XLSX content and preserve the PDF omission check.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
