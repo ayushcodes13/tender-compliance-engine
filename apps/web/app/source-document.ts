@@ -72,6 +72,17 @@ export type SourceDocumentModel = {
   pages: SourcePageModel[];
 };
 
+export type SourceInventoryIssueCode =
+  | "page_count_mismatch"
+  | "missing_or_reordered_page"
+  | "duplicate_source_element_id"
+  | "invalid_text_span"
+  | "invalid_geometry"
+  | "invalid_ocr_image_link"
+  | "invalid_table_relationship";
+
+export type SourceInventoryIssue = { code: SourceInventoryIssueCode; page?: number; elementId?: string };
+
 export type SourceCellLocation = { rowIndex: number; columnIndex: number };
 
 export type RequirementSourceReference = {
@@ -128,6 +139,81 @@ export function createSourceDocumentModel(bytes: Uint8Array, pageCount: number):
     pageCount,
     pages: [],
   };
+}
+
+/** Checks parser-owned inventory structure; it does not establish semantic coverage. */
+export function validateSourceDocumentInventory(document: SourceDocumentModel): SourceInventoryIssue[] {
+  const issues: SourceInventoryIssue[] = [];
+  const issueKeys = new Set<string>();
+  const addIssue = (issue: SourceInventoryIssue) => {
+    const key = `${issue.code}:${issue.page ?? ""}:${issue.elementId ?? ""}`;
+    if (!issueKeys.has(key)) { issueKeys.add(key); issues.push(issue); }
+  };
+  if (document.pages.length !== document.pageCount) addIssue({ code: "page_count_mismatch" });
+
+  const seenIds = new Set<string>();
+  const registerId = (id: string, page: number) => {
+    if (seenIds.has(id)) addIssue({ code: "duplicate_source_element_id", page, elementId: id });
+    seenIds.add(id);
+  };
+  const validBox = (box: SourceBox | null) => box === null || [box.x, box.y, box.width, box.height].every(Number.isFinite)
+    && box.width > 0 && box.height > 0;
+
+  document.pages.forEach((page, index) => {
+    const expectedPageNumber = index + 1;
+    if (page.physicalPdfPageNumber !== expectedPageNumber || page.id !== `${document.documentId}:page:${expectedPageNumber}`) {
+      addIssue({ code: "missing_or_reordered_page", page: expectedPageNumber, elementId: page.id });
+    }
+    registerId(page.id, expectedPageNumber);
+    if (![page.width, page.height].every(Number.isFinite) || page.width <= 0 || page.height <= 0) {
+      addIssue({ code: "invalid_geometry", page: expectedPageNumber, elementId: page.id });
+    }
+    for (const block of page.textBlocks) {
+      registerId(block.id, expectedPageNumber);
+      const spanValid = Number.isInteger(block.startOffset) && Number.isInteger(block.endOffset)
+        && block.startOffset >= 0 && block.endOffset >= block.startOffset
+        && block.endOffset <= page.sourceText.length
+        && page.sourceText.slice(block.startOffset, block.endOffset) === block.text;
+      if (!spanValid) addIssue({ code: "invalid_text_span", page: expectedPageNumber, elementId: block.id });
+      if (!validBox(block.bbox)) addIssue({ code: "invalid_geometry", page: expectedPageNumber, elementId: block.id });
+    }
+    const imageIds = new Set(page.imageRegions.map((region) => region.id));
+    for (const region of page.imageRegions) {
+      registerId(region.id, expectedPageNumber);
+      if (!validBox(region.bbox) || !Number.isFinite(region.areaRatio) || region.areaRatio < 0 || region.areaRatio > 1) {
+        addIssue({ code: "invalid_geometry", page: expectedPageNumber, elementId: region.id });
+      }
+    }
+    for (const region of page.ocrRegions) {
+      registerId(region.id, expectedPageNumber);
+      if (region.imageRegionId && !imageIds.has(region.imageRegionId)) {
+        addIssue({ code: "invalid_ocr_image_link", page: expectedPageNumber, elementId: region.id });
+      }
+      if (!validBox(region.bbox)) addIssue({ code: "invalid_geometry", page: expectedPageNumber, elementId: region.id });
+    }
+    if (page.ocrText !== page.ocrRegions.map((region) => region.text).join("\n")) {
+      addIssue({ code: "invalid_text_span", page: expectedPageNumber, elementId: page.id });
+    }
+    for (const table of page.tables) {
+      registerId(table.id, expectedPageNumber);
+      if (!Number.isInteger(table.columnCount) || table.columnCount < 1 || table.rows.length === 0) {
+        addIssue({ code: "invalid_table_relationship", page: expectedPageNumber, elementId: table.id });
+      }
+      for (const [rowOrder, row] of table.rows.entries()) {
+        registerId(row.id, expectedPageNumber);
+        if (row.rowIndex !== rowOrder || row.cells.length > table.columnCount) {
+          addIssue({ code: "invalid_table_relationship", page: expectedPageNumber, elementId: row.id });
+        }
+        for (const [columnIndex, cell] of row.cells.entries()) {
+          registerId(cell.id, expectedPageNumber);
+          if (cell.rowIndex !== row.rowIndex || cell.columnIndex !== columnIndex || !validBox(cell.bbox)) {
+            addIssue({ code: "invalid_table_relationship", page: expectedPageNumber, elementId: cell.id });
+          }
+        }
+      }
+    }
+  });
+  return issues;
 }
 
 export function buildSourcePageModel(input: {

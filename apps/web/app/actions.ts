@@ -27,7 +27,7 @@ import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
 import { createModelCompletionClient, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
-import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
+import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, validateSourceDocumentInventory, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
 import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRequirements, resolveRoutingDisposition, resolveSourceRowClassification, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion, type SourceRowClassification, type SourceRowClassificationReason } from "./coverage-ledger";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
@@ -297,6 +297,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       documentVersionId: sourceDocument.documentVersionId,
       documentFingerprint: sourceDocument.fingerprint,
       pageCount: sourceDocument.pageCount,
+      inventoryIntegrity: "structurally-verified" as const,
     };
 
     const pages: Array<{
@@ -585,6 +586,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         return { ok: false as const, error: "This PDF appears scanned, but local OCR or its configured language data is unavailable. Run the local app with Tesseract 5 and the required language pack." };
       }
       return { ok: false as const, error: "This PDF has too little readable text to route reliably. Check scan quality or select a clearer technical section." };
+    }
+
+    const inventoryIssues = validateSourceDocumentInventory(sourceDocument);
+    if (inventoryIssues.length) {
+      await pdf.destroy();
+      return { ok: false as const, error: "The source inventory could not verify every PDF page and source reference. No extraction was started; try re-saving the PDF or processing a shorter section." };
     }
 
     const providerResult = resolveModelProvider(process.env);
