@@ -6,6 +6,8 @@ The follow-up `heldout-manifest-2026-11-07.json` and `heldout-results-2026-11-07
 
 `page-inventory-shadow-2026-11-07.json` adds one record per page from the six available PDFs: page dimensions/rotation, native text character/word/block counts, embedded image-region count and approximate covered-area ratio, vector drawing count, and table-candidate counts by PyMuPDF strategy. It contains no tender text or source coordinates. It is a parser-side inventory diagnostic, not the production PDF.js inventory and not a semantic relevance or OCR-quality score. On this run, all 183 pages were represented; the scanned Shah tender had 13 image-only pages and the other five PDFs had native text on every page.
 
+`source-region-inventory-shadow-2026-11-07.json` extends that diagnostic with parser-reported page-point bounds and stable IDs for 3,337 native text blocks and 48 embedded image draws, plus 376 table candidates across the three PyMuPDF strategies. It contains no source text. Line-based table candidates include cell bounds; the exploratory `text` strategy retains only table bounds and row/column counts because its broad candidates would otherwise dominate the artifact. Text-block order is the parser's block order, not a verified reading order. These geometries are not production PDF.js coordinates, verified citations, OCR regions, or semantic requirement labels. The artifact is an inspection aid for later independent annotation; all 183 pages still need a human disposition.
+
 ## Reading the baseline
 
 The six documents contain 183 PDF pages. The current PDF.js/vector-table path and PyMuPDF `find_tables` strategies were compared in shadow mode. Counts are candidate geometry statistics only; they do not measure correct table detection. No OCR was run in the PyMuPDF comparison. The Shah document is image-only and therefore has no selectable text for either parser to interpret without OCR.
@@ -22,7 +24,7 @@ Before any quality claim, annotate every expected obligation on each selected te
 
 - PDF.js and the production vector-table parser are in `apps/web`; run the repository's documented Node test/runtime commands with the pinned lockfile.
 - PyMuPDF 1.26.5 was installed only in the local evaluation environment; it is not a runtime or development dependency of the product.
-- Re-run the PyMuPDF candidate counts with `python3 benchmarks/scripts/pymupdf-shadow.py id=/absolute/path/to/file.pdf ...`. The script emits fingerprints, timings, and counts only; it never prints extracted document text. Use the same version when comparing recorded counts.
+- Re-run the PyMuPDF shadow inventory with `python3 benchmarks/scripts/pymupdf-shadow.py id=/absolute/path/to/file.pdf ...`. It emits fingerprints, timings, parser counts, and source-region geometries, but never source text. Use the same version when comparing recorded results.
 - For the IIT Guwahati sample, fetch only from the `sourceUrl` in `heldout-manifest-2026-11-07.json` into a private local path, verify the SHA-256 before use, then pass it to the same shadow script. Do not put the PDF or its full text in Git.
 - The model run used the configured local provider, whose secret is deliberately not recorded. The 295-second client limit is part of the run conditions, not a provider SLA.
 - Do not commit source tenders, full extracted document text, credentials, or provider request/response dumps.
