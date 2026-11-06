@@ -1,6 +1,8 @@
-# Representative tender baseline
+# Representative tender baseline and new public sample
 
 This directory records a local, source-linked baseline for six real tender PDFs. The PDFs remain outside the repository. `manifest.json` records their SHA-256 fingerprints, page counts, sizes, and local path hints so the owner can reproduce the run without committing source files. `baseline-2026-11-07.json` records parser-shadow counts and actual model-run outcomes at commit `dd0c2c7`.
+
+The follow-up `heldout-manifest-2026-11-07.json` and `heldout-results-2026-11-07.json` add an IIT Guwahati tender acquired directly from the institute's public tender page. It was not part of the original six-document sample. The source PDF is not stored in Git. `heldout-golden-v0.1.json` records three page-11 omissions found by comparing the first completed run with the original page. This is one new sample, not a statistically sufficient holdout set; future work that uses these cases for tuning must not report them as untouched test data.
 
 ## Reading the baseline
 
@@ -19,9 +21,10 @@ Before any quality claim, annotate every expected obligation on each selected te
 - PDF.js and the production vector-table parser are in `apps/web`; run the repository's documented Node test/runtime commands with the pinned lockfile.
 - PyMuPDF 1.26.5 was installed only in the local evaluation environment; it is not a runtime or development dependency of the product.
 - Re-run the PyMuPDF candidate counts with `python3 benchmarks/scripts/pymupdf-shadow.py id=/absolute/path/to/file.pdf ...`. The script emits fingerprints, timings, and counts only; it never prints extracted document text. Use the same version when comparing recorded counts.
+- For the IIT Guwahati sample, fetch only from the `sourceUrl` in `heldout-manifest-2026-11-07.json` into a private local path, verify the SHA-256 before use, then pass it to the same shadow script. Do not put the PDF or its full text in Git.
 - The model run used the configured local provider, whose secret is deliberately not recorded. The 295-second client limit is part of the run conditions, not a provider SLA.
 - Do not commit source tenders, full extracted document text, credentials, or provider request/response dumps.
 
 ## Limitations
 
-The set is small and convenience-sampled, not statistically representative. The golden annotation is partial and manual. The model run timed out or failed on four documents, does not include token/cost telemetry, and cannot support a recall comparison. Public held-out tender collection and reuse terms remain to be established.
+The set is small and convenience-sampled, not statistically representative. The gold annotations are partial and manual. The original six-document model run timed out or failed on four documents, does not include token/cost telemetry, and cannot support a recall comparison. The IIT Guwahati analysis completed but nine pages were not omission-audited and all 114 output rows require human review. The public source did not state a reuse license; the source PDF is therefore kept local and not redistributed. More independent public tenders and a complete annotation protocol remain necessary.

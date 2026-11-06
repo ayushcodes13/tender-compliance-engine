@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "evaluatedAt": "2026-11-07",
+  "repositoryHead": "c80d97cb89f8b011f64bcff8588f1c16efd0a6dd",
+  "runtimeCodeHead": "dd0c2c72ad4759114318280c15d406d257290874",
+  "runtimeCodeNote": "The intervening commit only recorded architecture/baseline documentation; runtime code matches dd0c2c7.",
+  "environment": {
+    "pdfParser": "PDF.js production pipeline",
+    "shadowParser": "PyMuPDF 1.26.5",
+    "model": "configured local GPT-6 Luna compatible endpoint; credentials omitted",
+    "clientWallClockLimitSeconds": 295,
+    "costTelemetry": false
+  },
+  "shadowParser": {
+    "nativeTextPages": 15,
+    "strategies": {
+      "lines": { "pagesWithTables": 8, "tables": 9, "rows": 41 },
+      "lines_strict": { "pagesWithTables": 8, "tables": 8, "rows": 40 },
+      "text": { "pagesWithTables": 15, "tables": 15, "rows": 699 }
+    },
+    "interpretation": "Candidate geometry counts only; no table correctness/precision metric was measured."
+  },
+  "modelAnalysis": {
+    "outcome": "completed",
+    "elapsedSeconds": 288,
+    "documentPages": 15,
+    "selectedTechnicalPages": [6, 7, 8, 9, 10, 11],
+    "pagesNotOmissionAudited": 9,
+    "ocrPagesProcessed": 0,
+    "candidateSuggestions": 125,
+    "rejectedSuggestions": 12,
+    "sourceMatchedRows": 114,
+    "sourceMatchedRequirements": 96,
+    "responseRows": 114,
+    "allOutputRowsRequireHumanReview": true,
+    "allOutputRowsHadEvidenceClass": "visual-ocr",
+    "possibleOmissionSuggestions": 1
+  },
+  "manualReview": {
+    "reviewedPage": 11,
+    "method": "Native PDF text and rendered source page compared against all saved model candidates.",
+    "missedObligations": [
+      "Five-year annual maintenance contract with the stated service, calibration, maintenance, spares, and consumables coverage.",
+      "Local office or authorized associate in India for after-sales support and maintenance.",
+      "Spare-parts availability for at least five years beyond the initial warranty period."
+    ],
+    "includedNeighboringObligations": [
+      "One-year warranty.",
+      "Operation and maintenance manuals in soft and hard copy.",
+      "Calibration certificate.",
+      "Demonstration of system functionality after installation and during service visits."
+    ],
+    "limits": "A manually inspected source region, not an exhaustive page-by-page recall adjudication. The nine unaudited pages cannot be treated as requirement-free."
+  },
+  "qualityClaims": {
+    "requirementRecall": null,
+    "citationPrecision": null,
+    "numericFidelity": null,
+    "reason": "The source annotation is partial; most pages and all 114 output rows have not received independent item-level adjudication."
+  }
+}
