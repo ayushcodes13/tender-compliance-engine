@@ -10,6 +10,85 @@ export class ModelProviderConnectionError extends Error {
   }
 }
 
+export class ModelProviderBusyError extends Error {
+  constructor() {
+    super("The extraction service is busy. Please retry shortly.");
+    this.name = "ModelProviderBusyError";
+  }
+}
+
+export type ModelRequestAdmission = {
+  acquire(signal: AbortSignal | undefined, clientKey: object, clientLimit: number): Promise<() => void>;
+};
+
+/** Process-local guard shared by analyses in one running app instance. */
+export function createModelRequestAdmission(options: { maxConcurrent?: number; maxQueued?: number; queueTimeoutMs?: number } = {}): ModelRequestAdmission {
+  const maxConcurrent = options.maxConcurrent ?? 6;
+  const maxQueued = options.maxQueued ?? 24;
+  const queueTimeoutMs = options.queueTimeoutMs ?? 30_000;
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1 || !Number.isInteger(maxQueued) || maxQueued < 0 || queueTimeoutMs < 1) {
+    throw new Error("Model request admission limits must be positive integers.");
+  }
+  let active = 0;
+  type Waiter = { grant: (release: () => void) => void; reject: (error: unknown) => void; signal?: AbortSignal; timer: ReturnType<typeof setTimeout>; abort: () => void; clientKey: object; clientLimit: number };
+  const queue: Waiter[] = [];
+  const activeByClient = new Map<object, number>();
+  const releaseFor = (clientKey: object) => {
+    active -= 1;
+    const clientActive = activeByClient.get(clientKey) ?? 0;
+    if (clientActive <= 1) activeByClient.delete(clientKey);
+    else activeByClient.set(clientKey, clientActive - 1);
+    dispatch();
+  };
+  const remove = (waiter: Waiter) => {
+    const index = queue.indexOf(waiter);
+    if (index >= 0) queue.splice(index, 1);
+    clearTimeout(waiter.timer);
+    waiter.signal?.removeEventListener("abort", waiter.abort);
+  };
+  const dispatch = () => {
+    while (active < maxConcurrent && queue.length) {
+      const index = queue.findIndex((candidate) => (activeByClient.get(candidate.clientKey) ?? 0) < candidate.clientLimit);
+      if (index < 0) return;
+      const [waiter] = queue.splice(index, 1);
+      clearTimeout(waiter.timer);
+      waiter.signal?.removeEventListener("abort", waiter.abort);
+      if (waiter.signal?.aborted) { waiter.reject(waiter.signal.reason); continue; }
+      active += 1;
+      activeByClient.set(waiter.clientKey, (activeByClient.get(waiter.clientKey) ?? 0) + 1);
+      waiter.grant(() => releaseFor(waiter.clientKey));
+    }
+  };
+  return {
+    acquire(signal, clientKey, clientLimit) {
+      signal?.throwIfAborted();
+      if (!Number.isInteger(clientLimit) || clientLimit < 1) return Promise.reject(new Error("The per-analysis model limit must be a positive integer."));
+      if (active < maxConcurrent && queue.length === 0 && (activeByClient.get(clientKey) ?? 0) < clientLimit) {
+        active += 1;
+        activeByClient.set(clientKey, (activeByClient.get(clientKey) ?? 0) + 1);
+        return Promise.resolve(() => releaseFor(clientKey));
+      }
+      if (queue.length >= maxQueued) return Promise.reject(new ModelProviderBusyError());
+      return new Promise((resolve, reject) => {
+        const waiter: Waiter = {
+          grant: (release) => resolve(release),
+          reject,
+          signal,
+          clientKey,
+          clientLimit,
+          timer: setTimeout(() => { remove(waiter); reject(new ModelProviderBusyError()); }, queueTimeoutMs),
+          abort: () => { remove(waiter); reject(signal?.reason); },
+        };
+        queue.push(waiter);
+        signal?.addEventListener("abort", waiter.abort, { once: true });
+        if (signal?.aborted) waiter.abort();
+      });
+    },
+  };
+}
+
+const processModelRequestAdmission = createModelRequestAdmission();
+
 export function resolveModelProvider(env: Environment): ModelProviderResult {
   const apiKey = env.OPENAI_API_KEY?.trim();
   if (!apiKey) return { ok: false, error: "GPT-6 Luna is not configured. Add OPENAI_API_KEY to apps/web/.env.local." };
@@ -29,44 +108,24 @@ export function resolveModelProvider(env: Environment): ModelProviderResult {
 export function createModelCompletionClient(
   config: ModelProviderConfig,
   fetcher: FetchLike = fetch,
-  options: { maxConcurrent?: number; executionTimeoutMs?: number } = {},
+  options: { maxConcurrent?: number; executionTimeoutMs?: number; admission?: ModelRequestAdmission } = {},
 ) {
   const maxConcurrent = options.maxConcurrent ?? 3;
   const executionTimeoutMs = options.executionTimeoutMs ?? 90_000;
-  let active = 0;
-  const queue: Array<() => void> = [];
-  const acquire = async (signal?: AbortSignal) => {
-    signal?.throwIfAborted();
-    if (active < maxConcurrent) { active += 1; return; }
-    await new Promise<void>((resolve, reject) => {
-      const granted = () => { signal?.removeEventListener("abort", aborted); resolve(); };
-      const aborted = () => {
-        if (!signal) return;
-        const index = queue.indexOf(granted);
-        if (index >= 0) queue.splice(index, 1);
-        reject(signal.reason);
-      };
-      queue.push(granted);
-      signal?.addEventListener("abort", aborted, { once: true });
-      if (signal?.aborted) aborted();
-    });
-  };
-  const release = () => {
-    const next = queue.shift();
-    if (next) next();
-    else active -= 1;
-  };
+  const admission = options.admission ?? processModelRequestAdmission;
+  const clientKey = {};
   return {
     async fetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       if (init?.method && init.method.toUpperCase() !== "POST") throw new Error("Model completion requests must use POST.");
       if (init?.body !== undefined && typeof init.body !== "string") throw new Error("Model completion request body must be JSON text.");
       const cancellationSignal = init?.signal ?? undefined;
-      await acquire(cancellationSignal);
-      const executionTimeout = AbortSignal.timeout(executionTimeoutMs);
-      const requestSignal = cancellationSignal
-        ? AbortSignal.any([cancellationSignal, executionTimeout])
-        : executionTimeout;
+      let releaseAdmission: (() => void) | undefined;
       try {
+        releaseAdmission = await admission.acquire(cancellationSignal, clientKey, maxConcurrent);
+        const executionTimeout = AbortSignal.timeout(executionTimeoutMs);
+        const requestSignal = cancellationSignal
+          ? AbortSignal.any([cancellationSignal, executionTimeout])
+          : executionTimeout;
         let lastError: unknown;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
@@ -98,7 +157,7 @@ export function createModelCompletionClient(
         if (lastError instanceof TypeError) throw new ModelProviderConnectionError();
         throw lastError;
       } finally {
-        release();
+        releaseAdmission?.();
       }
     },
   };
