@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion, linkSourceRowsToRequirements, resolveRoutingDisposition } from "./coverage-ledger.ts";
+import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion, linkSourceRowsToRequirements, resolveRoutingDisposition, resolveSourceRowClassification } from "./coverage-ledger.ts";
+
+test("row classification reasons must agree with the structural class and mismatch stays ambiguous", () => {
+  assert.deepEqual(resolveSourceRowClassification({ rowType: "instruction", reason: "commercial_or_eligibility_term" }), {
+    rowType: "instruction", reason: "commercial_or_eligibility_term", valid: true,
+  });
+  assert.deepEqual(resolveSourceRowClassification({ rowType: "header", reason: "technical_obligation" }), {
+    rowType: "ambiguous", reason: "ambiguous_source_structure", valid: false,
+  });
+  assert.deepEqual(resolveSourceRowClassification({ rowType: "ambiguous", reason: "ambiguous_source_structure" }), {
+    rowType: "ambiguous", reason: "ambiguous_source_structure", valid: true,
+  });
+});
 
 test("explains why unsupported candidate text is excluded and directs reviewers to the source", () => {
   assert.equal(
@@ -206,6 +218,8 @@ test("lists source table rows with disposition and page-relative evidence boxes"
     sourceMatchedCandidates: 0,
     matchedRequirementIds: [],
     acceptedLinkStatus: "no_candidate_suggestions",
+    sourceClassification: "unclassified",
+    classificationReason: "classification_unavailable",
     sourceElementIds: [],
     sourceTableId: null,
     sourceRowId: null,
@@ -224,9 +238,11 @@ test("links source table rows to accepted requirements and keeps partial citatio
       bbox: { x: 10, y: 10, width: 100, height: 12 },
       sourceTableId: "table-1",
       sourceRowId: "row-1",
+      sourceClassification: "requirement",
+      classificationReason: "technical_obligation",
       sourceElementIds: ["table-1", "row-1", "cell-1", "cell-2"],
     },
-    { cells: ["Warranty", "Five years"], cellBoxes: [null, null], bbox: { x: 10, y: 30, width: 100, height: 12 }, sourceTableId: "table-1", sourceRowId: "row-2", sourceElementIds: ["table-1", "row-2", "cell-3", "cell-4"] },
+    { cells: ["Warranty", "Five years"], cellBoxes: [null, null], bbox: { x: 10, y: 30, width: 100, height: 12 }, sourceTableId: "table-1", sourceRowId: "row-2", sourceClassification: "requirement", classificationReason: "technical_obligation", sourceElementIds: ["table-1", "row-2", "cell-3", "cell-4"] },
   ], new Map([[0, 2]]), new Set(), { width: 200, height: 100 });
   const linked = linkSourceRowsToRequirements(rows.rows, 4, [
     { id: "req-10", page: 4, sourceRowIndex: 0, sourceElementIds: ["table-1", "row-1", "cell-2"] },
@@ -239,6 +255,8 @@ test("links source table rows to accepted requirements and keeps partial citatio
   assert.equal(linked[0].sourceMatchedCandidates, 1);
   assert.equal(linked[0].acceptedLinkStatus, "linked");
   assert.deepEqual(linked[0].sourceElementIds, ["table-1", "row-1", "cell-1", "cell-2"]);
+  assert.equal(linked[0].sourceClassification, "requirement");
+  assert.equal(linked[0].classificationReason, "technical_obligation");
   assert.deepEqual(linked[1].matchedRequirementIds, ["req-11"]);
   assert.equal(linked[1].acceptedLinkStatus, "linked");
   assert.deepEqual(linked[1].matchedRequirementIds, ["req-11"]);

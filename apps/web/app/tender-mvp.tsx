@@ -98,15 +98,17 @@ function countLabel(count: number, singular: string, plural = `${singular}s`): s
 function coverageRowReviewLabel(row: CoverageSourceRow): string {
   if (row.disposition === "header") return `SOURCE HEADER ROW ${row.rowNumber} · REPEATED LABEL`;
   if (row.disposition === "empty") return `EMPTY SOURCE ROW ${row.rowNumber}`;
+  if (row.sourceClassification === "ambiguous") return `AMBIGUOUS SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
   if (row.disposition === "unmapped") return `UNMAPPED SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
   if (row.sourceMatchedCandidates < row.candidateSuggestions) return `SOURCE ROW ${row.rowNumber} · COVERAGE MISMATCH`;
   return `SOURCE TABLE ROW ${row.rowNumber} · CANDIDATES SOURCE MATCHED`;
 }
 
 function coverageRowReviewMessage(row: CoverageSourceRow): string {
-  if (row.disposition === "header") return "This detected row was classified as a repeated table header.";
+  if (row.disposition === "header") return `This detected row was classified as a repeated table header (${row.classificationReason.replaceAll("_", " ")}).`;
   if (row.disposition === "empty") return "This detected source row contains no selectable cell text.";
-  if (row.disposition === "unmapped") return "No extraction candidate was generated for this nonempty source row. Decide whether it is a requirement, heading, or other table content.";
+  if (row.sourceClassification === "ambiguous") return `The row classifier could not confidently determine the row's role (${row.classificationReason.replaceAll("_", " ")}). It was retained without creating a requirement; inspect the source page and decide its disposition.`;
+  if (row.disposition === "unmapped") return `No extraction candidate was generated for this nonempty source row. Classification: ${row.sourceClassification.replaceAll("_", " ")} (${row.classificationReason.replaceAll("_", " ")}). Decide whether it is a requirement, heading, or other table content.`;
   if (row.sourceMatchedCandidates < row.candidateSuggestions) {
     return `${row.sourceMatchedCandidates} of ${row.candidateSuggestions} generated candidates from this source row matched the source; inspect the unmatched candidate and confirm the row grouping.`;
   }
@@ -972,7 +974,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                           : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")}`;
                       const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions;
                       return <div className="mvp-coverage-row-finding" key={`${item.page}-${row.rowNumber}`}>
-                        <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status}{row.textTruncated ? " · excerpt shortened" : ""}</span>
+                        <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status} · classified {row.sourceClassification.replaceAll("_", " ")} ({row.classificationReason.replaceAll("_", " ")}){row.textTruncated ? " · excerpt shortened" : ""}</span>
                         <p>{row.cells.filter(Boolean).join(" | ") || "(No cell text available)"}</p>
                         <button type="button" disabled={!row.bbox} onClick={() => { setCoverageFocus({ page: item.page, row }); setPage(item.page); setSourceOpen(true); }}>Inspect source row</button>
                       </div>;

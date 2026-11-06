@@ -22,6 +22,8 @@ Requirement citations carry stable page-scoped source element IDs in addition to
 
 The vector-table coverage ledger also carries each detected row's table/row/cell IDs and the IDs of accepted requirements linked to that row. The link status reports only whether any accepted requirement is associated with the row; candidate and accepted requirement counts remain visible as separate counts. This join exposes source association and rejected candidates; it does not decide that a row containing multiple obligations is semantically complete.
 
+Detected vector-table rows retain an advisory structural class and a reason code. Rows the classifier marks ambiguous do not generate requirements; they remain visible in the coverage ledger with their source text and an explicit unresolved classification. Header/instruction exclusions are likewise visible as source rows with their class and reason. These labels guide human review and are not ground truth; a linked requirement still does not prove that every obligation in a row was extracted.
+
 The next engineering steps are:
 
 1. Make inventory construction explicit and independently inspectable, retaining native text, OCR regions, raster image regions, and page geometry for hybrid pages. The current step records approximate PDF.js image draw bounds and exposes them for human page review; semantic region classification and canonical section/paragraph/list relationships remain open.
