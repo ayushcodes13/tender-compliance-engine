@@ -21,6 +21,7 @@ import { chooseRequirementColumn, sourceTableGroupHeading, sourceRequirementCell
 import { findColumnLayoutConflict, matchOcrHeaderTokens, normalizeSingleContentColumn, validatePageColumnMap, type SourceColumn } from "./column-layout";
 import { extractPdfPathRectangles, hasTableGridGeometry } from "./pdf-path-rectangles";
 import { validateVisualRowTranscription, type VisualOcrConfidence } from "./visual-ocr";
+import { hasRasterImageOperators, shouldRunPageOcr } from "./ocr-routing";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
@@ -312,6 +313,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       ocrPositioned: PositionedOcrLine[];
       ocrLines: OcrLine[];
       ocrPerformed: boolean;
+      ocrNeeded: boolean;
+      hasRasterImageContent: boolean;
       sourceItems: SourceTextItem[];
       rectangles: PdfRectangle[];
       hasVectorTableGeometry: boolean;
@@ -367,8 +370,21 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         }
       }
       const text = normalize(rawText);
+      const operators = await page.getOperatorList();
+      const hasRasterImageContent = hasRasterImageOperators(operators.fnArray, [
+        OPS.paintImageXObject,
+        OPS.paintInlineImageXObject,
+        OPS.paintImageMaskXObject,
+        OPS.paintImageXObjectRepeat,
+        OPS.paintImageMaskXObjectRepeat,
+      ]);
+      const pageArea = viewport.width * viewport.height;
+      const textAreaRatio = pageArea > 0
+        ? positioned.reduce((total, item) => total + item.box.width * item.box.height, 0) / pageArea
+        : 0;
+      const ocrRecommended = shouldRunPageOcr({ selectableText: text, textAreaRatio, hasRasterImageContent });
       let ocrResult: OcrPageText = { text: "", lines: [] };
-      if (text.length < 40 && ocrAttemptedPages < MAX_PAGES && Date.now() - ocrStartedAt < MAX_TOTAL_OCR_MS) {
+      if (ocrRecommended && ocrAttemptedPages < MAX_PAGES && Date.now() - ocrStartedAt < MAX_TOTAL_OCR_MS) {
         if (tesseractAvailable === undefined) tesseractAvailable = await isTesseractAvailable(undefined, signal);
         if (tesseractAvailable) {
           ocrAttemptedPages += 1;
@@ -421,7 +437,6 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const pathRectangles: PdfRectangle[] = [];
       let visualImage: string | undefined;
       {
-        const operators = await page.getOperatorList();
         for(const item of sourceItems){
           if(!item.fontName)continue;
           try{item.bold=nativeFontBold(page.commonObjs.get(item.fontName)?.name);}catch{ /* Font style remains unknown. */ }
@@ -465,7 +480,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         ocrRegions: ocrResult.lines,
       });
       sourceDocument.pages.push(sourceModel);
-      pages.push({ page: pageNumber, text: routingText, width: viewport.width, height: viewport.height, rawText, ocrText: ocrRawText, rawItemMap, positioned, ocrRawItemMap, ocrPositioned, ocrLines: ocrResult.lines, ocrPerformed: ocrResult.lines.length > 0, sourceItems, rectangles, hasVectorTableGeometry, sourceModel, structuredSection, visualImage });
+      pages.push({ page: pageNumber, text: routingText, width: viewport.width, height: viewport.height, rawText, ocrText: ocrRawText, rawItemMap, positioned, ocrRawItemMap, ocrPositioned, ocrLines: ocrResult.lines, ocrPerformed: ocrResult.lines.length > 0, ocrNeeded: ocrRecommended && ocrResult.lines.length === 0, hasRasterImageContent, sourceItems, rectangles, hasVectorTableGeometry, sourceModel, structuredSection, visualImage });
       onProgress?.({ stage: "reading", message: `Reading PDF text and table layout · page ${pageNumber} of ${pdf.numPages}`, current: pageNumber, total: pdf.numPages });
       page.cleanup();
       if (totalText > MAX_TEXT_CHARS) break;
@@ -571,6 +586,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const routingSections: RoutedSection[] = [];
     const uncertainPages = new Set<number>();
     const routingWarnings: string[] = [];
+    const unresolvedRasterPages = pages.filter((page) => page.hasRasterImageContent && page.ocrNeeded).map((page) => page.page);
+    if (unresolvedRasterPages.length) {
+      routingWarnings.push(`PDF pages ${formatPageNumbers(unresolvedRasterPages)} contain raster images alongside sparse selectable text, but local OCR did not produce a transcript. Inspect these pages for image-only technical requirements.`);
+    }
 
     let visualPageNumbers: number[] = [];
     let visualSheetType: "compliance-sheet" | "technical-table" = "technical-table";
@@ -1665,7 +1684,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         rejectionReasons,
         auditStatus,
         possibleOmissionSuggestions: audit?.possibleOmissions ?? 0,
-        ocrNeeded: !page.rawText.trim(),
+        ocrNeeded: page.ocrNeeded,
         ocrPerformed: page.ocrPerformed,
       };
     });

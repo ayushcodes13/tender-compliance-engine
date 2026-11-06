@@ -20,6 +20,10 @@ This is a deliberate simplification requested by the user. The deployed product 
 
 The dated entries below preserve the sequence of implementation and investigation. They are historical snapshots, not a single description of current behavior. When entries conflict, the later relevant entry supersedes the earlier one; current source code and its regression tests are authoritative for shipped behavior.
 
+### Additional adversarial audit sequence — 2026-11-06
+
+The new audit identifies reliability work that supersedes the older deployment-first ordering. Address confirmed findings in this sequence: hybrid-page OCR; independent response decisions for separate obligations; access control and request quotas; visual-completion provenance; OCR confidence for numeric/operator tokens; long-cell spreadsheet clipping; source-page citations in exports; and queued model-request deadlines. Keep custom-domain DNS as an open release gate. These items change distinct safety or operational guarantees and should remain separate PRs.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
