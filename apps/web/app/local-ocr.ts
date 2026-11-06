@@ -187,6 +187,12 @@ function hasAmbiguousNumericSuffix(words: OcrWord[]): boolean {
   return /[+-]?\d+(?:[.,]\d+)?\s*(?:°(?!\s*[cCfF]\b)|["'“”‘’])/u.test(text);
 }
 
+/** Bare OCR comparison signs can omit a printed equality bar (for example ≥ read as >). */
+function hasAmbiguousNumericComparison(words: OcrWord[]): boolean {
+  const text = words.map((word) => word.text).join(" ");
+  return /(?:^|[^\p{L}\p{N}])(?:<|>)(?=\s*[+-]?\d)/u.test(text);
+}
+
 export function parseTesseractTsv(
   tsv: string,
   pageSize: { width: number; height: number },
@@ -241,6 +247,7 @@ export function parseTesseractTsv(
     });
     const confidence = criticalValueConfidence(positionedWords, averageConfidence);
     const lineConfidenceLevel = hasAmbiguousNumericSuffix(positionedWords)
+      || hasAmbiguousNumericComparison(positionedWords)
       ? "low"
       : confidenceLevel(confidence);
     return {
