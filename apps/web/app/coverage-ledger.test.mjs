@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion, resolveRoutingDisposition } from "./coverage-ledger.ts";
+import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion, linkSourceRowsToRequirements, resolveRoutingDisposition } from "./coverage-ledger.ts";
 
 test("explains why unsupported candidate text is excluded and directs reviewers to the source", () => {
   assert.equal(
@@ -204,11 +204,44 @@ test("lists source table rows with disposition and page-relative evidence boxes"
     disposition: "unmapped",
     candidateSuggestions: 0,
     sourceMatchedCandidates: 0,
+    matchedRequirementIds: [],
+    acceptedLinkStatus: "no_candidate_suggestions",
+    sourceElementIds: [],
+    sourceTableId: null,
+    sourceRowId: null,
     bbox: { x: 10, y: 30, width: 50, height: 8 },
   });
   assert.equal(result.rows[0].disposition, "candidate");
   assert.equal(result.rows[1].disposition, "header");
   assert.equal(result.rows[3].disposition, "empty");
+});
+
+test("links source table rows to accepted requirements and keeps partial citation matches explicit", () => {
+  const rows = collectSourceTableCoverageRows([
+    {
+      cells: ["Operating pressure", "At least 10 bar; tolerance ±1 bar"],
+      cellBoxes: [null, null],
+      bbox: { x: 10, y: 10, width: 100, height: 12 },
+      sourceTableId: "table-1",
+      sourceRowId: "row-1",
+      sourceElementIds: ["table-1", "row-1", "cell-1", "cell-2"],
+    },
+    { cells: ["Warranty", "Five years"], cellBoxes: [null, null], bbox: { x: 10, y: 30, width: 100, height: 12 }, sourceTableId: "table-1", sourceRowId: "row-2", sourceElementIds: ["table-1", "row-2", "cell-3", "cell-4"] },
+  ], new Map([[0, 2]]), new Set(), { width: 200, height: 100 });
+  const linked = linkSourceRowsToRequirements(rows.rows, 4, [
+    { id: "req-10", page: 4, sourceRowIndex: 0, sourceElementIds: ["table-1", "row-1", "cell-2"] },
+    { id: "req-11", page: 4, sourceElementIds: ["cell-4"] },
+    { id: "table-only", page: 4, sourceElementIds: ["table-1"] },
+    { id: "req-other-page", page: 5, sourceRowIndex: 0, sourceElementIds: ["row-1"] },
+  ]);
+
+  assert.deepEqual(linked[0].matchedRequirementIds, ["req-10"]);
+  assert.equal(linked[0].sourceMatchedCandidates, 1);
+  assert.equal(linked[0].acceptedLinkStatus, "linked");
+  assert.deepEqual(linked[0].sourceElementIds, ["table-1", "row-1", "cell-1", "cell-2"]);
+  assert.deepEqual(linked[1].matchedRequirementIds, ["req-11"]);
+  assert.equal(linked[1].acceptedLinkStatus, "linked");
+  assert.deepEqual(linked[1].matchedRequirementIds, ["req-11"]);
 });
 
 test("keeps the total unmapped-row count when detail previews are capped", () => {

@@ -58,6 +58,11 @@ export type CoverageSourceRow = {
   disposition: "candidate" | "header" | "empty" | "unmapped";
   candidateSuggestions: number;
   sourceMatchedCandidates: number;
+  matchedRequirementIds: string[];
+  acceptedLinkStatus: "not_applicable" | "no_candidate_suggestions" | "linked" | "unlinked";
+  sourceElementIds: string[];
+  sourceTableId: string | null;
+  sourceRowId: string | null;
   /** Percentages of the rendered page, matching the evidence viewer contract. */
   bbox: { x: number; y: number; width: number; height: number } | null;
 };
@@ -101,6 +106,9 @@ export function collectSourceTableCoverageRows(
     cells: string[];
     cellBoxes: Array<{ x: number; y: number; width: number; height: number } | null>;
     bbox: { x: number; y: number; width: number; height: number };
+    sourceElementIds?: string[];
+    sourceTableId?: string;
+    sourceRowId?: string;
   }>,
   candidateCountByRow: Map<number, number>,
   excludedHeaderIndices: Set<number>,
@@ -124,6 +132,9 @@ export function collectSourceTableCoverageRows(
       height: Math.max(...boxes.map((box) => box.y + box.height)) - Math.min(...boxes.map((box) => box.y)),
     } : row.bbox;
     const normalizedCells = cells.map((cell) => cell.length > 240 ? `${cell.slice(0, 237)}…` : cell);
+    const acceptedLinkStatus: CoverageSourceRow["acceptedLinkStatus"] = isHeader || !populated
+      ? "not_applicable"
+      : candidateSuggestions === 0 ? "no_candidate_suggestions" : "unlinked";
     return [{
       rowNumber: rowIndex + 1,
       cells: normalizedCells,
@@ -131,6 +142,11 @@ export function collectSourceTableCoverageRows(
       disposition,
       candidateSuggestions,
       sourceMatchedCandidates: 0,
+      matchedRequirementIds: [],
+      acceptedLinkStatus,
+      sourceElementIds: row.sourceElementIds ?? [],
+      sourceTableId: row.sourceTableId ?? null,
+      sourceRowId: row.sourceRowId ?? null,
       bbox: pageSize.width > 0 && pageSize.height > 0 && sourceBox ? {
         x: sourceBox.x / pageSize.width * 100,
         y: sourceBox.y / pageSize.height * 100,
@@ -146,6 +162,35 @@ export function collectSourceTableCoverageRows(
       && (candidateCountByRow.get(rowIndex) ?? 0) === 0).length,
     notShown: Math.max(0, findings.length - Math.max(0, maxRows)),
   };
+}
+
+/** Link table-row inventory entries to accepted requirements; this proves source matching, not semantic completeness. */
+export function linkSourceRowsToRequirements(
+  rows: CoverageSourceRow[],
+  pageNumber: number,
+  requirements: Array<{ id: string; page: number; sourceRowIndex?: number; sourceElementIds: string[] }>,
+): CoverageSourceRow[] {
+  return rows.map((row) => {
+    // Table IDs are shared by every row; only row/cell IDs can identify a row-specific source.
+    const sourceIds = new Set([
+      ...(row.sourceRowId ? [row.sourceRowId] : []),
+      ...row.sourceElementIds.filter((id) => id !== row.sourceTableId),
+    ]);
+    const linked = requirements.filter((requirement) => requirement.page === pageNumber
+      && (requirement.sourceRowIndex === row.rowNumber - 1
+        || requirement.sourceElementIds.some((id) => sourceIds.has(id))));
+    const acceptedLinkStatus: CoverageSourceRow["acceptedLinkStatus"] = row.disposition === "header" || row.disposition === "empty"
+      ? "not_applicable"
+      : linked.length > 0
+        ? "linked"
+        : row.candidateSuggestions === 0 ? "no_candidate_suggestions" : "unlinked";
+    return {
+      ...row,
+      sourceMatchedCandidates: linked.length,
+      matchedRequirementIds: linked.map((requirement) => requirement.id),
+      acceptedLinkStatus,
+    };
+  });
 }
 
 export type CoverageReport = {
