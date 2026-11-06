@@ -81,7 +81,9 @@
       "disposition": "relevant",
       "phase1Handling": "route-to-technical-extraction",
       "reason": "Continues grip/fixture requirements and specifies controller connections, rates, Bluetooth/USB, user-interface connectivity, and testing-jig scope and documentation.",
-      "obligationReview": "partial"
+      "obligationReview": "partial",
+      "sourceObligationGroupsEnumerated": 9,
+      "runComparison": "Not evaluated against saved model rows; saved response-row text was unavailable."
     },
     {
       "page": 9,
@@ -89,7 +91,9 @@
       "disposition": "relevant",
       "phase1Handling": "route-to-technical-extraction",
       "reason": "Contains detailed puncture, seam, burst, and geogrid tensile jig requirements with standard references, dimensions, load ranges, and rates.",
-      "obligationReview": "partial"
+      "obligationReview": "partial",
+      "sourceObligationGroupsEnumerated": 6,
+      "runComparison": "Not evaluated against saved model rows; saved response-row text was unavailable."
     },
     {
       "page": 10,
@@ -97,7 +101,9 @@
       "disposition": "relevant",
       "phase1Handling": "route-to-technical-extraction",
       "reason": "Contains grab-test jig, software functions/formats, power, PC/UPS/peripheral configuration, and one-year warranty requirements; continues onto page 11.",
-      "obligationReview": "partial"
+      "obligationReview": "partial",
+      "sourceObligationGroupsEnumerated": 8,
+      "runComparison": "Not evaluated against saved model rows; saved response-row text was unavailable."
     },
     {
       "page": 11,
