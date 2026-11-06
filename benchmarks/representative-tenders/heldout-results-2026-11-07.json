@@ -40,6 +40,13 @@
   "manualReview": {
     "reviewedPage": 11,
     "method": "Native PDF text and rendered source page compared against all saved model candidates.",
+    "pageDispositionReview": {
+      "pagesReviewed": 15,
+      "reviewer": "Codex assistant",
+      "method": "Selectable text and rendered page images reviewed page by page.",
+      "artifact": "heldout-page-dispositions-2026-11-07.json",
+      "limit": "Page relevance classifications are not human-adjudicated. This does not compare every expected obligation with model output or establish recall; owner review is still required."
+    },
     "missedObligations": [
       "Five-year annual maintenance contract with the stated service, calibration, maintenance, spares, and consumables coverage.",
       "Local office or authorized associate in India for after-sales support and maintenance.",

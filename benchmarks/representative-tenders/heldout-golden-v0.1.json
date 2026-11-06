@@ -4,12 +4,16 @@
   "documentId": "iitg-utm",
   "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
   "pageCoordinateUnits": "PDF points",
+  "boundsFormat": "x-y-width-height",
+  "boundsProvenance": "PyMuPDF native text search bounds, parser-reported and visually checked against rendered PDF page 11",
+  "boundsReviewStatus": "assistant-checked; pending human adjudication",
   "cases": [
     {
       "id": "iitg-page-11-five-year-amc-omitted",
       "page": 11,
       "region": "Warranty and service continuation in the technical specification table",
-      "bounds": null,
+      "bounds": { "x": 207.05, "y": 20.51, "width": 344.28, "height": 40.28 },
+      "boundsPrecision": "parser-reported-text-bound",
       "expected": {
         "kind": "service-requirement",
         "summary": "Require a separately priced five-year AMC covering service visits, yearly calibration, routine maintenance, spare parts, and consumables.",
@@ -23,7 +27,8 @@
       "id": "iitg-page-11-local-after-sales-presence-omitted",
       "page": 11,
       "region": "Warranty and service continuation in the technical specification table",
-      "bounds": null,
+      "bounds": { "x": 207.05, "y": 74.65, "width": 252.52, "height": 26.12 },
+      "boundsPrecision": "parser-reported-text-bound",
       "expected": {
         "kind": "service-requirement",
         "summary": "Supplier must have a local office or authorized associate in India to provide timely after-sales support and maintenance.",
@@ -37,7 +42,8 @@
       "id": "iitg-page-11-five-year-parts-support-omitted",
       "page": 11,
       "region": "Warranty and service continuation in the technical specification table",
-      "bounds": null,
+      "bounds": { "x": 207.05, "y": 101.29, "width": 344.28, "height": 39.80 },
+      "boundsPrecision": "parser-reported-text-bound",
       "expected": {
         "kind": "service-requirement",
         "summary": "Provide after-sales service and spare-parts availability for at least five years beyond the initial warranty.",
