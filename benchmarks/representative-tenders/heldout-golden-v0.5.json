@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 5,
+  "status": "assistant-reviewed-partial-source-annotation; human-adjudication-pending",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "pageCoordinateUnits": "PDF points",
+  "boundsFormat": "x-y-width-height",
+  "boundsProvenance": "PyMuPDF 1.26.5 native text search bounds, visually inspected against Poppler render at 105 DPI; multi-line quote bounds are the union of parser-reported text bounds.",
+  "boundsReviewStatus": "assistant-checked; pending human adjudication",
+  "runComparison": "The captured IIT Guwahati run routed only pages 6–11. Page 4 was not selected or omission-audited, and saved output-row text was unavailable. These cases are source expectations only; no candidate-level recall or citation score is computed.",
+  "cases": [
+    {
+      "id": "iitg-page-4-installation-and-commissioning",
+      "page": 4,
+      "sourceUnit": "Terms & Conditions 16, Payment to Local supplier",
+      "sourceAnchor": "successful delivery, installation and commissioning/ acceptance of goods at IIT Guwahati",
+      "bounds": { "x": 252.24, "y": 487.26, "width": 315.50, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": {
+        "kind": "installation-and-commissioning-obligation",
+        "summary": "The supplier must deliver, install, and commission the ordered goods at IIT Guwahati; successful installation/commissioning is part of the stated acceptance or payment condition.",
+        "independentlyAnswerable": true
+      },
+      "expectedDisposition": "operational-technical-obligation-needs-review",
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-4-conditional-product-demonstration",
+      "page": 4,
+      "sourceUnit": "Terms & Conditions 18, Enquiry during the course of evaluation not allowed",
+      "sourceAnchor": "The bidders may also be asked to arrange demonstration of the offered items, in a short period notice, as such the bidders have to be ready for the same.",
+      "bounds": { "x": 43.68, "y": 725.13, "width": 526.85, "height": 25.25 },
+      "boundsPrecision": "native-text-search-bounds-union",
+      "expected": {
+        "kind": "conditional-product-demonstration-obligation",
+        "summary": "If the purchase committee or its authorized representative requests it during evaluation, the bidder must be ready to arrange a demonstration of the offered equipment at short notice.",
+        "independentlyAnswerable": true,
+        "condition": "Applies when the purchase committee or its authorized representative requests a demonstration."
+      },
+      "expectedDisposition": "conditional-operational-technical-obligation-needs-review",
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    }
+  ],
+  "scopeNote": "Delivery deadlines, transit insurance, pricing, payment amounts, taxes, and delay penalties on this page are commercial or contractual terms and are intentionally outside this technical-obligation annotation. Installation/commissioning and a requested demonstration are retained because they describe product delivery/acceptance and technical evaluation work.",
+  "limitations": [
+    "Source passages were reviewed by the assistant against selectable text and the rendered page; independent human adjudication is pending.",
+    "This is a partial annotation of two operational/technical units on page 4, not an exhaustive obligation inventory for the page or tender.",
+    "The page was not selected in the captured model run and the full response-row text was unavailable; no extraction recall, precision, or citation score can be computed.",
+    "The local source PDF hash must match the manifest before reproducing these source locations; the PDF is not redistributed."
+  ]
+}

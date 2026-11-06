@@ -106,6 +106,15 @@
       "runDisposition": "listed documentary/service units not routed or omission-audited in captured model run",
       "limit": "Partial source-unit annotation; related clauses and repeated documentary declarations are explicitly linked, not counted as distinct technical specifications. Full response-row text is unavailable, so no candidate-level recall or citation score is computed. Human adjudication remains pending."
     },
+    "page4OperationalTechnicalReview": {
+      "sourceUnitsAnnotated": 2,
+      "artifact": "heldout-golden-v0.5.json",
+      "reviewer": "Codex assistant",
+      "sourceHashVerified": true,
+      "boundsCheckedAgainstRenderedPages": [4],
+      "runDisposition": "installation/commissioning and conditional demonstration were on a page not selected or omission-audited in the captured model run",
+      "limit": "Partial source annotation only. The page is not exhaustively labeled, saved response-row text is unavailable, and no candidate-level recall or citation score is computed. Human adjudication remains pending."
+    },
     "page12To13FormReview": {
       "sourceUnitsAnnotated": 3,
       "artifact": "heldout-golden-v0.4.json",
