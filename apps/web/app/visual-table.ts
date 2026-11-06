@@ -32,26 +32,9 @@ export function mergeVisualRowContinuations<T extends VisualTableRow>(rows: T[])
   return merged;
 }
 
-/** Reassembles AI-split review requirements only when they came from one source cell. */
-export function mergeVisualExportGroups<T extends VisualTableRow>(rows: T[]): T[] {
-  const merged: T[] = [];
-  for (const row of rows) {
-    const previous = merged.at(-1);
-    if (row.exportGroupId && previous?.exportGroupId === row.exportGroupId) {
-      merged[merged.length - 1] = {
-        ...previous,
-        text: `${previous.text}\n${row.text}`,
-      };
-    } else {
-      merged.push(row);
-    }
-  }
-  return merged;
-}
-
 /** Preserves source order while allowing Word to paginate the response table naturally. */
 export function prepareVisualComplianceRows<T extends VisualHeadingRow>(rows: T[]): T[] {
-  return mergeVisualHeadingRows(mergeVisualRowContinuations(mergeVisualExportGroups(rows)));
+  return mergeVisualHeadingRows(mergeVisualRowContinuations(rows));
 }
 
 /** Applies only an explicit visual-model decision to join a standalone title row with its descriptor. */

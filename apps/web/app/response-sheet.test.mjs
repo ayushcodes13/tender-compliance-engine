@@ -131,7 +131,7 @@ test('normalizes different annexure layouts while keeping all 16 descriptions in
   assert.equal(sheet.columns.some(c=>c.header==='S. No.'),false);
 });
 
-test('reassembles source-cell subpoints and keeps separate annexure heading edits separate', () => {
+test('keeps source-cell obligations independently answerable and annexure heading edits separate', () => {
   const mapping=[{header:'Parameter',role:'heading'},{header:'Value',role:'specification'}];
   const source={normalizedTables:true,requirements:[
     {id:'h1',text:'A. Table',quote:'A. Table',page:20,rowType:'section',sourceSectionTitle:'Annexure I'},
@@ -141,12 +141,14 @@ test('reassembles source-cell subpoints and keeps separate annexure heading edit
     {id:'p3',text:'Third.',quote:'Third.',page:23,sourceColumnMap:mapping,sourceCells:['Holes','Third.'],sourceSectionTitle:'Annexure II'},
   ]};
   const sheet=buildResponseSheet(source);
-  assert.equal(sheet.rows.length,2);
-  assert.equal(sheet.rows[0].values[3],'First. Second.');
-  assert.deepEqual(sheet.rows[0].sourceRequirementIds,['p1','p2']);
+  assert.equal(sheet.rows.length,3);
+  assert.deepEqual(sheet.rows.slice(0,2).map(row=>row.values[3]),['First.','Second.']);
+  assert.deepEqual(sheet.rows.slice(0,2).map(row=>row.sourceRequirementIds),[['p1'],['p2']]);
+  assert.ok(sheet.rows.slice(0,2).every(row=>row.values.slice(4,7).every(value=>value==='')));
   const edited=updateResponseSheetCell(sheet,sheet.rows[0].id,0,'Edited table');
   assert.equal(edited.rows[0].values[0],'Edited table');
-  assert.equal(edited.rows[1].values[0],'A. Table');
+  assert.equal(edited.rows[1].values[0],'Edited table');
+  assert.equal(edited.rows[2].values[0],'A. Table');
 });
 
 test('normalized continuation retains both citations and additional source columns', () => {
@@ -165,17 +167,18 @@ test('normalized continuation retains both citations and additional source colum
   assert.deepEqual(sheet.rows[0].sourceRequirementIds,['a','b']);
 });
 
-test('many verified subpoints from one source cell retain every citation without becoming hundreds of response rows',()=>{
+test('many verified obligations from one source cell retain one citation and response row each',()=>{
  const mapping=[{header:'Parameter',role:'heading'},{header:'Description',role:'specification'}];
  const requirements=Array.from({length:300},(_,index)=>({
   id:`subpoint-${index}`,text:`Constraint ${index} mm.`,quote:`Constraint ${index} mm.`,page:4,
   exportGroupId:'source-cell-4-1',sourceColumnMap:mapping,sourceCells:['Instrument',`Constraint ${index} mm.`],
  }));
  const sheet=buildResponseSheet({normalizedTables:true,requirements});
- assert.equal(sheet.rows.length,1);
- assert.equal(sheet.rows[0].sourceRequirementIds.length,300);
- assert.deepEqual(sheet.rows[0].sourceRequirementIds,requirements.map(row=>row.id));
- for(const row of requirements)assert.ok(sheet.rows[0].values[3].includes(row.quote));
+ assert.equal(sheet.rows.length,300);
+ assert.deepEqual(sheet.rows.map(row=>row.sourceRequirementId),requirements.map(row=>row.id));
+ assert.deepEqual(sheet.rows.map(row=>row.sourceRequirementIds),requirements.map(row=>[row.id]));
+ assert.deepEqual(sheet.rows.map(row=>row.values[3]),requirements.map(row=>row.quote));
+ assert.ok(sheet.rows.every(row=>row.values[4]===''&&row.values[5]===''&&row.values[6]===''));
 });
 
 test('source response-column notes remain source context while every OEM response field starts blank',()=>{
