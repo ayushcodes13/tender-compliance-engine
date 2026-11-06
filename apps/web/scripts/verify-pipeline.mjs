@@ -22,6 +22,9 @@ const outsideTable = 'Service support shall remain available for 10 years.';
 let scenario = "prose";
 let extractionCalls = 0;
 let routeCalls = 0;
+let initialExtractionReturnedRecovery = false;
+let omissionAuditReturnedRecovery = false;
+let corruptedNumericClaimProposed = false;
 const provider = http.createServer(async (request, response) => {
   try {
     let raw = '';
@@ -56,15 +59,19 @@ const provider = http.createServer(async (request, response) => {
     } else if (schema === 'technical_table_missing_rows') {
       result={columns:[],requirements:[]};
     } else if (schema === 'technical_text_missing_requirements') {
-      result = {columns:[],requirements:[
+      const requirements=[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
         ...(text.includes(outsideTable)?[{page:1,quote:outsideTable,category:'Other',row_type:'requirement',heading_prefix:''},{page:1,quote:'Required value 1 mm',category:'Other',row_type:'requirement',heading_prefix:''},{page:1,quote:'A. Optical table',category:'Other',row_type:'section',heading_prefix:''}]:[]),
-      ]};
+      ];
+      if(scenario==='prose'&&requirements.some(item=>item.quote===recovery))omissionAuditReturnedRecovery=true;
+      result = {columns:[],requirements};
     } else if (schema === 'tender_requirements') {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
-      result={columns:[],requirements:[...requirements,{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
+      result={columns:[],requirements:[...requirements,...(scenario==='prose'&&pages.includes(2)?[{page:2,quote:'Vacuum shall remain below 999999 mbar.',row_type:'requirement',category:'Other',heading_prefix:''}]:[]),{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
+      if(scenario==='prose'&&result.requirements.some(item=>item.quote==='Vacuum shall remain below 999999 mbar.'))corruptedNumericClaimProposed=true;
+      if(scenario==='prose'&&result.requirements.some(item=>item.quote===recovery))initialExtractionReturnedRecovery=true;
       if(scenario==='all-rejected')result={columns:[],requirements:Array.from({length:60},(_,index)=>({page:pages[0],quote:`Invented limit ${index} of 999999 kN.`,row_type:'requirement',category:'Other',heading_prefix:''}))};
       if(scenario==='no-candidates')result={columns:[],requirements:[]};
       if(scenario==='injected-metadata')result.requirements=[{page:1,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:'',sourceBox:{x:0,y:0,width:1,height:1},source_cells_exact:true,source_row_index:999,source_column_index:0,visualOcr:true},{page:1,quote:'The catalog shall specify ingress protection IP67.',row_type:'requirement',category:'Documentation',heading_prefix:''},{page:1,quote:'Payment terms are 30 days.',row_type:'instruction',category:'Other',heading_prefix:'',source_cells_exact:true}];
@@ -227,6 +234,11 @@ try {
   const analysis=result.analysis;
   assert.equal(analysis.requirements.length,6);
   assert.deepEqual(analysis.requirements.map(row=>row.quote),[...quotes,recovery]);
+  const recoveredRequirement=analysis.requirements.find(row=>row.quote===recovery);
+  assert.equal(initialExtractionReturnedRecovery,false,'The first extraction pass deliberately omits this source requirement');
+  assert.equal(omissionAuditReturnedRecovery,true,'A separate source-to-output audit discovers the omitted exact source quote');
+  assert.ok(recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,'The recovered requirement passes source verification');
+  assert.ok(corruptedNumericClaimProposed,'The first pass deliberately proposes a mutated source value');
   for(const row of analysis.requirements){
     assert.equal(row.reviewed,false);
     assert.equal(row.sourceReference.locationPrecision,'exact');
@@ -236,6 +248,10 @@ try {
     assert.equal(row.sourceReference.documentFingerprint,analysis.document.documentFingerprint);
   }
   assert.ok(analysis.rejectedSuggestionDetails.some(row=>row.reason==='source_quote_or_location_not_verified'));
+  const rejectedCorruption=analysis.rejectedSuggestionDetails.find(row=>row.quotePreview.includes('999999 mbar.'));
+  assert.equal(rejectedCorruption?.reason,'source_quote_or_location_not_verified','A corrupted numerical value is rejected at the source-grounding gate');
+  assert.ok(analysis.requirements.some(row=>row.quote===quotes[1]),'The original source-backed numerical requirement remains intact');
+  assert.ok(!analysis.requirements.some(row=>row.quote.includes('999999 mbar.')),'The corrupted claim never enters the response matrix');
   assert.ok(analysis.rejectedSuggestionDetails.some(row=>row.reason==='page_not_selected_by_router'));
   assert.equal(analysis.coverage.summary.selectedTechnicalPages,5);
   assert.ok(extractionCalls>=3,'Multiple bounded extraction batches used');
@@ -286,7 +302,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
