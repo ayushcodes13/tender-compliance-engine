@@ -5,6 +5,7 @@ import {
   buildSourcePageModel,
   createSourceDocumentModel,
   findUniqueSourceText,
+  validateSourceDocumentInventory,
 } from "./source-document.ts";
 
 test("creates a stable document fingerprint and a distinct version identity", () => {
@@ -16,6 +17,52 @@ test("creates a stable document fingerprint and a distinct version identity", ()
   assert.notEqual(first.fingerprint, changed.fingerprint);
   assert.equal(first.documentVersionId, `ver-${first.fingerprint}`);
   assert.equal(first.pageCount, 2);
+});
+
+test("accepts a complete inventory with exact native spans and source structure", () => {
+  const document = createSourceDocumentModel(new Uint8Array([13]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 1,
+    width: 300,
+    height: 400,
+    sourceText: "Header\nForce ≥ 300 kN",
+    positionedItems: [
+      { start: 0, end: 6, text: "Header", box: { x: 10, y: 10, width: 30, height: 8 } },
+      { start: 7, end: 21, text: "Force ≥ 300 kN", box: { x: 10, y: 20, width: 90, height: 8 } },
+    ],
+    imageRegions: [{ bbox: { x: 150, y: 30, width: 100, height: 120 }, areaRatio: 0.1, operator: "image" }],
+    ocrRegions: [{ text: "Scanned note", bbox: { x: 160, y: 40, width: 60, height: 10 }, confidence: 92, confidenceLevel: "high", imageRegionIndex: 0 }],
+    vectorRows: [{ cells: ["Force", "≥ 300 kN"], cellBoxes: [null, { x: 50, y: 20, width: 50, height: 8 }] }],
+  });
+  document.pages.push(page);
+  assert.deepEqual(validateSourceDocumentInventory(document), []);
+});
+
+test("reports incomplete pages, invalid text spans, duplicate IDs, and broken source links", () => {
+  const document = createSourceDocumentModel(new Uint8Array([14]), 2);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 1,
+    width: 300,
+    height: 400,
+    sourceText: "Header",
+    positionedItems: [{ start: 0, end: 6, text: "Header", box: { x: 10, y: 10, width: 30, height: 8 } }],
+    imageRegions: [{ bbox: { x: 100, y: 100, width: 50, height: 50 }, areaRatio: 0.02, operator: "image" }],
+    ocrRegions: [{ text: "OCR", bbox: { x: 105, y: 110, width: 20, height: 5 }, confidence: 80, confidenceLevel: "medium", imageRegionIndex: 0 }],
+    vectorRows: [{ cells: ["Parameter", "Value"], cellBoxes: [null, null] }],
+  });
+  page.physicalPdfPageNumber = 2;
+  page.textBlocks[0].text = "Forged";
+  page.ocrRegions[0].imageRegionId = `${page.id}:image:missing`;
+  page.ocrRegions[0].id = page.textBlocks[0].id;
+  page.tables[0].rows[0].cells[0].columnIndex = 1;
+  document.pages.push(page);
+  const issues = validateSourceDocumentInventory(document);
+  assert.deepEqual(new Set(issues.map(({ code }) => code)), new Set([
+    "page_count_mismatch", "missing_or_reordered_page", "invalid_text_span", "duplicate_source_element_id", "invalid_ocr_image_link",
+    "invalid_table_relationship",
+  ]));
 });
 
 test("preserves physical page text blocks with offsets, geometry, and source table cells", () => {

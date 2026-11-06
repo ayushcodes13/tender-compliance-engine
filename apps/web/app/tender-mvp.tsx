@@ -58,7 +58,7 @@ type Analysis = {
   filename: string;
   pageCount: number;
   textPages: number;
-  document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number };
+  document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number; inventoryIntegrity: "structurally-verified" };
   normalizedTables?: boolean;
   sectionTitle?: string;
   sectionHeading?: string;
@@ -937,6 +937,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             </summary>
             <p className="mvp-coverage-caveat">Counts describe what the parser, router, and page audit actually processed. A model audit reporting no gaps does not prove that the tender is complete.</p>
             <dl className="mvp-coverage-summary">
+              <div><dt>Source inventory</dt><dd>All {analysis.document.pageCount} physical pages and parser-owned references passed structural checks. This does not establish semantic completeness.</dd></div>
               <div><dt>Router input</dt><dd>{analysis.coverage.summary.routingPages} of {analysis.coverage.summary.documentPages} pages with native or OCR text</dd></div>
               <div><dt>Routing dispositions</dt><dd>{countLabel(analysis.coverage.summary.selectedTechnicalPages, "page")} selected · {countLabel(analysis.coverage.summary.routingPagesUncertain, "uncertain page")} · {countLabel(analysis.coverage.summary.routingPagesUnrouted, "unrouted page")} · {countLabel(analysis.coverage.summary.routingPagesWithoutText, "page without text")}</dd></div>
               <div><dt>Source table rows</dt><dd>{countLabel(analysis.coverage.summary.tableRowsDetected, "row")} detected · {countLabel(analysis.coverage.summary.tableRowsMappedToCandidates, "row")} mapped · {countLabel(analysis.coverage.summary.tableRowsExcludedAsHeaders, "header")} · {countLabel(analysis.coverage.summary.tableRowsEmpty, "empty row")} · {countLabel(analysis.coverage.summary.tableRowsUnmapped, "nonempty row")} unmapped, across {countLabel(analysis.coverage.summary.tablePagesWithKnownRowCount, "page")} with detected row geometry</dd></div>

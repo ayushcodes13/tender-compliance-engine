@@ -106,6 +106,7 @@ try {
   const one=await analyze(short);
   assert.equal(one.ok,true,one.error);
   assert.equal(one.analysis.document.documentFingerprint,createHash('sha256').update(Buffer.from(short.output('arraybuffer'))).digest('hex'));
+  assert.equal(one.analysis.document.inventoryIntegrity,'structurally-verified');
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
   scenario='injected-metadata';
