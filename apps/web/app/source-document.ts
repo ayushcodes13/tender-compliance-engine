@@ -21,6 +21,14 @@ export type SourceOcrRegion = {
   extractionMethod: "tesseract-ocr";
 };
 
+export type SourceImageRegion = {
+  id: string;
+  bbox: SourceBox;
+  areaRatio: number;
+  operator: "image" | "image-group" | "image-repeat";
+  bboxPrecision: "approximate";
+};
+
 export type SourceTableCell = {
   id: string;
   rowIndex: number;
@@ -47,6 +55,7 @@ export type SourcePageModel = {
   ocrRecommended: boolean;
   ocrStatus: SourcePageOcrStatus;
   ocrSkipReason?: SourcePageOcrSkipReason;
+  imageRegions: SourceImageRegion[];
   ocrRegions: SourceOcrRegion[];
   extractionMethod: "pdfjs-native-text" | "tesseract-ocr" | "no-selectable-text";
   textBlocks: SourceTextBlock[];
@@ -129,6 +138,7 @@ export function buildSourcePageModel(input: {
   ocrRecommended?: boolean;
   ocrStatus?: SourcePageOcrStatus;
   ocrSkipReason?: SourcePageOcrSkipReason;
+  imageRegions?: Array<Omit<SourceImageRegion, "id" | "bboxPrecision">>;
   ocrRegions?: Array<Omit<SourceOcrRegion, "id" | "extractionMethod">>;
   vectorRows?: VectorRowInput[];
 }): SourcePageModel {
@@ -142,6 +152,12 @@ export function buildSourcePageModel(input: {
     extractionMethod: "pdfjs-native-text" as const,
   }));
   const tables = buildSourceTables(pageId, input.vectorRows ?? []);
+  const imageRegions: SourceImageRegion[] = (input.imageRegions ?? []).map((region, index) => ({
+    ...region,
+    id: `${pageId}:image:${index + 1}`,
+    bbox: { ...region.bbox },
+    bboxPrecision: "approximate",
+  }));
   const ocrRegions: SourceOcrRegion[] = (input.ocrRegions ?? []).map((region, index) => ({
     ...region,
     id: `${pageId}:ocr:${index + 1}`,
@@ -176,6 +192,7 @@ export function buildSourcePageModel(input: {
     ocrRecommended,
     ocrStatus,
     ...(input.ocrSkipReason ? { ocrSkipReason: input.ocrSkipReason } : {}),
+    imageRegions,
     ocrRegions,
     extractionMethod: input.sourceText.trim() ? "pdfjs-native-text" : ocrText.trim() ? "tesseract-ocr" : "no-selectable-text",
     textBlocks,

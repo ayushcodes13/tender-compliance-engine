@@ -3,16 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 
 type Box = { x: number; y: number; width: number; height: number };
+type ImageRegion = { id: string; bbox: Box; areaRatio: number };
 
 export function PdfEvidenceViewer({
   file,
   pageNumber,
   selectedBox,
+  imageRegions = [],
   highlightLabel = "Bounding box for cited source quote",
 }: {
   file: File;
   pageNumber: number;
   selectedBox: Box | null;
+  imageRegions?: ImageRegion[];
   highlightLabel?: string;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -109,6 +112,14 @@ export function PdfEvidenceViewer({
       {status && <div className="mvp-pdf-status" role="status">{status}</div>}
       <div className="mvp-pdf-page" style={{ visibility: status ? "hidden" : "visible" }}>
         <canvas ref={canvasRef} aria-label={`Tender PDF page ${pageNumber}`} />
+        {imageRegions.map((region) => (
+          <div
+            key={region.id}
+            className="mvp-pdf-image-region"
+            aria-label={`Approximate raster image region, ${Math.round(region.areaRatio * 100)} percent of page`}
+            style={{ left: `${region.bbox.x}%`, top: `${region.bbox.y}%`, width: `${region.bbox.width}%`, height: `${region.bbox.height}%` }}
+          />
+        ))}
         {selectedBox && (
           <div
             className="mvp-pdf-highlight"

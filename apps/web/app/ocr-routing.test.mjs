@@ -5,6 +5,24 @@ import { jsPDF } from "jspdf";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime.ts";
 import { hasRasterImageOperators, shouldRunPageOcr } from "./ocr-routing.ts";
+import { collectPdfImageRegions } from "./pdf-image-regions.ts";
+
+const imageRegionCodes = {
+  save: OPS.save,
+  restore: OPS.restore,
+  transform: OPS.transform,
+  paintFormXObjectBegin: OPS.paintFormXObjectBegin,
+  paintFormXObjectEnd: OPS.paintFormXObjectEnd,
+  image: [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject],
+  imageGroup: [OPS.paintImageMaskXObjectGroup, OPS.paintInlineImageXObjectGroup],
+  imageRepeat: [OPS.paintImageXObjectRepeat],
+  imageMaskRepeat: [OPS.paintImageMaskXObjectRepeat],
+};
+
+test("recognizes PDF.js image-group operators as raster image content", () => {
+  assert.equal(hasRasterImageOperators([OPS.paintInlineImageXObjectGroup], [OPS.paintInlineImageXObjectGroup]), true);
+  assert.equal(hasRasterImageOperators([OPS.paintImageMaskXObjectGroup], [OPS.paintImageMaskXObjectGroup]), true);
+});
 
 test("detects OCR need on a hybrid page with a selectable header and scanned table image", async () => {
   const pdf = new jsPDF({ unit: "pt", format: "a4" });
@@ -37,6 +55,27 @@ test("detects OCR need on a hybrid page with a selectable header and scanned tab
     const imageOperators = [OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintImageXObjectRepeat, OPS.paintImageMaskXObjectRepeat];
     assert.ok(selectableText.length > 40, "the native header exceeds the old character threshold");
     assert.ok(hasRasterImageOperators(operatorList.fnArray, imageOperators));
+    const imageRegions = collectPdfImageRegions({
+      fnArray: operatorList.fnArray,
+      argsArray: operatorList.argsArray,
+      codes: imageRegionCodes,
+      viewportTransform: viewport.transform,
+      pageSize: { width: viewport.width, height: viewport.height },
+    });
+    assert.equal(imageRegions.length, 1);
+    assert.ok(Math.abs(imageRegions[0].bbox.x - 28) < 1);
+    assert.ok(Math.abs(imageRegions[0].bbox.y - 54) < 1);
+    assert.ok(Math.abs(imageRegions[0].bbox.width - 539) < 1);
+    assert.ok(Math.abs(imageRegions[0].bbox.height - 674) < 1);
+    // The page-level transcript area is dense, but the scanned table image
+    // contains almost no native text and must independently trigger OCR.
+    assert.equal(shouldRunPageOcr({
+      selectableText,
+      textAreaRatio: 0.22,
+      hasRasterImageContent: true,
+      imageRegions,
+      nativeTextBoxes: [],
+    }), true);
     assert.equal(shouldRunPageOcr({ selectableText, textAreaRatio, hasRasterImageContent: true }), true);
     assert.equal(shouldRunPageOcr({ selectableText, textAreaRatio, hasRasterImageContent: false }), false);
     page.cleanup();
@@ -47,5 +86,19 @@ test("detects OCR need on a hybrid page with a selectable header and scanned tab
 
 test("does not OCR dense native text pages just because they contain an image", () => {
   assert.equal(shouldRunPageOcr({ selectableText: "A long native technical schedule".repeat(50), textAreaRatio: 0.22, hasRasterImageContent: true }), false);
+  assert.equal(shouldRunPageOcr({
+    selectableText: "A long native technical schedule".repeat(50),
+    textAreaRatio: 0.22,
+    hasRasterImageContent: true,
+    imageRegions: [{ bbox: { x: 350, y: 0, width: 200, height: 90 }, areaRatio: 0.037 }],
+    nativeTextBoxes: [],
+  }), false, "small repeated image marks should not trigger whole-page OCR by themselves");
+  assert.equal(shouldRunPageOcr({
+    selectableText: "A long native technical schedule".repeat(50),
+    textAreaRatio: 0.22,
+    hasRasterImageContent: true,
+    imageRegions: [{ bbox: { x: 20, y: 20, width: 400, height: 500 }, areaRatio: 0.55 }],
+    nativeTextBoxes: [{ x: 20, y: 20, width: 400, height: 500 }],
+  }), false, "dense native text contained inside the image region does not trigger duplicate OCR");
     assert.equal(shouldRunPageOcr({ selectableText: "A short native header", textAreaRatio: 0.02, hasRasterImageContent: false }), true);
 });

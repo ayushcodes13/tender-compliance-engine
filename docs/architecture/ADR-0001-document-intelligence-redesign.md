@@ -20,7 +20,7 @@ Treat a tender as a canonical, source-preserving inventory before interpreting i
 
 The next engineering steps are:
 
-1. Make inventory construction explicit and independently inspectable, retaining both native text and OCR evidence for hybrid pages.
+1. Make inventory construction explicit and independently inspectable, retaining native text, OCR regions, raster image regions, and page geometry for hybrid pages. The current step records approximate PDF.js image draw bounds and exposes them for human page review; semantic region classification and canonical section/paragraph/list relationships remain open.
 2. Compare the current PDF.js/vector reconstruction with optional parsers on adjudicated regions, not aggregate table counts alone.
 3. Rework extraction around bounded, resumable page/region batches and explicit incomplete states; do not claim completeness when audits did not run.
 4. Represent each independently answerable obligation as an atomic proposal and preserve all source locations through review and export.
