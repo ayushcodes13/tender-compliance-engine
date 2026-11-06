@@ -77,8 +77,35 @@ test("native references include exact quote offsets and source cell identity whe
   assert.equal(reference.bboxCoordinateSystem, "pdfjs-viewport-scale-1");
   assert.equal(reference.sourceCell?.columnIndex, 1);
   assert.equal(reference.sourceCell?.rowId, page.tables[0].rows[0].id);
+  assert.deepEqual(reference.sourceElementIds, [page.tables[0].id, page.tables[0].rows[0].id, page.tables[0].rows[0].cells[1].id]);
   assert.equal(reference.startOffset, 29);
   assert.equal(reference.endOffset, 37);
+});
+
+test("native narrative citations link every parser text block crossed by the exact source span", () => {
+  const document = createSourceDocumentModel(new Uint8Array([12]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 6,
+    width: 300,
+    height: 400,
+    sourceText: "Minimum\nforce ≥ 10 kN",
+    positionedItems: [
+      { start: 0, end: 7, text: "Minimum", box: { x: 10, y: 20, width: 40, height: 8 } },
+      { start: 8, end: 21, text: "force ≥ 10 kN", box: { x: 10, y: 30, width: 70, height: 8 } },
+    ],
+  });
+  const reference = buildRequirementSourceReference({
+    document,
+    page,
+    quote: "Minimum force ≥ 10 kN",
+    bbox: { x: 10, y: 20, width: 70, height: 18 },
+  });
+
+  assert.deepEqual(reference.sourceElementIds, page.textBlocks.map((block) => block.id));
+  assert.equal(reference.sourceText, "Minimum\nforce ≥ 10 kN");
+  assert.equal(reference.startOffset, 0);
+  assert.equal(reference.endOffset, 21);
 });
 
 test("visual transcriptions keep OCR text separate from native context and omit invented offsets", () => {
@@ -129,6 +156,7 @@ test("stores local OCR regions separately from native text with approximate cita
   assert.equal(reference.locationPrecision, "approximate");
   assert.equal(reference.ocrConfidence, "medium");
   assert.equal(reference.startOffset, undefined);
+  assert.deepEqual(reference.sourceElementIds, [page.ocrRegions[0].id]);
 });
 
 test("stores raster image regions with stable page-scoped identities and approximate boxes", () => {

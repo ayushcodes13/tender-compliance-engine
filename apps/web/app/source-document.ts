@@ -80,6 +80,8 @@ export type RequirementSourceReference = {
   documentFingerprint: string;
   physicalPdfPageNumber: number;
   sourceText: string;
+  /** Stable IDs for the parser-owned text blocks, OCR regions, and table elements supporting this reference. */
+  sourceElementIds: string[];
   startOffset?: number;
   endOffset?: number;
   offsetUnit?: "utf16-code-unit";
@@ -241,6 +243,29 @@ export function buildRequirementSourceReference(input: {
     }
   }
   const exactCellText = sourceCell ? input.page.tables[0]?.rows[sourceCell.rowIndex]?.cells[sourceCell.columnIndex]?.sourceText : undefined;
+  const sourceElementIds = new Set<string>();
+  if (match) {
+    for (const block of input.page.textBlocks) {
+      if (block.startOffset < match.endOffset && block.endOffset > match.startOffset) sourceElementIds.add(block.id);
+    }
+  }
+  if (sourceCell) {
+    sourceElementIds.add(sourceCell.tableId);
+    sourceElementIds.add(sourceCell.rowId);
+    sourceElementIds.add(sourceCell.cellId);
+  }
+  if (transcription && input.transcriptionMethod === "tesseract-ocr") {
+    const ocrTranscript = input.page.ocrRegions.map((region) => region.text).join("\n");
+    const ocrMatch = findUniqueTokenBoundedMatch(ocrTranscript, transcription);
+    if (ocrMatch) {
+      let offset = 0;
+      for (const region of input.page.ocrRegions) {
+        const regionEnd = offset + region.text.length;
+        if (offset < ocrMatch.endOffset && regionEnd > ocrMatch.startOffset) sourceElementIds.add(region.id);
+        offset = regionEnd + 1;
+      }
+    }
+  }
 
   return {
     documentId: input.document.documentId,
@@ -248,6 +273,7 @@ export function buildRequirementSourceReference(input: {
     documentFingerprint: input.document.fingerprint,
     physicalPdfPageNumber: input.page.physicalPdfPageNumber,
     sourceText: transcription ? input.selectableTextContext ?? "" : match?.sourceText ?? exactCellText ?? "",
+    sourceElementIds: [...sourceElementIds],
     ...(match ? { startOffset: match.startOffset, endOffset: match.endOffset } : {}),
     ...(match ? { offsetUnit: "utf16-code-unit" as const, offsetScope: "page-source-text" as const } : {}),
     bbox: input.bbox ? { ...input.bbox } : null,
