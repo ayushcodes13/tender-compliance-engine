@@ -96,6 +96,21 @@
       "artifact": "heldout-golden-v0.3.json",
       "runDisposition": "not-evaluated-saved-row-text-unavailable",
       "limit": "Partial grouped source inventory only; not exhaustive atomic labels or recall evaluation. Parser-reported text blocks and numeric meanings require human review."
+    },
+    "page2To3DocumentaryServiceReview": {
+      "sourceUnitsAnnotated": 11,
+      "artifact": "heldout-golden-v0.4.json",
+      "reviewer": "Codex assistant",
+      "sourceHashVerified": true,
+      "boundsCheckedAgainstRenderedPages": [2, 3],
+      "runDisposition": "listed documentary/service units not routed or omission-audited in captured model run",
+      "limit": "Partial source-unit annotation; related clauses and repeated documentary declarations are explicitly linked, not counted as distinct technical specifications. Full response-row text is unavailable, so no candidate-level recall or citation score is computed. Human adjudication remains pending."
+    },
+    "page12To13FormReview": {
+      "sourceUnitsAnnotated": 3,
+      "artifact": "heldout-golden-v0.4.json",
+      "runDisposition": "repeated bidder-response form fields; not a separate product-parameter set",
+      "limit": "The full form outputs were not saved. These records identify repeated source fields and do not establish duplicate resolution quality. Human adjudication remains pending."
     }
   },
   "qualityClaims": {

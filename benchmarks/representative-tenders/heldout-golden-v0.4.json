@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 4,
+  "status": "assistant-reviewed-partial-source-annotation; human-adjudication-pending",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "pageCoordinateUnits": "PDF points",
+  "boundsFormat": "x-y-width-height",
+  "boundsProvenance": "PyMuPDF 1.26.5 native text search bounds, visually inspected against Poppler renders at 110 DPI; quote spans broken over lines use the union of parser-reported word bounds.",
+  "boundsReviewStatus": "assistant-checked; pending human adjudication",
+  "runComparison": "The captured IIT Guwahati run routed only pages 6–11; pages 2–3 were not extracted or omission-audited. These source annotations therefore establish routing-level omissions for the listed documentary/service obligations, not candidate-level precision or exhaustive page recall. The full saved output-row text was unavailable.",
+  "cases": [
+    {
+      "id": "iitg-page-2-offered-technical-details-annexure",
+      "page": 2,
+      "sourceUnit": "03.1.A(iv), Fee/Technical Documents",
+      "sourceAnchor": "technical features of the offered item",
+      "bounds": { "x": 55.31, "y": 116.65, "width": 313.52, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "technical-document-cross-reference", "summary": "The bidder must state the offered item's technical features using Annexure-I; the Annexure-I specifications are the primary technical source, so this line should link to rather than duplicate those individual specifications.", "independentlyAnswerable": false },
+      "expectedDisposition": "link-to-primary-technical-specifications",
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-2-manufacturer-or-dealership-certificate",
+      "page": 2,
+      "sourceUnit": "03.1.A(iii), Fee/Technical Documents",
+      "sourceAnchor": "Manufacturer’s Certificate in case of manufacturer",
+      "bounds": { "x": 43.68, "y": 91.33, "width": 527.14, "height": 25.25 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "conditional-documentary-obligation", "summary": "A manufacturer must provide its manufacturer's certificate; an agent or dealer must provide the manufacturer's certificate plus valid authorization/dealership evidence for the offered product.", "independentlyAnswerable": true, "condition": "Evidence differs by whether the bidder is the manufacturer or an agent/dealer." },
+      "expectedDisposition": "documentary-obligation-needs-review",
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-2-technical-leaflet",
+      "page": 2,
+      "sourceUnit": "03.1.A(v), Fee/Technical Documents",
+      "sourceAnchor": "Standard Technical leaflet/literature",
+      "bounds": { "x": 55.78, "y": 129.25, "width": 217.12, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "technical-documentation-obligation", "summary": "Provide standard technical leaflet or literature for the offered item.", "independentlyAnswerable": true },
+      "expectedDisposition": "documentary-obligation-needs-review",
+      "relatedCases": ["iitg-page-3-literature-supports-quoted-specifications"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-2-certification-evidence",
+      "page": 2,
+      "sourceUnit": "03.1.A(vi), Fee/Technical Documents",
+      "sourceAnchor": "ISO/ISI Certificate and Proof of Certification",
+      "bounds": { "x": 55.29, "y": 141.85, "width": 333.2, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "technical-documentation-obligation", "summary": "Provide the applicable ISO/ISI certificate and proof that the offered product meets the certification claimed in its specification.", "independentlyAnswerable": true },
+      "expectedDisposition": "documentary-obligation-needs-review",
+      "relatedCases": ["iitg-page-3-quality-certificates"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-2-warranty-details",
+      "page": 2,
+      "sourceUnit": "03.1.A(vii), Fee/Technical Documents",
+      "sourceAnchor": "Warranty Details",
+      "bounds": { "x": 57.34, "y": 154.45, "width": 69.08, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "warranty-documentation-obligation", "summary": "Provide warranty details for the offered equipment.", "independentlyAnswerable": true },
+      "expectedDisposition": "documentary-obligation-needs-review",
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-2-service-centre-details",
+      "page": 2,
+      "sourceUnit": "03.1.B(i), Other Important Documents",
+      "sourceAnchor": "its Service Centre detail",
+      "bounds": { "x": 55.78, "y": 192.37, "width": 292.41, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "after-sales-documentation-obligation", "summary": "Provide bidder and service-centre details using Annexure-III; the service-centre information supports evaluation of after-sales availability.", "independentlyAnswerable": true },
+      "expectedDisposition": "service-documentation-obligation-needs-review",
+      "relatedCases": ["iitg-page-3-india-after-sales-centre", "iitg-page-13-guwahati-service-centre-form-field"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-3-warranty-annexure-reference",
+      "page": 3,
+      "sourceUnit": "Terms & Conditions 03, Warranty",
+      "sourceAnchor": "Please refer to Annexure I",
+      "bounds": { "x": 56.27, "y": 53.51, "width": 257.34, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "cross-reference", "summary": "Warranty is governed by the technical specifications in Annexure-I; this line points to the primary warranty requirement and is not a separate warranty value.", "independentlyAnswerable": false },
+      "expectedDisposition": "link-to-primary-warranty-source",
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-3-literature-supports-quoted-specifications",
+      "page": 3,
+      "sourceUnit": "Terms & Conditions 04, Literature a must",
+      "sourceAnchor": "specifications mentioned in the quotation must be reflected",
+      "bounds": { "x": 43.68, "y": 78.97, "width": 527.14, "height": 37.97 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "technical-evidence-and-documentation-obligation", "summary": "The supplier's quotation must be supported by technical literature that reflects the quoted specifications, and the offered model/specifications must be highlighted for reference.", "independentlyAnswerable": true },
+      "expectedDisposition": "documentary-obligation-needs-review",
+      "relatedCases": ["iitg-page-2-technical-leaflet"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-3-india-after-sales-centre",
+      "page": 3,
+      "sourceUnit": "Terms & Conditions 05, After Sales Service",
+      "sourceAnchor": "after sales service centre in India",
+      "bounds": { "x": 43.68, "y": 129.85, "width": 526.78, "height": 25.25 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "after-sales-documentation-obligation", "summary": "The bidder must provide the address, contact number, and email for an India-based after-sales service centre in Annexure-III.", "independentlyAnswerable": true },
+      "expectedDisposition": "service-documentation-obligation-needs-review",
+      "relatedCases": ["iitg-page-2-service-centre-details", "iitg-page-13-guwahati-service-centre-form-field"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-3-dealership-certificate",
+      "page": 3,
+      "sourceUnit": "Terms & Conditions 06, Dealership Certificate",
+      "sourceAnchor": "must upload valid dealership certificate",
+      "bounds": { "x": 156.61, "y": 155.17, "width": 369.83, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "conditional-documentary-obligation", "summary": "Agents or dealers acting for a manufacturer must upload valid dealership/authorization evidence.", "independentlyAnswerable": true, "condition": "Applies to agents or dealers, not a manufacturer bidding directly." },
+      "expectedDisposition": "duplicate-or-reinforcing-documentary-obligation",
+      "relatedCases": ["iitg-page-2-manufacturer-or-dealership-certificate"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-3-quality-certificates",
+      "page": 3,
+      "sourceUnit": "Terms & Conditions 07, Quality Certificates",
+      "sourceAnchor": "Manufacturer’s certificate; (b) ISO/ISI certificate",
+      "bounds": { "x": 43.68, "y": 167.77, "width": 526.84, "height": 25.25 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "technical-documentation-obligation", "summary": "Provide a manufacturer's certificate and a valid ISO/ISI certificate to support product authenticity and claimed standards.", "independentlyAnswerable": true },
+      "expectedDisposition": "duplicate-or-reinforcing-documentary-obligation",
+      "relatedCases": ["iitg-page-2-certification-evidence"],
+      "observed": "Page not selected by the captured run; no output record or page audit was available."
+    },
+    {
+      "id": "iitg-page-12-compliance-form-technical-literature-and-warranty",
+      "page": 12,
+      "sourceUnit": "Annexure-II compliance-certificate checklist",
+      "sourceAnchor": "Standard Technical literature on each of the items offered",
+      "bounds": { "x": 110.06, "y": 170.29, "width": 332.48, "height": 90.41 },
+      "boundsPrecision": "native-text-search-bounds-union",
+      "expected": { "kind": "response-form-cross-reference", "summary": "The checklist asks the bidder to declare offered technical features, technical literature, warranty, and related certificates; it repeats documentary checks from pages 2–3 and contains no new equipment parameter.", "independentlyAnswerable": false },
+      "expectedDisposition": "duplicate-response-form-not-a-new-technical-requirement",
+      "observed": "Page not selected by the captured run; exact checklist response rows are not available for comparison."
+    },
+    {
+      "id": "iitg-page-12-after-sales-service-checklist-field",
+      "page": 12,
+      "sourceUnit": "Annexure-II compliance-certificate checklist, row 16",
+      "sourceAnchor": "After Sales Service term agreed",
+      "bounds": { "x": 110.06, "y": 461.82, "width": 281.42, "height": 12.65 },
+      "boundsPrecision": "native-text-search-bound",
+      "expected": { "kind": "response-form-cross-reference", "summary": "The bidder is asked to agree to the after-sales term and provide the service-centre contact detail; this checklist field reiterates the Annexure-III service-centre information rather than adding a separate equipment requirement.", "independentlyAnswerable": false },
+      "expectedDisposition": "duplicate-service-documentation-form-field",
+      "relatedCases": ["iitg-page-2-service-centre-details", "iitg-page-3-india-after-sales-centre", "iitg-page-13-guwahati-service-centre-form-field"],
+      "observed": "Page not selected by the captured run; exact checklist response text is not available for comparison."
+    },
+    {
+      "id": "iitg-page-13-guwahati-service-centre-form-field",
+      "page": 13,
+      "sourceUnit": "Annexure-III bidder-details form, row 02",
+      "sourceAnchor": "Name & Address of service centre in Guwahati city",
+      "bounds": { "x": 99.26, "y": 250.69, "width": 202.51, "height": 25.25 },
+      "boundsPrecision": "native-text-search-bounds-union",
+      "expected": { "kind": "service-centre-form-field", "summary": "Annexure-III asks for the service-centre address in Guwahati and its contact person; this is a bidder-information field linked to the after-sales disclosure, not an additional equipment parameter.", "independentlyAnswerable": false },
+      "expectedDisposition": "duplicate-service-documentation-form-field",
+      "relatedCases": ["iitg-page-2-service-centre-details", "iitg-page-3-india-after-sales-centre"],
+      "observed": "Page not selected by the captured run; exact form-response rows are not available for comparison."
+    }
+  ],
+  "limitations": [
+    "Source regions were inspected by the assistant against the rendered PDF and selectable text; a second human adjudicator has not reviewed them.",
+    "This is a partial obligation inventory for documentary and after-sales clauses on pages 2–3 plus related response forms on pages 12–13; it is not exhaustive for pages 1–5 or 12–15.",
+    "No page 2–3 output text was saved, so the evidence proves those pages were not routed in the captured run but cannot measure candidate-level precision, quote accuracy, or partial coverage.",
+    "The PDF remains local and is not redistributed; the recorded SHA-256 must match before reproducing these source locations."
+  ]
+}
