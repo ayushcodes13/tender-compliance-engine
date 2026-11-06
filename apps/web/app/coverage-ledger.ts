@@ -7,6 +7,16 @@ export type RejectedSuggestion = {
   quotePreview: string;
 };
 
+export function describeRejectedSuggestion(reason: string): string {
+  if (reason === "source_quote_or_location_not_verified") {
+    return "Not added to the response sheet: the wording could not be verified against source text or OCR evidence on this page. Inspect the source page before relying on it.";
+  }
+  if (reason === "page_not_selected_by_router") {
+    return "Not added to the response sheet: its page was not selected for extraction.";
+  }
+  return `Not added to the response sheet: ${reason.replace(/_/g, " ")}.`;
+}
+
 export type CoverageSourceRow = {
   /** One-based position in the detected source table row sequence. */
   rowNumber: number;

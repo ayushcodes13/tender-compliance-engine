@@ -184,8 +184,9 @@ A formal 3-tier validation ladder and hierarchical response sheet architecture w
 - [x] **Tiered validation ladder (`apps/web/app/tiered-validation.ts`)**:
   - **Tier 1 (Verbatim Check)**: Deterministic string matching on native PDF selectable text with exact bounding box derivation.
   - **Tier 2 (Visual Check)**: Fallback on OCR transcript and token-level containment on cited page to handle scanned pages, character noise, and table cell wrapping.
-  - **Tier 3 (Human Review)**: Items ungrounded in verbatim and visual checks are not dropped or fabricated; they are explicitly flagged with `verdict: "needs_human_review"`, `precision: "unverified"`, and `needsHumanReview: true`.
-  - Runs over all candidate requirements before returning analysis to the user, producing summary counts and per-requirement validation tags.
+  - **Tier 3 (Human Review)**: A candidate passed to this validator that fails both automated checks is flagged with `verdict: "needs_human_review"`, `precision: "unverified"`, and `needsHumanReview: true`.
+  - In the production analysis flow, a stricter source-acceptance gate runs first. Candidates without accepted source evidence are excluded from the response sheet and surfaced in the coverage ledger as not added; they are not converted into Tier 3 requirement rows.
+  - The validator runs over source-accepted requirements before returning analysis, producing summary counts and per-requirement validation tags.
 - [x] **Hierarchical response sheet (`apps/web/app/response-sheet.ts` & `apps/web/app/response-sections.ts`)**:
   - Dynamically captures both Main Section / Unit (e.g. `Microwave Unit`, `Console`, `Magnet Unit`) and Subsystem / Parameter (e.g. `Microwave Bridge`, `Microwave Power`, `Automatic Frequency Control (AFC)`, `Magnetic Field Controller`), eliminating heading latching.
   - Generates multi-level columns `[Section / Unit, Subsystem / Parameter, Tender requirement, Compliance (Yes / No), Remarks / Justifications, Source page]`.

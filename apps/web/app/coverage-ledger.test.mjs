@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCoverageReport, collectSourceTableCoverageRows } from "./coverage-ledger.ts";
+import { buildCoverageReport, collectSourceTableCoverageRows, describeRejectedSuggestion } from "./coverage-ledger.ts";
+
+test("explains why unsupported candidate text is excluded and directs reviewers to the source", () => {
+  assert.equal(
+    describeRejectedSuggestion("source_quote_or_location_not_verified"),
+    "Not added to the response sheet: the wording could not be verified against source text or OCR evidence on this page. Inspect the source page before relying on it.",
+  );
+  assert.equal(
+    describeRejectedSuggestion("page_not_selected_by_router"),
+    "Not added to the response sheet: its page was not selected for extraction.",
+  );
+});
 
 const record = (page, overrides = {}) => ({
   page,

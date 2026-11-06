@@ -13,7 +13,7 @@ import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, ver
 import { buildResponseSections } from "./response-sections";
 import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
-import type { CoverageReport, CoverageSourceRow, RejectedSuggestion } from "./coverage-ledger";
+import { describeRejectedSuggestion, type CoverageReport, type CoverageSourceRow, type RejectedSuggestion } from "./coverage-ledger";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -914,7 +914,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   <span className={item.auditStatus === "no_gaps_reported" ? "" : "is-warning"}>Page audit: {item.auditStatus.replace(/_/g, " ")}</span>
                   {item.possibleOmissionSuggestions > 0 && <span className="is-warning">{countLabel(item.possibleOmissionSuggestions, "possible omission suggestion")}</span>}
                   {rejectedOnPage.map((suggestion, index) => <span className="mvp-coverage-rejection" key={`${item.page}-${suggestion.reason}-${index}`}>
-                    Rejected: {suggestion.reason.replace(/_/g, " ")}{suggestion.quotePreview ? ` — “${suggestion.quotePreview}”` : ""}
+                    {describeRejectedSuggestion(suggestion.reason)}{suggestion.quotePreview ? ` Suggested wording: “${suggestion.quotePreview}”` : ""}
                   </span>)}
                 </li>;
               })}
