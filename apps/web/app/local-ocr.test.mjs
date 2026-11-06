@@ -19,10 +19,37 @@ test("parses OCR words into source-ordered lines with page-coordinate boxes", ()
   assert.deepEqual(result.lines[1], {
     text: "100 kN",
     bbox: { x: 40, y: 80, width: 110, height: 20 },
-    confidence: 93,
+    confidence: 90,
     confidenceLevel: "high",
+    words: [
+      { start: 0, end: 3, text: "100", bbox: { x: 40, y: 80, width: 60, height: 20 }, confidence: 96, confidenceLevel: "high" },
+      { start: 4, end: 6, text: "kN", bbox: { x: 110, y: 80, width: 40, height: 20 }, confidence: 90, confidenceLevel: "high" },
+    ],
   });
   assert.equal(result.lines[0].confidenceLevel, "low");
+});
+
+test("low-confidence numeric and adjacent unit tokens cannot be hidden by a high word average", () => {
+  const labels = ["Maximum", "operating", "pressure", "value", "confidence", "level", "remains", "quite", "high"];
+  const values = [...labels.map((text) => ({ text, confidence: 98 })), { text: "5", confidence: 5 }, { text: "%", confidence: 96 }];
+  const tsv = [
+    "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+    ...values.map((word, index) => `5\t1\t1\t1\t1\t${index + 1}\t${index * 50}\t10\t40\t10\t${word.confidence}\t${word.text}`),
+  ].join("\n");
+  const [line] = parseTesseractTsv(tsv, { width: 700, height: 100 }, { width: 700, height: 100 }).lines;
+  assert.equal(line.confidence, 5, "the critical numeric token controls the line confidence");
+  assert.equal(line.confidenceLevel, "low", "the numeric token controls technical-value confidence");
+  assert.equal(line.words.find((word) => word.text === "5").confidenceLevel, "low");
+  assert.equal(line.words.find((word) => word.text === "%").confidenceLevel, "high");
+
+  const weakUnit = values.map((word) => ({ ...word, confidence: word.text === "%" ? 5 : 98 }));
+  const unitTsv = [
+    "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+    ...weakUnit.map((word, index) => `5\t1\t1\t1\t1\t${index + 1}\t${index * 50}\t10\t40\t10\t${word.confidence}\t${word.text}`),
+  ].join("\n");
+  const [unitLine] = parseTesseractTsv(unitTsv, { width: 700, height: 100 }, { width: 700, height: 100 }).lines;
+  assert.equal(unitLine.confidence, 5, "the unit adjacent to a technical value also affects confidence");
+  assert.equal(unitLine.confidenceLevel, "low");
 });
 
 test("returns empty OCR text for malformed TSV or invalid image dimensions", () => {
@@ -45,8 +72,8 @@ test("allows configured Tesseract languages without shell interpretation", () =>
 
 test("maps each OCR line to its approximate source box without mapping inserted line breaks", () => {
   const lines = [
-    { text: "First row", bbox: { x: 10, y: 20, width: 40, height: 8 }, confidence: 91, confidenceLevel: "high" },
-    { text: "Second row", bbox: { x: 10, y: 32, width: 45, height: 8 }, confidence: 70, confidenceLevel: "medium" },
+    { text: "First row", bbox: { x: 10, y: 20, width: 40, height: 8 }, confidence: 91, confidenceLevel: "high", words: [] },
+    { text: "Second row", bbox: { x: 10, y: 32, width: 45, height: 8 }, confidence: 70, confidenceLevel: "medium", words: [] },
   ];
   const result = buildOcrTextPositionMap(lines);
 

@@ -30,6 +30,8 @@ The unauthenticated-upload finding now has a production Basic-auth gate, with a 
 
 Model-proposed visual completions no longer replace source text in a requirement or export. The literal selectable quote remains the response text; a high-confidence completion is attached only as a visibly unverified suggestion in the source drawer. Human confirmation is still required before any wording is changed in the editable response sheet.
 
+Local Tesseract parsing now retains per-word confidence and geometry. A line containing numeric values derives its confidence level from numeric/operator tokens and adjacent recognized engineering units, rather than letting high-confidence prose raise a weak technical value's average. When multiple technical values share a line, the lowest relevant token confidence controls the line-level review signal.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
