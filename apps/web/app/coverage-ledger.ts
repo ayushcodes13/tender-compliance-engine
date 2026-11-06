@@ -2,6 +2,37 @@ import type { SourceBox, SourcePageOcrSkipReason, SourcePageOcrStatus } from "./
 
 export type CoverageAuditStatus = "not_run" | "incomplete" | "no_gaps_reported" | "possible_gaps_reported";
 export type ExtractionStatus = "not_selected" | "complete" | "incomplete";
+export type RoutingDisposition = "selected" | "uncertain" | "unrouted" | "no_text";
+
+export function resolveRoutingDisposition(input: {
+  hasRoutingText: boolean;
+  selectedForExtraction: boolean;
+  selectedByAnnexureContinuation: boolean;
+  markedUncertain: boolean;
+  matchingSections: Array<{ title: string; reason: string }>;
+}): { disposition: RoutingDisposition; reason: string } {
+  if (!input.hasRoutingText) {
+    return { disposition: "no_text", reason: "No native or OCR text was available to the router; inspect the page image." };
+  }
+  if (input.selectedForExtraction) {
+    const sectionContext = input.matchingSections.length
+      ? input.matchingSections.map((section) => `${section.title.slice(0, 120)}: ${section.reason.slice(0, 280)}`).join("; ").slice(0, 800)
+      : input.selectedByAnnexureContinuation
+        ? "Retained as a page in a parser-detected annexure continuation."
+        : "Selected by the router; no matching section reason was retained.";
+    return {
+      disposition: "selected",
+      reason: input.markedUncertain ? `${sectionContext} The router also marked this page uncertain.` : sectionContext,
+    };
+  }
+  if (input.markedUncertain) {
+    return { disposition: "uncertain", reason: "The router marked this page uncertain; it was not included in extraction and needs source review." };
+  }
+  return {
+    disposition: "unrouted",
+    reason: "No section range or uncertainty disposition was returned for this page; do not treat it as confirmed irrelevant.",
+  };
+}
 
 export type RejectedSuggestion = {
   page: number | null;
@@ -33,6 +64,9 @@ export type CoverageSourceRow = {
 
 export type PageCoverageRecord = {
   page: number;
+  routingDisposition: RoutingDisposition;
+  routingReason: string;
+  routerMarkedUncertain: boolean;
   selectableTextAvailable: boolean;
   routingInputIncluded: boolean;
   routingContextClipped: boolean;
@@ -120,6 +154,9 @@ export type CoverageReport = {
     documentPages: number;
     routingPages: number;
     selectedTechnicalPages: number;
+    routingPagesUncertain: number;
+    routingPagesUnrouted: number;
+    routingPagesWithoutText: number;
     pagesWithoutSelectableText: number;
     pagesWithRasterImageContent: number;
     ocrRecommendedPages: number;
@@ -164,6 +201,9 @@ export function buildCoverageReport(
       documentPages: orderedPages.length,
       routingPages: count((page) => page.routingInputIncluded),
       selectedTechnicalPages: count((page) => page.selectedForExtraction),
+      routingPagesUncertain: count((page) => page.routingDisposition === "uncertain" || page.routerMarkedUncertain),
+      routingPagesUnrouted: count((page) => page.routingDisposition === "unrouted"),
+      routingPagesWithoutText: count((page) => page.routingDisposition === "no_text"),
       pagesWithoutSelectableText: count((page) => !page.selectableTextAvailable),
       pagesWithRasterImageContent: count((page) => page.hasRasterImageContent),
       ocrRecommendedPages: count((page) => page.ocrRecommended),

@@ -28,7 +28,7 @@ import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRendere
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
-import { buildCoverageReport, collectSourceTableCoverageRows, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
+import { buildCoverageReport, collectSourceTableCoverageRows, resolveRoutingDisposition, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion } from "./coverage-ledger";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
@@ -776,6 +776,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const modelSelectedPages = expandRoutedSections(uniqueSections, routingPages.map((page) => page.page));
     visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.filter(section=>section.annexure).map((section) => section.page), pages.map((page) => page.page));
     const addedContinuationPages = visualPageNumbers.filter((page) => !modelSelectedPages.includes(page));
+    const annexureContinuationPages = new Set(addedContinuationPages);
     if (addedContinuationPages.length) routingWarnings.push(`Source annexure boundaries retained PDF pages ${formatPageNumbers(addedContinuationPages)} in addition to model-routed pages. These continuation pages require review too.`);
 
     // Audit unselected pages for technical indicators to prevent router false-negatives
@@ -1716,8 +1717,17 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       current.push(suggestion);
       pageRejections.set(suggestion.page, current);
     }
+    const extractableRoutePages = new Set(routingPages.filter((page) => visualPageNumbers.includes(page.page)).map((page) => page.page));
     const coveragePages = pages.map((page) => {
-      const selectedForExtraction = visualPageNumbers.includes(page.page);
+      const selectedForExtraction = extractableRoutePages.has(page.page);
+      const matchingSections = uniqueSections.filter((section) => page.page >= section.start_page && page.page <= section.end_page);
+      const routeDisposition = resolveRoutingDisposition({
+        hasRoutingText: Boolean(page.text.trim()),
+        selectedForExtraction,
+        selectedByAnnexureContinuation: annexureContinuationPages.has(page.page),
+        markedUncertain: uncertainPages.has(page.page),
+        matchingSections,
+      });
       const extraction = pageExtractionState.get(page.page);
       const audit = pageAuditState.get(page.page);
       const auditStatus: CoverageAuditStatus = !audit || audit.total === 0
@@ -1732,6 +1742,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         .map((reason) => ({ reason, count: rejectedOnPage.filter((item) => item.reason === reason).length }));
       return {
         page: page.page,
+        routingDisposition: routeDisposition.disposition,
+        routingReason: routeDisposition.reason,
+        routerMarkedUncertain: uncertainPages.has(page.page),
         selectableTextAvailable: Boolean(page.rawText.trim()),
         routingInputIncluded: Boolean(page.text.trim()),
         routingContextClipped: clippedFromRouting.includes(page.page),
@@ -1780,6 +1793,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       rejectedSuggestions: rejectedSuggestionDetails.filter((item) => item.page === null
         || !pages.some((page) => page.page === item.page)).length,
     });
+    const unresolvedRoutingPages = [...new Set(coverage.pages
+      .filter((page) => page.routingDisposition === "unrouted" || page.routingDisposition === "no_text")
+      .map((page) => page.page))];
     report("source verification complete", { stage: "verifying", message: `Verified ${requirements.length} source-linked rows` });
 
     if (requirements.length === 0) {
@@ -1795,8 +1811,8 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         rejectedSuggestionDetails: rejectedSuggestionDetails.slice(0, 50),
         rejectedSuggestionsNotShown: Math.max(0, rejectedSuggestionDetails.length - 50),
         coverageSummary: coverage.summary,
-        reviewPageNumbers: coveragePages.filter((page) => page.selectedForExtraction).map((page) => page.page).slice(0, 50),
-        reviewPagesNotShown: Math.max(0, coveragePages.filter((page) => page.selectedForExtraction).length - 50),
+        reviewPageNumbers: coveragePages.map((page) => page.page).slice(0, 50),
+        reviewPagesNotShown: Math.max(0, coveragePages.length - 50),
       };
     }
 
@@ -1864,7 +1880,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       sheetHeading: pages.some((page) => locatePageQuote("TECHNICAL SPECIFICATION:", page))
         ? "TECHNICAL SPECIFICATION:"
         : undefined,
-      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.unverifiedVisualCompletion) ? " Model-proposed visual completions are shown separately as unverified suggestions and are not included in response rows or exports." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""} Tiered validation: ${validationSummary.verbatimPass} verbatim verified, ${validationSummary.visualPass} visual/OCR verified, ${validationSummary.needsHumanReview} flagged for human review.`,
+      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${unresolvedRoutingPages.length ? ` The router did not resolve PDF pages ${formatPageNumbers(unresolvedRoutingPages)}; inspect them before treating the extraction as complete.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.unverifiedVisualCompletion) ? " Model-proposed visual completions are shown separately as unverified suggestions and are not included in response rows or exports." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""} Tiered validation: ${validationSummary.verbatimPass} verbatim verified, ${validationSummary.visualPass} visual/OCR verified, ${validationSummary.needsHumanReview} flagged for human review.`,
     };
     const responseRows = buildResponseSheet(analysis).rows.length;
     if (responseRows > MAX_RESPONSE_ROWS) {
