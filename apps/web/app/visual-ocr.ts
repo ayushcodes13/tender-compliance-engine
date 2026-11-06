@@ -1,7 +1,7 @@
 export type VisualOcrConfidence = "high" | "medium" | "low";
 
-/** Accept a visual row transcription only when it preserves every selectable source token in order. */
-export function validateVisualRowTranscription(
+/** Retain a model completion as a proposal only when it preserves selectable source tokens. */
+export function validateVisualCompletionProposal(
   selectableQuote: string,
   visualQuote: string,
   confidence: VisualOcrConfidence,
@@ -23,4 +23,14 @@ export function validateVisualRowTranscription(
     visualIndex += 1;
   }
   return transcription;
+}
+
+export function separateVisualCompletionProposal(
+  selectableQuote: string,
+  visualQuote: string,
+  confidence: VisualOcrConfidence,
+): { sourceQuote: string; unverifiedSuggestion?: string } {
+  const sourceQuote = selectableQuote.trim();
+  const suggestion = validateVisualCompletionProposal(sourceQuote, visualQuote, confidence);
+  return { sourceQuote, ...(suggestion ? { unverifiedSuggestion: suggestion } : {}) };
 }

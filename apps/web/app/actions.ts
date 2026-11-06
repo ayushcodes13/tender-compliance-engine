@@ -20,7 +20,7 @@ import { extractVectorTableRows, isRepeatedTableHeader } from "./vector-table";
 import { chooseRequirementColumn, sourceTableGroupHeading, sourceRequirementCell } from "./table-columns";
 import { findColumnLayoutConflict, matchOcrHeaderTokens, normalizeSingleContentColumn, validatePageColumnMap, type SourceColumn } from "./column-layout";
 import { extractPdfPathRectangles, hasTableGridGeometry } from "./pdf-path-rectangles";
-import { validateVisualRowTranscription, type VisualOcrConfidence } from "./visual-ocr";
+import { separateVisualCompletionProposal, type VisualOcrConfidence } from "./visual-ocr";
 import { hasRasterImageOperators, shouldRunPageOcr } from "./ocr-routing";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
@@ -61,6 +61,7 @@ type Requirement = {
   quote: string;
   sourceReference: RequirementSourceReference;
   selectableTextQuote?: string;
+  unverifiedVisualCompletion?: string;
   bbox: Box | null;
   precision: "exact" | "visual-ocr" | "page-only" | "unverified";
   verdict?: "verbatim_pass" | "visual_pass" | "needs_human_review";
@@ -796,7 +797,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       },
     };
 
-    type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean };
+    type Candidate = { page?: number; quote?: string; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
     let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: "extraction" | "coverage"; allowedPages?: number[]; trustedVectorRows?:boolean }> = [];
     let sourceColumns: SourceColumn[] = [];
@@ -1086,25 +1087,23 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             && suggestedSegments.every((segment) => segment.row_type === "requirement")
             && splitQuotes.length > 1;
           const visualCompletion = splitQuotes.length === 1 ? visualCompletionByIndex.get(index) : undefined;
-          const visualQuote = visualCompletion && typeof visualCompletion.quote === "string"
-            ? validateVisualRowTranscription(sourceQuote, visualCompletion.quote, visualCompletion.confidence ?? "low")
-            : null;
-          const segments = splitQuotes.length > 1 ? splitQuotes.map((quote, splitIndex) => ({ quote, rowType: suggestedSegments[splitIndex]?.row_type, category: suggestedSegments[splitIndex]?.category })) : [{ quote: visualQuote ?? sourceQuote, rowType: label?.row_type, category: label?.category }];
+          const visualDecision = visualCompletion && typeof visualCompletion.quote === "string"
+            ? separateVisualCompletionProposal(sourceQuote, visualCompletion.quote, visualCompletion.confidence ?? "low")
+            : { sourceQuote };
+          const visualSuggestion = visualDecision.unverifiedSuggestion;
+          const segments = splitQuotes.length > 1 ? splitQuotes.map((quote, splitIndex) => ({ quote, rowType: suggestedSegments[splitIndex]?.row_type, category: suggestedSegments[splitIndex]?.category, unverifiedVisualCompletion: undefined })) : [{ quote: sourceQuote, rowType: label?.row_type, category: label?.category, unverifiedVisualCompletion: visualSuggestion }];
           return segments.map((segment, splitIndex) => {
             const quote = segment.quote;
             const outputCells = [...row.cells];
             if (!isSection && !sourceCell?.specificationBlank) outputCells[requirementColumnIndex] = quote;
-            const visualOcr = Boolean(visualQuote);
-            const ocrWarning = Boolean(visualCompletion);
-            const lines = visualOcr ? [quote] : displayLinesForQuote(quote, page.rawText, page.rawItemMap, page.positioned) ?? [quote];
+            const lines = displayLinesForQuote(quote, page.rawText, page.rawItemMap, page.positioned) ?? [quote];
             const quoteBox = locateQuote(quote, page.rawText, page.rawItemMap, page.positioned);
             return {
               page: page.page,
               quote,
-              selectableTextQuote: visualOcr ? row.quote : undefined,
-              visualOcr,
-              visualOcrConfidence: visualOcr ? visualCompletion?.confidence : undefined,
-              ocrWarning,
+              unverifiedVisualCompletion: segment.unverifiedVisualCompletion,
+              visualOcr: false,
+              ocrWarning: false,
               remark: splitQuotes.length === 1 ? row.cells[pageColumns.findIndex((column) => column.role === "remark")] ?? "" : "",
               heading_prefix: splitQuotes.length === 1 || splitIndex === 0 ? label?.heading_prefix ?? "" : "",
               nativeHeadingPrefix: nativeHeadingPrefix&&quote.startsWith(nativeHeadingPrefix)?nativeHeadingPrefix:undefined,
@@ -1606,6 +1605,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           sourceCellLocation,
         }),
         selectableTextQuote: visualOcr ? candidate.selectableTextQuote : undefined,
+        unverifiedVisualCompletion: typeof candidate.unverifiedVisualCompletion === "string" ? candidate.unverifiedVisualCompletion : undefined,
         bbox: bbox ? {
           x: (Math.min(bbox.x, remarkBox?.x ?? bbox.x) / sourcePage.width) * 100,
           y: (Math.min(bbox.y, remarkBox?.y ?? bbox.y) / sourcePage.height) * 100,
@@ -1778,7 +1778,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       sheetHeading: pages.some((page) => locatePageQuote("TECHNICAL SPECIFICATION:", page))
         ? "TECHNICAL SPECIFICATION:"
         : undefined,
-      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""} Tiered validation: ${validationSummary.verbatimPass} verbatim verified, ${validationSummary.visualPass} visual/OCR verified, ${validationSummary.needsHumanReview} flagged for human review.`,
+      reviewNote: `Review every extracted row against the tender. This list is not a completeness guarantee. ${routingSummary}${uncertainPages.size ? ` Routing needs human review on PDF pages ${formatPageNumbers([...uncertainPages])}.` : ""}${routingWarnings.length ? ` Routing warnings: ${[...new Set(routingWarnings)].join(" ")}` : ""}${requirements.some((item) => item.ocrWarning) ? " Some row text was transcribed visually from embedded page images and carries an OCR warning; verify it against the original page." : ""}${requirements.some((item) => item.unverifiedVisualCompletion) ? " Model-proposed visual completions are shown separately as unverified suggestions and are not included in response rows or exports." : ""}${requirements.some((item) => item.precision === "page-only") ? " Some literal quotes were verified on their PDF page but have no trustworthy highlight box; review these page-only citations manually." : ""}${coverageCheckIncomplete ? " One or more model-based extraction or page coverage calls could not complete; inspect the coverage ledger." : ""} Tiered validation: ${validationSummary.verbatimPass} verbatim verified, ${validationSummary.visualPass} visual/OCR verified, ${validationSummary.needsHumanReview} flagged for human review.`,
     };
     const responseRows = buildResponseSheet(analysis).rows.length;
     if (responseRows > MAX_RESPONSE_ROWS) {

@@ -38,9 +38,13 @@ const provider = http.createServer(async (request, response) => {
       result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
-      const columns = ['single-content','mixed-native-heading'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
+      const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>({row_index:Number(match[1]),row_type:match[2].includes('Description')||match[2].includes('S. No.')?'header':match[2].includes('A. Optical table')?'section':'requirement',category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false})),loose_headings:[],splits:[],visual_completions:[]};
+      if(scenario==='visual-completion'&&schema==='visual_table_row_labels'){
+        const row=result.rows.find(candidate=>text.includes(`${candidate.row_index}. CELL 0: Pump shall deliver 200 bar`));
+        if(row)result.visual_completions=[{row_index:row.row_index,quote:'Pump shall deliver 200 bar and be compatible with ISO 9001',confidence:'high'}];
+      }
       if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly'))row.row_type='section';}}
     } else if (schema === 'technical_table_page_rows') {
       const quote='The centrifuge shall accommodate 10 samples.';
@@ -182,6 +186,18 @@ try {
   assert.equal(mixedCell.headingPrefix,mixedTitle);assert.equal(mixedCell.nativeHeadingPrefix,mixedTitle);assert.ok(mixedCell.quote.includes(mixedBody));
   const mixedSheet=buildResponseSheet(mixedHeading.analysis);assert.equal(mixedSheet.rows[0].values[0],mixedTitle);assert.equal(mixedSheet.rows[0].values[3],mixedBody);
   assert.ok(mixedCell.sourceReference.sourceCell,'Full-cell source identity retained');
+  scenario='visual-completion';
+  const completionPdf=new jsPDF({unit:'pt'});completionPdf.setFontSize(9);completionPdf.text('TECHNICAL SPECIFICATION',40,45);
+  [['Technical Parameters NIQ','Remark'],['Pump shall deliver 200 bar',''],['Supply voltage shall be 230 V AC',''],['Maximum flow shall be 20 L/min','']].forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{const width=column===0?370:130;completionPdf.rect(x,70+row*45,width,45);if(value)completionPdf.text(value,x+3,88+row*45);x+=width;});});
+  const completion=await analyze(completionPdf);assert.equal(completion.ok,true,completion.error);
+  const completionRow=completion.analysis.requirements.find(row=>row.quote==='Pump shall deliver 200 bar');
+  assert.ok(completionRow,'The immutable response quote is the literal selectable source text');
+  assert.equal(completionRow.unverifiedVisualCompletion,'Pump shall deliver 200 bar and be compatible with ISO 9001');
+  assert.ok(completionRow.sourceReference.sourceText.includes('Pump shall deliver 200 bar'));
+  const completionSheet=buildResponseSheet(completion.analysis);
+  assert.equal(completionSheet.rows[0].values[3],'Pump shall deliver 200 bar');
+  assert.ok(!completionSheet.rows[0].values[3].includes('ISO 9001'));
+  assert.match(completion.analysis.reviewNote,/unverified suggestions and are not included in response rows or exports/);
   scenario='prose';
   const pdf=new jsPDF();
   quotes.forEach((quote,index)=>{if(index)pdf.addPage();pdf.text('Technical requirements',20,20);pdf.text(quote,20,40);if(index===4)pdf.text(recovery,20,60);});
@@ -242,7 +258,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','mixed bold heading retains assessable body','single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

@@ -28,6 +28,8 @@ The independent-response change supersedes the earlier 2025-10-25 response-capac
 
 The unauthenticated-upload finding now has a production Basic-auth gate, with a fail-closed response when its password is missing. This does not implement a global quota or cross-instance concurrency limit; those remain open because the single-app MVP has no shared state store, and process-local counters would not provide a global guarantee on serverless deployments.
 
+Model-proposed visual completions no longer replace source text in a requirement or export. The literal selectable quote remains the response text; a high-confidence completion is attached only as a visibly unverified suggestion in the source drawer. Human confirmation is still required before any wording is changed in the editable response sheet.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
