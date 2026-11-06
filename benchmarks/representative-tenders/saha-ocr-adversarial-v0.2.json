@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "status": "assistant-reviewed-adversarial-ocr-case; human-adjudication-pending",
+  "documentId": "saha",
+  "sourceSha256": "ff72ab64cd94d9507ec1c169ce064315bcc862a5c0e663984aa0a3e69af347b6",
+  "sourcePage": 3,
+  "tesseractVersion": "5.5.3",
+  "applicationOcrPath": {
+    "renderer": "Poppler pdftoppm",
+    "maxImageDimensionPixels": 1700,
+    "pageSizePoints": { "width": 612, "height": 792 },
+    "pageSegmentationMode": 3
+  },
+  "case": {
+    "id": "saha-page-3-sensitivity-exponent-quote-substitution",
+    "sourceText": "Absolute sensitivity: 1.6 × 10⁹ spins / 1 G line width;",
+    "observedOcrText": "Absolute sensitivity: 1.6 x 10” spins / 1 G line width;",
+    "ambiguousToken": "10”",
+    "observedTokenConfidence": 72.050865,
+    "observedLineConfidenceLevelBeforeChange": "medium",
+    "tokenBoundsPoints": { "x": 244.08, "y": 27.36, "width": 12.60, "height": 9.36 },
+    "visualInspection": "The rendered tender page shows a superscript 9 after 10; the closing quote-like glyph is not a source quote or unit.",
+    "expectedSystemDisposition": "preserve OCR transcript and mark the critical value low confidence for human review",
+    "mustNot": [
+      "rewrite the OCR transcript as 10⁹ without source-verified transcription",
+      "treat the medium OCR confidence as sufficient support for the exponent",
+      "promote the OCR text to an exact native-text citation"
+    ]
+  },
+  "limitations": [
+    "The source PDF is local and is not redistributed.",
+    "This is one assistant-reviewed OCR failure case, not a general OCR accuracy estimate.",
+    "The annotated source value and coordinates require independent human adjudication."
+  ]
+}

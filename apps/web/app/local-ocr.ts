@@ -181,10 +181,10 @@ function criticalValueConfidence(words: OcrWord[], average: number): number {
   return Math.min(...[...critical].map((index) => words[index].confidence));
 }
 
-/** A bare degree glyph after a number can be Tesseract's rendering of a superscript exponent. */
-function hasAmbiguousBareDegreeValue(words: OcrWord[]): boolean {
+/** Bare degree or quote-like suffixes can be Tesseract's rendering of a superscript exponent. */
+function hasAmbiguousNumericSuffix(words: OcrWord[]): boolean {
   const text = words.map((word) => word.text).join(" ");
-  return /[+-]?\d+(?:[.,]\d+)?\s*°(?!\s*[cCfF]\b)/u.test(text);
+  return /[+-]?\d+(?:[.,]\d+)?\s*(?:°(?!\s*[cCfF]\b)|["'“”‘’])/u.test(text);
 }
 
 export function parseTesseractTsv(
@@ -240,7 +240,7 @@ export function parseTesseractTsv(
       };
     });
     const confidence = criticalValueConfidence(positionedWords, averageConfidence);
-    const lineConfidenceLevel = hasAmbiguousBareDegreeValue(positionedWords)
+    const lineConfidenceLevel = hasAmbiguousNumericSuffix(positionedWords)
       ? "low"
       : confidenceLevel(confidence);
     return {
