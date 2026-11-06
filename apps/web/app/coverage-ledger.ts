@@ -1,3 +1,5 @@
+import type { SourcePageOcrSkipReason, SourcePageOcrStatus } from "./source-document.ts";
+
 export type CoverageAuditStatus = "not_run" | "incomplete" | "no_gaps_reported" | "possible_gaps_reported";
 export type ExtractionStatus = "not_selected" | "complete" | "incomplete";
 
@@ -51,6 +53,10 @@ export type PageCoverageRecord = {
   rejectionReasons: Array<{ reason: string; count: number }>;
   auditStatus: CoverageAuditStatus;
   possibleOmissionSuggestions: number;
+  hasRasterImageContent: boolean;
+  ocrRecommended: boolean;
+  ocrStatus: SourcePageOcrStatus;
+  ocrSkipReason?: SourcePageOcrSkipReason;
   ocrNeeded: boolean;
   ocrPerformed: boolean;
 };
@@ -114,6 +120,12 @@ export type CoverageReport = {
     routingPages: number;
     selectedTechnicalPages: number;
     pagesWithoutSelectableText: number;
+    pagesWithRasterImageContent: number;
+    ocrRecommendedPages: number;
+    ocrAttemptedPages: number;
+    ocrSkippedPages: number;
+    ocrFailedPages: number;
+    ocrCompletedWithoutTextPages: number;
     pagesProcessedWithOcr: number;
     clippedRoutingPages: number;
     tableRowsDetected: number;
@@ -152,6 +164,12 @@ export function buildCoverageReport(
       routingPages: count((page) => page.routingInputIncluded),
       selectedTechnicalPages: count((page) => page.selectedForExtraction),
       pagesWithoutSelectableText: count((page) => !page.selectableTextAvailable),
+      pagesWithRasterImageContent: count((page) => page.hasRasterImageContent),
+      ocrRecommendedPages: count((page) => page.ocrRecommended),
+      ocrAttemptedPages: count((page) => ["text-found", "no-text-found", "failed"].includes(page.ocrStatus)),
+      ocrSkippedPages: count((page) => page.ocrStatus === "not-attempted"),
+      ocrFailedPages: count((page) => page.ocrStatus === "failed"),
+      ocrCompletedWithoutTextPages: count((page) => page.ocrStatus === "no-text-found"),
       pagesProcessedWithOcr: count((page) => page.ocrPerformed),
       clippedRoutingPages: count((page) => page.routingContextClipped),
       tableRowsDetected: sum((page) => page.sourceTableRowsDetected ?? 0),
