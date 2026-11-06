@@ -40,12 +40,16 @@ const provider = http.createServer(async (request, response) => {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
       const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
-      result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>({row_index:Number(match[1]),row_type:match[2].includes('Description')||match[2].includes('S. No.')?'header':match[2].includes('A. Optical table')?'section':'requirement',category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false})),loose_headings:[],splits:[],visual_completions:[]};
+      result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>{
+        const row_type=match[2].includes('Description')||match[2].includes('S. No.')?'header':match[2].includes('A. Optical table')?'section':match[2].includes('Unclear source row')?'ambiguous':'requirement';
+        const classification_reason={header:'header_or_page_furniture',section:'structural_heading',ambiguous:'ambiguous_source_structure',requirement:'technical_obligation'}[row_type];
+        return {row_index:Number(match[1]),row_type,classification_reason,category:'Other',continues_previous:false,heading_prefix:'',merge_with_next:false};
+      }),loose_headings:[],splits:[],visual_completions:[]};
       if(scenario==='visual-completion'&&schema==='visual_table_row_labels'){
         const row=result.rows.find(candidate=>text.includes(`${candidate.row_index}. CELL 0: Pump shall deliver 200 bar`));
         if(row)result.visual_completions=[{row_index:row.row_index,quote:'Pump shall deliver 200 bar and be compatible with ISO 9001',confidence:'high'}];
       }
-      if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly'))row.row_type='section';}}
+      if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly')){row.row_type='section';row.classification_reason='structural_heading';}}}
     } else if (schema === 'technical_table_page_rows') {
       const quote='The centrifuge shall accommodate 10 samples.';
       result={columns:[],requirements:scenario==='unlocated-remark'&&text.includes(quote)?[{page:1,quote,remark:'Invented deviation: maximum 500 RPM.',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]};
@@ -183,6 +187,9 @@ try {
   const mixedHeading=await analyze(mixedPdf);assert.equal(mixedHeading.ok,true,mixedHeading.error);
   const mixedCell=mixedHeading.analysis.requirements.find(row=>row.quote.includes(mixedTitle));
   assert.equal(mixedCell.rowType,'requirement','A mixed source cell is assessable despite model section classification');
+  const mixedSourceRow=mixedHeading.analysis.coverage.pages.flatMap(page=>page.sourceTableCoverageRows??[]).find(row=>row.cells.some(cell=>cell.includes(mixedTitle)));
+  assert.equal(mixedSourceRow.sourceClassification,'requirement');
+  assert.equal(mixedSourceRow.classificationReason,'technical_obligation');
   assert.equal(mixedCell.headingPrefix,mixedTitle);assert.equal(mixedCell.nativeHeadingPrefix,mixedTitle);assert.ok(mixedCell.quote.includes(mixedBody));
   const mixedSheet=buildResponseSheet(mixedHeading.analysis);assert.equal(mixedSheet.rows[0].values[0],mixedTitle);assert.equal(mixedSheet.rows[0].values[3],mixedBody);
   assert.ok(mixedCell.sourceReference.sourceCell,'Full-cell source identity retained');
@@ -233,6 +240,7 @@ try {
     if(page===1){tables.setFontSize(6);tables.rect(40,0,515,12);tables.text('Letterhead contact details',43,8);}
     const widths=page===1?[35,100,380]:[35,100,230,75,75];
     const sourceRows=[['A. Optical table',...widths.slice(1).map(()=>'')],['S. No.','Specification','Description',...(page===2?['Comply (Yes/No)','Remarks']:[])],
+      ...(page===1?[['0','Unclear source row','Source layout cannot be resolved',...(page===2?['','']:[])]]:[]),
       ...Array.from({length:16},(_,index)=>[String(index+1),`Parameter ${index+1}`,`Required value ${index+1} mm`,...(page===2?['','']:[])])];
     tables.setFontSize(11);tables.text(page===1?'Annexure I':'Annexure II',40,25);tables.text(page===1?'Technical Specifications for Optical Tables':'Technical Compliance Report for Optical Tables',40,45);
     tables.setFontSize(8);
@@ -243,6 +251,12 @@ try {
   const mixed=await analyze(tables);
   assert.equal(mixed.ok,true,mixed.error);
   assert.equal(mixed.analysis.normalizedTables,true);
+  const ambiguousSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.cells.some(cell=>cell.includes('Unclear source row')));
+  assert.ok(ambiguousSourceRow);
+  assert.equal(ambiguousSourceRow.sourceClassification,'ambiguous');
+  assert.equal(ambiguousSourceRow.classificationReason,'ambiguous_source_structure');
+  assert.equal(ambiguousSourceRow.disposition,'unmapped');
+  assert.deepEqual(ambiguousSourceRow.matchedRequirementIds,[],'Ambiguous source content stays out of output requirements and remains reviewable');
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
   const grouped=buildResponseSheet(mixed.analysis);

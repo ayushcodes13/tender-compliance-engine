@@ -40,6 +40,30 @@ export type RejectedSuggestion = {
   quotePreview: string;
 };
 
+export type SourceRowClassification = "requirement" | "section" | "optional_heading" | "header" | "instruction" | "ambiguous" | "unclassified";
+export type SourceRowClassificationReason = "technical_obligation" | "structural_heading" | "optional_item_heading" | "header_or_page_furniture" | "process_or_submission_instruction" | "commercial_or_eligibility_term" | "ambiguous_source_structure" | "classification_unavailable";
+
+const CLASSIFICATION_REASONS: Record<Exclude<SourceRowClassification, "unclassified">, SourceRowClassificationReason[]> = {
+  requirement: ["technical_obligation"],
+  section: ["structural_heading"],
+  optional_heading: ["optional_item_heading"],
+  header: ["header_or_page_furniture"],
+  instruction: ["process_or_submission_instruction", "commercial_or_eligibility_term"],
+  ambiguous: ["ambiguous_source_structure"],
+};
+
+export function resolveSourceRowClassification(input: { rowType?: string; reason?: string }): {
+  rowType: SourceRowClassification;
+  reason: SourceRowClassificationReason;
+  valid: boolean;
+} {
+  if (input.rowType && input.reason && Object.hasOwn(CLASSIFICATION_REASONS, input.rowType)
+    && CLASSIFICATION_REASONS[input.rowType as Exclude<SourceRowClassification, "unclassified">].includes(input.reason as SourceRowClassificationReason)) {
+    return { rowType: input.rowType as SourceRowClassification, reason: input.reason as SourceRowClassificationReason, valid: true };
+  }
+  return { rowType: "ambiguous", reason: "ambiguous_source_structure", valid: false };
+}
+
 export function describeRejectedSuggestion(reason: string): string {
   if (reason === "source_quote_or_location_not_verified") {
     return "Not added to the response sheet: the wording could not be verified against source text or OCR evidence on this page. Inspect the source page before relying on it.";
@@ -60,6 +84,8 @@ export type CoverageSourceRow = {
   sourceMatchedCandidates: number;
   matchedRequirementIds: string[];
   acceptedLinkStatus: "not_applicable" | "no_candidate_suggestions" | "linked" | "unlinked";
+  sourceClassification: SourceRowClassification;
+  classificationReason: SourceRowClassificationReason;
   sourceElementIds: string[];
   sourceTableId: string | null;
   sourceRowId: string | null;
@@ -109,6 +135,8 @@ export function collectSourceTableCoverageRows(
     sourceElementIds?: string[];
     sourceTableId?: string;
     sourceRowId?: string;
+    sourceClassification?: SourceRowClassification;
+    classificationReason?: SourceRowClassificationReason;
   }>,
   candidateCountByRow: Map<number, number>,
   excludedHeaderIndices: Set<number>,
@@ -147,6 +175,8 @@ export function collectSourceTableCoverageRows(
       sourceElementIds: row.sourceElementIds ?? [],
       sourceTableId: row.sourceTableId ?? null,
       sourceRowId: row.sourceRowId ?? null,
+      sourceClassification: row.sourceClassification ?? "unclassified",
+      classificationReason: row.classificationReason ?? "classification_unavailable",
       bbox: pageSize.width > 0 && pageSize.height > 0 && sourceBox ? {
         x: sourceBox.x / pageSize.width * 100,
         y: sourceBox.y / pageSize.height * 100,
