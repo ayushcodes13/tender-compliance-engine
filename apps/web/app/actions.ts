@@ -27,7 +27,7 @@ import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
 import { createModelCompletionClient, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
-import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, validateSourceDocumentInventory, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
+import { buildRequirementSourceReference, buildSourcePageModel, createSourceDocumentModel, findUniqueSourceText, validateSourceDocumentInventory, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
 import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRequirements, resolveRoutingDisposition, resolveSourceRowClassification, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion, type SourceRowClassification, type SourceRowClassificationReason } from "./coverage-ledger";
 
 // PDF.js uses these browser canvas globals while rendering pages on the server.
@@ -318,7 +318,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       sourceItems: SourceTextItem[];
       rectangles: PdfRectangle[];
       hasVectorTableGeometry: boolean;
-      vectorRows?: ReturnType<typeof extractVectorTableRows>;
+      vectorRows: ReturnType<typeof extractVectorTableRows>;
       sourceModel: SourcePageModel;
       structuredSection?: StructuredSection;
       visualImage?: string;
@@ -539,6 +539,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         if (result) structuredSection = result;
       }
       const hasVectorTableGeometry = rectangles.length >= 8 || hasTableGridGeometry(pathRectangles, viewport.width, viewport.height);
+      let vectorRows = hasVectorTableGeometry
+        ? extractVectorTableRows(sourceItems, rectangles, viewport.width, viewport.height)
+        : [];
+      const tableHeading = findAnnexureHeading(positioned, viewport.height) ?? findTechnicalSectionHeading(positioned, viewport.height);
+      const tableHeadingBox = tableHeading ? locateQuote(tableHeading, rawText, rawItemMap, positioned) : null;
+      if (tableHeadingBox) vectorRows = vectorRows.filter(row => row.bbox.y >= tableHeadingBox.y + tableHeadingBox.height);
       const sourceModel = buildSourcePageModel({
         documentId: sourceDocument.documentId,
         physicalPdfPageNumber: pageNumber,
@@ -552,9 +558,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         ocrSkipReason,
         imageRegions,
         ocrRegions: ocrResult.lines,
+        vectorRows,
       });
       sourceDocument.pages.push(sourceModel);
-      pages.push({ page: pageNumber, text: routingText, width: viewport.width, height: viewport.height, rawText, ocrText: ocrRawText, rawItemMap, positioned, ocrRawItemMap, ocrPositioned, ocrLines: ocrResult.lines, ocrPerformed: ocrResult.lines.length > 0, ocrNeeded: ocrRecommended && ocrResult.lines.length === 0, hasRasterImageContent, sourceItems, rectangles, hasVectorTableGeometry, sourceModel, structuredSection, visualImage });
+      pages.push({ page: pageNumber, text: routingText, width: viewport.width, height: viewport.height, rawText, ocrText: ocrRawText, rawItemMap, positioned, ocrRawItemMap, ocrPositioned, ocrLines: ocrResult.lines, ocrPerformed: ocrResult.lines.length > 0, ocrNeeded: ocrRecommended && ocrResult.lines.length === 0, hasRasterImageContent, sourceItems, rectangles, hasVectorTableGeometry, vectorRows, sourceModel, structuredSection, visualImage });
       onProgress?.({ stage: "reading", message: `Reading PDF text and table layout · page ${pageNumber} of ${pdf.numPages}`, current: pageNumber, total: pdf.numPages });
       page.cleanup();
       if (totalText > MAX_TEXT_CHARS) break;
@@ -563,18 +570,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     cleanupOcrRenderer = undefined;
     popplerRenderer = undefined;
 
-    const getVectorRows = (page: (typeof pages)[number]) => {
-      if (!page.vectorRows) {
-        page.vectorRows = page.hasVectorTableGeometry
-          ? extractVectorTableRows(page.sourceItems, page.rectangles, page.width, page.height)
-          : [];
-        const heading = findAnnexureHeading(page.positioned, page.height) ?? findTechnicalSectionHeading(page.positioned, page.height);
-        const headingBox = heading ? locateQuote(heading, page.rawText, page.rawItemMap, page.positioned) : null;
-        if (headingBox) page.vectorRows = page.vectorRows.filter(row => row.bbox.y >= headingBox.y + headingBox.height);
-        page.sourceModel.tables = buildSourceTables(page.sourceModel.id, page.vectorRows);
-      }
-      return page.vectorRows;
-    };
+    const getVectorRows = (page: (typeof pages)[number]) => page.vectorRows;
     if (totalText > MAX_TEXT_CHARS) {
       await pdf.destroy();
       return { ok: false as const, error: "This tender has too much selectable text for one hosted MVP run. Try a shorter technical section PDF." };
