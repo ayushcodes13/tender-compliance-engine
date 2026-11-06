@@ -425,16 +425,8 @@ function buildGroupedTableSheet(source: ResponseSheetSource): ResponseSheet {
       values: [group, section, parameter, [item.sourceSpecificationBlank ? "" : split?.remainder.trim() || item.quote, ...extras, ...sourceRemarks].join("\n"), "", "", "", `Page ${item.page}`],
     });
   }
-  const merged: ResponseSheetRow[] = [];
-  for (const row of rows) {
-    const previous = merged.at(-1);
-    if (row.exportGroupId && previous?.exportGroupId === row.exportGroupId && previous.mergeScope === row.mergeScope) {
-      previous.values[3] += " " + row.values[3];
-      previous.sourceRequirementIds.push(...row.sourceRequirementIds);
-    } else merged.push(row);
-  }
   const continued: ResponseSheetRow[] = [];
-  for (const row of merged) {
+  for (const row of rows) {
     const previous = continued.at(-1);
     const currentPage = Number(row.values[7].match(/\d+/)?.[0]);
     const previousPages = [...(previous?.values[7].matchAll(/\d+/g) ?? [])].map((match) => Number(match[0]));

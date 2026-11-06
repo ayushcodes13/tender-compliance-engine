@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { discardContainedSuggestions, discardContainedSuggestionsByPage, keepParsedSourceCandidate, mergeVisualExportGroups, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, sourceCandidateKey, splitSourceQuote } from "./visual-table.ts";
+import { discardContainedSuggestions, discardContainedSuggestionsByPage, keepParsedSourceCandidate, mergeVisualHeadingRows, mergeVisualRowContinuations, prepareVisualComplianceRows, sourceCandidateKey, splitSourceQuote } from "./visual-table.ts";
 
 test("coverage recovery removes represented rows only from the same source page", () => {
   const draft = [{ page: 3, quote: "Range: 0 to 100 mm" }];
@@ -57,19 +57,17 @@ test("does not merge a lettered requirement even if visual metadata flags merge_
   assert.deepEqual(mergeVisualHeadingRows(rows), rows);
 });
 
-test("reassembles AI-split items from the same source cell for DOCX export", () => {
+test("keeps AI-split obligations from the same source cell independently answerable in DOCX", () => {
   const rows = [
     { text: "c) Check uniformity.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
     { text: "d) Check Hall mobility.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
     { text: "e) Show cracker efficiency.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
     { text: "f) Different source cell.", page: 12 },
   ];
-  assert.deepEqual(mergeVisualExportGroups(rows), [
-    { text: "c) Check uniformity.\nd) Check Hall mobility.\ne) Show cracker efficiency.", page: 12, exportGroupId: "cell-12-4", sourceRowHeight: 48 },
-    { text: "f) Different source cell.", page: 12 },
-  ]);
   assert.deepEqual(prepareVisualComplianceRows(rows).map((row) => row.text), [
-    "c) Check uniformity.\nd) Check Hall mobility.\ne) Show cracker efficiency.",
+    "c) Check uniformity.",
+    "d) Check Hall mobility.",
+    "e) Show cracker efficiency.",
     "f) Different source cell.",
   ]);
 });
