@@ -16,6 +16,10 @@ Upload a text-based tender PDF
 
 This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory. GPT-6 Luna is the only model provider; the server-side credential is never exposed to the browser.
 
+### Reading dated implementation notes
+
+The dated entries below preserve the sequence of implementation and investigation. They are historical snapshots, not a single description of current behavior. When entries conflict, the later relevant entry supersedes the earlier one; current source code and its regression tests are authoritative for shipped behavior.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; PUBLIC VERCEL APP REACHABLE BUT MODEL CREDENTIALS ARE MISSING; CUSTOM DOMAIN DNS IS UNRESOLVED.**
@@ -211,6 +215,8 @@ A formal 3-tier validation ladder and hierarchical response sheet architecture w
 
 ### OCR symbol tolerance and completeness fix — 2026-11-06
 
+This entry records an intermediate implementation. Its comparison that treated `±` as equivalent to plain `+` was later narrowed: the current OCR matcher preserves technical operators and accepts only `±` / `+/-` as equivalents. See the later strict OCR grounding entry below and `tiered-validation.test.mjs`.
+
 Investigated and resolved an issue where valid technical specifications in scanned PDFs were dropped during candidate verification due to minor OCR character substitutions (e.g. `±` vs `+`, em-dash `—` vs en-dash `–`, bullet artifacts `«` / `¢`):
 
 - [x] **Symbol reconciliation (`normalizeOcrComparable`)**: Normalizes em-dashes (`—`), en-dashes (`–`), minus signs (`−`), plus-minus (`±` / `+/-`), bullet artifacts (`«`, `¢`, `•`), and word-boundary punctuation.
@@ -220,6 +226,8 @@ Investigated and resolved an issue where valid technical specifications in scann
 - [x] **Verification**: Added 3 unit tests in `tiered-validation.test.mjs` (178 unit tests passing). Verified 100% extraction of all 6 specifications under `Microwave Power` on the real ESR tender PDF.
 
 ### Token Sequence Alignment Grounding Engine — 2026-11-06
+
+This describes the initial alignment implementation and its fuzzy similarity threshold. It was superseded by **Complete Removal of Fuzzy Matching** below; current grounding requires contiguous exact token matches after limited, explicit canonicalization. The later strict OCR grounding entry further narrows which technical symbols may be canonicalized.
 
 Permanent architectural resolution for the dual-path divergence between multimodal vision transcription and OCR text:
 
