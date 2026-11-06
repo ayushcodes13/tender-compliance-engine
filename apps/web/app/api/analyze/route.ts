@@ -3,6 +3,7 @@ import { createAnalysisResponse } from "../../analysis-stream";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+const ANALYSIS_DEADLINE_MS = 270_000;
 
 export async function POST(request: Request) {
   let form: FormData;
@@ -15,5 +16,6 @@ export async function POST(request: Request) {
   return createAnalysisResponse(
     (signal, onProgress) => analyzeTender(form, onProgress, signal),
     request.signal,
+    ANALYSIS_DEADLINE_MS,
   );
 }

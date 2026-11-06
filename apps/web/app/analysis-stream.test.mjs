@@ -59,3 +59,40 @@ test("unexpected analysis exceptions become a safe stream error", async () => {
   const [event] = parseEvents(await response.text());
   assert.deepEqual(event, { type: "error", error: "The tender could not be processed. Please try again." });
 });
+
+test("analysis deadline aborts work and emits an explicit incomplete terminal event", async () => {
+  let analysisSignal;
+  const response = createAnalysisResponse((signal) => new Promise((resolve) => {
+    analysisSignal = signal;
+    signal.addEventListener("abort", () => resolve({ ok: true, responseRows: 4 }), { once: true });
+  }), undefined, 10);
+
+  const events = parseEvents(await response.text());
+  assert.equal(analysisSignal.aborted, true);
+  assert.deepEqual(events, [{
+    type: "error",
+    error: "Analysis time limit reached. Processing is incomplete; no response sheet was produced. Try a shorter tender or technical section.",
+  }]);
+});
+
+test("analysis deadline must be a positive integer", () => {
+  assert.throws(() => createAnalysisResponse(async () => ({}), undefined, 0), /positive integer/);
+  assert.throws(() => createAnalysisResponse(async () => ({}), undefined, 1.5), /positive integer/);
+});
+
+test("analysis deadline closes the stream even if work ignores abort temporarily", async () => {
+  let analysisSignal;
+  let finishAnalysis;
+  const response = createAnalysisResponse((signal) => new Promise((resolve) => {
+    analysisSignal = signal;
+    finishAnalysis = resolve;
+  }), undefined, 10);
+
+  const events = parseEvents(await response.text());
+  assert.equal(analysisSignal.aborted, true);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "error");
+  assert.match(events[0].error, /incomplete; no response sheet was produced/);
+  finishAnalysis?.({ ok: true, responseRows: 4 });
+  await new Promise((resolve) => setImmediate(resolve));
+});

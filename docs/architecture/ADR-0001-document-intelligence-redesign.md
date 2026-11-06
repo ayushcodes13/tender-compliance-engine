@@ -22,6 +22,8 @@ Requirement citations carry stable page-scoped source element IDs in addition to
 
 Before routing, the current runtime builds detected vector-table row candidates for every page with supported vector geometry, then checks the assembled source inventory for every physical page in order, exact native text-block offsets, unique parser element IDs, valid OCR-to-image references, and consistent table/row/cell relationships. Successful analyses expose this as a structural inventory check in the review ledger. Table geometry remains heuristic and may miss or combine tables; this gate detects malformed or incomplete parser output, not whether all visual regions, paragraphs, tables, or technical obligations were recognized.
 
+The upload stream now enforces a 270-second wall-clock deadline, below the route's 300-second platform limit. On expiry it aborts work through the existing request signal and emits an explicit incomplete terminal error; it never returns already accumulated rows as a finished response sheet. This bounds one request and prevents a platform timeout from silently looking like success. It is not resumable processing: completed batches are not persisted, and the reviewer must retry a shorter tender. A future resumable design must checkpoint source-linked batch results and preserve per-page/audit completeness states before it can safely return partial work.
+
 The vector-table coverage ledger also carries each detected row's table/row/cell IDs and the IDs of accepted requirements linked to that row. The link status reports only whether any accepted requirement is associated with the row; candidate and accepted requirement counts remain visible as separate counts. This join exposes source association and rejected candidates; it does not decide that a row containing multiple obligations is semantically complete.
 
 Detected vector-table rows retain an advisory structural class and a reason code. Rows the classifier marks ambiguous do not generate requirements; they remain visible in the coverage ledger with their source text and an explicit unresolved classification. Header/instruction exclusions are likewise visible as source rows with their class and reason. These labels guide human review and are not ground truth; a linked requirement still does not prove that every obligation in a row was extracted.
@@ -30,7 +32,7 @@ The next engineering steps are:
 
 1. Make inventory construction explicit and independently inspectable, retaining native text, OCR regions, raster image regions, and page geometry for hybrid pages. The current step records approximate PDF.js image draw bounds and exposes them for human page review; semantic region classification and canonical section/paragraph/list relationships remain open.
 2. Compare the current PDF.js/vector reconstruction with optional parsers on adjudicated regions, not aggregate table counts alone.
-3. Rework extraction around bounded, resumable page/region batches and explicit incomplete states; do not claim completeness when audits did not run.
+3. Rework extraction around bounded, resumable page/region batches and explicit incomplete states; the current stream-level deadline stops overlong work but cannot resume it or return partial results.
 4. Represent each independently answerable obligation as an atomic proposal and preserve all source locations through review and export.
 5. Add independently annotated golden and held-out tenders before changing parser defaults or claiming improved recall.
 
