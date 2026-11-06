@@ -7,13 +7,22 @@ type StreamEvent<T> = { type: "progress"; progress: ProcessingProgress }
 export function createAnalysisResponse<T>(
   analyze: (signal: AbortSignal, onProgress: (progress: ProcessingProgress) => void) => Promise<T>,
   requestSignal?: AbortSignal,
+  analysisDeadlineMs = 270_000,
 ): Response {
+  if (!Number.isInteger(analysisDeadlineMs) || analysisDeadlineMs < 1) {
+    throw new Error("The analysis deadline must be a positive integer.");
+  }
   const analysisController = new AbortController();
   let cancelled = false;
+  let timedOut = false;
+  let terminalSent = false;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
   const cancel = (reason?: unknown, closeStream = false) => {
     if (cancelled) return;
     cancelled = true;
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    requestSignal?.removeEventListener("abort", onRequestAbort);
     analysisController.abort(reason);
     if (closeStream && streamController) {
       try {
@@ -44,12 +53,32 @@ export function createAnalysisResponse<T>(
           cancel();
         }
       };
+      const sendTerminal = (event: Extract<StreamEvent<T>, { type: "result" | "error" }>) => {
+        if (terminalSent) return;
+        terminalSent = true;
+        send(event);
+      };
+      deadlineTimer = setTimeout(() => {
+        timedOut = true;
+        analysisController.abort(new DOMException("The analysis deadline was exceeded.", "TimeoutError"));
+        sendTerminal({ type: "error", error: "Analysis time limit reached. Processing is incomplete; no response sheet was produced. Try a shorter tender or technical section." });
+        try {
+          controller.close();
+        } catch {
+          cancel();
+        }
+      }, analysisDeadlineMs);
       void analyze(analysisController.signal, (progress) => send({ type: "progress", progress }))
-        .then((result) => send({ type: "result", result }))
+        .then((result) => {
+          if (!timedOut) sendTerminal({ type: "result", result });
+        })
         .catch(() => {
-          if (!analysisController.signal.aborted) send({ type: "error", error: "The tender could not be processed. Please try again." });
+          if (!timedOut && !analysisController.signal.aborted) {
+            sendTerminal({ type: "error", error: "The tender could not be processed. Please try again." });
+          }
         })
         .finally(() => {
+          if (deadlineTimer) clearTimeout(deadlineTimer);
           requestSignal?.removeEventListener("abort", onRequestAbort);
           if (cancelled) return;
           try {
