@@ -1602,10 +1602,6 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       }
     }
 
-    if (requirements.length === 0) {
-      return { ok: false as const, error: "No model quote could be matched to the source text or OCR transcript. Check scan quality or choose a different technical section." };
-    }
-
     if (visualSheetType === "compliance-sheet" || normalizedTables) {
       requirements.sort((a, b) => a.page - b.page || (a.bbox?.y ?? 0) - (b.bbox?.y ?? 0));
       for (let index = 0; index < requirements.length; index += 1) {
@@ -1680,6 +1676,18 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         || !pages.some((page) => page.page === item.page)).length,
     });
     report("source verification complete", { stage: "verifying", message: `Verified ${requirements.length} source-linked rows` });
+
+    if (requirements.length === 0) {
+      return {
+        ok: false as const,
+        error: "No model quote could be matched to the source text or OCR transcript. Check scan quality or choose a different technical section.",
+        pageCount: pages.length,
+        rejectedCandidates: rejected,
+        rejectedSuggestionDetails: rejectedSuggestionDetails.slice(0, 50),
+        rejectedSuggestionsNotShown: Math.max(0, rejectedSuggestionDetails.length - 50),
+        coverageSummary: coverage.summary,
+      };
+    }
 
     // Run Tiered Validation Ladder (Tier 1 Verbatim -> Tier 2 Visual -> Tier 3 Human Review)
     const pageEvidenceSources = pages.map((page) => ({
