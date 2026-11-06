@@ -32,6 +32,7 @@ function isMergeableColumn(column: { header: string; role?: string }): boolean {
 
 function getColumnWeight(column: { header: string; role?: string }): number {
   if (column.role === 'requirement') return 4.0;
+  if (column.role === 'page') return 0.8;
   const h = column.header.toLowerCase();
   if (h.includes('remark') || h.includes('justification') || h.includes('deviation')) return 2.2;
   if (h.includes('comply') || h.includes('compliance')) return 1.4;
@@ -42,6 +43,7 @@ function getColumnWeight(column: { header: string; role?: string }): number {
 
 function getExcelColumnWidth(column: { header: string; role?: string }): number {
   if (column.role === 'requirement') return 72;
+  if (column.role === 'page') return 14;
   const h = column.header.toLowerCase();
   if (h.includes('remark') || h.includes('justification') || h.includes('deviation')) return 36;
   if (h.includes('comply') || h.includes('compliance')) return 20;
@@ -61,7 +63,7 @@ export function createSectionedResponseDocument(sheet: ResponseSheet): Document 
   const content: Array<Paragraph | Table> = [];
   let previousAnnexure = '';
 
-  for (const section of buildResponseSections(sheet)) {
+  for (const section of buildResponseSections(sheet, true)) {
     if (section.annexure !== previousAnnexure) {
       content.push(
         new Paragraph({
@@ -237,7 +239,7 @@ export function createSectionedWorkbook(sheet: ResponseSheet): ExcelJS.Workbook 
   let lastDataRowNumber = 1;
   let maxColumnCount = 1;
 
-  for (const section of buildResponseSections(sheet)) {
+  for (const section of buildResponseSections(sheet, true)) {
     const count = section.columns.length;
     if (count > maxColumnCount) maxColumnCount = count;
 
