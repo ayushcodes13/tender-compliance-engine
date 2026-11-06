@@ -51,7 +51,10 @@
       "disposition": "possibly-relevant",
       "phase1Handling": "retain-operational-terms-for-review",
       "reason": "Contains delivery timing, safe-delivery responsibilities, transit insurance, installation/payment terms, and delay penalties. These are operational obligations rather than equipment specifications.",
-      "obligationReview": "not-exhaustive"
+      "obligationReview": "partial",
+      "sourceUnitsAnnotated": 2,
+      "annotationArtifact": "heldout-golden-v0.5.json",
+      "runComparison": "Two installation/commissioning and conditional demonstration units were not routed or omission-audited in the captured run; exact saved output rows are unavailable."
     },
     {
       "page": 5,
