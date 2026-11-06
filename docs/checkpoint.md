@@ -22,7 +22,7 @@ The dated entries below preserve the sequence of implementation and investigatio
 
 ## Checkpoint 72 — Single-user Vercel MVP
 
-**Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; PUBLIC VERCEL APP REACHABLE BUT MODEL CREDENTIALS ARE MISSING; CUSTOM DOMAIN DNS IS UNRESOLVED.**
+**Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**
 
 ### Sequence update — 2026-10-23
 
@@ -83,14 +83,14 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 This checkpoint does not establish exhaustive extraction on unseen layouts, hosted OCR support, client production access controls, persistence, or a completed hosted deployment. See `docs/document-reliability-audit.md` for the evidence and limits.
 
-- [x] Required remote CI passes for the current `main` revision (2026-11-06; GitHub Actions run [42255046703](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/42255046703), commit `25e3f51bb03e7ac32c990f9c7bdb4dbd6cbf34cf`). The run completed unit tests, typecheck, production build, and scripted pipeline checks.
+- [x] GitHub Actions run [42261845260](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/42261845260) passed unit tests, typecheck, production build, and scripted pipeline checks for the PR #307 source before its squash merge to `main` as `1739537c2080310c26c2e76ee7f19c69ce618356`.
 
 ### Remote release-gate refresh — 2026-11-06
 
 - [x] The public Vercel URL `https://tender-compliance-engine.vercel.app/` returned HTTP 200 on 2026-11-06.
-- [ ] The custom domain `tender.devayushrout.me` did not resolve in DNS on 2026-11-06.
-- [ ] Hosted model configuration and a fresh hosted upload/export were not verified; no tender was submitted to the public analysis endpoint during this check.
-- [ ] Vercel preview deployment for PR #302 was unavailable because the branch author did not have access to the Vercel project. GitHub Actions CI passed; this Vercel permission failure is a separate deployment integration issue.
+- [x] A fresh synthetic one-page text PDF was uploaded through the public UI on 2026-11-06. Hosted GPT-6 Luna returned one source-linked requirement; DOCX, PDF, and XLSX exports downloaded and were inspected. This verifies the hosted synthetic path, not extraction recall on real tenders. No client tender was submitted.
+- [ ] `tender.devayushrout.me` still fails to resolve in this environment; `tender-compliance-engine.vercel.app` resolves and responds over HTTPS. No DNS changes were made.
+- [ ] Vercel preview deployment remains unavailable because the branch author does not have access to the Vercel project. GitHub Actions CI passed; this Vercel permission failure is a separate deployment integration issue.
 
 Current main CI passing does not close the hosted release gates or this checkpoint's document-reliability limits.
 
