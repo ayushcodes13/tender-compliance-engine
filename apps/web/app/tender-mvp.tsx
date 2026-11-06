@@ -81,10 +81,13 @@ type Analysis = {
 
 type FailureDiagnostics = {
   pageCount: number;
+  candidateSuggestions: number;
   rejectedCandidates: number;
   rejectedSuggestionDetails: RejectedSuggestion[];
   rejectedSuggestionsNotShown: number;
   coverageSummary: CoverageReport["summary"];
+  reviewPageNumbers: number[];
+  reviewPagesNotShown: number;
 };
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -261,7 +264,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     let keepTerminalState = false;
     try {
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
-      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; coverageSummary?: CoverageReport["summary"] }>(response, {
+      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
         signal: requestController.signal,
         onProgress: (progress) => {
           if (activeRequestRef.current === requestController) setProcessing(progress);
@@ -269,13 +272,16 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       });
       if (activeRequestRef.current !== requestController) return;
       if (!result.ok) {
-        if (result.coverageSummary && result.rejectedSuggestionDetails && (result.rejectedCandidates ?? result.rejectedSuggestionDetails.length) > 0) {
+        if (result.coverageSummary && result.rejectedSuggestionDetails) {
           setFailureDiagnostics({
             pageCount: result.pageCount ?? result.coverageSummary.documentPages,
+            candidateSuggestions: result.candidateSuggestions ?? 0,
             rejectedCandidates: result.rejectedCandidates ?? result.rejectedSuggestionDetails.length,
             rejectedSuggestionDetails: result.rejectedSuggestionDetails,
             rejectedSuggestionsNotShown: result.rejectedSuggestionsNotShown ?? 0,
             coverageSummary: result.coverageSummary,
+            reviewPageNumbers: result.reviewPageNumbers ?? [],
+            reviewPagesNotShown: result.reviewPagesNotShown ?? 0,
           });
         }
         throw new Error(result.error || "The tender could not be processed.");
@@ -783,8 +789,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               {!busy && processing?.stage === "error" && <p className="mvp-processing-terminal" role="status">{processing.message}</p>}
               {error && <p className="mvp-error" role="alert">{error}</p>}
               {failureDiagnostics && <section className="mvp-coverage-failure" aria-label="Rejected extraction suggestions">
-                <h2>No requirements were accepted</h2>
-                <p>{failureDiagnostics.rejectedCandidates} suggestion(s) were left out because source evidence could not be verified in this {failureDiagnostics.pageCount}-page tender. These are unverified model suggestions, not review rows. Inspect the source before relying on any wording.</p>
+                <h2>No verified requirements to review</h2>
+                <p>{failureDiagnostics.candidateSuggestions > 0
+                  ? `${failureDiagnostics.rejectedCandidates} suggestion(s) were left out because source evidence could not be verified in this ${failureDiagnostics.pageCount}-page tender. These are unverified model suggestions, not review rows. Inspect the source before relying on any wording.`
+                  : `No requirement suggestions were produced for the selected pages in this ${failureDiagnostics.pageCount}-page tender. An empty extraction does not establish that the tender has no requirements; inspect the selected pages manually.`}</p>
                 <dl>
                   <div><dt>Technical pages selected</dt><dd>{failureDiagnostics.coverageSummary.selectedTechnicalPages}</dd></div>
                   <div><dt>Page audits</dt><dd>{failureDiagnostics.coverageSummary.auditPagesWithNoGapsReported} reported no gaps · {failureDiagnostics.coverageSummary.auditPagesWithPossibleGaps} reported possible gaps · {failureDiagnostics.coverageSummary.auditPagesIncomplete} incomplete · {failureDiagnostics.coverageSummary.auditPagesNotRun} not run</dd></div>
@@ -799,6 +807,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   </li>)}
                 </ul>}
                 {failureDiagnostics.rejectedSuggestionsNotShown > 0 && <p>{failureDiagnostics.rejectedSuggestionsNotShown} additional rejected suggestions are summarized in the coverage count but not listed here.</p>}
+                {failureDiagnostics.candidateSuggestions === 0 && failureDiagnostics.reviewPageNumbers.length > 0 && <div className="mvp-coverage-review-pages"><strong>Selected source pages</strong><div>{failureDiagnostics.reviewPageNumbers.map((sourcePage) => <button type="button" key={sourcePage} onClick={() => { setPage(sourcePage); setSourceOpen(true); }}>Inspect PDF page {sourcePage}</button>)}</div>{failureDiagnostics.reviewPagesNotShown > 0 && <span>{failureDiagnostics.reviewPagesNotShown} additional selected pages are not listed.</span>}</div>}
               </section>}
             </form>
             <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Review every quote</span><span><ShieldCheck size={15} /> Nothing marked checked for you</span></div>

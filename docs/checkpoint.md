@@ -144,6 +144,8 @@ This is a conservative intermediate step, not the final evidence model. Some quo
 
 When every suggested requirement fails source verification, analysis stops without a response sheet. That failure now retains the first 50 bounded rejection previews, reasons, total rejected count, and aggregate coverage summary in the SSE result. It does not send source table excerpts in this error payload. The upload screen shows that these are unverified suggestions, never review rows, and lets the reviewer open each known source page; any additional rejected suggestions remain in the total but are not sent as previews. A scripted upload-to-sheet contract verifies that the failed result contains no accepted analysis while preserving the bounded rejected-only diagnostics. The reviewer still decides whether any suggestion is a real requirement; no unsupported text is accepted.
 
+If the model returns no suggestions at all, the failure message says that no proposals were produced and explicitly avoids implying the source has no requirements. It shows the aggregate page-audit states and provides links to selected pages for manual inspection. A scripted zero-candidate case verifies the failure status and selected-page list.
+
 ### Optional Remark verification must not erase requirements — 2026-11-03
 
 The final candidate-verification loop previously removed an entire otherwise source-matched requirement when an optional model-suggested Remark field could not be located in the PDF. This is a code-level omission mechanism; its frequency in real tenders has not been measured.
