@@ -1092,6 +1092,558 @@
       "sourceModal": "source-says-need",
       "runDisposition": "not-evaluated-saved-row-text-unavailable",
       "scopeNote": "The source list is clipped at the page break; this anchor is only the visible page-7 start of the grip list. Do not infer omitted grip names from this partial line."
+    },
+    {
+      "id": "iitg-page-8-remaining-grip-set",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 140.3,
+            "y": 34.67,
+            "width": 425.2,
+            "height": 54.58
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "grip (ASTM D4833)",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Provide the continuation of the grip set: ASTM D4833 puncture, D4884 seam, D6241 burst, and D4632 grab breaking/elongation grips; each must comply with its applicable standard.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-controller-data-rates",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 164.18,
+            "y": 89.36,
+            "width": 387.91,
+            "height": 56.05
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "maximum data processing rate shall be 168 Hz",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Controller maximum processing rate 168 Hz and PC processing rate at least 1000 Hz.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-instrument-connections",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 164.18,
+            "y": 89.36,
+            "width": 387.91,
+            "height": 56.05
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "four (4) and three (3)",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Provide at least four external and three internal instrument-device connections.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-controller-bluetooth-usb",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 181.61,
+            "y": 144.85,
+            "width": 370.6,
+            "height": 27.08
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "Bluetooth enabled",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Controller supports Bluetooth v4.0 with A2DP, LE, EDR and at least two USB ports.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-user-interface-connectivity",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 181.61,
+            "y": 171.37,
+            "width": 373.51,
+            "height": 41.0
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "Suitable and fast user interface connectivity",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Integrate suitable user-interface connectivity for machine control and data extraction.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-jigs-and-accessories-ready-to-use",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 164.18,
+            "y": 211.81,
+            "width": 388.38,
+            "height": 41.72
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "various test jigs",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Supply applicable test jigs/accessories, standards compliance, full-use capability, itemized components, ready-to-use setup, manufacturer literature and calibration compliance.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-tensile-jig",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 206.69,
+            "y": 415.43,
+            "width": 345.66,
+            "height": 27.03
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D4595",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Tensile jig complies with ASTM D4595; clamps span specimen width without slip/crush and jaw faces exceed specimen width (50–200 mm).",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-tear-jig",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 206.69,
+            "y": 526.69,
+            "width": 345.87,
+            "height": 27.13
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D4533 standard",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Tear jig complies with ASTM D4533; parallel flat gripping surfaces 50.8–76.2 mm, correct trapezoid template, 15–85% full-scale load and 300 ± 10 mm/min.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-8-puncture-jig",
+      "page": 8,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 8,
+          "bbox": {
+            "x": 140.3,
+            "y": 34.67,
+            "width": 425.2,
+            "height": 54.58
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D4833",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Puncture jig complies with ASTM D4833, including 45 ± 0.025 mm internal opening, at least 100 mm external diameter, six 8 mm holes at 37 mm radius, specified textured plates and 8 ± 0.1 mm probe with 0.8 mm chamfer.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-9-puncture-load-range",
+      "page": 9,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 9,
+          "bbox": {
+            "x": 185.45,
+            "y": 131.17,
+            "width": 367.11,
+            "height": 41.84
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "rupture occurs between 10% and 90%",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Puncture setup load range must cause rupture between 10% and 90% of full-scale capacity.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-9-seam-jig",
+      "page": 9,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 9,
+          "bbox": {
+            "x": 206.69,
+            "y": 173.48,
+            "width": 345.78,
+            "height": 27.01
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D4884",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Seam jig complies with ASTM D4884; clamps cover specimen width without damage, jaw width typically at least 225 mm and minimum 50 mm, loading rate 10 ± 3% per minute.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-9-burst-jig",
+      "page": 9,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 9,
+          "bbox": {
+            "x": 206.69,
+            "y": 312.47,
+            "width": 345.35,
+            "height": 27.01
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D6241",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Burst jig complies with ASTM D6241 and includes the specified 150 mm cylinder, 50 ± 1 mm flat diameter and 2.5 ± 0.5 mm radial edge.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-9-burst-clamping-assembly",
+      "page": 9,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 9,
+          "bbox": {
+            "x": 206.69,
+            "y": 381.4,
+            "width": 345.87,
+            "height": 82.3
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "internal diameter of 150 mm",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Burst clamping assembly: 150 mm internal and at least 250 mm external diameter, 11 mm holes on 220 mm circle, slippage under 5 mm, bolted plates and guide block.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-9-burst-load-range",
+      "page": 9,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 9,
+          "bbox": {
+            "x": 185.45,
+            "y": 131.17,
+            "width": 367.11,
+            "height": 41.84
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "between 10% and 90% of the full-scale load",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Burst-test rupture occurs between 10% and 90% of UTM full-scale load.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-9-geogrid-jig",
+      "page": 9,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 9,
+          "bbox": {
+            "x": 206.69,
+            "y": 589.09,
+            "width": 345.52,
+            "height": 13.45
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D6637",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Geogrid tensile jig complies with ASTM D6637; clamps span specimen width, minimum 200 mm jaw face, rupture at 10–90% full scale and strain rate 10 ± 3% per minute of gauge length.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-grab-jig",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 206.69,
+            "y": 49.55,
+            "width": 345.78,
+            "height": 26.84
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "ASTM D4632",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Grab breaking/elongation jig complies with ASTM D4632; flat parallel non-slip clamps, one jaw face 25.4 × 50.8 mm with longer dimension parallel to load, aligned jaws, break at 10–90% full scale and controlled 300 ± 10 mm/min.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-software-controls-and-units",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 192.53,
+            "y": 256.91,
+            "width": 359.79,
+            "height": 13.45
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "real-time graphical interface",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Software provides real-time graphing, zoom/magnification/compression/point tracing and multiple load/displacement units.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-software-test-modules",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 192.53,
+            "y": 310.24,
+            "width": 359.56,
+            "height": 27.08
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "modules for various testing applications",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Software includes tensile stress, compression, cyclic loading and relaxation modules, and editable test programs.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-software-analysis-and-plots",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 192.53,
+            "y": 377.2,
+            "width": 359.5,
+            "height": 26.96
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "full statistical analysis",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Software supplies statistical analysis and plots for load-elongation, stress-strain, modulus, yield and proof stress.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-software-reports-and-compatibility",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 192.53,
+            "y": 430.74,
+            "width": 359.9,
+            "height": 40.4
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "custom report formats",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Software permits custom reports and Word/Excel/ASCII/PDF export; supports specified/current and future jig tests; warranty/AMC updates free and later updates at reasonable charges.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-power",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 163.58,
+            "y": 565.62,
+            "width": 388.75,
+            "height": 55.91
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "220/380/400V",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Power supply: 220/380/400 V, 50/60 Hz, three phase.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-pc-configuration",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 163.58,
+            "y": 635.49,
+            "width": 389.02,
+            "height": 123.8
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "at least an Intel i7 processor",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Provide desktop PC with UPS, CPU, monitor, keyboard and mouse; at least Intel i7, 512 GB SSD, 4 GB graphics, 16 GB RAM, Ethernet, multiple result formats/latest Office (preferably MS-19 or better), and minimum four USB 3.2 ports.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
+    },
+    {
+      "id": "iitg-page-10-one-year-warranty",
+      "page": 10,
+      "region": "Technical specification schedule",
+      "sourceLocations": [
+        {
+          "page": 10,
+          "bbox": {
+            "x": 207.05,
+            "y": 759.52,
+            "width": 358.35,
+            "height": 13.45
+          },
+          "bboxPrecision": "parser-reported-text-block-envelope"
+        }
+      ],
+      "anchorText": "one-year (12 months) warranty",
+      "expected": {
+        "kind": "technical-requirement",
+        "summary": "Supplier provides one-year warranty covering servicing, calibration and replacement of faulty parts.",
+        "independentlyAnswerable": true
+      },
+      "runDisposition": "not-evaluated-saved-row-text-unavailable"
     }
   ],
   "pageScope": {
@@ -1111,12 +1663,16 @@
   "scope": {
     "pages": [
       6,
-      7
+      7,
+      8,
+      9,
+      10
     ],
-    "sourceObligationGroups": 30,
+    "sourceObligationGroups": 53,
     "runComparison": "Not evaluated against saved model rows because the 114 response-row text was not retained in the repository.",
     "humanReview": "Pending",
     "notARecallScore": true,
-    "page6Context": "The page-six overview repeats the 100 kN capacity later specified in the page-seven system row. It also introduces test/material scope and accessory/standards context; only distinct strain/stress capability and manufacturer-literature support are separately enumerated here."
+    "page6Context": "The page-six overview repeats the 100 kN capacity later specified in the page-seven system row. It also introduces test/material scope and accessory/standards context; only distinct strain/stress capability and manufacturer-literature support are separately enumerated here.",
+    "page8To10": "Partial grouped source inventory based on parser-reported text-block regions. Test-jig groups preserve listed numeric constraints but are not an exhaustive atomic decomposition; separate numeric clauses and reviewer adjudication remain necessary."
   }
 }

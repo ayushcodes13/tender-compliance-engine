@@ -90,6 +90,12 @@
       "artifact": "heldout-golden-v0.3.json",
       "runDisposition": "not-evaluated-saved-row-text-unavailable",
       "limit": "Assistant-reviewed partial source annotations; no row-level comparison or recall score. Numeric ambiguities and approximate table bounds remain pending human adjudication."
+    },
+    "page8To10ObligationReview": {
+      "sourceObligationGroupsEnumerated": 23,
+      "artifact": "heldout-golden-v0.3.json",
+      "runDisposition": "not-evaluated-saved-row-text-unavailable",
+      "limit": "Partial grouped source inventory only; not exhaustive atomic labels or recall evaluation. Parser-reported text blocks and numeric meanings require human review."
     }
   },
   "qualityClaims": {
