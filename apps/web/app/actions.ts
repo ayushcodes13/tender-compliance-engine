@@ -382,10 +382,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         : 0;
       const ocrRecommended = shouldRunPageOcr({ selectableText: text, textAreaRatio, hasRasterImageContent });
       let ocrResult: OcrPageText = { text: "", lines: [] };
+      let ocrStatus: SourcePageModel["ocrStatus"] = ocrRecommended ? "not-attempted" : "not-recommended";
+      let ocrSkipReason: SourcePageModel["ocrSkipReason"];
       if (ocrRecommended && ocrAttemptedPages < MAX_PAGES && Date.now() - ocrStartedAt < MAX_TOTAL_OCR_MS) {
         if (tesseractAvailable === undefined) tesseractAvailable = await isTesseractAvailable(undefined, signal);
         if (tesseractAvailable) {
           ocrAttemptedPages += 1;
+          ocrStatus = "failed";
           report("running local OCR", {
             stage: "reading",
             message: `Running local OCR · PDF page ${pageNumber} of ${pdf.numPages}`,
@@ -418,11 +421,15 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               pageSize: { width: viewport.width, height: viewport.height },
               signal,
             });
+            ocrStatus = ocrResult.lines.length > 0 ? "text-found" : "no-text-found";
           } catch {
             signal?.throwIfAborted();
+            ocrStatus = "failed";
             // Keep the page's native text and record OCR as missing; never log source content.
           }
-        }
+        } else ocrSkipReason = "engine-unavailable";
+      } else if (ocrRecommended) {
+        ocrSkipReason = ocrAttemptedPages >= MAX_PAGES ? "page-limit" : "time-budget";
       }
       const ocrPositionMap = buildOcrTextPositionMap(ocrResult.lines);
       const ocrRawText = ocrPositionMap.text;
@@ -475,6 +482,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         height: viewport.height,
         sourceText: rawText,
         positionedItems: positioned,
+        hasRasterImageContent,
+        ocrRecommended,
+        ocrStatus,
+        ocrSkipReason,
         ocrRegions: ocrResult.lines,
       });
       sourceDocument.pages.push(sourceModel);
@@ -1681,6 +1692,10 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         rejectionReasons,
         auditStatus,
         possibleOmissionSuggestions: audit?.possibleOmissions ?? 0,
+        hasRasterImageContent: page.sourceModel.hasRasterImageContent,
+        ocrRecommended: page.sourceModel.ocrRecommended,
+        ocrStatus: page.sourceModel.ocrStatus,
+        ...(page.sourceModel.ocrSkipReason ? { ocrSkipReason: page.sourceModel.ocrSkipReason } : {}),
         ocrNeeded: page.ocrNeeded,
         ocrPerformed: page.ocrPerformed,
       };

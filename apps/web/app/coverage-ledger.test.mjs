@@ -33,6 +33,9 @@ const record = (page, overrides = {}) => ({
   rejectionReasons: [{ reason: "source_quote_or_location_not_verified", count: 1 }],
   auditStatus: "not_run",
   possibleOmissionSuggestions: 0,
+  hasRasterImageContent: false,
+  ocrRecommended: false,
+  ocrStatus: "not-recommended",
   ocrNeeded: false,
   ocrPerformed: false,
   ...overrides,
@@ -71,6 +74,26 @@ test("distinguishes OCR processed pages from pages that still need OCR", () => {
   ]);
   assert.equal(report.summary.pagesWithoutSelectableText, 2);
   assert.equal(report.summary.pagesProcessedWithOcr, 1);
+});
+
+test("reports image content, OCR attempts, skipped runs, failures, and empty OCR separately", () => {
+  const report = buildCoverageReport([
+    record(1, { hasRasterImageContent: true, ocrRecommended: true, ocrStatus: "text-found", ocrPerformed: true }),
+    record(2, { hasRasterImageContent: true, ocrRecommended: true, ocrStatus: "no-text-found", ocrNeeded: true }),
+    record(3, { hasRasterImageContent: true, ocrRecommended: true, ocrStatus: "not-attempted", ocrSkipReason: "engine-unavailable", ocrNeeded: true }),
+    record(4, { ocrRecommended: true, ocrStatus: "not-attempted", ocrSkipReason: "time-budget", ocrNeeded: true }),
+    record(5, { ocrRecommended: true, ocrStatus: "failed", ocrNeeded: true }),
+    record(6),
+  ]);
+
+  assert.equal(report.summary.pagesWithRasterImageContent, 3);
+  assert.equal(report.summary.ocrRecommendedPages, 5);
+  assert.equal(report.summary.ocrAttemptedPages, 3);
+  assert.equal(report.summary.ocrSkippedPages, 2);
+  assert.equal(report.summary.ocrFailedPages, 1);
+  assert.equal(report.summary.ocrCompletedWithoutTextPages, 1);
+  assert.equal(report.summary.pagesProcessedWithOcr, 1);
+  assert.equal(report.pages[2].ocrSkipReason, "engine-unavailable");
 });
 
 test("keeps model-reported gaps and rejected suggestions visible in totals", () => {

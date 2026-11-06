@@ -31,6 +31,8 @@ export type SourceTableCell = {
 
 export type SourceTableRow = { id: string; rowIndex: number; cells: SourceTableCell[] };
 export type SourceTable = { id: string; rows: SourceTableRow[]; columnCount: number };
+export type SourcePageOcrStatus = "not-recommended" | "not-attempted" | "text-found" | "no-text-found" | "failed";
+export type SourcePageOcrSkipReason = "engine-unavailable" | "page-limit" | "time-budget";
 
 export type SourcePageModel = {
   id: string;
@@ -41,6 +43,10 @@ export type SourcePageModel = {
   coordinateSystem: "pdfjs-viewport-scale-1";
   sourceText: string;
   ocrText: string;
+  hasRasterImageContent: boolean;
+  ocrRecommended: boolean;
+  ocrStatus: SourcePageOcrStatus;
+  ocrSkipReason?: SourcePageOcrSkipReason;
   ocrRegions: SourceOcrRegion[];
   extractionMethod: "pdfjs-native-text" | "tesseract-ocr" | "no-selectable-text";
   textBlocks: SourceTextBlock[];
@@ -119,6 +125,10 @@ export function buildSourcePageModel(input: {
   height: number;
   sourceText: string;
   positionedItems: PositionedSourceItem[];
+  hasRasterImageContent?: boolean;
+  ocrRecommended?: boolean;
+  ocrStatus?: SourcePageOcrStatus;
+  ocrSkipReason?: SourcePageOcrSkipReason;
   ocrRegions?: Array<Omit<SourceOcrRegion, "id" | "extractionMethod">>;
   vectorRows?: VectorRowInput[];
 }): SourcePageModel {
@@ -139,6 +149,20 @@ export function buildSourcePageModel(input: {
     extractionMethod: "tesseract-ocr",
   }));
   const ocrText = ocrRegions.map((region) => region.text).join("\n");
+  const ocrRecommended = input.ocrRecommended ?? false;
+  const ocrStatus = input.ocrStatus ?? (ocrRecommended ? "not-attempted" : "not-recommended");
+  const warnings = input.sourceText.trim()
+    ? []
+    : ocrText.trim()
+      ? ["No selectable text was found; OCR text and approximate regions are stored separately."]
+      : ["No selectable text was found on this page."];
+  if (ocrStatus === "not-attempted") {
+    warnings.push(`OCR was recommended but not attempted${input.ocrSkipReason ? ` (${input.ocrSkipReason})` : ""}.`);
+  } else if (ocrStatus === "failed") {
+    warnings.push("OCR was attempted but did not complete; no OCR text was added to the source inventory.");
+  } else if (ocrStatus === "no-text-found") {
+    warnings.push("OCR completed but found no text regions.");
+  }
 
   return {
     id: pageId,
@@ -148,13 +172,15 @@ export function buildSourcePageModel(input: {
     coordinateSystem: "pdfjs-viewport-scale-1",
     sourceText: input.sourceText,
     ocrText,
+    hasRasterImageContent: input.hasRasterImageContent ?? false,
+    ocrRecommended,
+    ocrStatus,
+    ...(input.ocrSkipReason ? { ocrSkipReason: input.ocrSkipReason } : {}),
     ocrRegions,
     extractionMethod: input.sourceText.trim() ? "pdfjs-native-text" : ocrText.trim() ? "tesseract-ocr" : "no-selectable-text",
     textBlocks,
     tables,
-    warnings: input.sourceText.trim() ? [] : ocrText.trim()
-      ? ["No selectable text was found; OCR text and approximate regions are stored separately."]
-      : ["No selectable text was found on this page."],
+    warnings,
   };
 }
 

@@ -46,6 +46,8 @@ The user's broader document-intelligence redesign changes the next-work sequence
 
 A new IIT Guwahati geosynthetic UTM tender is now recorded separately as an additional public-source baseline candidate. The local model run completed in 288 seconds but selected only pages 6–11, left nine pages unaudited, and produced 114 rows all requiring human review. Manual comparison of the rendered page 11 found three missed after-sales/maintenance obligations. This is partial adjudication on one additional document, not an exhaustive held-out score. The PDF remains local and is not redistributed; its public source, hash, parser counts, run conditions, and golden cases are in `benchmarks/representative-tenders/heldout-*2026-11-07.json`.
 
+The page inventory now records raster-image presence, whether OCR was recommended, whether it ran, and whether it found text, found no text, failed, or was skipped because of engine/page/time limits. Native text and OCR regions remain separate. Synthetic tests cover hybrid native-plus-OCR pages and distinguish each OCR outcome. This improves provenance reporting only; it does not detect image-region coordinates or change page routing/extraction behavior. The full source inventory and completeness audit remain open.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**

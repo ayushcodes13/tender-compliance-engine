@@ -131,6 +131,73 @@ test("stores local OCR regions separately from native text with approximate cita
   assert.equal(reference.startOffset, undefined);
 });
 
+test("records native and OCR evidence together on a mixed-content page", () => {
+  const document = createSourceDocumentModel(new Uint8Array([10]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 4,
+    width: 600,
+    height: 800,
+    sourceText: "Institute of Testing · Page 4",
+    positionedItems: [{ start: 0, end: 29, text: "Institute of Testing · Page 4", box: { x: 20, y: 20, width: 140, height: 10 } }],
+    hasRasterImageContent: true,
+    ocrRecommended: true,
+    ocrStatus: "text-found",
+    ocrRegions: [{
+      text: "Maximum pressure: 500 bar",
+      bbox: { x: 30, y: 90, width: 200, height: 14 },
+      confidence: 72,
+      confidenceLevel: "medium",
+    }],
+  });
+
+  assert.equal(page.extractionMethod, "pdfjs-native-text");
+  assert.equal(page.hasRasterImageContent, true);
+  assert.equal(page.ocrRecommended, true);
+  assert.equal(page.ocrStatus, "text-found");
+  assert.equal(page.sourceText, "Institute of Testing · Page 4");
+  assert.equal(page.ocrText, "Maximum pressure: 500 bar");
+  assert.equal(page.textBlocks[0].text, page.sourceText);
+  assert.equal(page.ocrRegions[0].text, page.ocrText);
+});
+
+test("distinguishes skipped, empty, and failed OCR from pages where OCR was not recommended", () => {
+  const document = createSourceDocumentModel(new Uint8Array([11]), 1);
+  const makePage = (options) => buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 1,
+    width: 100,
+    height: 200,
+    sourceText: "Header",
+    positionedItems: [],
+    hasRasterImageContent: true,
+    ocrRecommended: true,
+    ...options,
+  });
+
+  const skipped = makePage({ ocrStatus: "not-attempted", ocrSkipReason: "engine-unavailable" });
+  const empty = makePage({ ocrStatus: "no-text-found" });
+  const failed = makePage({ ocrStatus: "failed" });
+  const ordinary = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 2,
+    width: 100,
+    height: 200,
+    sourceText: "Native page text",
+    positionedItems: [],
+  });
+
+  assert.equal(skipped.ocrStatus, "not-attempted");
+  assert.equal(skipped.ocrSkipReason, "engine-unavailable");
+  assert.match(skipped.warnings.join(" "), /recommended but not attempted/);
+  assert.equal(empty.ocrStatus, "no-text-found");
+  assert.match(empty.warnings.join(" "), /completed but found no text/);
+  assert.equal(failed.ocrStatus, "failed");
+  assert.match(failed.warnings.join(" "), /did not complete/);
+  assert.equal(ordinary.ocrStatus, "not-recommended");
+  assert.deepEqual(ordinary.warnings, []);
+});
+
 test("does not report an unmatched model quote as source text", () => {
   const document = createSourceDocumentModel(new Uint8Array([5]), 1);
   const page = buildSourcePageModel({
