@@ -943,7 +943,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                 const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
                 return <li key={item.page}>
                   <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); setSourceOpen(true); }}>Open source page</button></div>
-                  <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrPerformed ? "Local OCR completed · verify transcription" : item.ocrNeeded ? "No selectable text · OCR unavailable or unreadable" : "Considered by router, not selected"}</span>
+                  <span>{item.selectedForExtraction ? "Selected for extraction" : item.ocrPerformed ? "Local OCR completed · verify transcription" : item.ocrNeeded ? "Sparse text or image-backed page · OCR unavailable or unreadable" : "Considered by router, not selected"}</span>
+                  {item.ocrNeeded && <span className="is-warning">OCR was needed but produced no transcript; inspect this source page manually.</span>}
                   {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}
                   {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
                   {Boolean(item.sourceTableCoverageRows?.length) && <div className="mvp-coverage-row-findings">
