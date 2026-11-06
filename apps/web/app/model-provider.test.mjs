@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider.ts";
+import { createModelCompletionClient, createModelRequestAdmission, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider.ts";
 
 test("selects GPT-6 Luna by default when the local key is present", () => {
   assert.deepEqual(resolveModelProvider({ OPENAI_API_KEY: "secret", OPENAI_BASE_URL: "https://example.invalid/openai/v1" }), {
@@ -94,4 +94,49 @@ test('starts the execution timeout only after a queued request is admitted', asy
   assert.equal(admissions[1].aborted, false, 'queued time did not consume its execution window');
   releaseRequests.shift()();
   await Promise.all([first, queued]);
+});
+
+test('shares a bounded model-request limit across independent analyses', async () => {
+  const admission = createModelRequestAdmission({ maxConcurrent: 1, maxQueued: 2, queueTimeoutMs: 1_000 });
+  let active = 0;
+  let peak = 0;
+  const releases = [];
+  const fetcher = async () => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => releases.push(resolve));
+    active -= 1;
+    return new Response('{}');
+  };
+  const config = { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' };
+  const firstClient = createModelCompletionClient(config, fetcher, { admission });
+  const secondClient = createModelCompletionClient(config, fetcher, { admission });
+  const first = firstClient.fetch('ignored');
+  await new Promise((resolve) => setImmediate(resolve));
+  const second = secondClient.fetch('ignored');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(active, 1, 'the second analysis waits behind the shared process limit');
+  releases.shift()();
+  while (releases.length === 0) await new Promise((resolve) => setImmediate(resolve));
+  releases.shift()();
+  await Promise.all([first, second]);
+  assert.equal(peak, 1);
+});
+
+test('rejects work when the shared model queue is full or its wait deadline expires', async () => {
+  const admission = createModelRequestAdmission({ maxConcurrent: 1, maxQueued: 1, queueTimeoutMs: 25 });
+  let release;
+  const fetcher = () => new Promise((resolve) => { release = () => resolve(new Response('{}')); });
+  const config = { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' };
+  const firstClient = createModelCompletionClient(config, fetcher, { admission });
+  const secondClient = createModelCompletionClient(config, fetcher, { admission });
+  const thirdClient = createModelCompletionClient(config, fetcher, { admission });
+  const first = firstClient.fetch('ignored');
+  await new Promise((resolve) => setImmediate(resolve));
+  const queued = secondClient.fetch('ignored');
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(thirdClient.fetch('ignored'), (error) => error instanceof ModelProviderBusyError);
+  await assert.rejects(queued, (error) => error instanceof ModelProviderBusyError);
+  release();
+  await first;
 });

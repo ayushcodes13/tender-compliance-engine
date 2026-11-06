@@ -25,7 +25,7 @@ import { hasRasterImageOperators, selectImageRegionsForOcr, shouldRunPageOcr } f
 import { collectPdfImageRegions } from "./pdf-image-regions";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
-import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
+import { createModelCompletionClient, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
 import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRequirements, resolveRoutingDisposition, resolveSourceRowClassification, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type RejectedSuggestion, type SourceRowClassification, type SourceRowClassificationReason } from "./coverage-ledger";
@@ -1943,6 +1943,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
     // Do not log tender text, filenames, model responses, credentials, or exception messages.
     console.error("Tender analysis failed", { stage, errorName, errorHint });
     if (error instanceof ModelProviderConnectionError) {
+      return { ok: false as const, error: error.message };
+    }
+    if (error instanceof ModelProviderBusyError) {
       return { ok: false as const, error: error.message };
     }
     if (error instanceof Error && error.name === "TimeoutError") {
