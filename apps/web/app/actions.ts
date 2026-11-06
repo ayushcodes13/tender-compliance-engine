@@ -259,9 +259,6 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     stage = stageName;
     onProgress?.(progress);
   };
-  const modelRequestSignal = (timeoutMs = 90_000) => signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-    : AbortSignal.timeout(timeoutMs);
   try {
     signal?.throwIfAborted();
     report("file validation", { stage: "uploading", message: "Checking the uploaded PDF" });
@@ -637,7 +634,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       };
       const pageSelection = await modelClient.fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
-        signal: modelRequestSignal(90_000),
+        signal,
         body: JSON.stringify({
           model,
           response_format: { type: "json_schema", json_schema: { name: "technical_section_route", strict: true, schema } },
@@ -822,7 +819,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
         const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
-          signal: modelRequestSignal(90_000),
+          signal,
           body: JSON.stringify({
             model,
             response_format: { type: "json_schema", json_schema: { name: "tender_requirements", strict: true, schema } },
@@ -948,7 +945,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       try {
         const mapResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
-            signal: modelRequestSignal(90_000),
+          signal,
           body: JSON.stringify({
             model,
             response_format: { type: "json_schema", json_schema: { name: "tender_source_column_map", strict: true, schema: columnSchema } },
@@ -1002,7 +999,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         try {
           const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-                signal: modelRequestSignal(90_000),
+            signal,
             body: JSON.stringify({
               model,
               response_format: { type: "json_schema", json_schema: { name: "visual_table_row_labels", strict: true, schema: labelSchema } },
@@ -1214,7 +1211,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       const pageResults = await Promise.all(pageSegments.map(async ({ page, segment }) => {
         const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
-            signal: modelRequestSignal(90_000),
+          signal,
           body: JSON.stringify({
             model,
             response_format: { type: "json_schema", json_schema: { name: "technical_table_page_rows", strict: true, schema } },
@@ -1315,7 +1312,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             : undefined;
           const coverageResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-                signal: modelRequestSignal(90_000),
+            signal,
             body: JSON.stringify({
               model,
               response_format: { type: "json_schema", json_schema: { name: "technical_table_missing_rows", strict: true, schema } },
@@ -1408,7 +1405,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         try {
           const auditResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
-            signal: modelRequestSignal(90_000),
+            signal,
             body: JSON.stringify({
               model,
               response_format: { type: "json_schema", json_schema: { name: "technical_text_missing_requirements", strict: true, schema } },

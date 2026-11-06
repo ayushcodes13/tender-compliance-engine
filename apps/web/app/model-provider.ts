@@ -26,21 +26,29 @@ export function resolveModelProvider(env: Environment): ModelProviderResult {
 }
 
 /** Per-analysis admission control: pages/crops cannot flood the provider. */
-export function createModelCompletionClient(config: ModelProviderConfig, fetcher: FetchLike = fetch) {
+export function createModelCompletionClient(
+  config: ModelProviderConfig,
+  fetcher: FetchLike = fetch,
+  options: { maxConcurrent?: number; executionTimeoutMs?: number } = {},
+) {
+  const maxConcurrent = options.maxConcurrent ?? 3;
+  const executionTimeoutMs = options.executionTimeoutMs ?? 90_000;
   let active = 0;
   const queue: Array<() => void> = [];
-  const acquire = async (signal: AbortSignal) => {
-    signal.throwIfAborted();
-    if (active < 3) { active += 1; return; }
+  const acquire = async (signal?: AbortSignal) => {
+    signal?.throwIfAborted();
+    if (active < maxConcurrent) { active += 1; return; }
     await new Promise<void>((resolve, reject) => {
-      const granted = () => { signal.removeEventListener("abort", aborted); resolve(); };
+      const granted = () => { signal?.removeEventListener("abort", aborted); resolve(); };
       const aborted = () => {
+        if (!signal) return;
         const index = queue.indexOf(granted);
         if (index >= 0) queue.splice(index, 1);
         reject(signal.reason);
       };
       queue.push(granted);
-      signal.addEventListener("abort", aborted, { once: true });
+      signal?.addEventListener("abort", aborted, { once: true });
+      if (signal?.aborted) aborted();
     });
   };
   const release = () => {
@@ -52,17 +60,21 @@ export function createModelCompletionClient(config: ModelProviderConfig, fetcher
     async fetch(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       if (init?.method && init.method.toUpperCase() !== "POST") throw new Error("Model completion requests must use POST.");
       if (init?.body !== undefined && typeof init.body !== "string") throw new Error("Model completion request body must be JSON text.");
-      const signal = init?.signal ?? AbortSignal.timeout(180_000);
-      await acquire(signal);
+      const cancellationSignal = init?.signal ?? undefined;
+      await acquire(cancellationSignal);
+      const executionTimeout = AbortSignal.timeout(executionTimeoutMs);
+      const requestSignal = cancellationSignal
+        ? AbortSignal.any([cancellationSignal, executionTimeout])
+        : executionTimeout;
       try {
         let lastError: unknown;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
-            signal.throwIfAborted();
+            requestSignal.throwIfAborted();
             const response = await fetcher(`${config.baseUrl}/chat/completions`, {
               method: "POST",
               headers: new Headers({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
-              signal,
+              signal: requestSignal,
               body: init?.body,
             });
             if (response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) {
@@ -75,7 +87,7 @@ export function createModelCompletionClient(config: ModelProviderConfig, fetcher
           } catch (error) {
             lastError = error;
             if (error instanceof DOMException && error.name === "AbortError") throw error;
-            if (attempt < 2 && (error instanceof TypeError || (error instanceof Error && error.name === "AbortError" && !signal.aborted))) {
+            if (attempt < 2 && (error instanceof TypeError || (error instanceof Error && error.name === "AbortError" && !requestSignal.aborted))) {
               await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
               continue;
             }
