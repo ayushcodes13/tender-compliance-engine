@@ -181,6 +181,12 @@ function criticalValueConfidence(words: OcrWord[], average: number): number {
   return Math.min(...[...critical].map((index) => words[index].confidence));
 }
 
+/** A bare degree glyph after a number can be Tesseract's rendering of a superscript exponent. */
+function hasAmbiguousBareDegreeValue(words: OcrWord[]): boolean {
+  const text = words.map((word) => word.text).join(" ");
+  return /[+-]?\d+(?:[.,]\d+)?\s*°(?!\s*[cCfF]\b)/u.test(text);
+}
+
 export function parseTesseractTsv(
   tsv: string,
   pageSize: { width: number; height: number },
@@ -234,11 +240,14 @@ export function parseTesseractTsv(
       };
     });
     const confidence = criticalValueConfidence(positionedWords, averageConfidence);
+    const lineConfidenceLevel = hasAmbiguousBareDegreeValue(positionedWords)
+      ? "low"
+      : confidenceLevel(confidence);
     return {
       text: words.map((word) => word.text).join(" "),
       bbox: { x: left * scaleX, y: top * scaleY, width: (right - left) * scaleX, height: (bottom - top) * scaleY },
       confidence,
-      confidenceLevel: confidenceLevel(confidence),
+      confidenceLevel: lineConfidenceLevel,
       words: positionedWords,
       top,
       left,
