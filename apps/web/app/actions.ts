@@ -21,10 +21,10 @@ import { chooseRequirementColumn, sourceTableGroupHeading, sourceRequirementCell
 import { findColumnLayoutConflict, matchOcrHeaderTokens, normalizeSingleContentColumn, validatePageColumnMap, type SourceColumn } from "./column-layout";
 import { extractPdfPathRectangles, hasTableGridGeometry } from "./pdf-path-rectangles";
 import { separateVisualCompletionProposal, type VisualOcrConfidence } from "./visual-ocr";
-import { hasRasterImageOperators, shouldRunPageOcr } from "./ocr-routing";
+import { hasRasterImageOperators, selectImageRegionsForOcr, shouldRunPageOcr } from "./ocr-routing";
 import { collectPdfImageRegions } from "./pdf-image-regions";
 import type { ProcessingProgress } from "./processing-progress";
-import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
+import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
 import { createModelCompletionClient, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { buildRequirementSourceReference, buildSourcePageModel, buildSourceTables, createSourceDocumentModel, findUniqueSourceText, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
@@ -329,6 +329,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     let ocrAttemptedPages = 0;
     const ocrStartedAt = Date.now();
     const MAX_TOTAL_OCR_MS = 210_000;
+    const MAX_OCR_REGIONS_PER_PAGE = 6;
     report("reading PDF text and page positions", { stage: "reading", message: "Reading text and page layout", current: 0, total: pdf.numPages });
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       signal?.throwIfAborted();
@@ -441,12 +442,48 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               image = ocrCanvas.toBuffer("image/png");
               imageSize = { width: ocrCanvas.width, height: ocrCanvas.height };
             }
-            ocrResult = await recognizePageImage({
-              image,
-              imageSize,
-              pageSize: { width: viewport.width, height: viewport.height },
-              signal,
-            });
+            const ocrTargets = text.trim()
+              ? selectImageRegionsForOcr(imageRegions, positioned.map((item) => item.box))
+              : [];
+            if (ocrTargets.length) {
+              const rendered = await loadImage(Buffer.from(image));
+              const scaleX = imageSize.width / viewport.width;
+              const scaleY = imageSize.height / viewport.height;
+              const lines: OcrLine[] = [];
+              let attemptedRegions = 0;
+              for (const target of ocrTargets.slice(0, MAX_OCR_REGIONS_PER_PAGE)) {
+                signal?.throwIfAborted();
+                if (Date.now() - ocrStartedAt >= MAX_TOTAL_OCR_MS) {
+                  ocrSkipReason = "time-budget";
+                  break;
+                }
+                const left = Math.max(0, Math.floor(target.bbox.x * scaleX));
+                const top = Math.max(0, Math.floor(target.bbox.y * scaleY));
+                const right = Math.min(imageSize.width, Math.ceil((target.bbox.x + target.bbox.width) * scaleX));
+                const bottom = Math.min(imageSize.height, Math.ceil((target.bbox.y + target.bbox.height) * scaleY));
+                if (right <= left || bottom <= top) continue;
+                const crop = createCanvas(right - left, bottom - top);
+                crop.getContext("2d").drawImage(rendered, left, top, right - left, bottom - top, 0, 0, right - left, bottom - top);
+                const cropResult = await recognizePageImage({
+                  image: crop.toBuffer("image/png"),
+                  imageSize: { width: right - left, height: bottom - top },
+                  pageSize: { width: target.bbox.width, height: target.bbox.height },
+                  signal,
+                });
+                lines.push(...offsetOcrPageText(cropResult, { x: target.bbox.x, y: target.bbox.y }, target.index).lines);
+                attemptedRegions += 1;
+              }
+              if (ocrTargets.length > attemptedRegions && !ocrSkipReason) ocrSkipReason = "region-limit";
+              ocrResult = { text: lines.map((line) => line.text).join("\n"), lines };
+            } else {
+              // Full-page OCR remains the fallback for scan-only or unlocalized pages.
+              ocrResult = await recognizePageImage({
+                image,
+                imageSize,
+                pageSize: { width: viewport.width, height: viewport.height },
+                signal,
+              });
+            }
             ocrStatus = ocrResult.lines.length > 0 ? "text-found" : "no-text-found";
           } catch {
             signal?.throwIfAborted();
