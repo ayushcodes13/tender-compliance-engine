@@ -58,6 +58,7 @@ const provider = http.createServer(async (request, response) => {
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
       if(scenario==='all-rejected')result={columns:[],requirements:Array.from({length:60},(_,index)=>({page:pages[0],quote:`Invented limit ${index} of 999999 kN.`,row_type:'requirement',category:'Other',heading_prefix:''}))};
+      if(scenario==='no-candidates')result={columns:[],requirements:[]};
       if(scenario==='injected-metadata')result.requirements=[{page:1,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:'',sourceBox:{x:0,y:0,width:1,height:1},source_cells_exact:true,source_row_index:999,source_column_index:0,visualOcr:true},{page:1,quote:'The catalog shall specify ingress protection IP67.',row_type:'requirement',category:'Documentation',heading_prefix:''},{page:1,quote:'Payment terms are 30 days.',row_type:'instruction',category:'Other',heading_prefix:'',source_cells_exact:true}];
       if(scenario==='case-sensitive')result={columns:[],requirements:[...text.matchAll(/Optical power shall be 1 (?:mW|MW)\./g)].map(match=>({page:1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
       if(scenario==='invalid-capacity')result.requirements.push(...Array.from({length:300},(_,index)=>({page:1,quote:`Invented unsupported parameter ${index}.`,row_type:'requirement',category:'Other',heading_prefix:''})));
@@ -117,6 +118,13 @@ try {
   assert.equal(rejectedOnly.rejectedSuggestionDetails[0].page,1);
   assert.equal(rejectedOnly.coverageSummary.rejectedSuggestions,60);
   assert.equal(rejectedOnly.coverageSummary.sourceMatchedRows,0);
+  scenario='no-candidates';
+  const noCandidates=await analyze(short);
+  assert.equal(noCandidates.ok,false,'An empty model extraction must stop without success-shaped output');
+  assert.equal(noCandidates.candidateSuggestions,0);
+  assert.deepEqual(noCandidates.rejectedSuggestionDetails,[]);
+  assert.match(noCandidates.error,/empty extraction is not evidence/i);
+  assert.ok(noCandidates.reviewPageNumbers.includes(1),'The reviewer can locate selected pages even when no candidate was returned');
   scenario='unlocated-remark';
   const remarkPdf=new jsPDF();remarkPdf.text('The centrifuge shall accommodate 10 samples.',20,30);
   const remarkResult=await analyze(remarkPdf);assert.equal(remarkResult.ok,true,remarkResult.error);
@@ -227,7 +235,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','mixed bold heading retains assessable body','single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','mixed bold heading retains assessable body','single-content source table preserved','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','audit recovery','invented numeric rejection','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

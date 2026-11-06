@@ -167,6 +167,10 @@ a { color: inherit; }
 .mvp-coverage-failure li { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid #ecd8be; }
 .mvp-coverage-failure li p, .mvp-coverage-failure li span { margin: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .mvp-coverage-failure li button { justify-self: start; border: 0; padding: 3px 0; background: transparent; color: #234ca0; font: inherit; font-weight: 650; cursor: pointer; }
+.mvp-coverage-review-pages { display: grid; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #ecd8be; font-size: 12px; }
+.mvp-coverage-review-pages > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.mvp-coverage-review-pages button { border: 1px solid #d5b38a; border-radius: 6px; padding: 6px 8px; background: #fffdfa; color: #234ca0; font: inherit; font-weight: 600; cursor: pointer; }
+.mvp-coverage-review-pages > span { font-size: 11px; }
 .mvp-upload-limits { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 9px; margin-top: 15px; padding-top: 14px; border-top: 1px solid #edf0f0; }
 .mvp-processing { margin-top: 16px; padding: 15px 16px; border: 1px solid #dce4ef; border-radius: 8px; background: #f7f9fc; }
 .mvp-processing-terminal { margin: 12px 0 0; padding: 11px 13px; border: 1px solid #dce4ef; border-radius: 8px; background: #f7f9fc; color: #44546a; font-size: 12px; line-height: 1.5; }

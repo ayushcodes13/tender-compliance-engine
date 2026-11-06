@@ -1678,14 +1678,20 @@ Product names and model/capacity labels are headings, but serials, page furnitur
     report("source verification complete", { stage: "verifying", message: `Verified ${requirements.length} source-linked rows` });
 
     if (requirements.length === 0) {
+      const hasSuggestions = unfilteredCandidates.length > 0;
       return {
         ok: false as const,
-        error: "No model quote could be matched to the source text or OCR transcript. Check scan quality or choose a different technical section.",
+        error: hasSuggestions
+          ? "No model quote could be matched to the source text or OCR transcript. Check scan quality or choose a different technical section."
+          : "No requirement suggestions were returned for the selected pages. Inspect the tender manually; an empty extraction is not evidence that no requirements exist.",
         pageCount: pages.length,
+        candidateSuggestions: unfilteredCandidates.length,
         rejectedCandidates: rejected,
         rejectedSuggestionDetails: rejectedSuggestionDetails.slice(0, 50),
         rejectedSuggestionsNotShown: Math.max(0, rejectedSuggestionDetails.length - 50),
         coverageSummary: coverage.summary,
+        reviewPageNumbers: coveragePages.filter((page) => page.selectedForExtraction).map((page) => page.page).slice(0, 50),
+        reviewPagesNotShown: Math.max(0, coveragePages.filter((page) => page.selectedForExtraction).length - 50),
       };
     }
 
