@@ -39,13 +39,37 @@ def inspect_document(document_id, path, strategies):
     try:
         result["pages"] = document.page_count
         result["nativeTextPages"] = 0
+        result["pageInventory"] = []
         result["strategies"] = {
             strategy: {"pagesWithTables": 0, "tables": 0, "rows": 0}
             for strategy in strategies
         }
         for page in document:
-            if page.get_text("text").strip():
+            native_text = page.get_text("text")
+            if native_text.strip():
                 result["nativeTextPages"] += 1
+            text_dict = page.get_text("dict")
+            text_blocks = [block for block in text_dict.get("blocks", []) if block.get("type") == 0]
+            words = page.get_text("words")
+            image_regions = page.get_image_info(xrefs=True)
+            page_area = max(page.rect.width * page.rect.height, 0)
+            image_area = 0
+            for image in image_regions:
+                bbox = image.get("bbox")
+                if bbox:
+                    image_area += max(0, bbox[2] - bbox[0]) * max(0, bbox[3] - bbox[1])
+            result["pageInventory"].append({
+                "page": page.number + 1,
+                "width": round(page.rect.width, 2),
+                "height": round(page.rect.height, 2),
+                "rotation": page.rotation,
+                "nativeTextChars": len(native_text.strip()),
+                "nativeWords": len(words),
+                "nativeTextBlocks": len(text_blocks),
+                "imageRegions": len(image_regions),
+                "imageAreaRatio": round(min(1, image_area / page_area), 4) if page_area else 0,
+                "vectorDrawingCount": len(page.get_drawings()),
+            })
             for strategy in strategies:
                 try:
                     tables = page.find_tables(strategy=strategy).tables
