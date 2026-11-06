@@ -106,3 +106,35 @@ test('Excel merges consecutive rows sharing the same heading', () => {
   const merges = Object.keys(sheet._merges || {});
   assert.ok(merges.length > 0, 'Excel worksheet contains merged cells for repeating headings');
 });
+
+test('Excel splits long requirement text across bounded-height rows without adding response decisions', () => {
+  const longRequirement = `Tender requirement: ${'The equipment shall retain the complete technical specification and operating conditions. '.repeat(100)}`;
+  const sheetData = buildResponseSheet({
+    requirements: [{ id: 'long-1', text: longRequirement, quote: longRequirement, page: 4 }],
+  });
+  const workbook = createSectionedWorkbook(sheetData);
+  const worksheet = workbook.worksheets[0];
+  let requirementColumn = 0;
+  let responseColumn = 0;
+  worksheet.eachRow((row) => {
+    const values = row.values.map((value) => String(value ?? '').toLowerCase());
+    if (values.includes('tender requirement')) requirementColumn = values.indexOf('tender requirement');
+    if (values.includes('compliance (yes / no)')) responseColumn = values.indexOf('compliance (yes / no)');
+  });
+  assert.ok(requirementColumn > 0);
+  assert.ok(responseColumn > 0);
+
+  const dataRows = [];
+  worksheet.eachRow((row) => {
+    const value = row.getCell(requirementColumn).value;
+    if (typeof value === 'string' && value.length > 100) dataRows.push(row);
+  });
+  assert.ok(dataRows.length > 1, 'long source text occupies continuation rows');
+  assert.equal(dataRows.map((row) => row.getCell(requirementColumn).value).join(''), sheetData.rows[0].values[1]);
+  assert.ok(dataRows.every((row) => row.height <= 300));
+  assert.equal(dataRows[0].getCell(responseColumn).value, '');
+  assert.ok(
+    Object.values(worksheet._merges || {}).some((range) => range.model?.top === dataRows[0].number && range.model?.bottom === dataRows.at(-1).number && range.model?.left === responseColumn),
+    'OEM response field is vertically merged across requirement continuation rows',
+  );
+});

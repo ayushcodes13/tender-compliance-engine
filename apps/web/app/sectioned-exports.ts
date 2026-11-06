@@ -198,6 +198,37 @@ const excelThinBorder: Partial<ExcelJS.Borders> = {
   right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
 };
 
+const MAX_EXCEL_DATA_ROW_HEIGHT = 300;
+const EXCEL_LINE_HEIGHT = 14;
+const EXCEL_ROW_PADDING = 8;
+const EXCEL_MAX_ESTIMATED_LINES = Math.floor((MAX_EXCEL_DATA_ROW_HEIGHT - EXCEL_ROW_PADDING) / EXCEL_LINE_HEIGHT);
+
+function splitCellForExcel(value: string, width: number): string[] {
+  const pieces: string[] = [];
+  let current = '';
+  let lineCount = 0;
+
+  // Keep every source character, including explicit newlines and spaces.
+  for (const match of value.matchAll(/[^\n]*\n|[^\n]+$|\n/g)) {
+    const segment = match[0];
+    const segmentLines = Math.max(1, Math.ceil(segment.replace(/\n$/, '').length / width));
+    if (current && lineCount + segmentLines > EXCEL_MAX_ESTIMATED_LINES) {
+      pieces.push(current);
+      current = '';
+      lineCount = 0;
+    }
+    if (segmentLines > EXCEL_MAX_ESTIMATED_LINES) {
+      const size = width * EXCEL_MAX_ESTIMATED_LINES;
+      for (let offset = 0; offset < segment.length; offset += size) pieces.push(segment.slice(offset, offset + size));
+    } else {
+      current += segment;
+      lineCount += segmentLines;
+    }
+  }
+  if (current || pieces.length === 0) pieces.push(current);
+  return pieces;
+}
+
 export function createSectionedWorkbook(sheet: ResponseSheet): ExcelJS.Workbook {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Technical response');
@@ -239,14 +270,37 @@ export function createSectionedWorkbook(sheet: ResponseSheet): ExcelJS.Workbook 
     });
 
     const startDataRowNumber = worksheet.rowCount + 1;
+    const physicalRows: Array<{ values: string[] }> = [];
+    const responseSpans: Array<{ start: number; end: number }> = [];
 
-    for (const row of section.rows) {
-      const added = worksheet.addRow(row.values.map((value) => value.replace(/\uF0B7/g, '•')));
+    for (const [logicalIndex, row] of section.rows.entries()) {
+      const chunks = row.values.map((value, index) => splitCellForExcel(
+        value.replace(/\uF0B7/g, '•'),
+        section.columns[index]?.role === 'requirement' ? 70 : getExcelColumnWidth(section.columns[index] ?? { header: '' }),
+      ));
+      const physicalCount = Math.max(1, ...chunks.map((parts) => parts.length));
+      const physicalStart = physicalRows.length;
+      for (let part = 0; part < physicalCount; part++) {
+        physicalRows.push({
+          values: chunks.map((parts, index) => {
+            const role = section.columns[index]?.role;
+            if (part > 0 && role === 'response') return '';
+            if (role === 'response') return parts.join('');
+            if (role === 'heading') return parts.join('');
+            return parts[part] ?? '';
+          }),
+        });
+      }
+      if (physicalCount > 1) responseSpans.push({ start: startDataRowNumber + physicalStart, end: startDataRowNumber + physicalRows.length - 1 });
+    }
+
+    for (const { values } of physicalRows) {
+      const added = worksheet.addRow(values);
       added.font = { name: 'Arial', size: 10, color: { argb: 'FF1E293B' } };
 
       const computedHeight = Math.max(
         22,
-        ...row.values.map(
+        ...values.map(
           (value, index) =>
             value
               .split(/\r?\n/)
@@ -259,7 +313,7 @@ export function createSectionedWorkbook(sheet: ResponseSheet): ExcelJS.Workbook 
             8,
         ),
       );
-      added.height = Math.min(300, computedHeight);
+      added.height = Math.min(MAX_EXCEL_DATA_ROW_HEIGHT, computedHeight);
 
       added.eachCell({ includeEmpty: true }, (cell) => {
         cell.alignment = { wrapText: true, vertical: 'top' };
@@ -269,10 +323,20 @@ export function createSectionedWorkbook(sheet: ResponseSheet): ExcelJS.Workbook 
 
     lastDataRowNumber = worksheet.rowCount;
 
+    // Continuation rows extend the same answer opportunity for this requirement.
+    for (const span of responseSpans) {
+      section.columns.forEach((column, colIdx) => {
+        if (column.role === 'response') {
+          worksheet.mergeCells(span.start, colIdx + 1, span.end, colIdx + 1);
+          worksheet.getCell(span.start, colIdx + 1).alignment = { wrapText: true, vertical: 'top' };
+        }
+      });
+    }
+
     // Apply vertical hierarchical cell merges for heading columns
     section.columns.forEach((column, colIdx) => {
       if (isMergeableColumn(column)) {
-        const colValues = section.rows.map((r) => r.values[colIdx]);
+        const colValues = physicalRows.map((r) => r.values[colIdx]);
         let r = 0;
         while (r < colValues.length) {
           if (verticalMergeAt(colValues, r) === 'restart') {
