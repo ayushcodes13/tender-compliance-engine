@@ -67,7 +67,7 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 ## Checkpoint 73 — Client tender document reliability
 
-**Status: LOCAL ACCEPTANCE VERIFIED; REMOTE CI / RELEASE GATE PENDING.**
+**Status: LOCAL ACCEPTANCE VERIFIED; CURRENT MAIN CI PASSED; HOSTED RELEASE GATES PENDING.**
 
 - [x] Real 42-page client PDF routes both full technical annexures, including continuation pages 22 and 26.
 - [x] Different table column layouts preserve literal source specifications/descriptions. Source annexure labels/title lines and equipment headings sit above separate tables, with no annexure/equipment columns in the body; the optical-table group has 16 source rows per annexure. Source citations remain available in the UI.
@@ -79,7 +79,16 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 This checkpoint does not establish exhaustive extraction on unseen layouts, hosted OCR support, client production access controls, persistence, or a completed hosted deployment. See `docs/document-reliability-audit.md` for the evidence and limits.
 
-- [ ] Required remote CI passes. Keep this checkpoint title open until the PR checks pass; do not merge a failing required check.
+- [x] Required remote CI passes for the current `main` revision (2026-11-06; GitHub Actions run [42255046703](https://github.com/ayushcodes13/tender-compliance-engine/actions/runs/42255046703), commit `25e3f51bb03e7ac32c990f9c7bdb4dbd6cbf34cf`). The run completed unit tests, typecheck, production build, and scripted pipeline checks.
+
+### Remote release-gate refresh — 2026-11-06
+
+- [x] The public Vercel URL `https://tender-compliance-engine.vercel.app/` returned HTTP 200 on 2026-11-06.
+- [ ] The custom domain `tender.devayushrout.me` did not resolve in DNS on 2026-11-06.
+- [ ] Hosted model configuration and a fresh hosted upload/export were not verified; no tender was submitted to the public analysis endpoint during this check.
+- [ ] Vercel preview deployment for PR #302 was unavailable because the branch author did not have access to the Vercel project. GitHub Actions CI passed; this Vercel permission failure is a separate deployment integration issue.
+
+Current main CI passing does not close the hosted release gates or this checkpoint's document-reliability limits.
 
 ### Client print-layout clarification — 2026-10-25
 
