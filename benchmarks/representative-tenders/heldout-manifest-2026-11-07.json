@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "evaluationSplit": "new-public-tender-baseline",
+  "accessedAt": "2026-11-07",
+  "documents": [
+    {
+      "id": "iitg-utm",
+      "title": "100 kN Automatic-Electromechanical Universal Testing Machine",
+      "tenderReference": "IITG/RND/T140/25-26",
+      "sourceInstitution": "Indian Institute of Technology Guwahati",
+      "publicationDateInDocument": "2025-05-08",
+      "sourceUrl": "https://www.iitg.ac.in/pdf/987dde7a7b7c5bca0e8cbed1b6b7afec.pdf",
+      "sourcePage": "Official IIT Guwahati tender PDF",
+      "bytes": 1369940,
+      "pages": 15,
+      "nativeTextPages": 15,
+      "sha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+      "repositoryCopy": false,
+      "reuseNote": "Publicly accessible source; no explicit reuse license identified. Keep the source local and do not redistribute the PDF."
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "status": "partial-manual-adjudication",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "pageCoordinateUnits": "PDF points",
+  "cases": [
+    {
+      "id": "iitg-page-11-five-year-amc-omitted",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": null,
+      "expected": {
+        "kind": "service-requirement",
+        "summary": "Require a separately priced five-year AMC covering service visits, yearly calibration, routine maintenance, spare parts, and consumables.",
+        "independentlyAnswerable": true
+      },
+      "observed": "No AMC obligation candidate was present among the 114 saved response rows.",
+      "disposition": "missed-by-extraction",
+      "evidence": "IIT Guwahati official PDF, tender reference IITG/RND/T140/25-26, physical PDF page 11; rendered page visually checked."
+    },
+    {
+      "id": "iitg-page-11-local-after-sales-presence-omitted",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": null,
+      "expected": {
+        "kind": "service-requirement",
+        "summary": "Supplier must have a local office or authorized associate in India to provide timely after-sales support and maintenance.",
+        "independentlyAnswerable": true
+      },
+      "observed": "No local-office or authorized-associate obligation candidate was present among the 114 saved response rows.",
+      "disposition": "missed-by-extraction",
+      "evidence": "IIT Guwahati official PDF, tender reference IITG/RND/T140/25-26, physical PDF page 11; rendered page visually checked."
+    },
+    {
+      "id": "iitg-page-11-five-year-parts-support-omitted",
+      "page": 11,
+      "region": "Warranty and service continuation in the technical specification table",
+      "bounds": null,
+      "expected": {
+        "kind": "service-requirement",
+        "summary": "Provide after-sales service and spare-parts availability for at least five years beyond the initial warranty.",
+        "independentlyAnswerable": true
+      },
+      "observed": "No beyond-warranty after-sales and spare-parts availability obligation candidate was present among the 114 saved response rows.",
+      "disposition": "missed-by-extraction",
+      "evidence": "IIT Guwahati official PDF, tender reference IITG/RND/T140/25-26, physical PDF page 11; rendered page visually checked."
+    }
+  ]
+}
