@@ -48,6 +48,8 @@ A new IIT Guwahati geosynthetic UTM tender is now recorded separately as an addi
 
 The page inventory now records raster-image presence, whether OCR was recommended, whether it ran, and whether it found text, found no text, failed, or was skipped because of engine/page/time limits. Native text and OCR regions remain separate. Synthetic tests cover hybrid native-plus-OCR pages and distinguish each OCR outcome. This improves provenance reporting only; it does not detect image-region coordinates or change page routing/extraction behavior. The full source inventory and completeness audit remain open.
 
+The six representative source PDFs are available locally and their fingerprints match `benchmarks/representative-tenders/manifest.json`. A page-level PyMuPDF shadow inventory now records metadata for all 183 pages without storing source text or coordinates. It independently confirms 13 image-only pages in the scanned Shah tender and native text on every page of the other five documents. This is useful page inventory evidence, not a semantic routing or extraction completeness result; region-level inventory and end-to-end per-page dispositions remain open.
+
 ## Checkpoint 72 — Single-user Vercel MVP
 
 **Status: LOCAL UI AND GPT-6 LUNA SMOKE VERIFIED; HOSTED SYNTHETIC ANALYSIS AND EXPORTS VERIFIED; CUSTOM DOMAIN DNS IS UNRESOLVED.**

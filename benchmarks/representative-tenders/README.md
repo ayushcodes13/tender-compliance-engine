@@ -4,6 +4,8 @@ This directory records a local, source-linked baseline for six real tender PDFs.
 
 The follow-up `heldout-manifest-2026-11-07.json` and `heldout-results-2026-11-07.json` add an IIT Guwahati tender acquired directly from the institute's public tender page. It was not part of the original six-document sample. The source PDF is not stored in Git. `heldout-golden-v0.1.json` records three page-11 omissions found by comparing the first completed run with the original page. This is one new sample, not a statistically sufficient holdout set; future work that uses these cases for tuning must not report them as untouched test data.
 
+`page-inventory-shadow-2026-11-07.json` adds one record per page from the six available PDFs: page dimensions/rotation, native text character/word/block counts, embedded image-region count and approximate covered-area ratio, vector drawing count, and table-candidate counts by PyMuPDF strategy. It contains no tender text or source coordinates. It is a parser-side inventory diagnostic, not the production PDF.js inventory and not a semantic relevance or OCR-quality score. On this run, all 183 pages were represented; the scanned Shah tender had 13 image-only pages and the other five PDFs had native text on every page.
+
 ## Reading the baseline
 
 The six documents contain 183 PDF pages. The current PDF.js/vector-table path and PyMuPDF `find_tables` strategies were compared in shadow mode. Counts are candidate geometry statistics only; they do not measure correct table detection. No OCR was run in the PyMuPDF comparison. The Shah document is image-only and therefore has no selectable text for either parser to interpret without OCR.
