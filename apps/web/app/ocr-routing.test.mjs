@@ -4,7 +4,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { jsPDF } from "jspdf";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { PDF_FONT_OPTIONS } from "./pdf-runtime.ts";
-import { hasRasterImageOperators, shouldRunPageOcr } from "./ocr-routing.ts";
+import { hasRasterImageOperators, selectImageRegionsForOcr, shouldRunPageOcr } from "./ocr-routing.ts";
 import { collectPdfImageRegions } from "./pdf-image-regions.ts";
 
 const imageRegionCodes = {
@@ -101,4 +101,13 @@ test("does not OCR dense native text pages just because they contain an image", 
     nativeTextBoxes: [{ x: 20, y: 20, width: 400, height: 500 }],
   }), false, "dense native text contained inside the image region does not trigger duplicate OCR");
     assert.equal(shouldRunPageOcr({ selectableText: "A short native header", textAreaRatio: 0.02, hasRasterImageContent: false }), true);
+});
+
+test("selects significant image-only regions for cropped OCR and ignores native-covered regions", () => {
+  const regions = [
+    { bbox: { x: 20, y: 100, width: 400, height: 500 }, areaRatio: 0.4, operator: "image" },
+    { bbox: { x: 10, y: 10, width: 20, height: 20 }, areaRatio: 0.002, operator: "image" },
+  ];
+  assert.deepEqual(selectImageRegionsForOcr(regions, [{ x: 20, y: 100, width: 400, height: 500 }]), []);
+  assert.deepEqual(selectImageRegionsForOcr(regions, []).map(({ index }) => index), [0]);
 });

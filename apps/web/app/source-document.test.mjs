@@ -141,11 +141,16 @@ test("stores raster image regions with stable page-scoped identities and approxi
     sourceText: "Tender header",
     positionedItems: [],
     imageRegions: [{ bbox: { x: 20, y: 100, width: 400, height: 500 }, areaRatio: 5 / 12, operator: "image" }],
+    ocrRegions: [{
+      text: "Maximum pressure: 500 bar", bbox: { x: 25, y: 120, width: 120, height: 10 }, confidence: 80,
+      confidenceLevel: "medium", imageRegionIndex: 0,
+    }],
   });
   assert.equal(page.imageRegions[0].id, `${page.id}:image:1`);
   assert.deepEqual(page.imageRegions[0].bbox, { x: 20, y: 100, width: 400, height: 500 });
   assert.equal(page.imageRegions[0].areaRatio, 5 / 12);
   assert.equal(page.imageRegions[0].bboxPrecision, "approximate");
+  assert.equal(page.ocrRegions[0].imageRegionId, page.imageRegions[0].id);
 });
 
 test("records native and OCR evidence together on a mixed-content page", () => {
@@ -195,6 +200,7 @@ test("distinguishes skipped, empty, and failed OCR from pages where OCR was not 
   const skipped = makePage({ ocrStatus: "not-attempted", ocrSkipReason: "engine-unavailable" });
   const empty = makePage({ ocrStatus: "no-text-found" });
   const failed = makePage({ ocrStatus: "failed" });
+  const partial = makePage({ ocrStatus: "text-found", ocrSkipReason: "region-limit" });
   const ordinary = buildSourcePageModel({
     documentId: document.documentId,
     physicalPdfPageNumber: 2,
@@ -211,6 +217,7 @@ test("distinguishes skipped, empty, and failed OCR from pages where OCR was not 
   assert.match(empty.warnings.join(" "), /completed but found no text/);
   assert.equal(failed.ocrStatus, "failed");
   assert.match(failed.warnings.join(" "), /did not complete/);
+  assert.match(partial.warnings.join(" "), /coverage is incomplete/);
   assert.equal(ordinary.ocrStatus, "not-recommended");
   assert.deepEqual(ordinary.warnings, []);
 });

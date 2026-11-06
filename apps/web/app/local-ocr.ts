@@ -37,12 +37,30 @@ export type OcrLine = {
   confidence: number;
   confidenceLevel: OcrConfidence;
   words: OcrWord[];
+  /** Zero-based index into the parser's page image-region inventory; absent for full-page OCR. */
+  imageRegionIndex?: number;
 };
 
 export type OcrPageText = {
   text: string;
   lines: OcrLine[];
 };
+
+/** Maps OCR geometry from a cropped region back into the page coordinate system. */
+export function offsetOcrPageText(result: OcrPageText, offset: { x: number; y: number }, imageRegionIndex?: number): OcrPageText {
+  return {
+    text: result.text,
+    lines: result.lines.map((line) => ({
+      ...line,
+      bbox: { ...line.bbox, x: line.bbox.x + offset.x, y: line.bbox.y + offset.y },
+      ...(imageRegionIndex === undefined ? {} : { imageRegionIndex }),
+      words: line.words.map((word) => ({
+        ...word,
+        bbox: { ...word.bbox, x: word.bbox.x + offset.x, y: word.bbox.y + offset.y },
+      })),
+    })),
+  };
+}
 
 export type PopplerPageRenderer = {
   renderPage(pageNumber: number, maxDimension: number, signal?: AbortSignal): Promise<Uint8Array>;

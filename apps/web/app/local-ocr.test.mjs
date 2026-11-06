@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, parseTesseractTsv, recognizePageImage, resolveTesseractLanguage } from "./local-ocr.ts";
+import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, offsetOcrPageText, parseTesseractTsv, recognizePageImage, resolveTesseractLanguage } from "./local-ocr.ts";
 
 test("parses OCR words into source-ordered lines with page-coordinate boxes", () => {
   const tsv = [
@@ -84,6 +84,17 @@ test("maps each OCR line to its approximate source box without mapping inserted 
     [0, 9, "First row", lines[0].bbox, "high"],
     [10, 20, "Second row", lines[1].bbox, "medium"],
   ]);
+});
+
+test("maps cropped OCR line and word boxes back to page coordinates", () => {
+  const source = { text: "500 bar", lines: [{
+    text: "500 bar", bbox: { x: 2, y: 3, width: 40, height: 8 }, confidence: 72, confidenceLevel: "medium",
+    words: [{ start: 0, end: 3, text: "500", bbox: { x: 2, y: 3, width: 20, height: 8 }, confidence: 72, confidenceLevel: "medium" }],
+  }] };
+  const [line] = offsetOcrPageText(source, { x: 100, y: 200 }, 2).lines;
+  assert.deepEqual(line.bbox, { x: 102, y: 203, width: 40, height: 8 });
+  assert.deepEqual(line.words[0].bbox, { x: 102, y: 203, width: 20, height: 8 });
+  assert.equal(line.imageRegionIndex, 2);
 });
 
 test("aborting a Poppler render terminates its process and leaves renderer cleanup available", async () => {

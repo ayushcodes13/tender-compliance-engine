@@ -19,6 +19,7 @@ export type SourceOcrRegion = {
   confidence: number;
   confidenceLevel: "high" | "medium" | "low";
   extractionMethod: "tesseract-ocr";
+  imageRegionId?: string;
 };
 
 export type SourceImageRegion = {
@@ -40,7 +41,7 @@ export type SourceTableCell = {
 export type SourceTableRow = { id: string; rowIndex: number; cells: SourceTableCell[] };
 export type SourceTable = { id: string; rows: SourceTableRow[]; columnCount: number };
 export type SourcePageOcrStatus = "not-recommended" | "not-attempted" | "text-found" | "no-text-found" | "failed";
-export type SourcePageOcrSkipReason = "engine-unavailable" | "page-limit" | "time-budget";
+export type SourcePageOcrSkipReason = "engine-unavailable" | "page-limit" | "time-budget" | "region-limit";
 
 export type SourcePageModel = {
   id: string;
@@ -139,7 +140,7 @@ export function buildSourcePageModel(input: {
   ocrStatus?: SourcePageOcrStatus;
   ocrSkipReason?: SourcePageOcrSkipReason;
   imageRegions?: Array<Omit<SourceImageRegion, "id" | "bboxPrecision">>;
-  ocrRegions?: Array<Omit<SourceOcrRegion, "id" | "extractionMethod">>;
+  ocrRegions?: Array<Omit<SourceOcrRegion, "id" | "extractionMethod" | "imageRegionId"> & { imageRegionIndex?: number }>;
   vectorRows?: VectorRowInput[];
 }): SourcePageModel {
   const pageId = `${input.documentId}:page:${input.physicalPdfPageNumber}`;
@@ -158,12 +159,16 @@ export function buildSourcePageModel(input: {
     bbox: { ...region.bbox },
     bboxPrecision: "approximate",
   }));
-  const ocrRegions: SourceOcrRegion[] = (input.ocrRegions ?? []).map((region, index) => ({
-    ...region,
-    id: `${pageId}:ocr:${index + 1}`,
-    bbox: { ...region.bbox },
-    extractionMethod: "tesseract-ocr",
-  }));
+  const ocrRegions: SourceOcrRegion[] = (input.ocrRegions ?? []).map((region, index) => {
+    const { imageRegionIndex, ...sourceRegion } = region;
+    return {
+      ...sourceRegion,
+      id: `${pageId}:ocr:${index + 1}`,
+      ...(imageRegionIndex === undefined ? {} : { imageRegionId: `${pageId}:image:${imageRegionIndex + 1}` }),
+      bbox: { ...region.bbox },
+      extractionMethod: "tesseract-ocr",
+    };
+  });
   const ocrText = ocrRegions.map((region) => region.text).join("\n");
   const ocrRecommended = input.ocrRecommended ?? false;
   const ocrStatus = input.ocrStatus ?? (ocrRecommended ? "not-attempted" : "not-recommended");
@@ -174,6 +179,8 @@ export function buildSourcePageModel(input: {
       : ["No selectable text was found on this page."];
   if (ocrStatus === "not-attempted") {
     warnings.push(`OCR was recommended but not attempted${input.ocrSkipReason ? ` (${input.ocrSkipReason})` : ""}.`);
+  } else if (input.ocrSkipReason) {
+    warnings.push(`OCR coverage is incomplete (${input.ocrSkipReason}); inspect the remaining source image regions.`);
   } else if (ocrStatus === "failed") {
     warnings.push("OCR was attempted but did not complete; no OCR text was added to the source inventory.");
   } else if (ocrStatus === "no-text-found") {
