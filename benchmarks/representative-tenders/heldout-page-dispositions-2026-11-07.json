@@ -29,7 +29,10 @@
       "disposition": "possibly-relevant",
       "phase1Handling": "retain-documentary-obligations",
       "reason": "Requires offered-product technical features, manufacturer/dealership evidence, technical leaflet, HSN/certification evidence, warranty details, and bidder/service-centre information; also contains procurement evaluation and financial-cover instructions.",
-      "obligationReview": "not-exhaustive"
+      "obligationReview": "partial",
+      "sourceUnitsAnnotated": 6,
+      "annotationArtifact": "heldout-golden-v0.4.json",
+      "runComparison": "Listed documentary/service source units were on a page not selected or omission-audited in the captured run; exact saved output rows were unavailable."
     },
     {
       "page": 3,
@@ -37,7 +40,10 @@
       "disposition": "possibly-relevant",
       "phase1Handling": "retain-documentary-and-service-obligations",
       "reason": "Requires India after-sales service-centre details, technical literature supporting offered specifications, manufacturer and quality certificates, and warranty cross-reference; the page also contains EMD and performance-guarantee terms.",
-      "obligationReview": "not-exhaustive"
+      "obligationReview": "partial",
+      "sourceUnitsAnnotated": 5,
+      "annotationArtifact": "heldout-golden-v0.4.json",
+      "runComparison": "Listed documentary/service source units were on a page not selected or omission-audited in the captured run; exact saved output rows were unavailable."
     },
     {
       "page": 4,
@@ -127,7 +133,10 @@
       "disposition": "possibly-relevant",
       "phase1Handling": "retain-as-form-cross-reference",
       "reason": "Checklist repeats technical-feature, literature, warranty, certificate, delivery, payment, and service declarations but introduces no separate equipment parameter schedule.",
-      "obligationReview": "not-exhaustive"
+      "obligationReview": "partial",
+      "sourceUnitsAnnotated": 2,
+      "annotationArtifact": "heldout-golden-v0.4.json",
+      "runComparison": "The checklist is a repeated bidder-response form, not an independently adjudicated equipment-requirement set."
     },
     {
       "page": 13,
@@ -135,7 +144,10 @@
       "disposition": "possibly-relevant",
       "phase1Handling": "retain-documentary-and-service-obligations",
       "reason": "Requests registered-office and Guwahati service-centre details, staff information, registration evidence, and past-client evidence; it is a bidder form rather than an equipment specification.",
-      "obligationReview": "not-exhaustive"
+      "obligationReview": "partial",
+      "sourceUnitsAnnotated": 1,
+      "annotationArtifact": "heldout-golden-v0.4.json",
+      "runComparison": "The annotated service-centre field repeats bidder-information requirements; form responses and remaining fields were not evaluated against saved model output."
     },
     {
       "page": 14,
