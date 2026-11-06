@@ -52,21 +52,32 @@ test("low-confidence numeric and adjacent unit tokens cannot be hidden by a high
   assert.equal(unitLine.confidenceLevel, "low");
 });
 
-test("flags a high-confidence bare degree after a number as possible superscript OCR confusion", () => {
+test("flags ambiguous degree and quote-like numeric suffixes without changing OCR text or score", () => {
   const header = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";
   const rows = [
     "5\t1\t1\t1\t1\t1\t0\t0\t90\t20\t98\tAFC",
     "5\t1\t1\t1\t1\t2\t95\t0\t110\t20\t98\tstability:",
     "5\t1\t1\t1\t1\t3\t210\t0\t50\t30\t92.1\t10°;",
-    "5\t1\t1\t1\t2\t1\t0\t50\t40\t20\t98\tTemperature:",
-    "5\t1\t1\t1\t2\t2\t45\t50\t55\t20\t98\t20°C",
+    "5\t1\t1\t1\t2\t1\t0\t50\t80\t20\t98\tAbsolute",
+    "5\t1\t1\t1\t2\t2\t85\t50\t100\t20\t98\tsensitivity:",
+    "5\t1\t1\t1\t2\t3\t190\t50\t40\t20\t98\t1.6",
+    "5\t1\t1\t1\t2\t4\t235\t50\t10\t20\t98\tx",
+    "5\t1\t1\t1\t2\t5\t250\t45\t38\t30\t72.05\t10”",
+    "5\t1\t1\t1\t2\t6\t292\t50\t50\t20\t98\tspins",
+    "5\t1\t1\t1\t3\t1\t0\t100\t40\t20\t98\tTemperature:",
+    "5\t1\t1\t1\t3\t2\t45\t100\t55\t20\t98\t20°C",
+    "5\t1\t1\t1\t4\t1\t0\t150\t40\t20\t98\tDimension:",
+    "5\t1\t1\t1\t4\t2\t45\t150\t45\t20\t98\t10\"",
   ];
-  const result = parseTesseractTsv([header, ...rows].join("\n"), { width: 400, height: 100 }, { width: 400, height: 100 });
+  const result = parseTesseractTsv([header, ...rows].join("\n"), { width: 400, height: 200 }, { width: 400, height: 200 });
 
   assert.equal(result.lines[0].text, "AFC stability: 10°;");
   assert.equal(result.lines[0].confidence, 92.1, "the numeric OCR score is preserved");
   assert.equal(result.lines[0].confidenceLevel, "low", "possible exponent/degree confusion requires reviewer attention");
-  assert.equal(result.lines[1].confidenceLevel, "high", "a conventional Celsius unit is not flagged");
+  assert.equal(result.lines[1].text, "Absolute sensitivity: 1.6 x 10” spins");
+  assert.equal(result.lines[1].confidenceLevel, "low", "quote-like exponent substitutions require reviewer attention");
+  assert.equal(result.lines[2].confidenceLevel, "high", "a conventional Celsius unit is not flagged");
+  assert.equal(result.lines[3].confidenceLevel, "low", "an inch mark remains an ambiguous numeric suffix requiring review");
 });
 
 test("returns empty OCR text for malformed TSV or invalid image dimensions", () => {
