@@ -79,6 +79,14 @@ type Analysis = {
   reviewNote: string;
 };
 
+type FailureDiagnostics = {
+  pageCount: number;
+  rejectedCandidates: number;
+  rejectedSuggestionDetails: RejectedSuggestion[];
+  rejectedSuggestionsNotShown: number;
+  coverageSummary: CoverageReport["summary"];
+};
+
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -135,6 +143,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [processing, setProcessing] = useState<ProcessingProgress | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [failureDiagnostics, setFailureDiagnostics] = useState<FailureDiagnostics | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
   const sourceDrawerRef = useRef<HTMLDialogElement>(null);
@@ -225,6 +234,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     previousRequest?.abort("a different tender was selected");
     setBusy(false);
     setError(null);
+    setFailureDiagnostics(null);
     setProcessing(null);
     setAnalysis(null);
     setResponseSheet(null);
@@ -244,20 +254,32 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setElapsedSeconds(0);
     setBusy(true);
     setError(null);
+    setFailureDiagnostics(null);
     setProcessing({ stage: "uploading", message: "Uploading and validating your PDF" });
     const body = new FormData();
     body.set("file", file);
     let keepTerminalState = false;
     try {
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
-      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string }>(response, {
+      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; coverageSummary?: CoverageReport["summary"] }>(response, {
         signal: requestController.signal,
         onProgress: (progress) => {
           if (activeRequestRef.current === requestController) setProcessing(progress);
         },
       });
       if (activeRequestRef.current !== requestController) return;
-      if (!result.ok) throw new Error(result.error || "The tender could not be processed.");
+      if (!result.ok) {
+        if (result.coverageSummary && result.rejectedSuggestionDetails && (result.rejectedCandidates ?? result.rejectedSuggestionDetails.length) > 0) {
+          setFailureDiagnostics({
+            pageCount: result.pageCount ?? result.coverageSummary.documentPages,
+            rejectedCandidates: result.rejectedCandidates ?? result.rejectedSuggestionDetails.length,
+            rejectedSuggestionDetails: result.rejectedSuggestionDetails,
+            rejectedSuggestionsNotShown: result.rejectedSuggestionsNotShown ?? 0,
+            coverageSummary: result.coverageSummary,
+          });
+        }
+        throw new Error(result.error || "The tender could not be processed.");
+      }
       const payload = result.analysis as Analysis;
       setProcessing({ stage: "preparing", message: "Preparing the editable response sheet" });
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -760,10 +782,34 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               {!busy && processing?.stage === "cancelled" && <p className="mvp-processing-terminal" role="status">{processing.message}</p>}
               {!busy && processing?.stage === "error" && <p className="mvp-processing-terminal" role="status">{processing.message}</p>}
               {error && <p className="mvp-error" role="alert">{error}</p>}
+              {failureDiagnostics && <section className="mvp-coverage-failure" aria-label="Rejected extraction suggestions">
+                <h2>No requirements were accepted</h2>
+                <p>{failureDiagnostics.rejectedCandidates} suggestion(s) were left out because source evidence could not be verified in this {failureDiagnostics.pageCount}-page tender. These are unverified model suggestions, not review rows. Inspect the source before relying on any wording.</p>
+                <dl>
+                  <div><dt>Technical pages selected</dt><dd>{failureDiagnostics.coverageSummary.selectedTechnicalPages}</dd></div>
+                  <div><dt>Page audits</dt><dd>{failureDiagnostics.coverageSummary.auditPagesWithNoGapsReported} reported no gaps · {failureDiagnostics.coverageSummary.auditPagesWithPossibleGaps} reported possible gaps · {failureDiagnostics.coverageSummary.auditPagesIncomplete} incomplete · {failureDiagnostics.coverageSummary.auditPagesNotRun} not run</dd></div>
+                  {failureDiagnostics.coverageSummary.possibleOmissionSuggestions > 0 && <div><dt>Possible omissions</dt><dd>{failureDiagnostics.coverageSummary.possibleOmissionSuggestions} advisory suggestion(s); not a completeness measure</dd></div>}
+                </dl>
+                {failureDiagnostics.rejectedSuggestionDetails.length > 0 && <ul>
+                  {failureDiagnostics.rejectedSuggestionDetails.map((suggestion, index) => <li key={`${suggestion.page}-${suggestion.reason}-${index}`}>
+                    <p>{suggestion.quotePreview ? `Suggested wording: “${suggestion.quotePreview}”` : "No usable wording was returned."}</p>
+                    <span>{describeRejectedSuggestion(suggestion.reason)}</span>
+                    {suggestion.page !== null && file && <button type="button" onClick={() => { setPage(suggestion.page!); setSourceOpen(true); }}>Inspect PDF page {suggestion.page}</button>}
+                    {suggestion.page === null && <span>Source page unavailable; inspect the tender manually.</span>}
+                  </li>)}
+                </ul>}
+                {failureDiagnostics.rejectedSuggestionsNotShown > 0 && <p>{failureDiagnostics.rejectedSuggestionsNotShown} additional rejected suggestions are summarized in the coverage count but not listed here.</p>}
+              </section>}
             </form>
             <div className="mvp-upload-limits"><span><FileCheck2 size={15} /> Review every quote</span><span><ShieldCheck size={15} /> Nothing marked checked for you</span></div>
           </div>
         </section>
+        {failureDiagnostics && sourceOpen && file && <dialog ref={sourceDrawerRef} className="mvp-source-drawer" aria-label={`PDF page ${page} for rejected suggestion`} onClose={() => setSourceOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) sourceDrawerRef.current?.close(); }}>
+          <section className="mvp-evidence-panel"><div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE REVIEW</span><h2>PDF page {page}</h2></div><button type="button" className="mvp-icon-button" aria-label="Close source page" onClick={() => sourceDrawerRef.current?.close()}><X size={18} /></button></div>
+            <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={null} highlightLabel="Inspect this original page; no candidate highlight was verified" />
+            <p className="mvp-review-note">No response-sheet row was created for the rejected suggestion. Review the page manually to decide whether it contains a requirement.</p>
+          </section>
+        </dialog>}
         <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> Single-user pilot</span><span>Review the cited source before relying on any extracted requirement.</span></footer>
       </main>
     );

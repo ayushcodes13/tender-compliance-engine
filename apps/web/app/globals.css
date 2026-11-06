@@ -156,6 +156,17 @@ a { color: inherit; }
 .mvp-primary:disabled, .mvp-export:disabled { border-color: #d8dee8; background: #e9edf3; color: #536175; opacity: 1; cursor: not-allowed; }
 .mvp-submit { width: 100%; margin-top: 12px; }
 .mvp-error { margin: 12px 0 0; color: var(--red); font-size: 12px; }
+.mvp-coverage-failure { margin-top: 14px; padding: 16px; border: 1px solid #e8bd86; border-radius: 12px; background: #fff8ed; color: #513717; }
+.mvp-coverage-failure h2 { margin: 0 0 6px; font-size: 15px; }
+.mvp-coverage-failure > p { margin: 0; font-size: 12px; line-height: 1.55; }
+.mvp-coverage-failure dl { display: grid; gap: 6px; margin: 12px 0 0; font-size: 11px; line-height: 1.5; }
+.mvp-coverage-failure dl div { display: grid; grid-template-columns: 132px 1fr; gap: 8px; }
+.mvp-coverage-failure dt { font-weight: 650; }
+.mvp-coverage-failure dd { margin: 0; }
+.mvp-coverage-failure ul { display: grid; gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.mvp-coverage-failure li { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid #ecd8be; }
+.mvp-coverage-failure li p, .mvp-coverage-failure li span { margin: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.mvp-coverage-failure li button { justify-self: start; border: 0; padding: 3px 0; background: transparent; color: #234ca0; font: inherit; font-weight: 650; cursor: pointer; }
 .mvp-upload-limits { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 9px; margin-top: 15px; padding-top: 14px; border-top: 1px solid #edf0f0; }
 .mvp-processing { margin-top: 16px; padding: 15px 16px; border: 1px solid #dce4ef; border-radius: 8px; background: #f7f9fc; }
 .mvp-processing-terminal { margin: 12px 0 0; padding: 11px 13px; border: 1px solid #dce4ef; border-radius: 8px; background: #f7f9fc; color: #44546a; font-size: 12px; line-height: 1.5; }
