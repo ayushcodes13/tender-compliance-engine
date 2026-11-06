@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "status": "assistant-reviewed-adversarial-ocr-case; human-adjudication-pending",
+  "documentId": "saha",
+  "sourceSha256": "ff72ab64cd94d9507ec1c169ce064315bcc862a5c0e663984aa0a3e69af347b6",
+  "sourcePage": 4,
+  "tesseractVersion": "5.5.3",
+  "applicationOcrPath": {
+    "renderer": "Poppler pdftoppm",
+    "maxImageDimensionPixels": 1700,
+    "pageSizePoints": { "width": 612, "height": 792 },
+    "pageSegmentationMode": 3
+  },
+  "case": {
+    "id": "saha-page-4-magnet-threshold-equality-bar-omission",
+    "sourceText": "Max magnetic field strength: ≥6.5 kG;",
+    "observedOcrText": "Max magnetic field strength: >6.5 kG;",
+    "ambiguousToken": ">6.5",
+    "observedTokenConfidence": 70.710457,
+    "observedLineConfidenceLevelBeforeChange": "medium",
+    "visualInspection": "The printed source includes an equality bar beneath the greater-than sign. The production OCR path emitted a bare greater-than sign with medium numeric-token confidence.",
+    "expectedSystemDisposition": "preserve the OCR transcript and mark the bare numeric comparison operator low confidence for human review",
+    "mustNot": [
+      "rewrite >6.5 as ≥6.5 without source-verified transcription",
+      "treat the medium OCR confidence as proof that the comparison operator is correct",
+      "promote the OCR text to an exact native-text citation"
+    ]
+  },
+  "limitations": [
+    "The source PDF is local and is not redistributed.",
+    "This is one assistant-reviewed OCR failure case, not a general OCR accuracy estimate.",
+    "The annotation and approximate source region require independent human adjudication.",
+    "The conservative bare-comparison signal also flags valid strict inequalities for review."
+  ]
+}

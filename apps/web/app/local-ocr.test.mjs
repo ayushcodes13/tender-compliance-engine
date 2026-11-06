@@ -68,6 +68,10 @@ test("flags ambiguous degree and quote-like numeric suffixes without changing OC
     "5\t1\t1\t1\t3\t2\t45\t100\t55\t20\t98\t20°C",
     "5\t1\t1\t1\t4\t1\t0\t150\t40\t20\t98\tDimension:",
     "5\t1\t1\t1\t4\t2\t45\t150\t45\t20\t98\t10\"",
+    "5\t1\t1\t1\t5\t1\t0\t200\t45\t20\t98\tMaximum",
+    "5\t1\t1\t1\t5\t2\t50\t200\t80\t20\t92.4\tfield",
+    "5\t1\t1\t1\t5\t3\t135\t200\t10\t20\t91.5\t>6.5",
+    "5\t1\t1\t1\t5\t4\t150\t200\t45\t20\t97\tkG",
   ];
   const result = parseTesseractTsv([header, ...rows].join("\n"), { width: 400, height: 200 }, { width: 400, height: 200 });
 
@@ -78,6 +82,9 @@ test("flags ambiguous degree and quote-like numeric suffixes without changing OC
   assert.equal(result.lines[1].confidenceLevel, "low", "quote-like exponent substitutions require reviewer attention");
   assert.equal(result.lines[2].confidenceLevel, "high", "a conventional Celsius unit is not flagged");
   assert.equal(result.lines[3].confidenceLevel, "low", "an inch mark remains an ambiguous numeric suffix requiring review");
+  assert.equal(result.lines[4].text, "Maximum field >6.5 kG");
+  assert.equal(result.lines[4].confidence, 91.5, "the numeric-token confidence score remains unchanged");
+  assert.equal(result.lines[4].confidenceLevel, "low", "a bare OCR comparison operator before a numeric threshold requires review");
 });
 
 test("returns empty OCR text for malformed TSV or invalid image dimensions", () => {
