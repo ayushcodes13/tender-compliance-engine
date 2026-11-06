@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "pageCount": 15,
+  "reviewMethod": ["native selectable text", "rendered page image"],
+  "status": "assistant-reviewed-page-dispositions-require-human-adjudication",
+  "adjudicationStatus": "not-human-adjudicated",
+  "limitations": [
+    "This records assistant-reviewed page-level relevance dispositions, not exhaustive atomic-requirement labels.",
+    "Page review does not establish that every obligation was extracted or that every candidate row is correct.",
+    "The source PDF is kept local and is not redistributed."
+  ],
+  "pages": [
+    {
+      "page": 1,
+      "contentClass": "invitation-and-bid-instructions",
+      "disposition": "possibly-relevant",
+      "phase1Handling": "retain-for-manual-review",
+      "reason": "Identifies the equipment and annexures, sets bid submission conditions and dates, and states bidder responsibility for tender obligations; no detailed technical parameter schedule appears on this page.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 2,
+      "contentClass": "bidder-documentary-requirements-and-evaluation",
+      "disposition": "possibly-relevant",
+      "phase1Handling": "retain-documentary-obligations",
+      "reason": "Requires offered-product technical features, manufacturer/dealership evidence, technical leaflet, HSN/certification evidence, warranty details, and bidder/service-centre information; also contains procurement evaluation and financial-cover instructions.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 3,
+      "contentClass": "general-terms-and-qualification",
+      "disposition": "possibly-relevant",
+      "phase1Handling": "retain-documentary-and-service-obligations",
+      "reason": "Requires India after-sales service-centre details, technical literature supporting offered specifications, manufacturer and quality certificates, and warranty cross-reference; the page also contains EMD and performance-guarantee terms.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 4,
+      "contentClass": "delivery-payment-and-commercial-terms",
+      "disposition": "possibly-relevant",
+      "phase1Handling": "retain-operational-terms-for-review",
+      "reason": "Contains delivery timing, safe-delivery responsibilities, transit insurance, installation/payment terms, and delay penalties. These are operational obligations rather than equipment specifications.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 5,
+      "contentClass": "legal-and-import-terms",
+      "disposition": "administrative-or-contractual",
+      "phase1Handling": "manual-review; no equipment-parameter schedule",
+      "reason": "Contains acceptance, force-majeure, default, applicable-law, and imported-goods clauses. These remain source content but are not equipment-specific technical requirements.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 6,
+      "contentClass": "technical-annexure-overview",
+      "disposition": "relevant",
+      "phase1Handling": "route-to-technical-extraction",
+      "reason": "Introduces the 100 kN electromechanical UTM use cases, capacity, measurement capabilities, geosynthetic/material scope, accessory/jig need, and standards context.",
+      "obligationReview": "partial"
+    },
+    {
+      "page": 7,
+      "contentClass": "technical-specification-table",
+      "disposition": "relevant",
+      "phase1Handling": "route-to-technical-extraction",
+      "reason": "Contains system, frame, actuator, load-cell, accuracy, speed, travel, spacing, protection, crosshead, and extension-measurement requirements; the table continues on the next page.",
+      "obligationReview": "partial"
+    },
+    {
+      "page": 8,
+      "contentClass": "technical-specification-table-continuation",
+      "disposition": "relevant",
+      "phase1Handling": "route-to-technical-extraction",
+      "reason": "Continues grip/fixture requirements and specifies controller connections, rates, Bluetooth/USB, user-interface connectivity, and testing-jig scope and documentation.",
+      "obligationReview": "partial"
+    },
+    {
+      "page": 9,
+      "contentClass": "technical-specification-table-continuation",
+      "disposition": "relevant",
+      "phase1Handling": "route-to-technical-extraction",
+      "reason": "Contains detailed puncture, seam, burst, and geogrid tensile jig requirements with standard references, dimensions, load ranges, and rates.",
+      "obligationReview": "partial"
+    },
+    {
+      "page": 10,
+      "contentClass": "technical-specification-table-continuation",
+      "disposition": "relevant",
+      "phase1Handling": "route-to-technical-extraction",
+      "reason": "Contains grab-test jig, software functions/formats, power, PC/UPS/peripheral configuration, and one-year warranty requirements; continues onto page 11.",
+      "obligationReview": "partial"
+    },
+    {
+      "page": 11,
+      "contentClass": "technical-specification-table-continuation",
+      "disposition": "relevant",
+      "phase1Handling": "route-to-technical-extraction-and-service-review",
+      "reason": "Contains five-year AMC, local after-sales support, beyond-warranty parts availability, manuals, calibration certificate, and installation/service-visit demonstration obligations.",
+      "obligationReview": "partial",
+      "visuallyInspectedRegions": [
+        "Five-year AMC and included service/calibration/maintenance/parts/consumables",
+        "India local office or authorized associate",
+        "Five years of after-sales service and spare parts beyond initial warranty",
+        "Manual, calibration, and acceptance demonstration"
+      ]
+    },
+    {
+      "page": 12,
+      "contentClass": "bidder-compliance-certificate-form",
+      "disposition": "possibly-relevant",
+      "phase1Handling": "retain-as-form-cross-reference",
+      "reason": "Checklist repeats technical-feature, literature, warranty, certificate, delivery, payment, and service declarations but introduces no separate equipment parameter schedule.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 13,
+      "contentClass": "bidder-details-form",
+      "disposition": "possibly-relevant",
+      "phase1Handling": "retain-documentary-and-service-obligations",
+      "reason": "Requests registered-office and Guwahati service-centre details, staff information, registration evidence, and past-client evidence; it is a bidder form rather than an equipment specification.",
+      "obligationReview": "not-exhaustive"
+    },
+    {
+      "page": 14,
+      "contentClass": "earnest-money-bank-guarantee-template",
+      "disposition": "administrative-or-contractual",
+      "phase1Handling": "retain-as-tender-document; no equipment-specific technical requirement",
+      "reason": "Provides a bank-guarantee form for EMD with generic guarantee wording and blank tenderer/bank fields.",
+      "obligationReview": "not-applicable-to-technical-requirement-gold"
+    },
+    {
+      "page": 15,
+      "contentClass": "performance-bank-guarantee-template",
+      "disposition": "administrative-or-contractual",
+      "phase1Handling": "retain-as-tender-document; no equipment-specific technical requirement",
+      "reason": "Provides a generic performance-bank-guarantee form with supplier, contract, goods/services, amount, and validity placeholders.",
+      "obligationReview": "not-applicable-to-technical-requirement-gold"
+    }
+  ]
+}
