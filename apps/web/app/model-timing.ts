@@ -4,6 +4,7 @@ export type ModelTimingEvent = {
   failureKind?: "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other";
   batchIndex?: number;
   totalBatches?: number;
+  pageNumbers?: number[];
   pageNumber?: number;
   batchPageCount: number;
   inputCharacters: number;
@@ -17,6 +18,8 @@ export type ModelTimingEvent = {
   completionTokens?: number;
   totalTokens?: number;
 };
+
+export const MODEL_TIMING_MAX_PAGE_NUMBERS = 16;
 
 const SAFE_NUMERIC_FIELDS = [
   "batchIndex",
@@ -47,10 +50,16 @@ export function emitModelTiming(
   enabled = process.env.TCE_MODEL_TIMING === "1",
 ): void {
   if (!enabled) return;
-  const safe: Record<string, string | number> = {
+  const safe: Record<string, string | number | number[]> = {
     phase: event.phase,
     requestKind: event.requestKind,
   };
+  if (Array.isArray(event.pageNumbers)
+    && event.pageNumbers.length > 0
+    && event.pageNumbers.length <= MODEL_TIMING_MAX_PAGE_NUMBERS
+    && event.pageNumbers.every((page, index, pages) => Number.isSafeInteger(page) && page > 0 && pages.indexOf(page) === index)) {
+    safe.pageNumbers = [...event.pageNumbers];
+  }
   for (const field of SAFE_NUMERIC_FIELDS) {
     const value = event[field];
     if (typeof value === "number" && Number.isFinite(value)) safe[field] = value;

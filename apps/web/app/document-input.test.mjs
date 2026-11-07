@@ -35,6 +35,22 @@ test('bounded batches preserve every page and overlap long-page windows', () => 
   assert.throws(()=>buildExtractionBatches(pages,0,0));
 });
 
+test('general extraction batch page IDs follow physical source order and repeat only for long-page windows', () => {
+  const pages = [
+    { page: 2, text: 'page two requirement' },
+    { page: 5, text: 'long opening ' + 'obligation '.repeat(2_000) + 'long ending' },
+    { page: 11, text: 'page eleven requirement' },
+  ];
+  const batches = buildExtractionBatches(pages, 2_000, 2);
+  const flattened = batches.flatMap((batch) => batch.pageNumbers);
+  assert.equal(flattened[0], 2);
+  assert.equal(flattened.at(-1), 11);
+  assert.deepEqual([...new Set(flattened)], [2, 5, 11]);
+  assert.ok(batches.every((batch) => batch.pageNumbers.length <= 2));
+  assert.ok(batches.filter((batch) => batch.pageNumbers.includes(5)).length > 1, 'long physical page has multiple overlapping windows');
+  assert.ok(batches.every((batch) => batch.pageNumbers.every((page) => Number.isSafeInteger(page) && page > 0)));
+});
+
 test('identical table cell text remains distinct at distinct source row locations', () => {
   assert.notEqual(sourceCandidateKey(1,'Shall include cooling',['Shall include cooling'],0),sourceCandidateKey(1,'Shall include cooling',['Shall include cooling'],1));
   assert.equal(sourceCandidateKey(1,'Same',undefined),sourceCandidateKey(1,'Same',undefined));

@@ -9,6 +9,7 @@ test('model timing is opt-in and emits only whitelisted aggregate fields', () =>
     requestKind: 'general_requirement_extraction',
     batchIndex: 2,
     totalBatches: 3,
+    pageNumbers: [4, 6, 9],
     batchPageCount: 3,
     inputCharacters: 16_000,
     requestHeadersWaitMs: 1_200,
@@ -31,6 +32,7 @@ test('model timing is opt-in and emits only whitelisted aggregate fields', () =>
     requestKind: 'general_requirement_extraction',
     batchIndex: 2,
     totalBatches: 3,
+    pageNumbers: [4, 6, 9],
     batchPageCount: 3,
     inputCharacters: 16_000,
     requestHeadersWaitMs: 1_200,
@@ -129,6 +131,7 @@ test('records provider timeouts as a distinct safe failure kind', () => {
     requestKind: 'general_requirement_extraction',
     batchIndex: 3,
     totalBatches: 4,
+    pageNumbers: [8, 10, 12],
     batchPageCount: 3,
     inputCharacters: 10_417,
     requestElapsedMs: 90_000,
@@ -137,7 +140,39 @@ test('records provider timeouts as a distinct safe failure kind', () => {
   const record = JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length));
   assert.equal(record.failureKind, 'provider_timeout');
   assert.equal(record.requestElapsedMs, 90_000);
+  assert.deepEqual(record.pageNumbers, [8, 10, 12]);
   assert.equal(JSON.stringify(record).includes('source'), false);
+});
+
+test('attributes failed extraction events to sanitized physical pages and batch index', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'request_failed',
+    requestKind: 'general_requirement_extraction',
+    batchIndex: 3,
+    totalBatches: 4,
+    pageNumbers: [8, 10, 12],
+    batchPageCount: 3,
+    inputCharacters: 10_417,
+    requestElapsedMs: 90_000,
+    failureKind: 'provider_timeout',
+    sourceText: 'private tender content',
+  }, (line) => lines.push(line), true);
+  const record = JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length));
+  assert.deepEqual({ requestKind: record.requestKind, batchIndex: record.batchIndex, pageNumbers: record.pageNumbers }, {
+    requestKind: 'general_requirement_extraction', batchIndex: 3, pageNumbers: [8, 10, 12],
+  });
+  assert.equal(record.requestElapsedMs, 90_000);
+  assert.equal(JSON.stringify(record).includes('private tender content'), false);
+});
+
+test('omits physical page IDs unless the complete list is bounded, unique, and positive integers', () => {
+  for (const pageNumbers of [[1, 0, 3], [1, -2], [1, 2.5], [1, 1], Array.from({ length: 17 }, (_, i) => i + 1)]) {
+    const lines = [];
+    emitModelTiming({ phase: 'request_started', requestKind: 'general_requirement_extraction', pageNumbers, batchPageCount: 1, inputCharacters: 100 }, (line) => lines.push(line), true);
+    const record = JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length));
+    assert.equal('pageNumbers' in record, false, JSON.stringify(pageNumbers));
+  }
 });
 
 test('vector response timing includes safe parse, response-size, and provider-usage fields', () => {

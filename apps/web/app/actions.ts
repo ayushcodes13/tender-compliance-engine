@@ -1115,15 +1115,19 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       let parsedBatchCount = 0;
       const extractionOutcomes = await mapWithConcurrencySettled(extractionBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
+        const timingContext = {
+          requestKind: "general_requirement_extraction" as const,
+          batchIndex: batchIndex + 1,
+          totalBatches: extractionBatches.length,
+          pageNumbers: batch.pageNumbers,
+          batchPageCount: batch.pageNumbers.length,
+          inputCharacters: batch.input.length,
+        };
         const requestStartedAt = performance.now();
         extractionRequestStartedAt[batchIndex] = requestStartedAt;
         emitModelTiming({
           phase: "request_started",
-          requestKind: "general_requirement_extraction",
-          batchIndex: batchIndex + 1,
-          totalBatches: extractionBatches.length,
-          batchPageCount: batch.pageNumbers.length,
-          inputCharacters: batch.input.length,
+          ...timingContext,
         });
         const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
@@ -1145,11 +1149,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         });
         emitModelTiming({
           phase: "headers_received",
-          requestKind: "general_requirement_extraction",
-          batchIndex: batchIndex + 1,
-          totalBatches: extractionBatches.length,
-          batchPageCount: batch.pageNumbers.length,
-          inputCharacters: batch.input.length,
+          ...timingContext,
           requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt),
           responseStatus: response.status,
         });
@@ -1164,11 +1164,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
         emitModelTiming({
           phase: "response_parsed",
-          requestKind: "general_requirement_extraction",
-          batchIndex: batchIndex + 1,
-          totalBatches: extractionBatches.length,
-          batchPageCount: batch.pageNumbers.length,
-          inputCharacters: batch.input.length,
+          ...timingContext,
           responseStatus: response.status,
           responseBodyAndEnvelopeMs,
           jsonParseMs: Math.round(performance.now() - jsonParseStartedAt),
@@ -1205,6 +1201,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             requestKind: "general_requirement_extraction",
             batchIndex: batchIndex + 1,
             totalBatches: extractionBatches.length,
+            pageNumbers: extractionBatches[batchIndex].pageNumbers,
             batchPageCount: extractionBatches[batchIndex].pageNumbers.length,
             inputCharacters: extractionBatches[batchIndex].input.length,
             requestElapsedMs: Math.round((extractionRequestSettledAt[batchIndex] ?? performance.now()) - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
@@ -1220,6 +1217,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             requestKind: "general_requirement_extraction",
             batchIndex: batchIndex + 1,
             totalBatches: extractionBatches.length,
+            pageNumbers: extractionBatches[batchIndex].pageNumbers,
             batchPageCount: extractionBatches[batchIndex].pageNumbers.length,
             inputCharacters: extractionBatches[batchIndex].input.length,
             requestElapsedMs: Math.round((extractionRequestSettledAt[batchIndex] ?? performance.now()) - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
