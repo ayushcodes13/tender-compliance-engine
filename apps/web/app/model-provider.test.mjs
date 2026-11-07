@@ -117,8 +117,25 @@ test('does not resend a generation POST after an upstream gateway timeout respon
     { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' },
     async () => { sent += 1; return new Response('{}', { status: 504 }); },
   );
-  await assert.rejects(client.fetch('ignored', { method: 'POST', body: '{}' }), (error) => error instanceof ModelProviderTimeoutError);
+  await assert.rejects(client.fetch('ignored', { method: 'POST', body: '{}' }), (error) => {
+    assert.equal(error instanceof ModelProviderTimeoutError, true);
+    assert.match(error.message, /gateway returned a timeout response/i);
+    return true;
+  });
   assert.equal(sent, 1);
+});
+
+test('does not retry an ambiguous upstream AbortError when the caller did not abort', async () => {
+  let sent = 0;
+  const client = createModelCompletionClient(
+    { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' },
+    async () => {
+      sent += 1;
+      throw new DOMException('upstream stopped unexpectedly', 'AbortError');
+    },
+  );
+  await assert.rejects(client.fetch('ignored', { method: 'POST', body: '{}' }), { name: 'AbortError' });
+  assert.equal(sent, 1, 'an ambiguous failed generation request is never resent');
 });
 
 test('propagates caller cancellation without misreporting a provider timeout', async () => {
