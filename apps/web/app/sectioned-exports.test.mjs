@@ -4,7 +4,7 @@ import { Packer } from 'docx';
 import JSZip from 'jszip';
 import { fixture } from './test-fixtures/response-sections.mjs';
 import { createSectionedResponseDocument, createSectionedWorkbook } from './sectioned-exports.ts';
-import { buildResponseSheet, updateResponseSheetCell } from './response-sheet.ts';
+import { buildResponseSheet, updateResponseSheetCell, addManualRequirementToSheet, promoteCandidateToSheet, removeResponseSheetRow } from './response-sheet.ts';
 
 test('Word annexures and table headings are paragraphs outside specification tables', async () => {
   const zip = await JSZip.loadAsync(await Packer.toBuffer(createSectionedResponseDocument(fixture())));
@@ -163,3 +163,54 @@ test('preserves user-edited supplier compliance and remark responses in DOCX and
   assert.ok(rows.some((r) => r.includes('Yes - Complied')));
   assert.ok(rows.some((r) => r.includes('Compliant with standard warranty.')));
 });
+
+test('operator manual additions, candidate promotions, and row removals flow cleanly into DOCX and XLSX exports', async () => {
+  const base = fixture();
+  const initialRowCount = base.rows.length;
+
+  // 1. Manually add a missing requirement (e.g. p.18 Digital readout)
+  const withManual = addManualRequirementToSheet(base, {
+    id: 'req-manual-p18',
+    page: 18,
+    heading: 'Temperature Controller',
+    text: 'Digital readout: Variable temperature controller must include a digital readout with 0.1 K resolution',
+    category: 'Technical',
+  });
+  assert.equal(withManual.rows.length, initialRowCount + 1);
+
+  // 2. Promote a classification review candidate
+  const { sheet: withPromoted } = promoteCandidateToSheet(withManual, {
+    candidateId: 'cand-amc-promoted',
+    page: 25,
+    quote: 'Comprehensive annual maintenance contract for three years after warranty',
+    heading: 'Service and Support',
+  });
+  assert.equal(withPromoted.rows.length, initialRowCount + 2);
+
+  // 3. Remove an unwanted / administrative row from original base
+  const rowToRemove = base.rows[0].id;
+  const removedText = base.rows[0].values[3]; // '≥ 300 mm'
+  const finalSheet = removeResponseSheetRow(withPromoted, rowToRemove);
+  assert.equal(finalSheet.rows.length, initialRowCount + 1);
+
+  // DOCX Export Verification
+  const docxZip = await JSZip.loadAsync(await Packer.toBuffer(createSectionedResponseDocument(finalSheet)));
+  const docxXml = await docxZip.file('word/document.xml').async('string');
+  assert.ok(docxXml.includes('Digital readout: Variable temperature controller must include a digital readout with 0.1 K resolution'));
+  assert.ok(docxXml.includes('Comprehensive annual maintenance contract for three years after warranty'));
+  assert.ok(docxXml.includes('Page 18'));
+  assert.ok(docxXml.includes('Page 25'));
+  assert.equal(docxXml.includes(removedText), false, 'Removed row text should not appear in Word export');
+
+  // Excel Export Verification
+  const wb = createSectionedWorkbook(finalSheet);
+  const excelRowValues = [];
+  wb.worksheets[0].eachRow((r) => excelRowValues.push(r.values));
+  const flattened = excelRowValues.flat().filter(Boolean).map(String);
+  assert.ok(flattened.some((v) => v.includes('Digital readout: Variable temperature controller')));
+  assert.ok(flattened.some((v) => v.includes('Comprehensive annual maintenance contract')));
+  assert.ok(flattened.some((v) => v.includes('Page 18')));
+  assert.ok(flattened.some((v) => v.includes('Page 25')));
+  assert.equal(flattened.some((v) => v === removedText), false, 'Removed row text should not appear in Excel export');
+});
+

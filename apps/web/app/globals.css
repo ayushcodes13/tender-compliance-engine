@@ -718,3 +718,46 @@ a { color: inherit; }
   .mvp-sheet-table th.mvp-sheet-actions-heading, .mvp-sheet-table td.mvp-sheet-row-actions { position: static; }
   .mvp-sheet-citations .mvp-sheet-source-link { min-height: 40px; }
 }
+
+/* Unresolved coverage headline alert banner */
+.mvp-unresolved-banner { width: min(1600px, calc(100% - 48px)); margin: 16px auto 0; border: 1px solid #e1b553; border-radius: 6px; background: #fffcf4; padding: 16px 20px; display: grid; gap: 12px; }
+.mvp-unresolved-banner-header { display: flex; gap: 12px; align-items: flex-start; color: #7b4d14; }
+.mvp-banner-icon { color: #c97d10; flex-shrink: 0; margin-top: 2px; }
+.mvp-unresolved-banner-header strong { display: block; font-size: 14px; font-weight: 700; color: #6d3f0a; margin-bottom: 2px; }
+.mvp-unresolved-banner-header p { margin: 0; font-size: 12px; color: #7b4d14; line-height: 1.45; }
+.mvp-unresolved-banner-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.mvp-banner-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 4px; font-size: 11px; background: #fdf3d8; border: 1px solid #ebd090; color: #6d3f0a; }
+.mvp-banner-pill.is-warning { background: #feece8; border-color: #f7beb5; color: #942b1f; }
+.mvp-banner-held-candidates { margin-top: 8px; padding-top: 10px; border-top: 1px dashed #e6cc8d; }
+.mvp-banner-held-heading { font-size: 11px; font-weight: 700; color: #6d3f0a; margin-bottom: 8px; }
+.mvp-banner-held-list { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.mvp-banner-held-item { padding: 8px 12px; border: 1px solid #ebd090; border-radius: 4px; background: #fff; display: grid; gap: 4px; }
+.mvp-banner-held-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; font-weight: 600; color: #855519; }
+.mvp-banner-held-actions { display: flex; gap: 6px; }
+.mvp-candidate-inspect-btn { padding: 3px 8px; border: 1px solid #dae3ef; border-radius: 3px; background: #f5f8fd; color: #315e9c; font-size: 10px; font-weight: 600; cursor: pointer; }
+.mvp-candidate-inspect-btn:hover { background: #eaf1fa; }
+.mvp-candidate-promote-btn { padding: 3px 10px; border: 1px solid #286344; border-radius: 3px; background: #286344; color: #fff; font-size: 10px; font-weight: 600; cursor: pointer; }
+.mvp-candidate-promote-btn:hover { background: #1e4d34; }
+.mvp-banner-held-quote { margin: 0; font-size: 11px; color: #29384d; font-style: italic; }
+
+/* Modal dialog for operator addition */
+.mvp-modal-dialog { position: fixed; inset: 0; width: 100vw; height: 100vh; padding: 0; margin: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.mvp-modal-backdrop { position: fixed; inset: 0; background: rgba(23, 35, 54, 0.45); backdrop-filter: blur(2px); }
+.mvp-modal-content { position: relative; width: min(600px, calc(100vw - 32px)); max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 6px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); z-index: 1001; padding: 24px; }
+.mvp-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.mvp-modal-header h2 { margin: 3px 0 0; font-size: 18px; font-weight: 700; color: #24354d; }
+.mvp-modal-desc { margin: 0 0 16px; font-size: 12px; color: #586678; line-height: 1.5; }
+.mvp-modal-form { display: grid; gap: 14px; }
+.mvp-form-group-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mvp-form-group { display: grid; gap: 5px; }
+.mvp-form-group label { font-size: 11px; font-weight: 650; color: #34445b; }
+.mvp-form-group label .is-required { color: #d13c2f; }
+.mvp-form-group input, .mvp-form-group textarea { width: 100%; padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 4px; font: inherit; font-size: 12px; color: #24354d; }
+.mvp-form-group input:focus, .mvp-form-group textarea:focus { outline: 2px solid rgba(36,79,187,.24); border-color: #315e9c; }
+.mvp-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+
+/* Operator added & promoted citation badges */
+.mvp-sheet-source-link.is-operator-added { color: #8c3b1e; border-color: #e5b9aa; background: #fdf5f2; }
+.mvp-sheet-source-link.is-promoted { color: #4a287c; border-color: #d2c0eb; background: #f8f4fd; }
+.mvp-citation-label.is-operator-added { color: #8c3b1e; }
+.mvp-citation-label.is-promoted { color: #4a287c; }
