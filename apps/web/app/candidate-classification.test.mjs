@@ -10,6 +10,33 @@ const iitgServiceAnchorGroups = [
   "availability of spare parts for a minimum period of five years beyond the initial warranty period",
 ];
 
+const newlyObservedAdministrativeCases = [
+  ["req-6", 2, "iv. PAN Detail and TIN number"],
+  ["req-7", 2, "v. Registration Certificate"],
+  ["req-8", 2, "vi. Banker’s Detail"],
+  ["req-9", 2, "vii. List of reputed organizations/institutions, particularly to IIT/Institutes and other Government Organization where similar orders have been executed, if any (copy (s) of the Purchase Orders and Installation certificates will have to be uploaded)."],
+  ["req-21", 3, "(a) The Purchase Order (PO) shall be executed as per terms and conditions mentioned therein."],
+  ["req-25", 3, "(e) The guarantee is to the extent of the below mentioned slab."],
+  ["req-26", 4, "Maximum within 45 days from the date of issue of purchase order in case of indigenous items and 90 days for imported items."],
+  ["req-28", 4, "All aspects of safe delivery shall be the exclusive responsibility of the vendor."],
+  ["req-29", 4, "At the destination site, the package will be opened only in the presence of IIT user/representative and vendor's representative."],
+  ["req-31", 4, "Part delivery is not allowed."],
+  ["req-32", 4, "The date of delivery should be strictly adhered to otherwise the Director, IITG reserves the right not to accept delivery in part or full."],
+  ["req-33", 4, "HSN/SAC No of the items must be clearly mentioned in the quotation along with GST No."],
+];
+
+const mixedSourceCases = [
+  ["req-3", "vi. HSN/SAC Number, ISO/ISI Certificate and Proof of Certification as per specification"],
+  ["req-5", "i. Bidder’s detail and its Service Centre detail as per format at Annexure - III"],
+  ["req-15", "The bidders should clearly state the detail address, contact number and email ids of after sales service centre in India in Bidder’s Details under Statutory Cover as at Annexure - III"],
+];
+
+const page11ServiceRequirements = [
+  "The quote must include a separate charge for a Five - year Annual Maintenance Contract (AMC), covering: Service visits; Yearly calibration; Routine maintenance services, and Provision of spare parts and necessary consumables",
+  "The supplier must have a local office or an authorized associate in India to ensure timely after - sales support and maintenance.",
+  "An undertaking must be provided for: After - sales service and availability of spare parts for a minimum period of five years beyond the initial warranty period.",
+];
+
 test("retains the IIT Guwahati page-11 supplier service obligations when labeled instruction", () => {
   for (const sourceQuote of iitgServiceAnchorGroups) {
     const result = classifyCandidateScope("instruction", sourceQuote);
@@ -25,6 +52,7 @@ test("excludes procurement mechanics, commercial terms, and document navigation"
     ["instruction", "Earnest Money Deposit (EMD) shall accompany the bid."],
     ["instruction", "Payment will be released according to the payment schedule."],
     ["instruction", "The successful bidder shall furnish a bank guarantee."],
+    ["requirement", "The format for PBG shall be as per the format enclosed at Annexure V."],
     ["instruction", "Tender submission must be completed before the closing date."],
     ["instruction", "Bidders must indicate compliance status in every row."],
     ["instruction", "The technical compliance report must be uploaded with the tender submission."],
@@ -58,6 +86,28 @@ test("keeps a supplier-required calibration certificate despite the submission v
   assert.equal(result.requiresHumanReview, true);
 });
 
+test("preserves source-grounded equipment and supplier obligations across unfamiliar wording", () => {
+  const positiveCases = [
+    "Cryostat shall retain helium for 90 days.",
+    "Firmware must support the OPC UA protocol.",
+    "Ferromagnetic stainless steel.",
+    "At least two USB ports should be provided with the instrument.",
+    "The fixture must allow the machine to use the full range of specimen grips.",
+    "The setup shall comply with ASTM D4595.",
+    "The jaw faces shall align with their corresponding opposing surfaces.",
+    "The supplier shall rectify or replace defects during the guarantee period.",
+    "An emergency stop button shall be within easy reach of the operator.",
+    "The PC must include a 512 GB solid-state drive and 16 GB memory.",
+    "The software shall import test results in CSV and PDF formats.",
+    "The supplier shall deliver the equipment within 45 days of the purchase order.",
+  ];
+  for (const quote of positiveCases) {
+    const result = classifyCandidateScope("requirement", quote);
+    assert.ok(["kept", "reclassified_for_review"].includes(result.outcome), quote);
+    assert.equal(result.effectiveRowType, "requirement", quote);
+  }
+});
+
 test("retains mixed administrative and supplier-service clauses as review-only with their source intact", () => {
   const quote = "The tender submission must include the bid form, and the supplier shall provide calibration certificates.";
   const result = classifyCandidateScope("instruction", quote);
@@ -67,6 +117,26 @@ test("retains mixed administrative and supplier-service clauses as review-only w
   assert.equal(result.requiresHumanReview, true);
   assert.ok(quote.includes("tender submission"));
   assert.ok(quote.includes("supplier shall provide calibration certificates"));
+});
+
+test("holds source-verified mixed bidder, tax, service-centre, and technical-document clauses for review", () => {
+  for (const [requirementId, quote] of mixedSourceCases) {
+    const result = classifyCandidateScope("requirement", quote);
+    assert.equal(result.outcome, "retained_for_review", requirementId);
+    assert.equal(result.effectiveRowType, "ambiguous", requirementId);
+    assert.equal(result.requiresHumanReview, true, requirementId);
+    assert.ok(result.reason.length > 0, requirementId);
+  }
+});
+
+test("screens the twelve newly observed administrative rows without overgeneralizing incidental technical words", () => {
+  for (const [requirementId, page, quote] of newlyObservedAdministrativeCases) {
+    const result = classifyCandidateScope("requirement", quote);
+    const expected = ["req-26", "req-28", "req-32"].includes(requirementId) ? "retained_for_review" : "rejected";
+    assert.equal(result.outcome, expected, `${requirementId} p.${page}`);
+    assert.ok(result.reason.length > 0, `${requirementId} p.${page}`);
+    assert.notEqual(result.effectiveRowType, "requirement", `${requirementId} p.${page}`);
+  }
 });
 
 test("keeps unresolved source structure separate from a technical obligation", () => {
@@ -164,12 +234,16 @@ test("screens every flagged and adjacent administrative benchmark row when the m
   }
 });
 
-test("preserves page-11 service obligations when originally labeled requirement", () => {
-  for (const sourceQuote of iitgServiceAnchorGroups) {
-    const result = classifyCandidateScope("requirement", sourceQuote);
-    assert.equal(result.outcome, "kept", sourceQuote);
+test("preserves the three exact page-11 service obligations with their recorded model labels", () => {
+  for (const [sourceQuote, rowType, expectedOutcome] of [
+    [page11ServiceRequirements[0], "instruction", "reclassified_for_review"],
+    [page11ServiceRequirements[1], "requirement", "kept"],
+    [page11ServiceRequirements[2], "requirement", "kept"],
+  ]) {
+    const result = classifyCandidateScope(rowType, sourceQuote);
+    assert.equal(result.outcome, expectedOutcome, sourceQuote);
     assert.equal(result.effectiveRowType, "requirement", sourceQuote);
-    assert.equal(result.requiresHumanReview, false, sourceQuote);
+    assert.equal(result.requiresHumanReview, expectedOutcome !== "kept", sourceQuote);
   }
 });
 
@@ -185,6 +259,10 @@ test("keeps technical documentation as an obligation and sends admin-mixed wordi
   const technicalDocument = classifyCandidateScope("requirement", "The supplier shall submit calibration certificates with each unit.");
   assert.equal(technicalDocument.outcome, "kept");
   assert.equal(technicalDocument.effectiveRowType, "requirement");
+
+  const productLiterature = classifyCandidateScope("requirement", "The model and specifications quoted should be highlighted in the product literature.");
+  assert.equal(productLiterature.effectiveRowType, "requirement");
+  assert.equal(productLiterature.requiresHumanReview, true);
 
   const mixed = classifyCandidateScope("requirement", "The tender submission must include the bid form, and the supplier shall provide calibration certificates.");
   assert.equal(mixed.outcome, "retained_for_review");
@@ -219,7 +297,12 @@ test("reconciles administrative exclusions, review-only mixed clauses, and accep
   }
 
   assert.equal(terminal.rejected.length + terminal.discarded.length + terminal.accepted.length, benchmarkFalseInclusions.length + iitgServiceAnchorGroups.length);
-  assert.deepEqual(ledger.summary(), { total: 27, accepted: 3, rejected: 23, duplicate: 0, merged: 0, discarded: 1, incomplete: 0 });
+  const summary = ledger.summary();
+  assert.equal(summary.total, benchmarkFalseInclusions.length + iitgServiceAnchorGroups.length);
+  assert.equal(summary.accepted, terminal.accepted.length);
+  assert.equal(summary.rejected, terminal.rejected.length);
+  assert.equal(summary.discarded, terminal.discarded.length);
+  assert.equal(summary.accepted + summary.rejected + summary.duplicate + summary.merged + summary.discarded + summary.incomplete, summary.total);
   assert.equal(ledger.records.filter((record) => record.disposition === "accepted").every((record) => record.finalRequirementId && record.classificationDecision?.effectiveRowType === "requirement"), true);
   assert.equal(ledger.records.every((record) => record.sourceQuoteStatus === "matched" && record.sourceElementIds.length === 1), true);
 });
