@@ -1001,6 +1001,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const extractionBatches = buildExtractionBatches(generalPages);
       for (const [batchIndex, batch] of extractionBatches.entries()) {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
+        report("requesting extraction batch", {
+          stage: "extracting",
+          message: `Requesting technical extraction batch ${batchIndex + 1} of ${extractionBatches.length}`,
+          current: batchIndex + 1,
+          total: extractionBatches.length,
+        });
         const requestStartedAt = performance.now();
         emitModelTiming({
           phase: "request_started",

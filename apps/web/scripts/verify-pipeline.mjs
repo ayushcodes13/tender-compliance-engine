@@ -38,6 +38,7 @@ const provider = http.createServer(async (request, response) => {
     for await (const chunk of request) raw += chunk;
     const body = JSON.parse(raw);
     const schema = body.response_format?.json_schema?.name;
+    if (scenario === 'slow-general-extraction' && schema === 'tender_requirements') await new Promise(resolve => setTimeout(resolve, 150));
     if (scenario === 'vector-page-concurrency' && schema === 'visual_table_row_labels') {
       trackedVectorLabelRequest = true;
       activeVectorLabelRequests += 1;
@@ -147,6 +148,13 @@ try {
   assert.equal(one.analysis.document.inventoryIntegrity,'structurally-verified');
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
+  scenario='slow-general-extraction';
+  const slowGeneral=await analyze(short);
+  assert.equal(slowGeneral.ok,true,slowGeneral.error);
+  const slowExtractionProgress=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
+  const requestProgressIndex=slowExtractionProgress.findIndex(message=>message==='Requesting technical extraction batch 1 of 1');
+  const parsingProgressIndex=slowExtractionProgress.findIndex(message=>message==='Parsing the model\'s extracted technical requirements');
+  assert.ok(requestProgressIndex>=0&&parsingProgressIndex>requestProgressIndex,`Extraction progress reports the active model request before switching to response parsing: ${JSON.stringify(slowExtractionProgress)}`);
   scenario='page-disposition-only';
   const dispositionOnly=await analyze(short);
   assert.equal(dispositionOnly.ok,true,dispositionOnly.error);
