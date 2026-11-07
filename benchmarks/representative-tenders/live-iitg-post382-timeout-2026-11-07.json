@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePages": 15,
+  "codeCommit": "9783f82c63e8c61d58526d5f7fc7655a500359ad",
+  "runDate": "2026-11-07",
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "merged-main local production build; client and application deadline 290 seconds",
+  "elapsedSeconds": 291.2,
+  "terminalStatus": "client-timeout-no-response-sheet",
+  "providerConfiguration": {
+    "apiKeyPresent": true,
+    "baseUrlConfigured": true,
+    "model": "gpt-6-luna",
+    "credentialValuesRecorded": false,
+    "endpointHostnameRecorded": false
+  },
+  "stages": {
+    "pageRouting": {
+      "requests": 2,
+      "responsesParsed": 2,
+      "startedAtSeconds": 1.5,
+      "completedBySeconds": 71
+    },
+    "vectorTableMappingAndClassification": {
+      "pageNumbers": [
+        1,
+        7,
+        11,
+        12,
+        13
+      ],
+      "mappingAndClassificationCalls": 14,
+      "firstProgressSeconds": 71,
+      "completedBySeconds": 186.5
+    },
+    "generalRequirementExtraction": {
+      "startedAtSeconds": 186.5,
+      "batchesStarted": 4,
+      "batchesTotal": 4,
+      "responsesParsed": 4,
+      "completedBySeconds": 267.4
+    },
+    "textPageOmissionAudit": {
+      "startedAtSeconds": 267.4,
+      "batchesStarted": 3,
+      "batchesTotal": 4,
+      "responsesWithHeaders": 0,
+      "responsesParsed": 0,
+      "pendingBatchIndicesAtTimeout": [
+        1,
+        2,
+        3
+      ]
+    },
+    "visualPageOmissionAudit": {
+      "status": "not-reached"
+    },
+    "responseSheet": {
+      "status": "not-produced"
+    }
+  },
+  "modelTiming": {
+    "page_routing": {
+      "requestsStarted": 2,
+      "responsesWithHeaders": 2,
+      "responsesParsed": 2,
+      "requestHeaderWaitMs": 64438,
+      "completedTokens": 8988,
+      "pending": []
+    },
+    "vector_table_column_mapping": {
+      "requestsStarted": 9,
+      "responsesWithHeaders": 9,
+      "responsesParsed": 9,
+      "requestHeaderWaitMs": 91950,
+      "completedTokens": 25179,
+      "pending": []
+    },
+    "vector_table_row_classification": {
+      "requestsStarted": 5,
+      "responsesWithHeaders": 5,
+      "responsesParsed": 5,
+      "requestHeaderWaitMs": 123239,
+      "completedTokens": 32420,
+      "pending": []
+    },
+    "general_requirement_extraction": {
+      "requestsStarted": 4,
+      "responsesWithHeaders": 4,
+      "responsesParsed": 4,
+      "requestHeaderWaitMs": 190348,
+      "completedTokens": 48866,
+      "pending": []
+    },
+    "text_page_omission_audit": {
+      "requestsStarted": 3,
+      "responsesWithHeaders": 0,
+      "responsesParsed": 0,
+      "requestHeaderWaitMs": 0,
+      "completedTokens": 0,
+      "pending": [
+        "batch-1",
+        "batch-2",
+        "batch-3"
+      ]
+    }
+  },
+  "completedCallObservedTokenTotal": 115453,
+  "cost": "not-recorded",
+  "diagnosis": "The sliding general-extraction scheduler completed all four extraction batches by 267.4 seconds. The text omission audit then started four-page batches with three workers, but none returned response headers before the 290-second route deadline; the client observed timeout at 291.2 seconds. The next bottleneck is the earlier serial routing stage plus sequential vector map/classification waves. Provider request-header wait sums overlap and are not wall-clock durations.",
+  "qualityComparison": {
+    "responseRowsAvailable": false,
+    "sourceAnchorComparisonPerformed": false,
+    "recallOrPrecisionClaim": false
+  },
+  "limitations": [
+    "The run did not produce a terminal analysis, omission audit result, or response sheet.",
+    "The comparison with the previous run is non-controlled and subject to provider latency variation.",
+    "Timing progress is rounded to tenths; request-header wait sums overlap.",
+    "No extraction text, provider bodies, cost, or gold-quality result is present."
+  ],
+  "privacy": "No tender text, candidate text, provider request/response bodies, source bounds, credentials, or endpoint hostname are stored."
+}
