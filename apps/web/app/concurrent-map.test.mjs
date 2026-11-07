@@ -33,6 +33,7 @@ test("rejects invalid concurrency and supports empty work", async () => {
 test("settles all bounded work and preserves fulfilled batch results beside a timeout", async () => {
   let active = 0;
   let peak = 0;
+  const settledIndexes = [];
   const results = await mapWithConcurrencySettled(["parsed-a", "timeout", "parsed-b"], 2, async (item) => {
     active += 1;
     peak = Math.max(peak, active);
@@ -40,7 +41,8 @@ test("settles all bounded work and preserves fulfilled batch results beside a ti
     active -= 1;
     if (item === "timeout") throw new DOMException("provider deadline", "TimeoutError");
     return item;
-  });
+  }, (_completed, _total, _settled, index) => { settledIndexes.push(index); });
+  assert.deepEqual([...settledIndexes].sort((x, y) => x - y), [0, 1, 2]);
   assert.deepEqual(results.map((result) => result.status), ["fulfilled", "rejected", "fulfilled"]);
   assert.deepEqual(results.filter((result) => result.status === "fulfilled").map((result) => result.value), ["parsed-a", "parsed-b"]);
   assert.equal(results[1].reason.name, "TimeoutError");
