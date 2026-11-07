@@ -1111,6 +1111,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         stage: "extracting",
         message: `Requesting technical extraction batches 1–${Math.min(MODEL_REQUESTS_PER_ANALYSIS, extractionBatches.length)} of ${extractionBatches.length}`,
       });
+      let parsedBatchCount = 0;
       const extractionOutcomes = await mapWithConcurrencySettled(extractionBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
         const requestStartedAt = performance.now();
@@ -1181,10 +1182,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           traceCandidateId: registerTraceCandidate(candidate, "initial_extraction", batchIndex * 100_000 + candidateOrdinal),
         }));
         return { ok: true as const, parsed, allowedPages: batch.pageNumbers };
-      }, (completed, total) => {
+      }, (completed, total, settled) => {
+        const parsed = settled.status === "fulfilled" && settled.value.ok;
+        if (parsed) parsedBatchCount += 1;
         report("completed extraction batch", {
           stage: "extracting",
-          message: `Finished processing ${completed} of ${total} technical extraction batches`,
+          message: parsed
+            ? `Received and parsed ${parsedBatchCount} of ${total} technical extraction batches`
+            : `A technical extraction batch failed; ${parsedBatchCount} of ${total} batches parsed (${completed} finished)`,
           current: completed,
           total,
         });
