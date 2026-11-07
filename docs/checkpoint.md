@@ -16,6 +16,16 @@ Upload a text-based tender PDF
 
 This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory. GPT-6 Luna is the only model provider; the server-side credential is never exposed to the browser.
 
+## Active client POC: coordinated 70% -> conditional 90% milestone (2026-11-07)
+
+This section temporarily takes priority over the historical first-unchecked-item order **for the two parallel Goal Mode agents and ChatGPT architecture lane only**. Follow [POC 90 parallel execution contract](poc-90-parallel-coordination.md) and AGENTS.md. Do not edit this shared file concurrently from the two agent worktrees. The user-visible readiness percentage is a gated judgment, not a count of checkboxes or model recall score.
+
+- [ ] **Architecture coordination (ChatGPT / no live tests):** publish/merge lane ownership, acceptability gates, handoff protocol, separate worktrees, limits and stop conditions; review all resulting PRs and evidence together.
+- [ ] **Lane A, extraction and quality (Agent 1):** one approved, controlled IIT Guwahati completed run on pinned main or an explicitly evidenced blocker outcome; compare 20 known administrative cases, 3 recovered page-11 obligations, citations, units, partial source-anchor gold, runtime and provider usage. If incomplete, record failed milestone rather than claiming it passed.
+- [ ] **Lane B, customer journey (Agent 2):** independently verify local upload/scripted or saved-result replay, source drawer, human review/edits, exports and access/handoff; use no paid provider requests and report actual browser/export evidence.
+- [ ] **Final integration review (ChatGPT):** required remote CI and sequential PR merges, source-to-UI contract, all four readiness gate outcomes and P0/P1 issues. Assign 90% only if every evidence gate passes. Stop or select exactly one blocker follow-up if not.
+- [ ] **Deferred customer/public production gates:** resolve hosted model credentials, Vercel project permissions, custom-domain DNS and hosted OCR if a remote customer-hosted POC is actually required. An operator-assisted private local POC does not pretend these are complete.
+
 ### Reading dated implementation notes
 
 The dated entries below preserve the sequence of implementation and investigation. They are historical snapshots, not a single description of current behavior. When entries conflict, the later relevant entry supersedes the earlier one; current source code and its regression tests are authoritative for shipped behavior.
