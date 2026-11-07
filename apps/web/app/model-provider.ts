@@ -20,8 +20,10 @@ export class ModelProviderBusyError extends Error {
 }
 
 export class ModelProviderTimeoutError extends Error {
-  constructor() {
-    super("A GPT-6 Luna request exceeded its 90-second provider execution limit. The timed-out request was not automatically retried.");
+  constructor(reason: "execution" | "upstream" = "execution") {
+    super(reason === "upstream"
+      ? "The GPT-6 Luna gateway returned a timeout response. The request was not automatically retried."
+      : "A GPT-6 Luna request exceeded its 90-second provider execution limit. The timed-out request was not automatically retried.");
     this.name = "ModelProviderTimeoutError";
   }
 }
@@ -145,7 +147,7 @@ export function createModelCompletionClient(
               signal: requestSignal,
               body: init?.body,
             });
-            if (response.status === 408 || response.status === 504) throw new ModelProviderTimeoutError();
+            if (response.status === 408 || response.status === 504) throw new ModelProviderTimeoutError("upstream");
             if (response.status === 429) {
               if (attempt < 2) {
                 await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
@@ -159,10 +161,6 @@ export function createModelCompletionClient(
             if (cancellationSignal?.aborted) throw cancellationSignal.reason ?? error;
             if (error instanceof DOMException && error.name === "AbortError") throw error;
             if (error instanceof TypeError) throw new ModelProviderConnectionError();
-            if (attempt < 2 && error instanceof Error && error.name === "AbortError" && !requestSignal.aborted) {
-              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-              continue;
-            }
             throw error;
           }
         }
