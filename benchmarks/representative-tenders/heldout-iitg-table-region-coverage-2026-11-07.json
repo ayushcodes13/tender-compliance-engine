@@ -1,0 +1,534 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "sourceDocumentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "runtimeCommit": "8803ca77fd4d20011ae21379a745884756f98d73",
+  "pymupdfVersion": "1.26.5",
+  "annotationArtifacts": [
+    "benchmarks/representative-tenders/heldout-golden-v0.3.json",
+    "benchmarks/representative-tenders/heldout-golden-v0.4.json",
+    "benchmarks/representative-tenders/heldout-golden-v0.5.json"
+  ],
+  "annotationAdjudication": "assistant-reviewed; independent human adjudication pending",
+  "comparisonKind": "maximum table-candidate intersection divided by annotated source-bound area",
+  "sourceTextIncluded": false,
+  "sourceBoundsIncluded": false,
+  "annotationCount": 23,
+  "strategySummary": {
+    "lines": {
+      "annotationsWithBounds": 23,
+      "sourceCoverageAtLeast95Percent": 10,
+      "sourceCoverageAtLeast50Percent": 10,
+      "medianBestSourceCoverage": 0,
+      "medianBestCandidateAreaRatio": 11.436
+    },
+    "lines_strict": {
+      "annotationsWithBounds": 23,
+      "sourceCoverageAtLeast95Percent": 10,
+      "sourceCoverageAtLeast50Percent": 10,
+      "medianBestSourceCoverage": 0,
+      "medianBestCandidateAreaRatio": 11.436
+    },
+    "text": {
+      "annotationsWithBounds": 23,
+      "sourceCoverageAtLeast95Percent": 21,
+      "sourceCoverageAtLeast50Percent": 23,
+      "medianBestSourceCoverage": 1,
+      "medianBestCandidateAreaRatio": 27.929
+    }
+  },
+  "cases": [
+    {
+      "caseId": "iitg-page-2-certification-evidence",
+      "page": 2,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 89.458
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-2-manufacturer-or-dealership-certificate",
+      "page": 2,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.996,
+          "bestCandidateAreaRatio": 28.329
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-2-offered-technical-details-annexure",
+      "page": 2,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 95.073
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-2-service-centre-details",
+      "page": 2,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 101.937
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-2-technical-leaflet",
+      "page": 2,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 137.285
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-2-warranty-details",
+      "page": 2,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 431.49
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-3-dealership-certificate",
+      "page": 3,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 73.965
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-3-india-after-sales-centre",
+      "page": 3,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 26.015
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-3-literature-supports-quoted-specifications",
+      "page": 3,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 17.288
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-3-quality-certificates",
+      "page": 3,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 26.012
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-3-warranty-annexure-reference",
+      "page": 3,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 106.297
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-4-conditional-product-demonstration",
+      "page": 4,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.984,
+          "bestCandidateAreaRatio": 27.929
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-4-installation-and-commissioning",
+      "page": 4,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "lines_strict": {
+          "pageCandidateCount": 0,
+          "bestSourceCoverage": 0,
+          "bestCandidateAreaRatio": null
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 93.091
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-calibration-certificate",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.244
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.244
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.993,
+          "bestCandidateAreaRatio": 7.411
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-five-year-amc-omitted",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.164
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.164
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.969,
+          "bestCandidateAreaRatio": 7.358
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-five-year-parts-support-omitted",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.298
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.298
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.991,
+          "bestCandidateAreaRatio": 7.447
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-installation-function-demonstration",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 17.234
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 17.234
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.359
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-local-after-sales-presence-omitted",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 23.472
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 23.472
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 15.47
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-operation-maintenance-manual-copies",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.297
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.297
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.991,
+          "bestCandidateAreaRatio": 7.446
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-11-service-visit-demonstration",
+      "page": 11,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.436
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 11.436
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.994,
+          "bestCandidateAreaRatio": 7.538
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-12-after-sales-service-checklist-field",
+      "page": 12,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 45.581
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 45.581
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.918,
+          "bestCandidateAreaRatio": 49.737
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-12-compliance-form-technical-literature-and-warranty",
+      "page": 12,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 5.398
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 5.398
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 0.777,
+          "bestCandidateAreaRatio": 5.89
+        }
+      }
+    },
+    {
+      "caseId": "iitg-page-13-guwahati-service-centre-form-field",
+      "page": 13,
+      "byStrategy": {
+        "lines": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 30.29
+        },
+        "lines_strict": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 30.29
+        },
+        "text": {
+          "pageCandidateCount": 1,
+          "bestSourceCoverage": 1,
+          "bestCandidateAreaRatio": 37.267
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "This measures whether a parser candidate envelope intersects an annotated text bound, not whether the table or obligation was correctly extracted.",
+    "A full-page candidate can cover many source bounds while being structurally uninformative; candidate area ratios make this overcoverage visible.",
+    "Annotations are partial assistant-reviewed regions, not human-adjudicated gold labels.",
+    "No candidate bound is negative evidence for prose, OCR, or regions outside the annotation set.",
+    "PyMuPDF candidate geometries and source annotation bounds use PDF point coordinates; the production PDF.js parser is not evaluated by this script."
+  ]
+}
