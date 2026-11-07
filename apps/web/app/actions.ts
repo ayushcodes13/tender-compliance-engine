@@ -1164,8 +1164,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       return [];
       };
       sourceColumns = await mapPageColumns(firstPage);
-      report("matching source text to visible vector table rows", { stage: "extracting", message: "Reading each table row and splitting independent subpoints", current: 0, total: vectorPages.length });
-      const inspectVectorPage = async (page: (typeof visualPages)[number]) => {
+      const inspectVectorPage = async (page: (typeof visualPages)[number], inheritedColumns: SourceColumn[], auditTurn: Promise<void>) => {
         const sourceRows = getVectorRows(page);
         const sourceTable = page.sourceModel.tables[0];
         const sourceRowsWithIds = sourceRows.map((row, rowIndex) => {
@@ -1178,7 +1177,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           };
         });
         const precedingPage = pages.find((candidatePage) => candidatePage.page === page.page - 1 && candidatePage.visualImage);
-        let pageColumns = sourceColumns;
+        let pageColumns = inheritedColumns;
         const sourceColumnCount = Math.max(...sourceRows.map((row) => row.cells.length));
         if (pageColumns.length !== sourceColumnCount) pageColumns = await mapPageColumns(page);
         let requirementColumnIndex = chooseRequirementColumn(pageColumns, sourceRows.map((row) => row.cells));
@@ -1367,6 +1366,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           return [{ rowIndex, sourceCells: row.cells, extractedRequirements }];
         });
         const rowAuditState = new Map<number, { status: "no_gap_reported" | "possible_gap" | "ambiguous" | "audit_incomplete"; note?: string }>();
+        // Keep the analysis-wide audit cap deterministic even when independent
+        // pages are being inspected concurrently.
+        await auditTurn;
         const rowAuditBatches = batchSourceRowsForAudit(requirementRows);
         for (const batch of rowAuditBatches) {
           const expectedRowIndices = batch.map((row) => row.rowIndex);
@@ -1448,8 +1450,6 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           if (!sourceBox) continue;
           requirements.push({ page: page.page, quote: heading.quote, display_lines: [heading.quote], row_type: heading.row_type, category: "Other", continues_previous: false, sourceBox });
         }
-        const completed = vectorPages.indexOf(page) + 1;
-        onProgress?.({ stage: "extracting", message: `Extracting table rows · page ${page.page} of ${pages.length}`, current: completed, total: vectorPages.length });
         return {
           parsed: { requirements },
           page: page.page,
@@ -1466,15 +1466,53 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           sourceTableRowsNotShown: Math.max(0, tableCoverageRows.rows.length - 12),
         };
       };
+      const inheritedColumns = [...sourceColumns];
+      const auditTurns: Promise<void>[] = [];
+      const releaseAuditTurns: Array<() => void> = [];
+      for (let index = 0; index < vectorPages.length; index += 1) {
+        auditTurns.push(index === 0 ? Promise.resolve() : new Promise<void>((resolve) => { releaseAuditTurns[index] = resolve; }));
+      }
+      const inspectInSourceOrder = async (page: (typeof visualPages)[number], index: number, columns: SourceColumn[]) => {
+        try {
+          return await inspectVectorPage(page, columns, auditTurns[index]);
+        } finally {
+          // Pages that fail before reaching the audit still advance the ordered
+          // turn, without allowing a later page to consume the budget first.
+          await auditTurns[index];
+          releaseAuditTurns[index + 1]?.();
+        }
+      };
+      report("matching source text to visible vector table rows", { stage: "extracting", message: "Reading table rows and auditing independent requirements", current: 0, total: vectorPages.length });
+      const canInspectPagesIndependently = inheritedColumns.length > 0 && vectorPages.every((page) =>
+        getVectorRows(page).some((row) => isRepeatedTableHeader(row.cells, inheritedColumns.map((column) => column.header))),
+      );
+      let inspectedPages: Array<Awaited<ReturnType<typeof inspectVectorPage>> | null>;
+      if (canInspectPagesIndependently) {
+        inspectedPages = await mapInConcurrentWaves(
+          vectorPages,
+          MODEL_REQUESTS_PER_ANALYSIS,
+          (page, index) => inspectInSourceOrder(page, index, inheritedColumns),
+          (completed, total) => onProgress?.({ stage: "extracting", message: "Reading table rows and auditing independent requirements", current: completed, total }),
+        );
+      } else {
+        inspectedPages = [];
+        for (const [index, page] of vectorPages.entries()) {
+          const result = await inspectInSourceOrder(page, index, sourceColumns);
+          inspectedPages.push(result);
+          if (result?.columns.length) sourceColumns = result.columns;
+        }
+      }
       const pageResults = [];
-      // A continuation without visible headers inherits the last verified page map,
-      // not the first table in the entire document.
-      for (const page of vectorPages) {
-        const result = await inspectVectorPage(page);
-        if (!result) { otherPages.push(page); continue; }
-        if (result.columns.length) sourceColumns = result.columns;
+      // The wave runner preserves input order. Apply page-local results in source
+      // order so continuations, requirement ordering, and column state stay stable.
+      for (const [index, result] of inspectedPages.entries()) {
+        if (!result) { otherPages.push(vectorPages[index]); continue; }
         pageResults.push(result);
       }
+      // Keep each page's verified map on its own candidates. Distinct tender
+      // schedules may legitimately use different columns and are projected as
+      // separate response sections; only the inherited default remains shared.
+      for (const result of pageResults) if (result.columns.length) sourceColumns = result.columns;
       for (const result of pageResults) pageExtractionState.set(result.page, {
         status: result.modelInspectionComplete ? "complete" : "incomplete",
         sourceTableRowsDetected: result.sourceTableRowsDetected,
