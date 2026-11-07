@@ -28,7 +28,7 @@ export async function mapWithConcurrencySettled<T, R>(
   items: T[],
   concurrency: number,
   mapItem: (item: T, index: number) => Promise<R>,
-  onItemComplete?: (completed: number, total: number, result: PromiseSettledResult<R>) => void,
+  onItemComplete?: (completed: number, total: number, result: PromiseSettledResult<R>, index: number) => void,
 ): Promise<PromiseSettledResult<R>[]> {
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error("Concurrency must be a positive integer.");
   const results = new Array<PromiseSettledResult<R>>(items.length);
@@ -44,7 +44,7 @@ export async function mapWithConcurrencySettled<T, R>(
         results[index] = { status: "rejected", reason };
       }
       completed += 1;
-      onItemComplete?.(completed, items.length, results[index]);
+      onItemComplete?.(completed, items.length, results[index], index);
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
