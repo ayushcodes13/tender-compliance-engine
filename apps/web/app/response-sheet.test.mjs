@@ -430,4 +430,28 @@ test("distinguishes physical PDF line wrapping from independent subclauses", () 
   assert.equal(subpointsColon[0], "Minimum operating pressure: 200 bar");
 });
 
+test("removing a row retains all other rows and reset restores pristine extracted state", () => {
+  const initial = {
+    requirements: [
+      { id: "req-1", text: "Cryostat system", quote: "Cryostat system", page: 2 },
+      { id: "req-2", text: "Vacuum below 1e-6 mbar", quote: "Vacuum below 1e-6 mbar", page: 3 },
+    ],
+  };
+  const sheet = buildResponseSheet(initial);
+  assert.equal(sheet.rows.length, 2);
 
+  // Edit cell
+  const edited = updateResponseSheetCell(sheet, sheet.rows[0].id, 1, "Cryostat system revised");
+  assert.equal(edited.rows[0].values[1], "Cryostat system revised");
+  assert.equal(edited.rows[1].values[1], "Vacuum below 1e-6 mbar");
+
+  // Remove first row
+  const reduced = removeResponseSheetRow(edited, sheet.rows[0].id);
+  assert.equal(reduced.rows.length, 1);
+  assert.equal(reduced.rows[0].values[1], "Vacuum below 1e-6 mbar");
+
+  // Reset from original analysis restored
+  const restored = buildResponseSheet(initial);
+  assert.equal(restored.rows.length, 2);
+  assert.equal(restored.rows[0].values[1], "Cryostat system");
+});
