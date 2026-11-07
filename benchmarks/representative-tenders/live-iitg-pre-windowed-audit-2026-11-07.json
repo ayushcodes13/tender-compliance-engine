@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePages": 15,
+  "codeCommit": "ad767310f0d4f43055adeac6ebd91c64e2453443",
+  "runDate": "2026-11-07",
+  "elapsedSeconds": 270.9,
+  "terminalStatus": "incomplete-no-response-sheet",
+  "terminalError": "Analysis time limit reached. Processing is incomplete; no response sheet was produced.",
+  "stages": {
+    "routing": { "batchesCompleted": 2, "batchesTotal": 2, "elapsedAtNextStageSeconds": 56.1 },
+    "vectorTableInspection": { "pagesCompleted": 5, "pageNumbers": [1, 7, 11, 12, 13], "startedAtSeconds": 59.8, "completedAtSeconds": 164.6, "usedSerialFallback": true },
+    "generalRequirementExtraction": { "batchesCompleted": 4, "batchesTotal": 4, "startedAtSeconds": 164.6, "completedAtSeconds": 235.9, "batchesPerWave": [3, 1] },
+    "textPageOmissionAudit": { "startedAtSeconds": 235.9, "batchesTotal": 4, "batchesStarted": 3, "batchesCompleted": 2, "completedBatchIndices": [2, 3], "pendingBatchIndices": [1, 4] },
+    "terminalAtSeconds": 270.9
+  },
+  "modelTiming": {
+    "pageRouting": { "requests": 2, "responsesParsed": 2, "requestHeaderWaitMs": 50285, "observedTokens": 9590 },
+    "vectorColumnMapping": { "requests": 6, "responsesParsed": 6, "requestHeaderWaitMs": 29032, "observedTokens": 16650 },
+    "vectorRowClassification": { "requests": 5, "responsesParsed": 5, "requestHeaderWaitMs": 79420, "observedTokens": 32376 },
+    "generalRequirementExtraction": { "requests": 4, "responsesParsed": 4, "requestHeaderWaitMs": 115482, "observedTokens": 48207 },
+    "textPageOmissionAudit": { "requestsStarted": 3, "responsesParsed": 2, "requestHeaderWaitMs": 45234, "observedTokens": 11836 },
+    "completedCallObservedTokenTotal": 118659,
+    "cost": "not-recorded"
+  },
+  "qualityComparison": {
+    "responseRowsAvailable": false,
+    "routingDispositionCountsAvailable": false,
+    "sourceAnchorComparisonPerformed": false,
+    "recallOrPrecisionClaim": false
+  },
+  "limitations": [
+    "The vector-page branch processed five structurally different pages through the serial fallback; page-level classification time was a material wall-clock stage.",
+    "The omission-audit stage started three concurrent requests, but the slowest request prevented the fixed-wave scheduler from starting batch four; two of four audit batches had returned when the deadline aborted processing.",
+    "Request header-wait sums overlap across concurrent requests and are not wall-clock stage durations.",
+    "Only completed-call provider token metadata is counted; the in-flight request and cost are unknown.",
+    "No sheet was returned, so output requirements, citations, page dispositions, and coverage results are unavailable for evaluation."
+  ],
+  "privacy": "No tender text, candidate text, request or response bodies, source bounds, or credentials are stored."
+}
