@@ -133,6 +133,12 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 ## Checkpoint 73 — Client tender document reliability
 
+### Held-out parser-candidate/source-region overlap — 2026-11-07
+
+- [x] Run PyMuPDF `lines`, `lines_strict`, and `text` table-candidate geometry against 23 SHA-256-bound source-region annotations from the separate IIT Guwahati tender; store a text-free, geometry-free report and a reproducible evaluator.
+- [x] Record the observed structural trade-off: line-based candidates cover the seven annotated specification-table spans but miss the thirteen narrative/documentary spans; the broad text strategy covers nearly all bounds with large candidate envelopes.
+- [ ] Independently adjudicate source-region labels and compare candidate-level text/cell structure, not only geometry. Current measurements are assistant-reviewed overlap diagnostics, not precision/recall.
+
 ### PDF.js and PyMuPDF inventory parity baseline — 2026-11-07
 
 - [x] Verify all six representative tender PDFs against manifest SHA-256 fingerprints and page counts; run the production PDF.js parser and compare page inventory signals with the PyMuPDF 1.26.5 shadow artifact.
