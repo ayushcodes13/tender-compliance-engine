@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "d793802",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "isolated production Next.js server on 127.0.0.1:3155; 270-second application deadline",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 270.1,
+  "progressTimingsSeconds": {
+    "sourceInventoryReachedPage15": 0.4,
+    "routingGroup1Of2": 0.4,
+    "routingGroup2Of2": 42.7,
+    "mappingStarted": 73.3,
+    "vectorTableRowExtractionStarted": 78.8,
+    "vectorPage4Of5Completed": 212.3,
+    "applicationDeadline": 270.1
+  },
+  "lastObservedStage": "extracting",
+  "lastObservedMessage": "Extracting table rows · page 12 of 15",
+  "vectorPageProgress": {
+    "completed": 4,
+    "total": 5
+  },
+  "sourceInventoryCompleted": true,
+  "routingCompleted": true,
+  "responseSheetProduced": false,
+  "coverageMetricsAvailable": false,
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "observedImplementation": "Vector table pages are inspected sequentially in actions.ts; progress is emitted only after each page inspection and its source-row audits complete.",
+  "limitations": [
+    "No response sheet means page dispositions, final extraction state, and omission-audit metrics are unavailable.",
+    "No model payload, source text, requirement text, or candidate text was persisted.",
+    "No token usage, request-level latency, or cost telemetry was collected.",
+    "This is one nondeterministic run on one tender; annotations remain partial and assistant-reviewed, not independently adjudicated."
+  ]
+}
