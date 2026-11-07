@@ -58,6 +58,9 @@ const provider = http.createServer(async (request, response) => {
       result={columns:[],requirements:scenario==='unlocated-remark'&&text.includes(quote)?[{page:1,quote,remark:'Invented deviation: maximum 500 RPM.',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]};
     } else if (schema === 'technical_table_missing_rows') {
       result={columns:[],requirements:[]};
+    } else if (schema === 'source_row_semantic_coverage') {
+      const rows = JSON.parse(body.messages.at(-1)?.content ?? '[]');
+      result = { rows: rows.map(row => ({ row_index: row.row_index, status: 'no_gap_reported', note: '' })) };
     } else if (schema === 'technical_text_missing_requirements') {
       const requirements=[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
@@ -286,6 +289,9 @@ try {
   assert.equal(ambiguousSourceRow.sourceClassification,'ambiguous');
   assert.equal(ambiguousSourceRow.classificationReason,'ambiguous_source_structure');
   assert.equal(ambiguousSourceRow.disposition,'unmapped');
+  const auditedSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.sourceClassification==='requirement');
+  assert.equal(auditedSourceRow.semanticCoverageStatus,'no_gap_reported');
+  assert.equal(auditedSourceRow.semanticCoverageNote,'');
   assert.deepEqual(ambiguousSourceRow.matchedRequirementIds,[],'Ambiguous source content stays out of output requirements and remains reviewable');
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
