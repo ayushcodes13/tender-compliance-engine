@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "e5fb774",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna compatible endpoint",
+  "execution": "local Next.js API on 127.0.0.1:3000; application wall-clock deadline 270 seconds",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 270,
+  "lastObservedStage": "extracting",
+  "stagesObserved": [
+    "uploading",
+    "reading",
+    "locating",
+    "mapping",
+    "extracting"
+  ],
+  "sourceInventoryCompleted": true,
+  "routingCompleted": true,
+  "responseSheetProduced": false,
+  "coverageMetricsAvailable": false,
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "comparison": {
+    "priorRun": "live-iitg-heldout-baseline-2026-11-07.json",
+    "priorOutcome": "completed",
+    "priorElapsedSeconds": 186,
+    "interpretation": "The earlier run completed; this run reached extraction and hit the application deadline. The runs are nondeterministic and do not isolate routing changes as the cause. No before/after quality or latency claim is supported."
+  },
+  "limitations": [
+    "No completed response sheet means the updated per-page routing dispositions and selected-page totals could not be compared.",
+    "The run does not establish extraction recall, audit coverage, candidate counts, or model cost.",
+    "This is one incomplete run on one public tender; the source annotations remain partial and assistant-reviewed, not independently adjudicated."
+  ]
+}
