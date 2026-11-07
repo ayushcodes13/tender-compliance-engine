@@ -1,12 +1,14 @@
 export type ModelTimingEvent = {
-  phase: "headers_received" | "response_parsed";
-  requestKind: "general_requirement_extraction";
+  phase: "request_started" | "headers_received" | "response_parsed";
+  requestKind: "general_requirement_extraction" | "text_page_omission_audit";
+  batchIndex?: number;
+  totalBatches?: number;
   batchPageCount: number;
   inputCharacters: number;
   requestHeadersWaitMs?: number;
   responseBodyAndEnvelopeMs?: number;
   jsonParseMs?: number;
-  responseStatus: number;
+  responseStatus?: number;
   responseCharacters?: number;
   promptTokens?: number;
   completionTokens?: number;
@@ -14,6 +16,8 @@ export type ModelTimingEvent = {
 };
 
 const SAFE_NUMERIC_FIELDS = [
+  "batchIndex",
+  "totalBatches",
   "batchPageCount",
   "inputCharacters",
   "requestHeadersWaitMs",

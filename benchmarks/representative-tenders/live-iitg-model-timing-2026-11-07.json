@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "a586a80548d4e91c8ca1da6257ae978c980250cd",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "isolated production Next.js server on 127.0.0.1:3155; 270-second application deadline; TCE_MODEL_TIMING=1",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 271.4,
+  "vectorInspection": {
+    "pagesDetected": 5,
+    "mode": "serial_fallback",
+    "allPagesCompletedAtSeconds": 180.1
+  },
+  "generalExtractionRequestsCompleted": [
+    {
+      "batchPageCount": 3,
+      "inputCharacters": 12981,
+      "requestHeadersWaitMs": 22018,
+      "responseBodyAndEnvelopeMs": 2,
+      "jsonParseMs": 0,
+      "responseStatus": 200,
+      "responseCharacters": 2786,
+      "promptTokens": 9608,
+      "completionTokens": 2060,
+      "totalTokens": 11668
+    },
+    {
+      "batchPageCount": 3,
+      "inputCharacters": 9266,
+      "requestHeadersWaitMs": 44513,
+      "responseBodyAndEnvelopeMs": 3,
+      "jsonParseMs": 0,
+      "responseStatus": 200,
+      "responseCharacters": 11720,
+      "promptTokens": 8814,
+      "completionTokens": 4411,
+      "totalTokens": 13225
+    }
+  ],
+  "responseSheetProduced": false,
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "limitations": [
+    "These timings cover only two completed general extraction requests; the run ended before producing a response sheet.",
+    "Response-body/envelope parsing took 2–3 ms and model-content JSON parsing was below 1 ms in these two responses; the reported header wait includes local admission and provider time to response headers.",
+    "The text-page omission audit and other model request kinds were not instrumented in this build, so the precise operation that remained at deadline is unknown.",
+    "No model payload, tender text, requirement text, token-cost estimate, or source coordinates were retained.",
+    "This is one nondeterministic sample on one tender and does not establish extraction quality or a latency improvement."
+  ]
+}
