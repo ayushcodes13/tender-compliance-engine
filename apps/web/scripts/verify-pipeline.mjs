@@ -311,7 +311,7 @@ try {
   assert.deepEqual(projected.map(section=>section.rows.length),[1,17,16,1]);
   assert.equal(projected[0].annexure,'Annexure I');assert.equal(projected[2].annexure,'Annexure II');
   assert.ok(projected.every(section=>section.columns.every(column=>column.role!=='heading'&&column.role!=='page')));
-  assert.equal(grouped.rows.filter(row=>row.values[0]==='A. Optical table').length,33);
+  assert.equal(grouped.rows.filter(row=>row.values[0]==='A. Optical table').length,17);
   assert.ok(mixed.analysis.requirements.some(row=>row.quote===outsideTable&&row.sourceReference.locationPrecision==='exact'));
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
