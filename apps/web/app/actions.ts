@@ -1482,6 +1482,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           const classificationReviewOnly = classificationDecision?.outcome === "retained_for_review"
             && classificationDecision.effectiveRowType === "ambiguous"
             && (classificationDecision.reason === "mixed_administrative_and_supplier_obligation"
+              || sourceLabel?.row_type === "ambiguous"
               || sourceLabel?.row_type === "instruction" && classificationDecision.reason !== "unresolved_source_structure");
           const nativePrefix=row.cellHeadingPrefixes?.[requirementColumnIndex];
           const nativeHeadingPrefix=!groupHeading?confirmedNativeHeadingPrefix(nativePrefix,label?.row_type,label?.heading_prefix):undefined;
@@ -1567,6 +1568,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         }
         const candidateCountBySourceRow = new Map<number, number>();
         for (const candidate of requirements) {
+          // Preserve rejected source rows in the forensic trace, but do not count
+          // their rejected proposals as mapped compliance candidates.
+          if (candidate.classificationDecision?.outcome === "rejected") continue;
           const rowIndex = candidate.source_row_index;
           if (Number.isInteger(rowIndex)) candidateCountBySourceRow.set(rowIndex!, (candidateCountBySourceRow.get(rowIndex!) ?? 0) + 1);
         }
