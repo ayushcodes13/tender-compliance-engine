@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, Plus, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -12,7 +12,7 @@ import { visibleCitationEvidence } from "./poc90-client-citation";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
-import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, type ResponseSheet } from "./response-sheet";
+import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import { describeRejectedSuggestion, type CoverageReport, type CoverageSourceRow, type RejectedSuggestion } from "./coverage-ledger";
 import type { ClassificationReviewCandidate } from "./candidate-classification";
@@ -55,6 +55,8 @@ type Requirement = {
   isRevised?: boolean;
   revisedText?: string;
   originalSourceText?: string;
+  isOperatorAdded?: boolean;
+  isPromoted?: boolean;
 };
 type Analysis = {
   filename: string;
@@ -167,6 +169,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const sourceDrawerRef = useRef<HTMLDialogElement>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [coverageFocus, setCoverageFocus] = useState<{ page: number; row: CoverageSourceRow } | null>(null);
+  const [addRequirementOpen, setAddRequirementOpen] = useState(false);
+  const [newReqPage, setNewReqPage] = useState<number | string>(1);
+  const [newReqHeading, setNewReqHeading] = useState("");
+  const [newReqText, setNewReqText] = useState("");
+  const [newReqCategory, setNewReqCategory] = useState("Technical");
+  const [formError, setFormError] = useState<string | null>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
   const processingStartedAtRef = useRef(0);
 
@@ -398,8 +406,171 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   function removeSheetRow(rowId: string) {
     if (!responseSheet) return;
+    const targetRow = responseSheet.rows.find((r) => r.id === rowId);
     setResponseSheet(removeResponseSheetRow(responseSheet, rowId));
     setSheetEdited(true);
+    if (analysis && targetRow) {
+      const targetId = targetRow.sourceRequirementId;
+      const item = analysis.requirements.find((r) => r.id === targetId);
+      if (item?.isOperatorAdded) {
+        setAnalysis({
+          ...analysis,
+          requirements: analysis.requirements.filter((r) => r.id !== targetId),
+        });
+      }
+    }
+  }
+
+  function handleAddRequirement(e: FormEvent) {
+    e.preventDefault();
+    if (!analysis || !responseSheet) return;
+    const pageNum = Number(newReqPage);
+    if (!pageNum || pageNum < 1 || pageNum > analysis.pageCount) {
+      setFormError(`Please enter a valid page number between 1 and ${analysis.pageCount}.`);
+      return;
+    }
+    if (!newReqText.trim()) {
+      setFormError("Requirement wording is required.");
+      return;
+    }
+
+    const reqId = `req-manual-${Date.now()}`;
+    const newReq: Requirement = {
+      id: reqId,
+      text: newReqText.trim(),
+      quote: newReqText.trim(),
+      page: pageNum,
+      category: newReqCategory.trim() || "Technical",
+      parameter: newReqHeading.trim() || undefined,
+      sourceSectionTitle: newReqHeading.trim() || undefined,
+      headingPrefix: newReqHeading.trim() || undefined,
+      rowType: "requirement",
+      precision: "page-only",
+      verdict: "needs_human_review",
+      needsHumanReview: true,
+      reviewed: false,
+      isOperatorAdded: true,
+      bbox: null,
+      sourceReference: {
+        documentId: analysis.document.documentId,
+        documentVersionId: analysis.document.documentVersionId,
+        documentFingerprint: analysis.document.documentFingerprint,
+        physicalPdfPageNumber: pageNum,
+        sourceText: newReqText.trim(),
+        sourceElementIds: [],
+        bbox: null,
+        bboxCoordinateSystem: "pdfjs-viewport-scale-1",
+        extractionMethod: "pdfjs-native-text",
+        locationPrecision: "approximate",
+      },
+    };
+
+    const updatedAnalysisRequirements = [...analysis.requirements, newReq];
+    const updatedSheet = addManualRequirementToSheet(responseSheet, {
+      id: reqId,
+      page: pageNum,
+      text: newReqText.trim(),
+      heading: newReqHeading.trim() || undefined,
+      category: newReqCategory.trim() || "Technical",
+    });
+
+    setAnalysis({
+      ...analysis,
+      requirements: updatedAnalysisRequirements,
+    });
+    setResponseSheet(updatedSheet);
+    setSheetEdited(true);
+    setAddRequirementOpen(false);
+    setNewReqText("");
+    setNewReqHeading("");
+    setNewReqCategory("Technical");
+    setFormError(null);
+    setActiveId(reqId);
+    setPage(pageNum);
+  }
+
+  function handlePromoteCandidate(candidate: ClassificationReviewCandidate, candidateIndex: number) {
+    if (!analysis || !responseSheet) return;
+    const { sheet: updatedSheet, requirementId } = promoteCandidateToSheet(responseSheet, candidate);
+    const promotedReq: Requirement = {
+      id: requirementId,
+      text: candidate.quote,
+      quote: candidate.quote,
+      page: candidate.page,
+      category: "Promoted Specification",
+      rowType: "requirement",
+      precision: candidate.sourceReference?.locationPrecision === "exact" ? "exact" : "page-only",
+      verdict: "needs_human_review",
+      needsHumanReview: true,
+      reviewed: false,
+      isPromoted: true,
+      bbox: candidate.sourceReference?.bbox ?? null,
+      sourceReference: candidate.sourceReference,
+    };
+
+    const updatedRequirements = [...analysis.requirements, promotedReq];
+    const remainingCandidates = (analysis.classificationReviewCandidates ?? []).filter((_, i) => i !== candidateIndex);
+
+    setAnalysis({
+      ...analysis,
+      requirements: updatedRequirements,
+      classificationReviewCandidates: remainingCandidates,
+    });
+    setResponseSheet(updatedSheet);
+    setSheetEdited(true);
+    setActiveId(requirementId);
+    setPage(candidate.page);
+  }
+
+  function handlePromoteFromDiagnostics(candidate: ClassificationReviewCandidate, candidateIndex: number) {
+    if (!failureDiagnostics) return;
+    const promotedReqId = candidate.candidateId || `req-promoted-${Date.now()}-${candidateIndex}`;
+    const promotedReq: Requirement = {
+      id: promotedReqId,
+      text: candidate.quote,
+      quote: candidate.quote,
+      page: candidate.page,
+      category: "Promoted Specification",
+      rowType: "requirement",
+      precision: candidate.sourceReference?.locationPrecision === "exact" ? "exact" : "page-only",
+      verdict: "needs_human_review",
+      needsHumanReview: true,
+      reviewed: false,
+      isPromoted: true,
+      bbox: candidate.sourceReference?.bbox ?? null,
+      sourceReference: candidate.sourceReference,
+    };
+
+    const remaining = failureDiagnostics.classificationReviewCandidates.filter((_, i) => i !== candidateIndex);
+    const newAnalysis: Analysis = {
+      filename: file?.name || "Tender Document",
+      pageCount: failureDiagnostics.pageCount,
+      textPages: failureDiagnostics.coverageSummary.documentPages,
+      document: {
+        documentId: `doc-${Date.now()}`,
+        documentVersionId: `v-${Date.now()}`,
+        documentFingerprint: "manual-recovery",
+        pageCount: failureDiagnostics.pageCount,
+        inventoryIntegrity: "structurally-verified",
+      },
+      requirements: [promotedReq],
+      classificationReviewCandidates: remaining,
+      rejectedCandidates: failureDiagnostics.rejectedCandidates,
+      rejectedSuggestionDetails: failureDiagnostics.rejectedSuggestionDetails,
+      coverage: {
+        summary: failureDiagnostics.coverageSummary,
+        pages: [],
+      },
+      reviewNote: "Session recovered via operator candidate promotion.",
+    };
+
+    const sheet = buildResponseSheet(newAnalysis);
+    setAnalysis(newAnalysis);
+    setResponseSheet(sheet);
+    setSheetEdited(true);
+    setFailureDiagnostics(null);
+    setActiveId(promotedReqId);
+    setPage(candidate.page);
   }
 
   function resetResponseSheet() {
@@ -836,7 +1007,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   {failureDiagnostics.classificationReviewCandidates.map((candidate, index) => <div className="mvp-coverage-row-finding" key={`${candidate.page}-${candidate.candidateId ?? index}`}>
                     <span className="is-warning">Original classification: {candidate.originalClassification} · effective classification: {candidate.effectiveClassification} · {candidate.reason.replaceAll("_", " ")}. Not included in the compliance matrix.</span>
                     <p>{candidate.quote}</p>
-                    {file && <button type="button" onClick={() => { setPage(candidate.page); setSourceOpen(true); }}>Inspect PDF page {candidate.page}</button>}
+                    <div className="mvp-banner-held-actions">
+                      {file && <button type="button" onClick={() => { setPage(candidate.page); setSourceOpen(true); }}>Inspect PDF page {candidate.page}</button>}
+                      <button type="button" className="mvp-candidate-promote-btn" onClick={() => handlePromoteFromDiagnostics(candidate, index)}>Promote to response sheet</button>
+                    </div>
                   </div>)}
                 </div>}
                 {failureDiagnostics.rejectedSuggestionDetails.length > 0 && <ul>
@@ -867,6 +1041,17 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   const reviewableRequirements = analysis.requirements.filter(item => item.rowType !== "section" && item.rowType !== "optional_heading");
   const checkedCount = reviewableRequirements.filter((item) => item.reviewed).length;
+  const unreviewedCount = reviewableRequirements.filter((item) => !item.reviewed).length;
+  const heldCandidatesCount = analysis.classificationReviewCandidates?.length ?? 0;
+  const totalPendingHumanReview = unreviewedCount + heldCandidatesCount;
+
+  const unresolvedAuditCount = analysis.coverage?.summary.auditPagesIncomplete ?? 0;
+  const possibleGapsCount = analysis.coverage?.summary.auditPagesWithPossibleGaps ?? 0;
+  const uncertainRoutingCount = analysis.coverage?.summary.routingPagesUncertain ?? 0;
+  const unmappedTableRowsCount = analysis.coverage?.summary.tableRowsUnmapped ?? 0;
+  const clippedRoutingCount = analysis.coverage?.summary.clippedRoutingPages ?? 0;
+  const hasUnresolvedIssues = unresolvedAuditCount > 0 || possibleGapsCount > 0 || uncertainRoutingCount > 0 || unmappedTableRowsCount > 0 || clippedRoutingCount > 0 || heldCandidatesCount > 0;
+
   const coveragePagesToShow = analysis.coverage?.pages.filter((item) => item.selectedForExtraction
     || item.routingDisposition !== "selected"
     || item.routerMarkedUncertain
@@ -899,17 +1084,82 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           {analysis.validationSummary && (
             <div><span className="mvp-stat-icon"><ShieldCheck size={15} /></span><span><strong>{analysis.validationSummary.verbatimPass + analysis.validationSummary.visualPass}<i> / {analysis.validationSummary.total}</i></strong><small>Tier 1/2 verified</small></span></div>
           )}
-          {analysis.validationSummary && analysis.validationSummary.needsHumanReview > 0 && (
-            <div><span className="mvp-stat-icon mvp-stat-icon-warn"><AlertTriangle size={15} /></span><span><strong>{analysis.validationSummary.needsHumanReview}</strong><small>Tier 3 human review</small></span></div>
+          <div><span className="mvp-stat-icon mvp-stat-icon-warn"><AlertTriangle size={15} /></span><span><strong>{totalPendingHumanReview}</strong><small>Pending review ({unreviewedCount} reqs{heldCandidatesCount > 0 ? ` + ${heldCandidatesCount} held` : ""})</small></span></div>
+          {heldCandidatesCount > 0 && (
+            <div><span className="mvp-stat-icon mvp-stat-icon-warn"><ScanSearch size={15} /></span><span><strong>{heldCandidatesCount}</strong><small>Held for classification</small></span></div>
           )}
           <div><span className="mvp-stat-icon mvp-stat-icon-warn"><Check size={15} /></span><span><strong>{checkedCount}<i> / {reviewableRequirements.length}</i></strong><small>Checked by you</small></span></div>
           <div><span className="mvp-stat-icon"><FileText size={15} /></span><span><strong>{analysis.pageCount}</strong><small>Tender pages</small></span></div>
         </div>
       </section>
+      {hasUnresolvedIssues && (
+        <section className="mvp-unresolved-banner" role="alert" aria-label="Unresolved coverage and incomplete audits">
+          <div className="mvp-unresolved-banner-header">
+            <span className="mvp-banner-icon"><AlertTriangle size={20} /></span>
+            <div>
+              <strong>Incomplete AI Draft — Unresolved Coverage & Audits Require Review</strong>
+              <p>This draft is not guaranteed complete. The parser/router reported unresolved pages, incomplete audits, or unclassified candidate obligations that require human inspection.</p>
+            </div>
+          </div>
+          <div className="mvp-unresolved-banner-pills">
+            {heldCandidatesCount > 0 && (
+              <span className="mvp-banner-pill is-warning">
+                <strong>{heldCandidatesCount}</strong> held candidate{heldCandidatesCount === 1 ? "" : "s"} await classification
+              </span>
+            )}
+            {unresolvedAuditCount > 0 && (
+              <span className="mvp-banner-pill is-warning">
+                <strong>{unresolvedAuditCount}</strong> page audit{unresolvedAuditCount === 1 ? "" : "s"} incomplete
+              </span>
+            )}
+            {possibleGapsCount > 0 && (
+              <span className="mvp-banner-pill is-warning">
+                <strong>{possibleGapsCount}</strong> page{possibleGapsCount === 1 ? "" : "s"} with possible omissions
+              </span>
+            )}
+            {uncertainRoutingCount > 0 && (
+              <span className="mvp-banner-pill">
+                <strong>{uncertainRoutingCount}</strong> router-uncertain page{uncertainRoutingCount === 1 ? "" : "s"}
+              </span>
+            )}
+            {unmappedTableRowsCount > 0 && (
+              <span className="mvp-banner-pill">
+                <strong>{unmappedTableRowsCount}</strong> unmapped table row{unmappedTableRowsCount === 1 ? "" : "s"}
+              </span>
+            )}
+            {clippedRoutingCount > 0 && (
+              <span className="mvp-banner-pill">
+                <strong>{clippedRoutingCount}</strong> clipped router page{clippedRoutingCount === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {heldCandidatesCount > 0 && (
+            <div className="mvp-banner-held-candidates">
+              <div className="mvp-banner-held-heading">
+                <span>Grounded candidates held for classification review (not in compliance sheet):</span>
+              </div>
+              <div className="mvp-banner-held-list">
+                {analysis.classificationReviewCandidates?.map((candidate, idx) => (
+                  <div key={`${candidate.page}-${candidate.candidateId ?? idx}`} className="mvp-banner-held-item">
+                    <div className="mvp-banner-held-meta">
+                      <span>Page {candidate.page} · {candidate.reason.replaceAll("_", " ")}</span>
+                      <div className="mvp-banner-held-actions">
+                        <button type="button" className="mvp-candidate-inspect-btn" onClick={() => { setCoverageFocus(null); setPage(candidate.page); setSourceOpen(true); }}>Inspect p. {candidate.page}</button>
+                        <button type="button" className="mvp-candidate-promote-btn" onClick={() => handlePromoteCandidate(candidate, idx)}>Promote to sheet</button>
+                      </div>
+                    </div>
+                    <p className="mvp-banner-held-quote">“{candidate.quote}”</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
       {responseSheet && <section className="mvp-sheet-panel" aria-label="Editable response sheet">
         <div className="mvp-sheet-heading">
           <div><span className="mvp-panel-kicker">EXPORT PREVIEW</span><h2>Response sheet <span>{responseSheet.rows.length} rows</span></h2><p>Edit the sheet before downloading. Click a citation to inspect the original page and highlighted source. Sheet edits apply to all downloads.</p></div>
-          <div className="mvp-sheet-heading-actions">{sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}<button type="button" className="mvp-text-button mvp-sheet-reset" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); setSourceOpen(false); }}>New tender</button></div>
+          <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button mvp-add-row-action" onClick={() => { setFormError(null); setNewReqPage(page || 1); setAddRequirementOpen(true); }}><Plus size={14} /> Add requirement</button>{sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}<button type="button" className="mvp-text-button mvp-sheet-reset" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); setSourceOpen(false); }}>New tender</button></div>
         </div>
         <div className="mvp-sheet-scroll">
           {buildResponseSections(responseSheet, true).map((section, sectionIndex, sections) => <section className="mvp-response-section" key={section.id}>
@@ -938,7 +1188,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                       ? <div className="mvp-sheet-citations">{(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId, citationIndex) => {
                           const item = analysis.requirements.find(requirement => requirement.id === sourceId);
                           const isApprox = Boolean(item && (item.precision === "page-only" || item.sourceReference?.locationPrecision === "approximate" || (!item.bbox && !item.sourceReference?.startOffset)));
-                          return item ? <button type="button" className={`mvp-sheet-source-link ${item.reviewed ? "is-checked" : ""} ${item.needsHumanReview || item.ocrWarning || isApprox || item.unverifiedVisualCompletion ? "is-ocr-warning" : ""}`} key={sourceId} aria-label={`View source for response row ${rowIndex + 1}, page ${item.page}, citation ${citationIndex + 1}`} title={item.unverifiedVisualCompletion ? "Unverified model visual-completion suggestion is not included in the response row" : item.needsHumanReview ? "Tier 3: Unverified quote — marked for human review" : item.ocrWarning ? "Tier 2: OCR source — verify transcription" : item.precision === "page-only" ? "Text verified on page; exact highlight unavailable" : item.sourceReference?.locationPrecision === "approximate" ? "Approximate citation: exact source location unavailable; verify on page" : item.reviewed ? "Source checked" : "Tier 1: Verbatim verified source"} onClick={() => openRequirement(item)}><FileText size={12} />p. {item.page}{row.sourceRequirementIds.length > 1 && <small>· {citationIndex + 1}</small>}{item.reviewed && <Check size={12} />}{item.unverifiedVisualCompletion ? <span>CHECK IMAGE</span> : item.needsHumanReview ? <span>REVIEW</span> : item.ocrWarning ? <span>OCR</span> : item.precision === "page-only" ? <span>PAGE</span> : item.sourceReference?.locationPrecision === "approximate" ? <span>APPROX</span> : null}</button> : null;
+                          return item ? <button type="button" className={`mvp-sheet-source-link ${item.reviewed ? "is-checked" : ""} ${item.isOperatorAdded ? "is-operator-added" : item.isPromoted ? "is-promoted" : item.needsHumanReview || item.ocrWarning || isApprox || item.unverifiedVisualCompletion ? "is-ocr-warning" : ""}`} key={sourceId} aria-label={`View source for response row ${rowIndex + 1}, page ${item.page}, citation ${citationIndex + 1}`} title={item.isOperatorAdded ? "Operator-added requirement: verify on tender page" : item.isPromoted ? "Promoted from classification review: verify on page" : item.unverifiedVisualCompletion ? "Unverified model visual-completion suggestion is not included in the response row" : item.needsHumanReview ? "Tier 3: Unverified quote — marked for human review" : item.ocrWarning ? "Tier 2: OCR source — verify transcription" : item.precision === "page-only" ? "Text verified on page; exact highlight unavailable" : item.sourceReference?.locationPrecision === "approximate" ? "Approximate citation: exact source location unavailable; verify on page" : item.reviewed ? "Source checked" : "Tier 1: Verbatim verified source"} onClick={() => openRequirement(item)}><FileText size={12} />p. {item.page}{row.sourceRequirementIds.length > 1 && <small>· {citationIndex + 1}</small>}{item.reviewed && <Check size={12} />}{item.isOperatorAdded ? <span>OPERATOR</span> : item.isPromoted ? <span>PROMOTED</span> : item.unverifiedVisualCompletion ? <span>CHECK IMAGE</span> : item.needsHumanReview ? <span>REVIEW</span> : item.ocrWarning ? <span>OCR</span> : item.precision === "page-only" ? <span>PAGE</span> : item.sourceReference?.locationPrecision === "approximate" ? <span>APPROX</span> : null}</button> : null;
                         })}</div>
                       : <textarea
                         aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
@@ -980,7 +1230,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               {analysis.classificationReviewCandidates?.map((candidate, index) => <div className="mvp-coverage-row-finding" key={`${candidate.page}-${candidate.candidateId ?? index}`}>
                 <span className="is-warning">Original classification: {candidate.originalClassification} · effective classification: {candidate.effectiveClassification} · {candidate.reason.replaceAll("_", " ")}.</span>
                 <p>{candidate.quote}</p>
-                <button type="button" onClick={() => { setCoverageFocus(null); setPage(candidate.page); setSourceOpen(true); }}>Inspect PDF page {candidate.page}</button>
+                <div className="mvp-banner-held-actions">
+                  <button type="button" onClick={() => { setCoverageFocus(null); setPage(candidate.page); setSourceOpen(true); }}>Inspect PDF page {candidate.page}</button>
+                  <button type="button" className="mvp-candidate-promote-btn" onClick={() => handlePromoteCandidate(candidate, index)}>Promote to sheet</button>
+                </div>
               </div>)}
             </div>}
             <dl className="mvp-coverage-summary">
@@ -1060,6 +1313,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               highlightLabel={
                 coverageFocus?.page === page
                   ? "Detected source row not matched to an extraction candidate; inspect its meaning"
+                  : active?.isOperatorAdded
+                  ? "Operator-added requirement; verify against source page"
+                  : active?.isPromoted
+                  ? "Promoted classification candidate; verify on page"
                   : active?.ocrWarning
                   ? "Approximate table-row box for visually transcribed text; verify the full row"
                   : active?.sourceReference?.locationPrecision === "approximate" || active?.precision === "page-only"
@@ -1071,14 +1328,85 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           {sourceOpen && currentPageImageRegions.length > 0 && <p className="mvp-image-region-note">Dashed outlines mark parser-detected raster image bounds. Bounds are approximate and do not identify whether an image contains technical text.</p>}
           {sourceOpen && currentPageCoverage?.hasRasterImageContent && currentPageImageRegions.length === 0 && <p className="mvp-image-region-note">Raster image content was detected, but its bounds were not resolved. Inspect this page visually.</p>}
           <div className="mvp-citation-detail">
-            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.needsHumanReview || active?.ocrWarning || active?.precision === "page-only" || active?.sourceReference?.locationPrecision === "approximate" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : active?.sourceReference?.locationPrecision === "approximate" ? "APPROXIMATE CITATION · VERIFY ON PAGE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}{displayedCitationEvidence?.sourceElementIds.length ? <span className="mvp-source-element-ids">({countLabel(displayedCitationEvidence.sourceElementIds.length, "element")}: {displayedCitationEvidence.sourceElementIds.join(", ")})</span> : displayedCitationEvidence?.approximate ? <span className="mvp-source-element-ids">(Approximate citation)</span> : null}</div>
+            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.isOperatorAdded ? "is-operator-added" : active?.isPromoted ? "is-promoted" : active?.needsHumanReview || active?.ocrWarning || active?.precision === "page-only" || active?.sourceReference?.locationPrecision === "approximate" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.isOperatorAdded ? "OPERATOR-ADDED REQUIREMENT · REQUIRES HUMAN CONFIRMATION" : active?.isPromoted ? "PROMOTED FROM CLASSIFICATION REVIEW · VERIFY ON PAGE" : active?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : active?.sourceReference?.locationPrecision === "approximate" ? "APPROXIMATE CITATION · VERIFY ON PAGE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}{displayedCitationEvidence?.sourceElementIds.length ? <span className="mvp-source-element-ids">({countLabel(displayedCitationEvidence.sourceElementIds.length, "element")}: {displayedCitationEvidence.sourceElementIds.join(", ")})</span> : displayedCitationEvidence?.approximate ? <span className="mvp-source-element-ids">(Approximate citation)</span> : null}</div>
             <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
             {coverageFocus?.page !== page && active?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{active.selectableTextQuote}</p></div>}
             {coverageFocus?.page !== page && active?.unverifiedVisualCompletion && <div className="mvp-selectable-excerpt"><span>UNVERIFIED VISUAL COMPLETION · NOT EXPORTED</span><p>{active.unverifiedVisualCompletion}</p><p>Model-proposed wording; compare it with the page image before using it.</p></div>}
-            <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.needsHumanReview ? "This quote could not be verified automatically; inspect and verify manually against the page." : page === active?.page && (active?.precision === "page-only" || active?.sourceReference?.locationPrecision === "approximate") ? "The citation has an approximate or unlinked location. Inspect the original page and verify the wording manually." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={Boolean(coverageFocus?.page === page) || !active || page !== active.page} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
+            <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : active?.isOperatorAdded ? "You added this requirement manually. Confirm the wording against the cited source page." : active?.isPromoted ? "This requirement was promoted from classification review. Confirm against the cited page." : active?.reviewed ? "You checked this citation against the page." : page === active?.page && active?.needsHumanReview ? "This quote could not be verified automatically; inspect and verify manually against the page." : page === active?.page && (active?.precision === "page-only" || active?.sourceReference?.locationPrecision === "approximate") ? "The citation has an approximate or unlinked location. Inspect the original page and verify the wording manually." : page === active?.page && active?.bbox ? "Confirm the wording and highlight against the original." : "Open the cited page to check the quote and highlight."}</span><button disabled={Boolean(coverageFocus?.page === page) || !active || page !== active.page} className={active?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : active?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
           </div>
         </section>
       </dialog>
+      {addRequirementOpen && (
+        <dialog className="mvp-modal-dialog" open onClose={() => setAddRequirementOpen(false)}>
+          <div className="mvp-modal-backdrop" onClick={() => setAddRequirementOpen(false)} />
+          <div className="mvp-modal-content" role="dialog" aria-labelledby="add-req-title">
+            <div className="mvp-modal-header">
+              <div>
+                <span className="mvp-panel-kicker">HUMAN OPERATOR RECOVERY</span>
+                <h2 id="add-req-title">Add missing requirement</h2>
+              </div>
+              <button type="button" className="mvp-icon-button" aria-label="Close dialog" onClick={() => setAddRequirementOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleAddRequirement} className="mvp-modal-form">
+              <p className="mvp-modal-desc">
+                Manually add a requirement missed by automated extraction. It will be added to the response sheet with source page attribution and flagged for human review.
+              </p>
+              {formError && <p className="mvp-error" role="alert">{formError}</p>}
+              <div className="mvp-form-group-row">
+                <div className="mvp-form-group">
+                  <label htmlFor="req-page">Source Page <span className="is-required">*</span></label>
+                  <input
+                    id="req-page"
+                    type="number"
+                    min={1}
+                    max={analysis.pageCount}
+                    value={newReqPage}
+                    onChange={(e) => setNewReqPage(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="mvp-form-group">
+                  <label htmlFor="req-category">Category</label>
+                  <input
+                    id="req-category"
+                    type="text"
+                    value={newReqCategory}
+                    onChange={(e) => setNewReqCategory(e.target.value)}
+                    placeholder="e.g. Technical"
+                  />
+                </div>
+              </div>
+              <div className="mvp-form-group">
+                <label htmlFor="req-heading">Section / Heading <small>(optional)</small></label>
+                <input
+                  id="req-heading"
+                  type="text"
+                  value={newReqHeading}
+                  onChange={(e) => setNewReqHeading(e.target.value)}
+                  placeholder="e.g. Temperature Controller or 4.2 Technical Parameters"
+                />
+              </div>
+              <div className="mvp-form-group">
+                <label htmlFor="req-text">Technical Requirement Wording <span className="is-required">*</span></label>
+                <textarea
+                  id="req-text"
+                  rows={4}
+                  value={newReqText}
+                  onChange={(e) => setNewReqText(e.target.value)}
+                  placeholder="Enter the exact requirement wording from the source page..."
+                  required
+                />
+              </div>
+              <div className="mvp-modal-actions">
+                <button type="button" className="mvp-text-button" onClick={() => setAddRequirementOpen(false)}>Cancel</button>
+                <button type="submit" className="mvp-primary">Add to response sheet</button>
+              </div>
+            </form>
+          </div>
+        </dialog>
+      )}
     </main>
   );
 }

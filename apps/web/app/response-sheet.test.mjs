@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints } from "./response-sheet.ts";
+import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet } from "./response-sheet.ts";
 
 const structured = {
   extractionMode: "structured-table",
@@ -454,4 +454,66 @@ test("removing a row retains all other rows and reset restores pristine extracte
   const restored = buildResponseSheet(initial);
   assert.equal(restored.rows.length, 2);
   assert.equal(restored.rows[0].values[1], "Cryostat system");
+});
+
+test("addManualRequirementToSheet inserts missing requirement at correct page-sorted order with user wording and page citation", () => {
+  const initial = {
+    requirements: [
+      { id: "req-1", text: "Cryostat chamber", quote: "Cryostat chamber", page: 10 },
+      { id: "req-2", text: "Vacuum flange ISO-KF", quote: "Vacuum flange ISO-KF", page: 25 },
+    ],
+  };
+  const sheet = buildResponseSheet(initial);
+  assert.equal(sheet.rows.length, 2);
+
+  // Add missing p.18 Digital readout requirement
+  const updated = addManualRequirementToSheet(sheet, {
+    id: "req-manual-18",
+    page: 18,
+    heading: "Temperature Controller",
+    text: "Digital readout: Variable temperature controller must include a digital readout with 0.1 K resolution",
+    category: "Technical",
+  });
+
+  assert.equal(updated.rows.length, 3);
+  // Verify inserted in page order between p.10 and p.25
+  assert.equal(updated.rows[0].sourceRequirementId, "req-1");
+  assert.equal(updated.rows[1].sourceRequirementId, "req-manual-18");
+  assert.equal(updated.rows[2].sourceRequirementId, "req-2");
+
+  const reqCol = updated.columns.findIndex((c) => c.role === "requirement");
+  const pageCol = updated.columns.findIndex((c) => c.role === "page");
+  const headingCol = updated.columns.findIndex((c) => c.role === "heading");
+  const responseCol = updated.columns.findIndex((c) => c.role === "response");
+
+  assert.equal(updated.rows[1].values[reqCol], "Digital readout: Variable temperature controller must include a digital readout with 0.1 K resolution");
+  assert.equal(updated.rows[1].values[pageCol], "Page 18");
+  assert.equal(updated.rows[1].values[headingCol], "Temperature Controller");
+  assert.equal(updated.rows[1].values[responseCol], "");
+});
+
+test("promoteCandidateToSheet adds classification-review candidate directly to response sheet with blank responses", () => {
+  const initial = {
+    requirements: [
+      { id: "req-1", text: "Cryostat chamber", quote: "Cryostat chamber", page: 10 },
+    ],
+  };
+  const sheet = buildResponseSheet(initial);
+  const { sheet: updated, requirementId } = promoteCandidateToSheet(sheet, {
+    candidateId: "cand-amc-1",
+    page: 12,
+    quote: "Comprehensive AMC for 3 years post standard warranty period",
+    originalClassification: "ambiguous",
+    reason: "service_contact_form_requires_scope_review",
+  });
+
+  assert.equal(updated.rows.length, 2);
+  assert.equal(requirementId, "cand-amc-1");
+  const promotedRow = updated.rows.find((r) => r.sourceRequirementId === "cand-amc-1");
+  assert.ok(promotedRow);
+
+  const reqCol = updated.columns.findIndex((c) => c.role === "requirement");
+  const pageCol = updated.columns.findIndex((c) => c.role === "page");
+  assert.equal(promotedRow.values[reqCol], "Comprehensive AMC for 3 years post standard warranty period");
+  assert.equal(promotedRow.values[pageCol], "Page 12");
 });

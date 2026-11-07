@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createResponsePdf } from './pdf-export.ts';
+import { addManualRequirementToSheet, promoteCandidateToSheet } from './response-sheet.ts';
 import { DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
 Object.assign(globalThis,{DOMMatrix,ImageData,Path2D});
 const font=readFileSync(new URL('../public/fonts/DejaVuSans.ttf',import.meta.url)).toString('base64');
@@ -56,4 +57,34 @@ test('prints native annexure and equipment headings above the tables without gen
  try{const document=await task.promise;let text='';for(let i=1;i<=document.numPages;i++){text+=(await(await document.getPage(i)).getTextContent()).items.filter(item=>'str'in item).map(item=>item.str).join(' ')+' ';}
  assert.ok(text.indexOf('Annexure I')<text.indexOf('Specification'));assert.ok(text.includes('Technical Specifications for Optical Tables'));assert.ok(text.includes('A. Optical Table'));assert.ok(text.includes('B. Isolators'));assert.ok(text.includes('Annexure II'));assert.equal(text.includes('UNWANTED'),false);assert.equal(text.includes('Equipment / group'),false);assert.equal(text.includes('Annexure / section'),false);
  }finally{await task.destroy();}
+});
+
+test('operator additions and promoted candidates are retained in PDF export', async () => {
+  const updatedSheet = addManualRequirementToSheet(sheet, {
+    id: 'req-manual-18',
+    page: 18,
+    text: 'Digital readout with 0.1 K resolution',
+  });
+  const { sheet: finalSheet } = promoteCandidateToSheet(updatedSheet, {
+    candidateId: 'cand-promoted',
+    page: 22,
+    quote: 'Comprehensive post-warranty maintenance coverage',
+  });
+
+  const pdf = createResponsePdf(finalSheet, 'Technical requirements', 'synthetic.pdf', font);
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = getDocument({ data: new Uint8Array(pdf.output('arraybuffer')), isEvalSupported: false });
+  try {
+    const doc = await task.promise;
+    let fullText = '';
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const text = (await page.getTextContent({ disableNormalization: true })).items.filter((item) => 'str' in item).map((item) => item.str).join(' ');
+      fullText += text + ' ';
+    }
+    assert.ok(fullText.includes('Digital readout with 0.1 K resolution'));
+    assert.ok(fullText.includes('Comprehensive post-warranty maintenance coverage'));
+  } finally {
+    await task.destroy();
+  }
 });

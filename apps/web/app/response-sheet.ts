@@ -447,3 +447,137 @@ export function responseHeadingMergeKeys(sheet: ResponseSheet): string[] {
     return value && row.mergeScope ? `${row.mergeScope}\u0000${value}` : value;
   });
 }
+
+export function addManualRequirementToSheet(
+  sheet: ResponseSheet,
+  requirement: {
+    id: string;
+    page: number;
+    text: string;
+    heading?: string;
+    category?: string;
+  },
+): ResponseSheet {
+  const isSectioned = sheet.layout === "sectioned";
+  const headingVal = requirement.heading?.trim() || requirement.category?.trim() || (isSectioned ? "Manual Additions" : "General");
+  const values = sheet.columns.map((column) => {
+    if (column.role === "page") {
+      return `Page ${requirement.page}`;
+    }
+    if (column.role === "requirement") {
+      return requirement.text.trim();
+    }
+    if (column.role === "response") {
+      return "";
+    }
+    if (column.role === "heading") {
+      return headingVal;
+    }
+    if (column.role === "source") {
+      if (/annex/i.test(column.header) || /section/i.test(column.header)) {
+        return requirement.heading?.trim() || "Technical Specifications";
+      }
+      return "";
+    }
+    return "";
+  });
+
+  const newRow: ResponseSheetRow = {
+    id: `${requirement.id}:0`,
+    sourceRequirementId: requirement.id,
+    sourceRequirementIds: [requirement.id],
+    mergeScope: requirement.heading?.trim() || (isSectioned ? "Technical Specifications" : undefined),
+    sectionHeadings: requirement.heading?.trim() ? [requirement.heading.trim()] : undefined,
+    values,
+  };
+
+  const pageColIndex = sheet.columns.findIndex((col) => col.role === "page");
+  let insertIndex = -1;
+  if (pageColIndex >= 0) {
+    for (let i = 0; i < sheet.rows.length; i++) {
+      const match = sheet.rows[i].values[pageColIndex]?.match(/\d+/);
+      if (match && Number(match[0]) > requirement.page) {
+        insertIndex = i;
+        break;
+      }
+    }
+  }
+
+  const updatedRows = insertIndex >= 0
+    ? [...sheet.rows.slice(0, insertIndex), newRow, ...sheet.rows.slice(insertIndex)]
+    : [...sheet.rows, newRow];
+
+  return {
+    ...sheet,
+    rows: updatedRows,
+  };
+}
+
+export function promoteCandidateToSheet(
+  sheet: ResponseSheet,
+  candidate: {
+    candidateId?: string;
+    page: number;
+    quote: string;
+    originalClassification?: string;
+    reason?: string;
+    heading?: string;
+  },
+): { sheet: ResponseSheet; requirementId: string } {
+  const requirementId = candidate.candidateId || `promoted-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const isSectioned = sheet.layout === "sectioned";
+  const headingVal = candidate.heading?.trim() || "Promoted Specification";
+  const values = sheet.columns.map((column) => {
+    if (column.role === "page") {
+      return `Page ${candidate.page}`;
+    }
+    if (column.role === "requirement") {
+      return candidate.quote.trim();
+    }
+    if (column.role === "response") {
+      return "";
+    }
+    if (column.role === "heading") {
+      return headingVal;
+    }
+    if (column.role === "source") {
+      if (/annex/i.test(column.header) || /section/i.test(column.header)) {
+        return "Promoted Specifications";
+      }
+      return "";
+    }
+    return "";
+  });
+
+  const newRow: ResponseSheetRow = {
+    id: `${requirementId}:0`,
+    sourceRequirementId: requirementId,
+    sourceRequirementIds: [requirementId],
+    mergeScope: isSectioned ? "Promoted Specifications" : undefined,
+    values,
+  };
+
+  const pageColIndex = sheet.columns.findIndex((col) => col.role === "page");
+  let insertIndex = -1;
+  if (pageColIndex >= 0) {
+    for (let i = 0; i < sheet.rows.length; i++) {
+      const match = sheet.rows[i].values[pageColIndex]?.match(/\d+/);
+      if (match && Number(match[0]) > candidate.page) {
+        insertIndex = i;
+        break;
+      }
+    }
+  }
+
+  const updatedRows = insertIndex >= 0
+    ? [...sheet.rows.slice(0, insertIndex), newRow, ...sheet.rows.slice(insertIndex)]
+    : [...sheet.rows, newRow];
+
+  return {
+    sheet: {
+      ...sheet,
+      rows: updatedRows,
+    },
+    requirementId,
+  };
+}
