@@ -352,3 +352,64 @@ test("literal text with no bounding box retains offsets but never claims an exac
   assert.equal(reference.startOffset, 0);
   assert.equal(reference.endOffset, "The instrument shall withstand 5 bar.".length);
 });
+
+
+test("repeated native passages preserve literal page evidence but never fabricate an exact occurrence", () => {
+  const document = createSourceDocumentModel(new Uint8Array([42]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 8,
+    width: 300,
+    height: 400,
+    sourceText: "Speed 300 ± 10 mm/min\nOther clause\nSpeed 300 ± 10 mm/min",
+    positionedItems: [
+      { start: 0, end: 21, text: "Speed 300 ± 10 mm/min", box: { x: 10, y: 30, width: 140, height: 10 } },
+      { start: 35, end: 56, text: "Speed 300 ± 10 mm/min", box: { x: 10, y: 90, width: 140, height: 10 } },
+    ],
+  });
+  const reference = buildRequirementSourceReference({
+    document, page, quote: "Speed 300 ± 10 mm/min",
+    bbox: { x: 10, y: 30, width: 140, height: 10 },
+  });
+  assert.equal(reference.sourceText, "Speed 300 ± 10 mm/min");
+  assert.equal(reference.physicalPdfPageNumber, 8);
+  assert.equal(reference.locationPrecision, "approximate", "a supplied box does not disambiguate repeated native text");
+  assert.deepEqual(reference.sourceElementIds, []);
+  assert.equal("startOffset" in reference, false);
+  assert.equal("endOffset" in reference, false);
+  assert.equal("sourceCell" in reference, false);
+});
+
+test("a different engineering sign or unit cannot be used to fill missing source evidence", () => {
+  const document = createSourceDocumentModel(new Uint8Array([43]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 2,
+    width: 300,
+    height: 400,
+    sourceText: "Power 5 mW\nAccuracy +2 mm\nPower 5 mW",
+    positionedItems: [],
+  });
+  for (const quote of ["Power 5 MW", "Accuracy ±2 mm", "Power 50 mW"]) {
+    const reference = buildRequirementSourceReference({ document, page, quote, bbox: null });
+    assert.equal(reference.sourceText, "", quote);
+    assert.deepEqual(reference.sourceElementIds, [], quote);
+    assert.equal(reference.locationPrecision, "approximate", quote);
+  }
+});
+
+test("visual transcriptions never borrow coincidentally similar native page text as proof", () => {
+  const document = createSourceDocumentModel(new Uint8Array([44]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId, physicalPdfPageNumber: 3, width: 300, height: 400,
+    sourceText: "Capacity 500 kN\nCapacity 500 kN", positionedItems: [],
+  });
+  const reference = buildRequirementSourceReference({
+    document, page, quote: "Capacity 500 kN", bbox: { x: 20, y: 20, width: 90, height: 10 },
+    visualTranscription: "Capacity 500 kN", transcriptionMethod: "visual-transcription",
+  });
+  assert.equal(reference.sourceText, "");
+  assert.equal(reference.transcribedText, "Capacity 500 kN");
+  assert.deepEqual(reference.sourceElementIds, []);
+  assert.equal(reference.locationPrecision, "approximate");
+});
