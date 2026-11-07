@@ -26,12 +26,29 @@ let initialExtractionReturnedRecovery = false;
 let omissionAuditReturnedRecovery = false;
 let corruptedNumericClaimProposed = false;
 const visualBatchObservations = [];
+let activeVectorLabelRequests = 0;
+let maximumVectorLabelConcurrency = 0;
+let vectorLabelRequestCount = 0;
+const vectorAuditPageOrder = [];
 const provider = http.createServer(async (request, response) => {
+  let trackedVectorLabelRequest = false;
   try {
     let raw = '';
     for await (const chunk of request) raw += chunk;
     const body = JSON.parse(raw);
     const schema = body.response_format?.json_schema?.name;
+    if (scenario === 'vector-page-concurrency' && schema === 'visual_table_row_labels') {
+      trackedVectorLabelRequest = true;
+      activeVectorLabelRequests += 1;
+      vectorLabelRequestCount += 1;
+      maximumVectorLabelConcurrency = Math.max(maximumVectorLabelConcurrency, activeVectorLabelRequests);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (scenario === 'vector-page-concurrency' && schema === 'source_row_semantic_coverage') {
+      const auditInput = body.messages.at(-1)?.content ?? '';
+      const pageMatch = auditInput.match(/Maximum load on unit (\d+)/);
+      if (pageMatch) vectorAuditPageOrder.push(Number(pageMatch[1]));
+    }
     const contents = body.messages.flatMap(message => typeof message.content === 'string' ? [{type:'text',text:message.content}] : message.content);
     const text = contents.filter(item=>item.type==='text').map(item=>item.text).join('\n');
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
@@ -43,8 +60,8 @@ const provider = http.createServer(async (request, response) => {
       result = {sections:['page-disposition-only','possibly-relevant-page','unrouted-page'].includes(scenario)?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||scenario==='page-batched-fallback'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:scenario==='possibly-relevant-page'?pages:[],page_dispositions:scenario==='unrouted-page'?[]:pages.map(page=>({page,classification:scenario==='possibly-relevant-page'?'possibly_relevant':'relevant',reason:scenario==='possibly-relevant-page'?'The page excerpt is ambiguous and may contain technical obligations.':'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
-      const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
-        ...(page===2?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
+      const columns = ['single-content','mixed-native-heading','visual-completion','vector-page-concurrency'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
+        ...(page===2&&scenario!=='vector-page-concurrency'?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])];
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>{
         const row_type=match[2].includes('Description')||match[2].includes('S. No.')?'header':match[2].includes('A. Optical table')?'section':match[2].includes('Unclear source row')?'ambiguous':'requirement';
         const classification_reason={header:'header_or_page_furniture',section:'structural_heading',ambiguous:'ambiguous_source_structure',requirement:'technical_obligation'}[row_type];
@@ -89,6 +106,7 @@ const provider = http.createServer(async (request, response) => {
     response.writeHead(200, {'content-type':'application/json'});
     response.end(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}));
   } catch(error) {response.writeHead(500);response.end(JSON.stringify({error:String(error)}));}
+  finally { if (trackedVectorLabelRequest) activeVectorLabelRequests -= 1; }
 });
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
@@ -240,6 +258,23 @@ try {
   assert.equal(singleSections[0].columns[0].header,'Technical Parameters NIQ');
   assert.equal(singleSections[0].columnIndices[0],3,'No invented empty parameter column');
   assert.equal(singleSections[0].rows.length,3);
+  scenario='vector-page-concurrency';
+  const vectorPagesPdf=new jsPDF({unit:'pt'});vectorPagesPdf.setFontSize(9);
+  for(let page=1;page<=3;page++){
+    if(page>1)vectorPagesPdf.addPage();
+    vectorPagesPdf.text('TECHNICAL SPECIFICATION',40,45);
+    [['Technical Parameters NIQ','Remark'],[`Maximum load on unit ${page} shall be 10 kN.`,''],['Supply voltage shall be 230 V AC.',''],['Operating temperature shall be -10 to 50 °C.','']].forEach((cells,row)=>{
+      let x=40;const widths=[370,130];
+      cells.forEach((value,column)=>{vectorPagesPdf.rect(x,70+row*38,widths[column],38);if(value)vectorPagesPdf.text(value,x+3,88+row*38);x+=widths[column];});
+    });
+  }
+  const vectorPagesResult=await analyze(vectorPagesPdf);
+  assert.equal(vectorPagesResult.ok,true,`${vectorPagesResult.error} (route calls ${routeCalls}; vector labels ${vectorLabelRequestCount}; peak concurrency ${maximumVectorLabelConcurrency})`);
+  assert.equal(vectorLabelRequestCount,3,'Each detected vector-table page receives a page-local classification request');
+  assert.equal(maximumVectorLabelConcurrency,3,'Independent vector pages run concurrently up to the model-client limit');
+  assert.deepEqual(vectorAuditPageOrder,[1,2,3],'The analysis-wide row-audit budget is consumed in source-page order');
+  assert.deepEqual(vectorPagesResult.analysis.requirements.map(row=>row.page),[1,1,1,2,2,2,3,3,3],'Returned requirements preserve source page order');
+  assert.ok(vectorPagesResult.analysis.requirements.every(row=>row.sourceReference.sourceCell),'Parallel inspection preserves source-row citations');
   scenario='mixed-native-heading';
   const mixedTitle='16. Source shutter assembly',mixedBody='The system shall withstand 300 N.';
   const mixedPdf=new jsPDF({unit:'pt'});mixedPdf.setFontSize(9);mixedPdf.text('TECHNICAL SPECIFICATION',40,45);
@@ -346,7 +381,7 @@ try {
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
   assert.ok(mixed.analysis.requirements.some(row=>row.quote==='Calibration report shall be supplied.' && row.reviewed===false && row.sourceReference.sourceText==='Calibration report shall be supplied.'),'an exact source excerpt from a possible-gap audit re-enters as an unchecked, source-verified recovery candidate');
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','vector pages with verified repeated headers run concurrently and keep audit budget order','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
