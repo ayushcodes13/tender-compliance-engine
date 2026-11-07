@@ -1500,6 +1500,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           const result = await inspectInSourceOrder(page, index, sourceColumns);
           inspectedPages.push(result);
           if (result?.columns.length) sourceColumns = result.columns;
+          onProgress?.({ stage: "extracting", message: "Reading table rows and auditing independent requirements", current: index + 1, total: vectorPages.length });
         }
       }
       const pageResults = [];
