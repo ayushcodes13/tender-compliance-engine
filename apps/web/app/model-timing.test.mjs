@@ -97,3 +97,27 @@ test('vector timing records only numeric page and request metadata', () => {
     inputCharacters: 12_345,
   });
 });
+
+test('vector request failure logs use a bounded enum and never an error message', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'request_failed',
+    requestKind: 'vector_table_row_classification',
+    pageNumber: 11,
+    batchPageCount: 1,
+    inputCharacters: 1_131,
+    requestHeadersWaitMs: 90_000,
+    failureKind: 'provider_connection',
+    error: 'sensitive provider response text',
+  }, (line) => lines.push(line), true);
+
+  assert.deepEqual(JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length)), {
+    phase: 'request_failed',
+    requestKind: 'vector_table_row_classification',
+    failureKind: 'provider_connection',
+    pageNumber: 11,
+    batchPageCount: 1,
+    inputCharacters: 1_131,
+    requestHeadersWaitMs: 90_000,
+  });
+});

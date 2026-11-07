@@ -37,6 +37,13 @@ import { validatePossibleSourceConflicts } from "./section-consistency";
 import { batchSourceRowsForAudit, isSourceRowAuditBatchWithinLimits, SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS, validateSourceRowAuditResult } from "./source-row-audit";
 import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page-audit";
 
+function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "request_aborted" | "other" {
+  if (error instanceof ModelProviderBusyError) return "provider_busy";
+  if (error instanceof ModelProviderConnectionError) return "provider_connection";
+  if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return "request_aborted";
+  return "other";
+}
+
 // PDF.js uses these browser canvas globals while rendering pages on the server.
 Object.assign(globalThis, { DOMMatrix, ImageData, Path2D });
 
@@ -1231,7 +1238,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             }
           }
         }
-      } catch {
+      } catch (error) {
+        emitModelTiming({ phase: "request_failed", requestKind: "vector_table_column_mapping", pageNumber: sourcePage.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), failureKind: modelTimingFailureKind(error, signal) });
         signal?.throwIfAborted();
         // A missing initial header map is reflected by the page layout state;
         // it is not an omission-audit failure.
@@ -1264,9 +1272,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         let invalidPageColumnMap = false;
         let modelInspectionComplete = false;
         let rowClassificationComplete = true;
+        const inputCharacters = sourceRows.reduce((total, row) => total + row.cells.reduce((rowTotal, cell) => rowTotal + cell.length, 0), 0);
+        const requestStartedAt = performance.now();
         try {
-          const inputCharacters = sourceRows.reduce((total, row) => total + row.cells.reduce((rowTotal, cell) => rowTotal + cell.length, 0), 0);
-          const requestStartedAt = performance.now();
           emitModelTiming({ phase: "request_started", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters });
           const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
@@ -1329,7 +1337,8 @@ Product names and model/capacity labels are headings, but serials, page furnitur
                 && sourceRows.every((_, index) => rowLabels.some((label) => label.row_index === index && label.classification_reason));
             } else coverageCheckIncomplete = true;
           }
-        } catch {
+        } catch (error) {
+          emitModelTiming({ phase: "request_failed", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), failureKind: modelTimingFailureKind(error, signal) });
           signal?.throwIfAborted();
           coverageCheckIncomplete = true;
         }
@@ -1462,10 +1471,10 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             continue;
           }
           sourceRowAuditBatchesUsed += 1;
+          const auditInput = JSON.stringify(batch.map((row) => ({ row_index: row.rowIndex, source_cells: row.sourceCells, extracted_requirements: row.extractedRequirements })));
+          const inputCharacters = auditInput.length;
+          const requestStartedAt = performance.now();
           try {
-            const auditInput = JSON.stringify(batch.map((row) => ({ row_index: row.rowIndex, source_cells: row.sourceCells, extracted_requirements: row.extractedRequirements })));
-            const inputCharacters = auditInput.length;
-            const requestStartedAt = performance.now();
             emitModelTiming({ phase: "request_started", requestKind: "vector_source_row_audit", batchIndex: auditBatchIndex + 1, totalBatches: rowAuditBatches.length, pageNumber: page.page, batchPageCount: 1, inputCharacters });
             const auditResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
               method: "POST",
@@ -1512,7 +1521,8 @@ Product names and model/capacity labels are headings, but serials, page furnitur
                 });
               }
             }
-          } catch {
+          } catch (error) {
+            emitModelTiming({ phase: "request_failed", requestKind: "vector_source_row_audit", batchIndex: auditBatchIndex + 1, totalBatches: rowAuditBatches.length, pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), failureKind: modelTimingFailureKind(error, signal) });
             signal?.throwIfAborted();
             coverageCheckIncomplete = true;
             for (const rowIndex of expectedRowIndices) rowAuditState.set(rowIndex, { status: "audit_incomplete" });
