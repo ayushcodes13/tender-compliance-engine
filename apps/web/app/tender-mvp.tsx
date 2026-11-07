@@ -976,7 +976,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
                   {Boolean(item.sourceTableCoverageRows?.length) && <div className="mvp-coverage-row-findings">
                     <strong>Detected source rows and their extraction coverage</strong>
-                    {item.sourceTableCoverageRows?.map((row) => {
+                    {item.sourceTableCoverageRows?.slice(0, 12).map((row) => {
                       const status = row.disposition === "header" ? "repeated header"
                         : row.disposition === "empty" ? "empty row"
                           : row.disposition === "unmapped" ? "no candidate generated"

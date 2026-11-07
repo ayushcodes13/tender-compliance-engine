@@ -95,12 +95,17 @@ let logs='';child.stdout.on('data',chunk=>{logs+=chunk;});child.stderr.on('data'
 try {
   const base=`http://127.0.0.1:${appPort}`;
   let ready=false;
+  let lastReadinessResponse='no response received';
   for(let attempt=0;attempt<100;attempt++) {
     if(child.exitCode!==null) throw new Error('Test app exited: '+logs.slice(-1500));
-    try {if((await fetch(base,{headers:{authorization:`Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`},signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
+    try {
+      const response=await fetch(base,{headers:{authorization:`Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`},signal:AbortSignal.timeout(1000)});
+      lastReadinessResponse=`HTTP ${response.status}`;
+      if(response.ok){ready=true;break;}
+    }catch(error){lastReadinessResponse=String(error);}
     await new Promise(resolve=>setTimeout(resolve,100));
   }
-  assert.ok(ready,'Test app ready');
+  assert.ok(ready,`Test app ready (${lastReadinessResponse}): ${logs.slice(-1500)}`);
   const unauthenticatedPage = await fetch(base);
   assert.equal(unauthenticatedPage.status, 401, 'The application UI rejects anonymous requests');
   const unauthenticated = await fetch(`${base}/api/analyze`, { method: 'POST', body: new FormData() });
@@ -292,6 +297,7 @@ try {
   const auditedSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.sourceClassification==='requirement');
   assert.equal(auditedSourceRow.semanticCoverageStatus,'no_gap_reported');
   assert.equal(auditedSourceRow.semanticCoverageNote,'');
+  assert.equal(mixed.analysis.coverage.pages[0].sourceTableRowsNotShown,7,'audit states are retained for all rows even when the UI preview is capped');
   assert.deepEqual(ambiguousSourceRow.matchedRequirementIds,[],'Ambiguous source content stays out of output requirements and remains reviewable');
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
