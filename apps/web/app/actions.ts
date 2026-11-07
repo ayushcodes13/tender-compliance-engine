@@ -37,6 +37,7 @@ import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRe
 import { validatePossibleSourceConflicts } from "./section-consistency";
 import { batchSourceRowsForAudit, isSourceRowAuditBatchWithinLimits, SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS, validateSourceRowAuditResult } from "./source-row-audit";
 import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page-audit";
+import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, type CandidateOrigin } from "./candidate-trace";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
@@ -270,6 +271,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
   let cleanupOcrRenderer: (() => Promise<void>) | undefined;
   let detachPdfAbort: (() => void) | undefined;
   let destroyPdf: (() => Promise<void>) | undefined;
+  let forensicTraceState: { ledger: CandidateTraceLedger; directory: string } | null = null;
   const report = (stageName: string, progress: ProcessingProgress) => {
     signal?.throwIfAborted();
     stage = stageName;
@@ -307,6 +309,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       return { ok: false as const, error: `This MVP accepts up to ${MAX_PAGES} pages per tender.` };
     }
     const sourceDocument = createSourceDocumentModel(bytes, pdf.numPages);
+    const forensicTraceConfig = resolveForensicTraceConfig();
+    const forensicTrace = forensicTraceConfig.enabled ? new CandidateTraceLedger(sourceDocument.fingerprint) : null;
+    if (forensicTrace && forensicTraceConfig.directory) forensicTraceState = { ledger: forensicTrace, directory: forensicTraceConfig.directory };
     const documentReference = {
       documentId: sourceDocument.documentId,
       documentVersionId: sourceDocument.documentVersionId,
@@ -1022,9 +1027,62 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       },
     };
 
-    type Candidate = { page?: number; quote?: string; visual_region_index?: number; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean };
+    type Candidate = { page?: number; quote?: string; visual_region_index?: number; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean; traceOrigin?: CandidateOrigin; traceSourceElementIds?: string[]; traceSourceRowId?: string; traceSourceCellId?: string; traceCandidateId?: string };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
-    let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: "extraction" | "coverage"; allowedPages?: number[]; trustedVectorRows?:boolean }> = [];
+    const registeredTraceCandidateIds = new Set<string>();
+    const registerTraceCandidate = (candidate: Candidate, origin: CandidateOrigin, candidateOrdinal?: number, trustedSourceMetadata = false): string | undefined => {
+      if (!forensicTrace) return undefined;
+      const pageNumber = Number.isInteger(candidate.page) ? Number(candidate.page) : null;
+      const page = pageNumber === null ? undefined : pages.find((item) => item.page === pageNumber);
+      const modelQuote = typeof candidate.quote === "string" ? candidate.quote : "";
+      let sourceQuote: string | null = null;
+      let sourceIds = trustedSourceMetadata ? [...(candidate.traceSourceElementIds ?? [])] : [];
+      let sourceRowId = trustedSourceMetadata ? candidate.traceSourceRowId : undefined;
+      let sourceCellId = trustedSourceMetadata ? candidate.traceSourceCellId : undefined;
+      if (trustedSourceMetadata && page && candidate.source_cells_exact === true && Number.isInteger(candidate.source_row_index)) {
+        const tableRow = page.sourceModel.tables[0]?.rows[candidate.source_row_index!];
+        const column = Number.isInteger(candidate.source_column_index) ? candidate.source_column_index! : candidate.specification_column_index;
+        const cell = Number.isInteger(column) ? tableRow?.cells[column!] : undefined;
+        sourceQuote = cell?.sourceText ?? (Array.isArray(candidate.source_cells) ? candidate.source_cells.filter(Boolean).join(" | ") : null);
+        sourceRowId ??= tableRow?.id;
+        sourceCellId ??= cell?.id;
+        if (tableRow) sourceIds.push(tableRow.id, ...tableRow.cells.map((item) => item.id));
+      }
+      if (page && sourceQuote === null && modelQuote) {
+        const nativeMatch = findUniqueTokenBoundedMatch(page.rawText, modelQuote);
+        if (nativeMatch) {
+          sourceQuote = nativeMatch.sourceText;
+          sourceIds.push(...page.sourceModel.textBlocks.filter((block) => block.startOffset < nativeMatch.endOffset && block.endOffset > nativeMatch.startOffset).map((block) => block.id));
+        } else {
+          const ocrMatch = findUniqueTokenBoundedMatch(page.ocrText, modelQuote);
+          if (ocrMatch) {
+            sourceQuote = ocrMatch.sourceText;
+            let offset = 0;
+            for (const region of page.sourceModel.ocrRegions) {
+              const end = offset + region.text.length;
+              if (offset < ocrMatch.endOffset && end > ocrMatch.startOffset) sourceIds.push(region.id);
+              offset = end + 1;
+            }
+          }
+        }
+      }
+      const candidateId = forensicTrace.register({
+        page: pageNumber,
+        origin,
+        modelQuote,
+        sourceQuote,
+        sourceQuoteStatus: sourceQuote === null ? "unavailable" : "matched",
+        sourceElementIds: sourceIds,
+        sourceRowIndex: candidate.source_row_index,
+        sourceColumnIndex: candidate.source_column_index,
+        candidateOrdinal,
+        sourceRowId,
+        sourceCellId,
+      });
+      registeredTraceCandidateIds.add(candidateId);
+      return candidateId;
+    };
+    let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: CandidateOrigin; allowedPages?: number[]; trustedVectorRows?:boolean }> = [];
     let sourceColumns: SourceColumn[] = [];
     let coverageCheckIncomplete = false;
     let normalizedTables = false;
@@ -1113,6 +1171,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
         });
         if (!Array.isArray(parsed.requirements)) return { ok: false as const, error: "The model response did not contain a requirements list." };
+        parsed.requirements = parsed.requirements.map((candidate, candidateOrdinal) => ({
+          ...candidate,
+          traceCandidateId: registerTraceCandidate(candidate, "initial_extraction", batchIndex * 100_000 + candidateOrdinal),
+        }));
         return { ok: true as const, parsed, allowedPages: batch.pageNumbers };
       }, (completed, total) => {
         report("completed extraction batch", {
@@ -1125,7 +1187,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       for (const outcome of extractionOutcomes) {
         if (!outcome.ok) return outcome;
         // The scheduler returns results in input order, so source page order stays deterministic.
-        parsedResponses.push({ parsed: outcome.parsed, origin: "extraction", allowedPages: outcome.allowedPages });
+        parsedResponses.push({ parsed: outcome.parsed, origin: "initial_extraction", allowedPages: outcome.allowedPages });
       }
       for (const pageNumber of generalPages.map((page) => page.page)) pageExtractionState.set(pageNumber, {
         status: "complete",
@@ -1459,6 +1521,10 @@ Product names and model/capacity labels are headings, but serials, page furnitur
               source_column_index: isSection ? undefined : quoteColumnIndex,
               specification_column_index: requirementColumnIndex,
               specification_blank: !isSection && sourceCell?.specificationBlank === true,
+              traceOrigin: "vector_table_extraction",
+              traceSourceElementIds: sourceRowsWithIds[index]?.sourceElementIds,
+              traceSourceRowId: sourceRowsWithIds[index]?.sourceRowId,
+              traceSourceCellId: page.sourceModel.tables[0]?.rows[index]?.cells[quoteColumnIndex]?.id,
               sourceRowHeight: exportAsSourceCell
                 ? row.rowHeight
                 : splitQuotes.length === 1
@@ -1471,6 +1537,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             };
           });
         });
+        for (const [candidateOrdinal, candidate] of requirements.entries()) {
+          candidate.traceCandidateId = registerTraceCandidate(candidate, "vector_table_extraction", candidateOrdinal, true);
+        }
         const candidateCountBySourceRow = new Map<number, number>();
         for (const candidate of requirements) {
           const rowIndex = candidate.source_row_index;
@@ -1575,12 +1644,18 @@ Product names and model/capacity labels are headings, but serials, page furnitur
                 const cellIndex = auditedRow?.sourceCells.findIndex((cell) => cell.includes(quote)) ?? -1;
                 if (cellIndex < 0) continue;
                 const sourceBox = locateQuote(quote, page.rawText, page.rawItemMap, page.positioned);
-                requirements.push({
+                const recoveredCandidate: Candidate = {
                   page: page.page, quote, display_lines: displayLinesForQuote(quote, page.rawText, page.rawItemMap, page.positioned) ?? [quote],
                   row_type: "requirement", category: "Other", continues_previous: false, sourceBox: sourceBox ?? undefined,
                   source_cells: auditedRow!.sourceCells, source_column_map: pageColumns, source_cells_exact: true,
                   source_row_index: row.rowIndex, source_column_index: cellIndex, specification_column_index: requirementColumnIndex,
-                });
+                  traceOrigin: "source_row_recovery",
+                  traceSourceElementIds: sourceRowsWithIds[row.rowIndex]?.sourceElementIds,
+                  traceSourceRowId: sourceRowsWithIds[row.rowIndex]?.sourceRowId,
+                  traceSourceCellId: page.sourceModel.tables[0]?.rows[row.rowIndex]?.cells[cellIndex]?.id,
+                };
+                recoveredCandidate.traceCandidateId = registerTraceCandidate(recoveredCandidate, "source_row_recovery", requirements.length, true);
+                requirements.push(recoveredCandidate);
               }
             }
           } catch (error) {
@@ -1604,7 +1679,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           if (typeof heading.quote !== "string" || !["section", "optional_heading"].includes(heading.row_type ?? "")) continue;
           const sourceBox = locateQuote(heading.quote, page.rawText, page.rawItemMap, page.positioned);
           if (!sourceBox) continue;
-          requirements.push({ page: page.page, quote: heading.quote, display_lines: [heading.quote], row_type: heading.row_type, category: "Other", continues_previous: false, sourceBox });
+          const headingCandidate: Candidate = { page: page.page, quote: heading.quote, display_lines: [heading.quote], row_type: heading.row_type, category: "Other", continues_previous: false, sourceBox };
+          headingCandidate.traceCandidateId = registerTraceCandidate(headingCandidate, "vector_table_extraction", requirements.length, true);
+          requirements.push(headingCandidate);
         }
         return {
           parsed: { requirements },
@@ -1707,7 +1784,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           status: result.modelInspectionComplete && expectedPageColumns.length > 0 ? "complete" : "incomplete",
         });
       }
-      parsedResponses = pageResults.map((result) => ({ ...result, origin: "extraction" as const, trustedVectorRows:true }));
+      parsedResponses = pageResults.map((result) => ({ ...result, origin: "vector_table_extraction" as const, trustedVectorRows:true }));
     } else if (visualSheetType === "compliance-sheet" && visualPages.length) {
       report("splitting selected table pages into overlapping visual reading regions", { stage: "mapping", message: "Reading the selected table layout" });
       const pageSegments = (await Promise.all(visualPages.map(async (page) =>
@@ -1740,7 +1817,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       };
       const visualPageBatches = groupVisualPages(visualPages, 2);
       report("extracting rows from selected page images", { stage: "extracting", message: "Extracting rows from the selected pages", current: 0, total: visualPages.length });
-      const pageBatchCalls = await mapInConcurrentWaves(visualPageBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batchPages) => {
+      const pageBatchCalls = await mapInConcurrentWaves(visualPageBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batchPages, batchIndex) => {
         const pageInputs = batchPages.map((page) => ({
           page,
           segments: pageSegments.filter((item) => item.page.page === page.page).map((item) => item.segment),
@@ -1778,12 +1855,19 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         const parsed = parseJson(content);
         const validated = validateVisualPageBatchResponse(parsed, batchPages.map((page) => page.page), { requireColumns: true });
         if (!validated.ok) return failBatch(200);
-        return validated.pages.map((entry) => ({
-          ok: true as const,
-          parsed: { columns: entry.columns as SourceColumn[], requirements: entry.requirements as Candidate[] },
-          page: entry.page,
-          segments: pageInputs.find((item) => item.page.page === entry.page)!.segments,
-        }));
+        return validated.pages.map((entry) => {
+          const requirements = (entry.requirements as Candidate[]).map((candidate, candidateOrdinal) => {
+            const pageCandidate = { ...candidate, page: entry.page };
+            pageCandidate.traceCandidateId = registerTraceCandidate(pageCandidate, "initial_extraction", batchIndex * 100_000 + candidateOrdinal);
+            return pageCandidate;
+          });
+          return {
+            ok: true as const,
+            parsed: { columns: entry.columns as SourceColumn[], requirements },
+            page: entry.page,
+            segments: pageInputs.find((item) => item.page.page === entry.page)!.segments,
+          };
+        });
       }, (completedBatches) => {
         const completedPages = visualPageBatches.slice(0, completedBatches).reduce((total, batch) => total + batch.length, 0);
         report("extracting rows from selected page images", { stage: "extracting", message: "Extracting rows from the selected pages", current: completedPages, total: visualPages.length });
@@ -1908,16 +1992,44 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           const payload = await coverageResponse.json();
           const content = payload?.choices?.[0]?.message?.content;
           const parsed = typeof content === "string" ? parseJson(content) as ParsedExtraction | null : null;
-          if (!parsed || !Array.isArray(parsed.requirements)
-            || parsed.requirements.some((candidate) => !Number.isInteger(candidate.visual_region_index) || candidate.visual_region_index! < 0 || candidate.visual_region_index! > 2)) {
+          if (!parsed || !Array.isArray(parsed.requirements)) {
             coverageCheckIncomplete = true;
             return incomplete();
           }
-          const auditSuggestions = parsed.requirements;
+          const tracedAuditSuggestions = parsed.requirements.map((candidate, candidateOrdinal) => ({
+            ...candidate,
+            page: page.page,
+            traceCandidateId: registerTraceCandidate({ ...candidate, page: page.page }, "visual_page_omission_audit", candidateOrdinal),
+          }));
+          if (tracedAuditSuggestions.some((candidate) => !Number.isInteger(candidate.visual_region_index) || candidate.visual_region_index! < 0 || candidate.visual_region_index! > 2)) {
+            coverageCheckIncomplete = true;
+            for (const candidate of tracedAuditSuggestions) {
+              if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, {
+                disposition: "rejected",
+                responsibleStage: "visual_page_audit_output_validation",
+                rejectionCategory: "invalid_visual_region_index",
+              });
+            }
+            return incomplete();
+          }
           return sourceRegions.map((region) => {
             const knownRows = (draftByRegion.get(region.index) ?? []).map((candidate) => typeof candidate.quote === "string" ? candidate.quote : "").filter(Boolean);
-            const regionSuggestions = auditSuggestions.filter((candidate) => candidate.visual_region_index === region.index);
+            const regionSuggestions = tracedAuditSuggestions.filter((candidate) => candidate.visual_region_index === region.index);
             const completeRows = discardContainedSuggestions(knownRows, regionSuggestions);
+            const keptIds = new Set(completeRows.map((candidate) => candidate.traceCandidateId).filter(Boolean));
+            for (const candidate of regionSuggestions) {
+              if (candidate.traceCandidateId && !keptIds.has(candidate.traceCandidateId)) {
+                const normalizedQuote = normalize(candidate.quote ?? "");
+                const relatedCandidateId = (draftByRegion.get(region.index) ?? []).find((draft) => typeof draft.quote === "string"
+                  && normalize(draft.quote).includes(normalizedQuote))?.traceCandidateId;
+                forensicTrace?.terminate(candidate.traceCandidateId, {
+                  disposition: "duplicate",
+                  responsibleStage: "visual_omission_containment",
+                  rejectionCategory: "contained_by_existing_extraction",
+                  ...(relatedCandidateId ? { relatedCandidateId } : {}),
+                });
+              }
+            }
             return { parsed: { requirements: completeRows }, page: page.page, segmentIndex: region.index, auditComplete: true, possibleOmissions: completeRows.length };
           });
         } catch {
@@ -1942,9 +2054,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         total: visualPages.length,
       });
       parsedResponses = [
-        ...pageResults.flatMap((result) => result.ok ? [{ parsed: result.parsed, page: result.page, origin: "extraction" as const }] : []),
+        ...pageResults.flatMap((result) => result.ok ? [{ parsed: result.parsed, page: result.page, origin: "initial_extraction" as const }] : []),
         ...coverageResults.filter((result) => result.auditComplete && result.parsed.requirements.length > 0)
-          .map((result) => ({ parsed: result.parsed, page: result.page, origin: "coverage" as const })),
+          .map((result) => ({ parsed: result.parsed, page: result.page, origin: "visual_page_omission_audit" as const })),
       ];
     } else {
       const failure = await extractGeneralPages(visualPages);
@@ -2051,8 +2163,30 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           });
 
           if (!Array.isArray(parsed.requirements)) throw new Error("text page coverage audit response was invalid");
-          const validPageSuggestions = parsed.requirements.filter((candidate) => Number.isInteger(candidate.page) && batchPageNumbers.has(candidate.page!));
+          const auditedSuggestions = parsed.requirements.map((candidate, candidateOrdinal) => ({
+            ...candidate,
+            traceCandidateId: registerTraceCandidate(candidate, "text_page_omission_audit", candidateOrdinal),
+          }));
+          const validPageSuggestions = auditedSuggestions.filter((candidate) => Number.isInteger(candidate.page) && batchPageNumbers.has(candidate.page!));
           const recoveryRows = discardContainedSuggestionsByPage(extractedRows, validPageSuggestions);
+          const recoveredIds = new Set(recoveryRows.map((candidate) => candidate.traceCandidateId).filter(Boolean));
+          for (const candidate of auditedSuggestions) {
+            if (!candidate.traceCandidateId) continue;
+            if (!Number.isInteger(candidate.page) || !batchPageNumbers.has(candidate.page!)) {
+              forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "text_page_audit_output_validation", rejectionCategory: "candidate_page_outside_audit_batch" });
+            } else if (!recoveredIds.has(candidate.traceCandidateId)) {
+              const normalizedQuote = normalize(candidate.quote ?? "");
+              const relatedCandidateId = extractedRows.find((existing) => existing.page === candidate.page
+                && typeof existing.quote === "string"
+                && normalize(existing.quote).includes(normalizedQuote))?.traceCandidateId;
+              forensicTrace?.terminate(candidate.traceCandidateId, {
+                disposition: "duplicate",
+                responsibleStage: "omission_containment",
+                rejectionCategory: "contained_by_existing_extraction",
+                ...(relatedCandidateId ? { relatedCandidateId } : {}),
+              });
+            }
+          }
           return { batch, complete: validPageSuggestions.length === parsed.requirements.length, recoveryRows };
         } catch {
           signal?.throwIfAborted();
@@ -2073,7 +2207,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         });
         recoveredTextAuditRows.push(...outcome.recoveryRows);
       }
-      if (recoveredTextAuditRows.length) parsedResponses.push({ parsed: { requirements: recoveredTextAuditRows }, origin: "coverage" });
+      if (recoveredTextAuditRows.length) parsedResponses.push({ parsed: { requirements: recoveredTextAuditRows }, origin: "text_page_omission_audit" });
       report("text-page omission audit attempt ended", {
         stage: "coverage",
         message: coverageCheckIncomplete ? "Text-page coverage audit incomplete; inspect the coverage ledger" : "Text-page coverage audit finished; inspect any reported gaps",
@@ -2081,13 +2215,31 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         total: textAudit.batches.length,
       });
     }
-    const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "extraction", allowedPages, trustedVectorRows=false }) => (parsed.requirements ?? []).map((candidate, ordinal) => ({
-      ...(trustedVectorRows ? candidate : modelCandidateFields(candidate)),
-      ...(page === undefined ? {} : { page }),
-      ordinal,
-      suggestionOrigin: origin,
-      allowedPages,
-    })));
+    const unfilteredCandidates = parsedResponses.flatMap(({ parsed, page, origin = "initial_extraction", allowedPages, trustedVectorRows=false }) => (parsed.requirements ?? []).map((candidate, ordinal) => {
+      const candidateOrigin = trustedVectorRows ? candidate.traceOrigin ?? origin : origin;
+      const wasRegistered = Boolean(candidate.traceCandidateId && registeredTraceCandidateIds.has(candidate.traceCandidateId));
+      const traceCandidateId = wasRegistered && candidate.traceCandidateId
+        ? candidate.traceCandidateId
+        : registerTraceCandidate({ ...candidate, page: candidate.page ?? page }, candidateOrigin, ordinal, trustedVectorRows);
+      return {
+        ...(trustedVectorRows ? candidate : modelCandidateFields(candidate)),
+        ...(page === undefined ? {} : { page }),
+        ...(traceCandidateId ? { traceCandidateId } : {}),
+        ...(trustedVectorRows ? {
+          traceOrigin: candidateOrigin,
+          traceSourceElementIds: candidate.traceSourceElementIds,
+          traceSourceRowId: candidate.traceSourceRowId,
+          traceSourceCellId: candidate.traceSourceCellId,
+          source_row_index: candidate.source_row_index,
+          source_column_index: candidate.source_column_index,
+          source_cells: candidate.source_cells,
+          source_cells_exact: candidate.source_cells_exact,
+        } : {}),
+        ordinal,
+        suggestionOrigin: candidateOrigin,
+        allowedPages,
+      };
+    }));
     const rejectedSuggestionDetails: RejectedSuggestion[] = [];
     const addRejection = (page: number | null, reason: string, quote: string) => rejectedSuggestionDetails.push({
       page,
@@ -2098,14 +2250,24 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       const samePage = unfilteredCandidates.filter((other) => other.page === candidate.page);
       const samePageQuotes = samePage.map((other) => typeof other.quote === "string" ? other.quote : "").filter(Boolean);
       const kept = keepParsedSourceCandidate(candidate, samePageQuotes);
-      if (!kept) addRejection(Number.isInteger(candidate.page) ? Number(candidate.page) : null, "duplicate_or_contained_suggestion", typeof candidate.quote === "string" ? candidate.quote : "");
+      if (!kept) {
+        addRejection(Number.isInteger(candidate.page) ? Number(candidate.page) : null, "duplicate_or_contained_suggestion", typeof candidate.quote === "string" ? candidate.quote : "");
+        const normalizedQuote = normalize(typeof candidate.quote === "string" ? candidate.quote : "");
+        const relatedCandidateId = samePage.find((other) => other !== candidate && typeof other.quote === "string"
+          && normalize(other.quote).includes(normalizedQuote))?.traceCandidateId;
+        if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, {
+          disposition: "duplicate", responsibleStage: "candidate_deduplication", rejectionCategory: "duplicate_or_contained_suggestion",
+          ...(relatedCandidateId ? { relatedCandidateId } : {}),
+        });
+      }
       return kept;
     });
 
     report("validating source quotes", { stage: "verifying", message: "Verifying each quote and citation against the PDF", current: 0, total: parsedCandidates.length });
     let rejected = rejectedSuggestionDetails.length;
-    const seen = new Set<string>();
+    const seen = new Map<string, string>();
     const requirements: Requirement[] = [];
+    const traceCandidateForRequirement = new Map<Requirement, string>();
     for (const candidate of parsedCandidates) {
       const pageNumber = typeof candidate.page === "number" ? candidate.page : Number.NaN;
       const quote = typeof candidate.quote === "string" ? candidate.quote.trim() : "";
@@ -2116,16 +2278,19 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       if (!Number.isInteger(pageNumber) || !sourcePage || !pageWasSelected) {
         rejected += 1;
         addRejection(sourcePage ? pageNumber : null, "page_not_selected_by_router", quote);
+        if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "routing_scope_validation", rejectionCategory: "page_not_selected_by_router" });
         continue;
       }
       if (!quote || quote.length > 5_000) {
         rejected += 1;
         addRejection(pageNumber, "invalid_candidate_text", quote);
+        if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "candidate_text_validation", rejectionCategory: "invalid_candidate_text" });
         continue;
       }
       if (candidate.row_type === "instruction" || candidate.row_type === "header") {
         rejected += 1;
         addRejection(pageNumber, "administrative_procurement_clause", quote);
+        if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "candidate_type_validation", rejectionCategory: "administrative_procurement_clause" });
         continue;
       }
       const normalizedQuote = normalize(quote);
@@ -2136,9 +2301,14 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       if (seen.has(key)) {
         rejected += 1;
         addRejection(pageNumber, "duplicate_or_contained_suggestion", quote);
+        const relatedCandidateId = seen.get(key);
+        if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, {
+          disposition: "duplicate", responsibleStage: "candidate_deduplication", rejectionCategory: "duplicate_or_contained_suggestion",
+          ...(relatedCandidateId ? { relatedCandidateId } : {}),
+        });
         continue;
       }
-      seen.add(key);
+      seen.set(key, candidate.traceCandidateId ?? "");
       const nativeTextMatch = Boolean(findUniqueTokenBoundedMatch(sourcePage.rawText, quote));
       const ocrTextMatch = !nativeTextMatch && matchesOcrQuote(quote, sourcePage.ocrText);
       const visualOcr = candidate.visualOcr === true && (visualSheetType === "compliance-sheet" || normalizedTables);
@@ -2150,6 +2320,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       if (!evidencePrecision) {
         rejected += 1;
         addRejection(pageNumber, "source_quote_or_location_not_verified", quote);
+        if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "source_evidence_validation", rejectionCategory: "source_quote_or_location_not_verified" });
         continue;
       }
       const suggestedRemark = typeof candidate.remark === "string" ? candidate.remark.trim() : "";
@@ -2244,6 +2415,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         ocrWarning: candidate.ocrWarning === true || ocrGrounded,
         reviewed: false,
       });
+      if (candidate.traceCandidateId) traceCandidateForRequirement.set(requirements[requirements.length - 1], candidate.traceCandidateId);
       if (requirements.length % 10 === 0 || requirements.length === parsedCandidates.length) {
         onProgress?.({ stage: "verifying", message: `Verified ${requirements.length} source-linked rows`, current: requirements.length, total: parsedCandidates.length });
       }
@@ -2257,6 +2429,14 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         item.continuationOfPrevious = Boolean(item.continuationOfPrevious && previous?.page === item.page - 1);
         item.id = `req-${index + 1}`;
       }
+    }
+    for (const requirement of requirements) {
+      const candidateId = traceCandidateForRequirement.get(requirement);
+      if (candidateId) forensicTrace?.terminate(candidateId, {
+        disposition: "accepted",
+        responsibleStage: "source_evidence_validation",
+        finalRequirementId: requirement.id,
+      });
     }
     let activeSectionTitle: string | undefined;
     let activeSectionHeadings: string[] = [];
@@ -2324,7 +2504,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           })),
         ),
         sourceTableRowsNotShown: extraction?.sourceTableRowsNotShown ?? 0,
-        candidateSuggestions: unfilteredCandidates.filter((candidate) => candidate.page === page.page && candidate.suggestionOrigin === "extraction").length,
+        candidateSuggestions: unfilteredCandidates.filter((candidate) => candidate.page === page.page && ["initial_extraction", "vector_table_extraction", "source_row_recovery"].includes(candidate.suggestionOrigin)).length,
         sourceMatchedRows: requirements.filter((item) => item.page === page.page).length,
         sourceMatchedRequirements: requirements.filter((item) => item.page === page.page && item.rowType === "requirement").length,
         needsHumanReview: requirements.filter((item) => item.page === page.page && !item.reviewed).length,
@@ -2487,6 +2667,17 @@ Product names and model/capacity labels are headings, but serials, page furnitur
     }
     return { ok: false as const, error: "The upload could not be processed. Please choose a readable text-based PDF and try again." };
   } finally {
+    if (forensicTraceState) {
+      try {
+        await writeForensicTrace(forensicTraceState.directory, {
+          documentFingerprint: forensicTraceState.ledger.documentFingerprint,
+          candidates: forensicTraceState.ledger.finalize(),
+        });
+      } catch {
+        // Trace persistence is observational only; failure never changes extraction decisions.
+        console.warn("Opt-in forensic trace could not be written; analysis decisions were unchanged.");
+      }
+    }
     detachPdfAbort?.();
     await destroyPdf?.().catch(() => undefined);
     try {
