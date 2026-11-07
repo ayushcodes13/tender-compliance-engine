@@ -133,6 +133,13 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 ## Checkpoint 73 — Client tender document reliability
 
+### Verbatim source-row omission recovery — 2026-11-07
+
+- [x] Allow the bounded semantic row audit to return exact source-cell excerpts for likely omissions; reject paraphrases, excerpts not contained in a single source cell, excessive suggestions, and excerpts on non-gap dispositions.
+- [x] Reintroduce accepted excerpts as independent unchecked candidates through the existing grounding and validation path. Preserve the audit's advisory status and never treat the result as a completeness guarantee.
+- [x] Scripted upload-to-sheet contract verifies one seeded omission is recovered as a separate source-verified, unchecked row; unit tests cover verbatim validation boundaries.
+- [ ] Measure omission-recovery precision and recall against independently annotated real tender rows; the current evidence is scripted only.
+
 **Status: LOCAL ACCEPTANCE VERIFIED; CURRENT MAIN CI PASSED; HOSTED RELEASE GATES PENDING.**
 
 - [x] Real 42-page client PDF routes both full technical annexures, including continuation pages 22 and 26.

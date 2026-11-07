@@ -60,9 +60,9 @@ const provider = http.createServer(async (request, response) => {
       result={columns:[],requirements:[]};
     } else if (schema === 'source_row_semantic_coverage') {
       const rows = JSON.parse(body.messages.at(-1)?.content ?? '[]');
-      result = { rows: rows.map(row => row.source_cells.includes('Calibration report shall be supplied.')
-        ? { row_index: row.row_index, status: 'possible_gap', note: 'The source row contains a second independently assessable obligation.' }
-        : { row_index: row.row_index, status: 'no_gap_reported', note: '' }) };
+      result = { rows: rows.map(row => row.source_cells.some(cell => cell.includes('Calibration report shall be supplied.'))
+        ? { row_index: row.row_index, status: 'possible_gap', note: 'The source row contains a second independently assessable obligation.', missing_source_quotes: ['Calibration report shall be supplied.'] }
+        : { row_index: row.row_index, status: 'no_gap_reported', note: '', missing_source_quotes: [] }) };
     } else if (schema === 'technical_text_missing_requirements') {
       const requirements=[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
@@ -316,7 +316,7 @@ try {
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  assert.ok(mixed.analysis.requirements.some(row=>row.quote.includes('Calibration report shall be supplied.')),'audit findings do not silently remove or rewrite the grounded extraction');
+  assert.ok(mixed.analysis.requirements.some(row=>row.quote==='Calibration report shall be supplied.' && row.reviewed===false && row.sourceReference.sourceText==='Calibration report shall be supplied.'),'an exact source excerpt from a possible-gap audit re-enters as an unchecked, source-verified recovery candidate');
   console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');

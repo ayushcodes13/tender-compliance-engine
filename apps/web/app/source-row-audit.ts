@@ -2,7 +2,7 @@ export type SourceRowAuditStatus = "no_gap_reported" | "possible_gap" | "ambiguo
 
 export type SourceRowAuditInput = {
   rowIndex: number;
-  sourceText: string;
+  sourceCells: string[];
   extractedRequirements: string[];
 };
 
@@ -10,6 +10,8 @@ export type SourceRowAuditResult = {
   rowIndex: number;
   status: Exclude<SourceRowAuditStatus, "incomplete">;
   note: string;
+  /** Literal source excerpts the advisory audit believes are not represented in the draft. */
+  missingSourceQuotes: string[];
 };
 
 export const SOURCE_ROW_AUDIT_MAX_CHARS = 12_000;
@@ -17,7 +19,7 @@ export const SOURCE_ROW_AUDIT_MAX_ROWS = 12;
 export const SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS = 16;
 
 function sourceRowAuditInputSize(row: SourceRowAuditInput): number {
-  return row.sourceText.length + row.extractedRequirements.reduce((sum, quote) => sum + quote.length, 0);
+  return row.sourceCells.reduce((sum, cell) => sum + cell.length, 0) + row.extractedRequirements.reduce((sum, quote) => sum + quote.length, 0);
 }
 
 export function isSourceRowAuditBatchWithinLimits(
@@ -60,6 +62,7 @@ export function batchSourceRowsForAudit(
 export function validateSourceRowAuditResult(
   value: unknown,
   expectedRowIndices: number[],
+  sourceRows: SourceRowAuditInput[] = [],
 ): { complete: true; rows: SourceRowAuditResult[] } | { complete: false; rows: [] } {
   if (!value || typeof value !== "object" || !Array.isArray((value as { rows?: unknown }).rows)) return { complete: false, rows: [] };
   const input = (value as { rows: unknown[] }).rows;
@@ -73,8 +76,15 @@ export function validateSourceRowAuditResult(
     if (!Number.isInteger(row.row_index) || !expected.has(row.row_index as number) || observed.has(row.row_index as number)) return { complete: false, rows: [] };
     if (row.status !== "no_gap_reported" && row.status !== "possible_gap" && row.status !== "ambiguous") return { complete: false, rows: [] };
     if (typeof row.note !== "string" || row.note.length > 500) return { complete: false, rows: [] };
+    if (!Array.isArray(row.missing_source_quotes) || row.missing_source_quotes.length > 8
+      || row.missing_source_quotes.some((quote) => typeof quote !== "string" || !quote.trim() || quote.length > 1_000)) return { complete: false, rows: [] };
+    const sourceRow = sourceRows.find((candidate) => candidate.rowIndex === row.row_index);
+    const sourceCells = sourceRow?.sourceCells ?? [];
+    const missingSourceQuotes = row.missing_source_quotes as string[];
+    if (row.status !== "possible_gap" && missingSourceQuotes.length > 0) return { complete: false, rows: [] };
+    if (missingSourceQuotes.some((quote) => !sourceCells.some((cell) => cell.includes(quote)))) return { complete: false, rows: [] };
     observed.add(row.row_index as number);
-    rows.push({ rowIndex: row.row_index as number, status: row.status, note: row.note });
+    rows.push({ rowIndex: row.row_index as number, status: row.status, note: row.note, missingSourceQuotes: [...new Set(missingSourceQuotes)] });
   }
   if (observed.size !== expected.size) return { complete: false, rows: [] };
   return { complete: true, rows: rows.sort((left, right) => left.rowIndex - right.rowIndex) };
