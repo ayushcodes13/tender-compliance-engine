@@ -45,8 +45,8 @@ export function recoverDocumentIdentity(
   if (!Number.isInteger(pageCount) || pageCount < 1
     || !Number.isInteger(source.physicalPdfPageNumber) || source.physicalPdfPageNumber < 1
     || source.physicalPdfPageNumber > pageCount
-    || !/^doc-[a-f0-9]{24}$/.test(source.documentId)
     || !/^[a-f0-9]{64}$/.test(source.documentFingerprint)
+    || source.documentId !== `doc-${source.documentFingerprint.slice(0, 24)}`
     || source.documentVersionId !== `ver-${source.documentFingerprint}`) return null;
   return {
     documentId: source.documentId,
