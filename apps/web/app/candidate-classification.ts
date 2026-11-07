@@ -40,7 +40,9 @@ export function applyValidatedSourceObligationGroup(
     effectiveRowType: "requirement",
     outcome: "kept",
     reason: decision.outcome === "kept" ? decision.reason : `validated_source_obligation_group_${group.role}`,
-    requiresHumanReview: false,
+    // Source adjacency proves the list relationship, not that a previously
+    // uncertain classification has been independently adjudicated.
+    requiresHumanReview: decision.requiresHumanReview,
     sourceObligationGroupId: group.id,
     sourceObligationGroupRole: group.role,
     sourceObligationGroupParentCandidateId: group.parentCandidateId,
