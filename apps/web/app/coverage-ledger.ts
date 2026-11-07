@@ -110,6 +110,7 @@ export type CoverageSourceRow = {
   semanticCoverageStatus: "not_applicable" | "not_assessed" | "no_gap_reported" | "possible_gap" | "ambiguous" | "audit_incomplete";
   semanticCoverageNote?: string;
   sourceClassification: SourceRowClassification;
+  originalSourceClassification?: SourceRowClassification;
   classificationReason: SourceRowClassificationReason;
   sourceElementIds: string[];
   sourceTableId: string | null;
@@ -161,6 +162,7 @@ export function collectSourceTableCoverageRows(
     sourceTableId?: string;
     sourceRowId?: string;
     sourceClassification?: SourceRowClassification;
+    originalSourceClassification?: SourceRowClassification;
     classificationReason?: SourceRowClassificationReason;
   }>,
   candidateCountByRow: Map<number, number>,
@@ -203,6 +205,7 @@ export function collectSourceTableCoverageRows(
       sourceTableId: row.sourceTableId ?? null,
       sourceRowId: row.sourceRowId ?? null,
       sourceClassification: row.sourceClassification ?? "unclassified",
+      ...(row.originalSourceClassification ? { originalSourceClassification: row.originalSourceClassification } : {}),
       classificationReason: row.classificationReason ?? "classification_unavailable",
       bbox: pageSize.width > 0 && pageSize.height > 0 && sourceBox ? {
         x: sourceBox.x / pageSize.width * 100,

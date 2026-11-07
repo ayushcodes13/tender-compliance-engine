@@ -14,6 +14,7 @@ import { buildResponseSections } from "./response-sections";
 import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import { describeRejectedSuggestion, type CoverageReport, type CoverageSourceRow, type RejectedSuggestion } from "./coverage-ledger";
+import type { ClassificationReviewCandidate } from "./candidate-classification";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -67,6 +68,7 @@ type Analysis = {
   sheetHeading?: string;
   sheetProductTitle?: string;
   requirements: Requirement[];
+  classificationReviewCandidates?: ClassificationReviewCandidate[];
   validationSummary?: {
     total: number;
     verbatimPass: number;
@@ -89,6 +91,7 @@ type FailureDiagnostics = {
   coverageSummary: CoverageReport["summary"];
   reviewPageNumbers: number[];
   reviewPagesNotShown: number;
+  classificationReviewCandidates: ClassificationReviewCandidate[];
 };
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -275,7 +278,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     let keepTerminalState = false;
     try {
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
-      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
+      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; classificationReviewCandidates?: ClassificationReviewCandidate[]; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
         signal: requestController.signal,
         onProgress: (progress) => {
           if (activeRequestRef.current === requestController) setProcessing(progress);
@@ -293,6 +296,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             coverageSummary: result.coverageSummary,
             reviewPageNumbers: result.reviewPageNumbers ?? [],
             reviewPagesNotShown: result.reviewPagesNotShown ?? 0,
+            classificationReviewCandidates: result.classificationReviewCandidates ?? [],
           });
         }
         throw new Error(result.error || "The tender could not be processed.");
@@ -800,8 +804,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               {!busy && processing?.stage === "error" && <p className="mvp-processing-terminal" role="status">{processing.message}</p>}
               {error && <p className="mvp-error" role="alert">{error}</p>}
               {failureDiagnostics && <section className="mvp-coverage-failure" aria-label="Rejected extraction suggestions">
-                <h2>No verified requirements to review</h2>
-                <p>{failureDiagnostics.candidateSuggestions > 0
+                <h2>{failureDiagnostics.classificationReviewCandidates.length > 0 ? "Grounded candidates need classification review" : "No verified requirements to review"}</h2>
+                <p>{failureDiagnostics.classificationReviewCandidates.length > 0
+                  ? `${failureDiagnostics.classificationReviewCandidates.length} source-grounded candidate(s) remain available for classification review and were not added as compliance obligations.`
+                  : failureDiagnostics.candidateSuggestions > 0
                   ? `${failureDiagnostics.rejectedCandidates} suggestion(s) were left out because source evidence could not be verified in this ${failureDiagnostics.pageCount}-page tender. These are unverified model suggestions, not review rows. Inspect the source before relying on any wording.`
                   : `No requirement suggestions were produced for the selected pages in this ${failureDiagnostics.pageCount}-page tender. An empty extraction does not establish that the tender has no requirements; inspect the selected pages manually.`}</p>
                 <dl>
@@ -809,6 +815,14 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   <div><dt>Page audits</dt><dd>{failureDiagnostics.coverageSummary.auditPagesWithNoGapsReported} reported no gaps · {failureDiagnostics.coverageSummary.auditPagesWithPossibleGaps} reported possible gaps · {failureDiagnostics.coverageSummary.auditPagesIncomplete} incomplete · {failureDiagnostics.coverageSummary.auditPagesNotRun} not run</dd></div>
                   {failureDiagnostics.coverageSummary.possibleOmissionSuggestions > 0 && <div><dt>Possible omissions</dt><dd>{failureDiagnostics.coverageSummary.possibleOmissionSuggestions} advisory suggestion(s); not a completeness measure</dd></div>}
                 </dl>
+                {failureDiagnostics.classificationReviewCandidates.length > 0 && <div className="mvp-coverage-row-findings">
+                  <strong>Grounded candidates held for classification review</strong>
+                  {failureDiagnostics.classificationReviewCandidates.map((candidate, index) => <div className="mvp-coverage-row-finding" key={`${candidate.page}-${candidate.candidateId ?? index}`}>
+                    <span className="is-warning">Original classification: {candidate.originalClassification} · effective classification: {candidate.effectiveClassification} · {candidate.reason.replaceAll("_", " ")}. Not included in the compliance matrix.</span>
+                    <p>{candidate.quote}</p>
+                    {file && <button type="button" onClick={() => { setPage(candidate.page); setSourceOpen(true); }}>Inspect PDF page {candidate.page}</button>}
+                  </div>)}
+                </div>}
                 {failureDiagnostics.rejectedSuggestionDetails.length > 0 && <ul>
                   {failureDiagnostics.rejectedSuggestionDetails.map((suggestion, index) => <li key={`${suggestion.page}-${suggestion.reason}-${index}`}>
                     <p>{suggestion.quotePreview ? `Suggested wording: “${suggestion.quotePreview}”` : "No usable wording was returned."}</p>
@@ -944,6 +958,14 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               <small>{countLabel(analysis.coverage.summary.selectedTechnicalPages, "routed page")} · {countLabel(analysis.coverage.summary.routingPagesExplicitlyExcluded, "explicitly excluded page")} · {countLabel(analysis.coverage.summary.routingPagesUnrouted, "unresolved route")} · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(analysis.coverage.summary.rejectedSuggestions, "rejected suggestion")}</small>
             </summary>
             <p className="mvp-coverage-caveat">Counts describe what the parser, router, and page audit actually processed. A model audit reporting no gaps does not prove that the tender is complete.</p>
+            {(analysis.classificationReviewCandidates?.length ?? 0) > 0 && <div className="mvp-coverage-row-findings">
+              <strong>Grounded candidates held for classification review · not compliance obligations</strong>
+              {analysis.classificationReviewCandidates?.map((candidate, index) => <div className="mvp-coverage-row-finding" key={`${candidate.page}-${candidate.candidateId ?? index}`}>
+                <span className="is-warning">Original classification: {candidate.originalClassification} · effective classification: {candidate.effectiveClassification} · {candidate.reason.replaceAll("_", " ")}.</span>
+                <p>{candidate.quote}</p>
+                <button type="button" onClick={() => { setCoverageFocus(null); setPage(candidate.page); setSourceOpen(true); }}>Inspect PDF page {candidate.page}</button>
+              </div>)}
+            </div>}
             <dl className="mvp-coverage-summary">
               <div><dt>Source inventory</dt><dd>All {analysis.document.pageCount} physical pages and parser-owned references passed structural checks. This does not establish semantic completeness.</dd></div>
               <div><dt>Router input</dt><dd>{analysis.coverage.summary.routingPages} of {analysis.coverage.summary.documentPages} pages with native or OCR text</dd></div>
@@ -987,7 +1009,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                           : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")} · ${row.semanticCoverageStatus.replaceAll("_", " ")}`;
                       const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions || row.semanticCoverageStatus !== "not_applicable";
                       return <div className="mvp-coverage-row-finding" key={`${item.page}-${row.rowNumber}`}>
-                        <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status} · classified {row.sourceClassification.replaceAll("_", " ")} ({row.classificationReason.replaceAll("_", " ")}){row.textTruncated ? " · excerpt shortened" : ""}</span>
+                        <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status} · classified {row.originalSourceClassification && row.originalSourceClassification !== row.sourceClassification ? `${row.originalSourceClassification.replaceAll("_", " ")} → ` : ""}{row.sourceClassification.replaceAll("_", " ")} ({row.classificationReason.replaceAll("_", " ")}){row.textTruncated ? " · excerpt shortened" : ""}</span>
                         <p>{row.cells.filter(Boolean).join(" | ") || "(No cell text available)"}</p>
                         <button type="button" disabled={!row.bbox} onClick={() => { setCoverageFocus({ page: item.page, row }); setPage(item.page); setSourceOpen(true); }}>Inspect source row</button>
                       </div>;
