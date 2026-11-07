@@ -85,7 +85,8 @@ export type CoverageSourceRow = {
   matchedRequirementIds: string[];
   acceptedLinkStatus: "not_applicable" | "no_candidate_suggestions" | "linked" | "unlinked";
   /** Source association does not establish that every obligation in the row was extracted. */
-  semanticCoverageStatus: "not_applicable" | "not_assessed";
+  semanticCoverageStatus: "not_applicable" | "not_assessed" | "no_gap_reported" | "possible_gap" | "ambiguous" | "audit_incomplete";
+  semanticCoverageNote?: string;
   sourceClassification: SourceRowClassification;
   classificationReason: SourceRowClassificationReason;
   sourceElementIds: string[];

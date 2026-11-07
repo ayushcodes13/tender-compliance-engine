@@ -100,6 +100,10 @@ function coverageRowReviewLabel(row: CoverageSourceRow): string {
   if (row.disposition === "empty") return `EMPTY SOURCE ROW ${row.rowNumber}`;
   if (row.sourceClassification === "ambiguous") return `AMBIGUOUS SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
   if (row.disposition === "unmapped") return `UNMAPPED SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
+  if (row.semanticCoverageStatus === "possible_gap") return `SOURCE ROW ${row.rowNumber} · POSSIBLE OMISSION REPORTED`;
+  if (row.semanticCoverageStatus === "ambiguous") return `SOURCE ROW ${row.rowNumber} · SEMANTIC AUDIT AMBIGUOUS`;
+  if (row.semanticCoverageStatus === "audit_incomplete") return `SOURCE ROW ${row.rowNumber} · SEMANTIC AUDIT INCOMPLETE`;
+  if (row.semanticCoverageStatus === "no_gap_reported") return `SOURCE ROW ${row.rowNumber} · NO GAP REPORTED · STILL UNVERIFIED`;
   if (row.sourceMatchedCandidates < row.candidateSuggestions) return `SOURCE ROW ${row.rowNumber} · COVERAGE MISMATCH`;
   return `SOURCE TABLE ROW ${row.rowNumber} · SOURCE MATCHED · COMPLETENESS UNVERIFIED`;
 }
@@ -109,6 +113,10 @@ function coverageRowReviewMessage(row: CoverageSourceRow): string {
   if (row.disposition === "empty") return "This detected source row contains no selectable cell text.";
   if (row.sourceClassification === "ambiguous") return `The row classifier could not confidently determine the row's role (${row.classificationReason.replaceAll("_", " ")}). It was retained without creating a requirement; inspect the source page and decide its disposition.`;
   if (row.disposition === "unmapped") return `No extraction candidate was generated for this nonempty source row. Classification: ${row.sourceClassification.replaceAll("_", " ")} (${row.classificationReason.replaceAll("_", " ")}). Decide whether it is a requirement, heading, or other table content.`;
+  if (row.semanticCoverageStatus === "possible_gap") return `A separate row audit reported a possible omission or partial representation. This is advisory; inspect the source row and candidate requirements. ${row.semanticCoverageNote ?? ""}`;
+  if (row.semanticCoverageStatus === "ambiguous") return `A separate row audit could not determine whether every obligation is represented. Inspect the source row and candidate requirements. ${row.semanticCoverageNote ?? ""}`;
+  if (row.semanticCoverageStatus === "audit_incomplete") return "The separate semantic row audit did not complete; source matching does not establish that every obligation is represented.";
+  if (row.semanticCoverageStatus === "no_gap_reported") return `A separate row audit reported no possible gap, but this does not establish semantic completeness. Check every independent obligation in the row. ${row.semanticCoverageNote ?? ""}`;
   if (row.sourceMatchedCandidates < row.candidateSuggestions) {
     return `${row.sourceMatchedCandidates} of ${row.candidateSuggestions} generated candidates from this source row matched the source; inspect the unmatched candidate and confirm the row grouping.`;
   }
@@ -968,12 +976,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                   {item.sourceTableRowsMappedToCandidates !== null && <span>{countLabel(item.sourceTableRowsMappedToCandidates, "row")} mapped to candidates · {countLabel(item.sourceTableRowsExcludedAsHeaders ?? 0, "header")} · {countLabel(item.sourceTableRowsEmpty ?? 0, "empty row")} · {countLabel(item.sourceTableRowsUnmapped ?? 0, "nonempty row")} unmapped</span>}
                   {Boolean(item.sourceTableCoverageRows?.length) && <div className="mvp-coverage-row-findings">
                     <strong>Detected source rows and their extraction coverage</strong>
-                    {item.sourceTableCoverageRows?.map((row) => {
+                    {item.sourceTableCoverageRows?.slice(0, 12).map((row) => {
                       const status = row.disposition === "header" ? "repeated header"
                         : row.disposition === "empty" ? "empty row"
                           : row.disposition === "unmapped" ? "no candidate generated"
-                          : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")} · completeness unverified`;
-                      const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions || row.semanticCoverageStatus === "not_assessed";
+                          : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")} · ${row.semanticCoverageStatus.replaceAll("_", " ")}`;
+                      const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions || row.semanticCoverageStatus !== "not_applicable";
                       return <div className="mvp-coverage-row-finding" key={`${item.page}-${row.rowNumber}`}>
                         <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status} · classified {row.sourceClassification.replaceAll("_", " ")} ({row.classificationReason.replaceAll("_", " ")}){row.textTruncated ? " · excerpt shortened" : ""}</span>
                         <p>{row.cells.filter(Boolean).join(" | ") || "(No cell text available)"}</p>
