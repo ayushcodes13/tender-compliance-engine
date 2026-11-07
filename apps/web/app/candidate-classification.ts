@@ -6,6 +6,9 @@ export type CandidateClassificationDecision = {
   outcome: "kept" | "reclassified_for_review" | "retained_for_review" | "rejected";
   reason: string;
   requiresHumanReview: boolean;
+  sourceObligationGroupId?: string;
+  sourceObligationGroupRole?: "parent" | "member";
+  sourceObligationGroupParentCandidateId?: string;
 };
 
 export type ClassificationReviewCandidate = {
@@ -17,6 +20,32 @@ export type ClassificationReviewCandidate = {
   reason: string;
   sourceReference: RequirementSourceReference;
 };
+
+const SOURCE_GROUP_BLOCKED_REVIEW_REASONS = new Set([
+  "form_agreement_not_supplier_obligation",
+  "service_contact_form_requires_scope_review",
+  "mixed_administrative_and_supplier_obligation",
+]);
+
+export function canJoinValidatedSourceObligationGroup(decision: CandidateClassificationDecision): boolean {
+  return decision.outcome !== "rejected" && !SOURCE_GROUP_BLOCKED_REVIEW_REASONS.has(decision.reason);
+}
+
+export function applyValidatedSourceObligationGroup(
+  decision: CandidateClassificationDecision,
+  group: { id: string; role: "parent" | "member"; parentCandidateId: string },
+): CandidateClassificationDecision {
+  return {
+    ...decision,
+    effectiveRowType: "requirement",
+    outcome: "kept",
+    reason: decision.outcome === "kept" ? decision.reason : `validated_source_obligation_group_${group.role}`,
+    requiresHumanReview: false,
+    sourceObligationGroupId: group.id,
+    sourceObligationGroupRole: group.role,
+    sourceObligationGroupParentCandidateId: group.parentCandidateId,
+  };
+}
 
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
 

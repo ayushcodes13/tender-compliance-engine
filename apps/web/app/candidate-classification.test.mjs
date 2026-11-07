@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyCandidateScope } from "./candidate-classification.ts";
+import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGroup, classifyCandidateScope } from "./candidate-classification.ts";
 import { CandidateTraceLedger } from "./candidate-trace.ts";
 import { collectSourceTableCoverageRows } from "./coverage-ledger.ts";
 
@@ -231,6 +231,7 @@ test("screens every flagged and adjacent administrative benchmark row when the m
     assert.ok(["rejected", "retained_for_review"].includes(result.outcome), `${requirementId} p.${page}: ${sourceQuote}`);
     assert.ok(["instruction", "ambiguous"].includes(result.effectiveRowType), `${requirementId} p.${page}: ${sourceQuote}`);
     assert.ok(result.reason.length > 0, `${requirementId} p.${page}: missing disposition reason`);
+    assert.equal(canJoinValidatedSourceObligationGroup(result), false, `${requirementId} p.${page}: source grouping must not promote this administrative case`);
   }
 });
 
@@ -347,4 +348,49 @@ test("holds a mixed performance commitment and service contact disclosure for hu
   assert.equal(decision.outcome, "retained_for_review");
   assert.equal(decision.effectiveRowType, "ambiguous");
   assert.equal(decision.requiresHumanReview, true);
+});
+
+test("records a validated source-list parent/member relationship without changing the source classification", () => {
+  const parent = classifyCandidateScope("instruction", "The quote must include a separate charge for a Five - year Annual Maintenance Contract (AMC), covering:");
+  assert.equal(parent.outcome, "retained_for_review");
+  const parentId = "cand-amc-parent";
+  const group = { id: "sog-doc-p11-o4", role: "parent", parentCandidateId: parentId };
+  const retained = applyValidatedSourceObligationGroup(parent, group);
+  assert.equal(retained.originalRowType, "instruction");
+  assert.equal(retained.effectiveRowType, "requirement");
+  assert.equal(retained.outcome, "kept");
+  assert.equal(retained.reason, "validated_source_obligation_group_parent");
+  assert.equal(retained.requiresHumanReview, false);
+  assert.equal(retained.sourceObligationGroupId, group.id);
+  assert.equal(retained.sourceObligationGroupRole, "parent");
+
+  const child = classifyCandidateScope("requirement", "Provision of spare parts and necessary consumables");
+  assert.equal(child.outcome, "retained_for_review");
+  const member = applyValidatedSourceObligationGroup(child, { ...group, role: "member" });
+  assert.equal(member.originalRowType, "requirement");
+  assert.equal(member.effectiveRowType, "requirement");
+  assert.equal(member.outcome, "kept");
+  assert.equal(member.reason, "validated_source_obligation_group_member");
+  assert.equal(member.sourceObligationGroupId, group.id);
+  assert.equal(member.sourceObligationGroupParentCandidateId, parentId);
+});
+
+test("does not let source grouping override administrative or mixed-form scope decisions", () => {
+  const excludedOrReviewOnly = [
+    ["instruction", "EMD of ₹50,000 must be submitted with the bid."],
+    ["requirement", "Payment shall be released within 30 days of invoice."],
+    ["instruction", "The bidder shall provide a bank guarantee with the tender."],
+    ["instruction", "The tender submission must include the bid form, and the supplier shall provide calibration certificates."],
+    ["requirement", "Warranty period agreed"],
+    ["requirement", "Service Centre details: Contact person, telephone and e-mail"],
+  ];
+  for (const [rowType, quote] of excludedOrReviewOnly) {
+    const decision = classifyCandidateScope(rowType, quote);
+    assert.equal(canJoinValidatedSourceObligationGroup(decision), false, quote);
+  }
+
+  const parent = classifyCandidateScope("instruction", "The quote must include a separate charge for a Five - year Annual Maintenance Contract (AMC), covering:");
+  const member = classifyCandidateScope("requirement", "Service visits;");
+  assert.equal(canJoinValidatedSourceObligationGroup(parent), true);
+  assert.equal(canJoinValidatedSourceObligationGroup(member), true);
 });
