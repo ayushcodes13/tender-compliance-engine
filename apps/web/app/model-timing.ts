@@ -1,13 +1,14 @@
 export type ModelTimingEvent = {
   phase: "request_started" | "headers_received" | "response_parsed" | "request_failed";
   requestKind: "page_routing" | "general_requirement_extraction" | "text_page_omission_audit" | "vector_table_column_mapping" | "vector_table_row_classification" | "vector_source_row_audit";
-  failureKind?: "provider_busy" | "provider_connection" | "request_aborted" | "other";
+  failureKind?: "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other";
   batchIndex?: number;
   totalBatches?: number;
   pageNumber?: number;
   batchPageCount: number;
   inputCharacters: number;
   requestHeadersWaitMs?: number;
+  requestElapsedMs?: number;
   responseBodyAndEnvelopeMs?: number;
   jsonParseMs?: number;
   responseStatus?: number;
@@ -24,6 +25,7 @@ const SAFE_NUMERIC_FIELDS = [
   "batchPageCount",
   "inputCharacters",
   "requestHeadersWaitMs",
+  "requestElapsedMs",
   "responseBodyAndEnvelopeMs",
   "jsonParseMs",
   "responseStatus",
@@ -55,7 +57,7 @@ export function emitModelTiming(
   }
   for (const field of SAFE_ENUM_FIELDS) {
     const value = event[field];
-    if (typeof value === "string" && ["provider_busy", "provider_connection", "request_aborted", "other"].includes(value)) safe[field] = value;
+    if (typeof value === "string" && ["provider_busy", "provider_connection", "provider_timeout", "request_aborted", "other"].includes(value)) safe[field] = value;
   }
   logger(`[TCE_MODEL_TIMING] ${JSON.stringify(safe)}`);
 }
