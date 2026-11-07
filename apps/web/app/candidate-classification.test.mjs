@@ -306,3 +306,45 @@ test("reconciles administrative exclusions, review-only mixed clauses, and accep
   assert.equal(ledger.records.filter((record) => record.disposition === "accepted").every((record) => record.finalRequirementId && record.classificationDecision?.effectiveRowType === "requirement"), true);
   assert.equal(ledger.records.every((record) => record.sourceQuoteStatus === "matched" && record.sourceElementIds.length === 1), true);
 });
+
+
+test("keeps bidder-form acknowledgement fields out of the accepted technical matrix", () => {
+  const formFields = [
+    "Warranty period agreed",
+    "After-sales service terms agreed",
+    "After-sales terms agreed and contact details supplied",
+    "Service Centre Guwahati: Contact person, phone, e-mail and address",
+    "Guwahati Service Centre Address and Contact Details",
+    "The bidder must provide the service centre contact number and email address in the form.",
+  ];
+  for (const quote of formFields) {
+    const decision = classifyCandidateScope("requirement", quote);
+    assert.equal(decision.outcome, "retained_for_review", quote);
+    assert.equal(decision.effectiveRowType, "ambiguous", quote);
+    assert.equal(decision.requiresHumanReview, true, quote);
+    assert.notEqual(decision.reason, "no_administrative_scope_conflict", quote);
+  }
+});
+
+test("preserves substantive maintenance and local-service promises while screening contact forms", () => {
+  const obligations = [
+    "The supplier must have a local office or an authorized associate in India to ensure timely after-sales support and maintenance.",
+    "The supplier shall provide five years of warranty support with routine maintenance services.",
+    "The quote must include a separate charge for a Five - year Annual Maintenance Contract (AMC), covering: Service visits; Yearly calibration; Routine maintenance services, and Provision of spare parts and necessary consumables",
+    "An undertaking must be provided for after-sales service and availability of spare parts for five years beyond warranty.",
+  ];
+  for (const quote of obligations) {
+    const decision = classifyCandidateScope("requirement", quote);
+    assert.equal(decision.effectiveRowType, "requirement", quote);
+    assert.notEqual(decision.outcome, "rejected", quote);
+    assert.notEqual(decision.outcome, "retained_for_review", quote);
+  }
+});
+
+test("holds a mixed performance commitment and service contact disclosure for human scope review", () => {
+  const sourceQuote = "The supplier shall operate a local service centre for five years and submit its contact person, telephone and e-mail details.";
+  const decision = classifyCandidateScope("requirement", sourceQuote);
+  assert.equal(decision.outcome, "retained_for_review");
+  assert.equal(decision.effectiveRowType, "ambiguous");
+  assert.equal(decision.requiresHumanReview, true);
+});
