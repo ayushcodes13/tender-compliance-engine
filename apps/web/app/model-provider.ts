@@ -19,6 +19,13 @@ export class ModelProviderBusyError extends Error {
   }
 }
 
+export class ModelProviderTimeoutError extends Error {
+  constructor() {
+    super("A GPT-6 Luna request exceeded its 90-second provider execution limit. The timed-out request was not automatically retried.");
+    this.name = "ModelProviderTimeoutError";
+  }
+}
+
 export type ModelRequestAdmission = {
   acquire(signal: AbortSignal | undefined, clientKey: object, clientLimit: number): Promise<() => void>;
 };
@@ -138,7 +145,8 @@ export function createModelCompletionClient(
               signal: requestSignal,
               body: init?.body,
             });
-            if (response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) {
+            if (response.status === 408 || response.status === 504) throw new ModelProviderTimeoutError();
+            if (response.status === 429) {
               if (attempt < 2) {
                 await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
                 continue;
@@ -147,12 +155,14 @@ export function createModelCompletionClient(
             return response;
           } catch (error) {
             lastError = error;
+            if (executionTimeout.aborted && !cancellationSignal?.aborted) throw new ModelProviderTimeoutError();
+            if (cancellationSignal?.aborted) throw cancellationSignal.reason ?? error;
             if (error instanceof DOMException && error.name === "AbortError") throw error;
-            if (attempt < 2 && (error instanceof TypeError || (error instanceof Error && error.name === "AbortError" && !requestSignal.aborted))) {
+            if (error instanceof TypeError) throw new ModelProviderConnectionError();
+            if (attempt < 2 && error instanceof Error && error.name === "AbortError" && !requestSignal.aborted) {
               await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
               continue;
             }
-            if (error instanceof TypeError) throw new ModelProviderConnectionError();
             throw error;
           }
         }

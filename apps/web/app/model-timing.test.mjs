@@ -122,6 +122,24 @@ test('vector request failure logs use a bounded enum and never an error message'
   });
 });
 
+test('records provider timeouts as a distinct safe failure kind', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'request_failed',
+    requestKind: 'general_requirement_extraction',
+    batchIndex: 3,
+    totalBatches: 4,
+    batchPageCount: 3,
+    inputCharacters: 10_417,
+    requestElapsedMs: 90_000,
+    failureKind: 'provider_timeout',
+  }, (line) => lines.push(line), true);
+  const record = JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length));
+  assert.equal(record.failureKind, 'provider_timeout');
+  assert.equal(record.requestElapsedMs, 90_000);
+  assert.equal(JSON.stringify(record).includes('source'), false);
+});
+
 test('vector response timing includes safe parse, response-size, and provider-usage fields', () => {
   const lines = [];
   emitModelTiming({

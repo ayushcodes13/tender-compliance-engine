@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createModelCompletionClient, createModelRequestAdmission, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider.ts";
+import { createModelCompletionClient, createModelRequestAdmission, ModelProviderBusyError, ModelProviderConnectionError, ModelProviderTimeoutError, resolveModelProvider } from "./model-provider.ts";
 
 test("selects GPT-6 Luna by default when the local key is present", () => {
   assert.deepEqual(resolveModelProvider({ OPENAI_API_KEY: "secret", OPENAI_BASE_URL: "https://example.invalid/openai/v1" }), {
@@ -94,6 +94,49 @@ test('starts the execution timeout only after a queued request is admitted', asy
   assert.equal(admissions[1].aborted, false, 'queued time did not consume its execution window');
   releaseRequests.shift()();
   await Promise.all([first, queued]);
+});
+
+test('reports provider execution timeout distinctly and never retries an ambiguous timed-out POST', async () => {
+  let sent = 0;
+  const client = createModelCompletionClient(
+    { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' },
+    async (_input, init) => {
+      sent += 1;
+      return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => setTimeout(() => reject(init.signal.reason), 0), { once: true }));
+    },
+    { executionTimeoutMs: 20 },
+  );
+  const request = assert.rejects(client.fetch('ignored', { method: 'POST', body: '{}' }), (error) => error instanceof ModelProviderTimeoutError);
+  await Promise.all([request, new Promise((resolve) => setTimeout(resolve, 35))]);
+  assert.equal(sent, 1);
+});
+
+test('does not resend a generation POST after an upstream gateway timeout response', async () => {
+  let sent = 0;
+  const client = createModelCompletionClient(
+    { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' },
+    async () => { sent += 1; return new Response('{}', { status: 504 }); },
+  );
+  await assert.rejects(client.fetch('ignored', { method: 'POST', body: '{}' }), (error) => error instanceof ModelProviderTimeoutError);
+  assert.equal(sent, 1);
+});
+
+test('propagates caller cancellation without misreporting a provider timeout', async () => {
+  let sent = 0;
+  const client = createModelCompletionClient(
+    { provider: 'openai-compatible', baseUrl: 'https://example.invalid', model: 'gpt-6-luna', apiKey: 'secret' },
+    async (_input, init) => {
+      sent += 1;
+      return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => setTimeout(() => reject(init.signal.reason), 0), { once: true }));
+    },
+    { executionTimeoutMs: 1_000 },
+  );
+  const controller = new AbortController();
+  const request = client.fetch('ignored', { method: 'POST', body: '{}', signal: controller.signal });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort(new DOMException('cancelled', 'AbortError'));
+  await assert.rejects(request, { name: 'AbortError' });
+  assert.equal(sent, 1);
 });
 
 test('shares a bounded model-request limit across independent analyses', async () => {

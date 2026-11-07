@@ -25,10 +25,10 @@ import { hasRasterImageOperators, selectImageRegionsForOcr, shouldRunPageOcr } f
 import { collectPdfImageRegions } from "./pdf-image-regions";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
-import { createModelCompletionClient, MODEL_REQUESTS_PER_ANALYSIS, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
+import { createModelCompletionClient, MODEL_REQUESTS_PER_ANALYSIS, ModelProviderBusyError, ModelProviderConnectionError, ModelProviderTimeoutError, resolveModelProvider } from "./model-provider";
 import { emitModelTiming } from "./model-timing";
 import { mapInConcurrentWaves } from "./concurrent-waves";
-import { mapWithConcurrency } from "./concurrent-map";
+import { mapWithConcurrency, mapWithConcurrencySettled } from "./concurrent-map";
 import { groupVisualPages, validateVisualPageBatchResponse } from "./visual-page-batching";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { validatePageDispositions } from "./page-dispositions";
@@ -40,9 +40,10 @@ import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page
 import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, type CandidateOrigin } from "./candidate-trace";
 import { classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
 
-function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "request_aborted" | "other" {
+function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
   if (error instanceof ModelProviderConnectionError) return "provider_connection";
+  if (error instanceof ModelProviderTimeoutError) return "provider_timeout";
   if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return "request_aborted";
   return "other";
 }
@@ -1105,13 +1106,15 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const extractGeneralPages = async (generalPages: typeof visualPages) => {
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
       const extractionBatches = buildExtractionBatches(generalPages);
+      const extractionRequestStartedAt: number[] = [];
       report("requesting extraction batches", {
         stage: "extracting",
         message: `Requesting technical extraction batches 1–${Math.min(MODEL_REQUESTS_PER_ANALYSIS, extractionBatches.length)} of ${extractionBatches.length}`,
       });
-      const extractionOutcomes = await mapWithConcurrency(extractionBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
+      const extractionOutcomes = await mapWithConcurrencySettled(extractionBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
         const requestStartedAt = performance.now();
+        extractionRequestStartedAt[batchIndex] = requestStartedAt;
         emitModelTiming({
           phase: "request_started",
           requestKind: "general_requirement_extraction",
@@ -1181,21 +1184,52 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       }, (completed, total) => {
         report("completed extraction batch", {
           stage: "extracting",
-          message: `Received and parsed ${completed} of ${total} technical extraction batches`,
+          message: `Finished processing ${completed} of ${total} technical extraction batches`,
           current: completed,
           total,
         });
       });
-      for (const outcome of extractionOutcomes) {
-        if (!outcome.ok) return outcome;
-        // The scheduler returns results in input order, so source page order stays deterministic.
+      const failedBatches: Array<{ batchIndex: number; error: unknown }> = [];
+      for (const [batchIndex, settled] of extractionOutcomes.entries()) {
+        if (settled.status === "rejected") {
+          emitModelTiming({
+            phase: "request_failed",
+            requestKind: "general_requirement_extraction",
+            batchIndex: batchIndex + 1,
+            totalBatches: extractionBatches.length,
+            batchPageCount: extractionBatches[batchIndex].pageNumbers.length,
+            inputCharacters: extractionBatches[batchIndex].input.length,
+            requestElapsedMs: Math.round(performance.now() - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
+            failureKind: modelTimingFailureKind(settled.reason, signal),
+          });
+          failedBatches.push({ batchIndex, error: settled.reason });
+          continue;
+        }
+        const outcome = settled.value;
+        if (!outcome.ok) {
+          emitModelTiming({
+            phase: "request_failed",
+            requestKind: "general_requirement_extraction",
+            batchIndex: batchIndex + 1,
+            totalBatches: extractionBatches.length,
+            batchPageCount: extractionBatches[batchIndex].pageNumbers.length,
+            inputCharacters: extractionBatches[batchIndex].input.length,
+            requestElapsedMs: Math.round(performance.now() - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
+            failureKind: "other",
+          });
+          failedBatches.push({ batchIndex, error: new Error(outcome.error) });
+          continue;
+        }
+        // Fulfilled batches stay available for source-grounded tracing even if
+        // another batch fails. A failed run still never returns a response sheet.
         parsedResponses.push({ parsed: outcome.parsed, origin: "initial_extraction", allowedPages: outcome.allowedPages });
       }
-      for (const pageNumber of generalPages.map((page) => page.page)) pageExtractionState.set(pageNumber, {
-        status: "complete",
+      const failedBatchIndexes = new Set(failedBatches.map((failed) => failed.batchIndex));
+      for (const page of generalPages) pageExtractionState.set(page.page, {
+        status: extractionBatches.some((batch, index) => batch.pageNumbers.includes(page.page) && failedBatchIndexes.has(index)) ? "incomplete" : "complete",
         sourceTableRowsDetected: (() => {
-          const page = pages.find((candidatePage) => candidatePage.page === pageNumber);
-          return page?.hasVectorTableGeometry ? getVectorRows(page).length : null;
+          const sourcePage = pages.find((candidatePage) => candidatePage.page === page.page);
+          return sourcePage?.hasVectorTableGeometry ? getVectorRows(sourcePage).length : null;
         })(),
         sourceTableRowsMappedToCandidates: null,
         sourceTableRowsExcludedAsHeaders: null,
@@ -1204,6 +1238,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         sourceTableCoverageRows: [],
         sourceTableRowsNotShown: 0,
       });
+      if (failedBatches.length) {
+        const firstFailure = failedBatches[0].error;
+        if (firstFailure instanceof ModelProviderTimeoutError) return { ok: false as const, error: firstFailure.message };
+        if (signal?.aborted) signal.throwIfAborted();
+        if (firstFailure instanceof ModelProviderConnectionError || firstFailure instanceof ModelProviderBusyError) throw firstFailure;
+        return { ok: false as const, error: "One or more technical extraction batches failed. Completed batches were retained for forensic tracing; no complete response sheet was produced." };
+      }
       return null;
     };
     if (vectorPages.length > 0) {
@@ -2720,6 +2761,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       return { ok: false as const, error: error.message };
     }
     if (error instanceof ModelProviderBusyError) {
+      return { ok: false as const, error: error.message };
+    }
+    if (error instanceof ModelProviderTimeoutError) {
       return { ok: false as const, error: error.message };
     }
     if (error instanceof Error && error.name === "TimeoutError") {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapWithConcurrency } from "./concurrent-map.ts";
+import { mapWithConcurrency, mapWithConcurrencySettled } from "./concurrent-map.ts";
 
 test("starts the next independent item when any worker finishes and preserves result order", async () => {
   const items = ["slow", "fast", "middle", "next"];
@@ -28,4 +28,33 @@ test("starts the next independent item when any worker finishes and preserves re
 test("rejects invalid concurrency and supports empty work", async () => {
   await assert.rejects(mapWithConcurrency([], 0, async () => null), /positive integer/);
   assert.deepEqual(await mapWithConcurrency([], 3, async () => null), []);
+});
+
+test("settles all bounded work and preserves fulfilled batch results beside a timeout", async () => {
+  let active = 0;
+  let peak = 0;
+  const results = await mapWithConcurrencySettled(["parsed-a", "timeout", "parsed-b"], 2, async (item) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, item === "timeout" ? 5 : 1));
+    active -= 1;
+    if (item === "timeout") throw new DOMException("provider deadline", "TimeoutError");
+    return item;
+  });
+  assert.deepEqual(results.map((result) => result.status), ["fulfilled", "rejected", "fulfilled"]);
+  assert.deepEqual(results.filter((result) => result.status === "fulfilled").map((result) => result.value), ["parsed-a", "parsed-b"]);
+  assert.equal(results[1].reason.name, "TimeoutError");
+  assert.equal(peak, 2);
+});
+
+test("settles caller cancellation without discarding another completed item", async () => {
+  const controller = new AbortController();
+  const results = await mapWithConcurrencySettled([1, 2], 2, async (item) => {
+    if (item === 1) return "completed";
+    controller.abort(new DOMException("cancelled", "AbortError"));
+    throw controller.signal.reason;
+  });
+  assert.deepEqual(results.map((result) => result.status), ["fulfilled", "rejected"]);
+  assert.equal(results[0].value, "completed");
+  assert.equal(results[1].reason.name, "AbortError");
 });
