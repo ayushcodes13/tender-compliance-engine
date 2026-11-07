@@ -1,0 +1,330 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "5b0dbbfb49706518ab6242b58c5e4fd73d5ac218",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna compatible endpoint",
+  "execution": "local Next.js API on 127.0.0.1:3000; completed run; wall-clock client timeout 265 seconds",
+  "costTelemetry": "not available",
+  "elapsedSeconds": 186,
+  "outcome": "completed",
+  "requirements": {
+    "candidateSuggestions": 113,
+    "acceptedUncheckedRows": 96,
+    "reviewedRows": 0,
+    "rejectedSuggestions": 17
+  },
+  "routing": {
+    "selectedTechnicalPages": 6,
+    "pagesNotSelectedOrUnrouted": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      12,
+      13,
+      14,
+      15
+    ],
+    "uncertainPages": 1,
+    "unroutedPages": 9,
+    "routingContextClippedPages": 15
+  },
+  "audit": {
+    "pagesNoGapsReported": 6,
+    "pagesPossibleGaps": 0,
+    "pagesIncomplete": 0,
+    "pagesNotAudited": 9,
+    "possibleOmissionSuggestions": 0
+  },
+  "ocr": {
+    "pagesWithRasterImageContent": 1,
+    "ocrRecommendedPages": 0,
+    "ocrAttemptedPages": 0
+  },
+  "annotationComparison": {
+    "status": "assistant-reviewed; independent human adjudication pending",
+    "sourceBoundCases": 23,
+    "sourceBoundsAtLeast95PercentCovered": 0,
+    "sourceBoundsAtLeast50PercentCovered": 4,
+    "exactAnchorCases": 23,
+    "casesWithAllExactAnchorsPresent": 4,
+    "anchorCoverageByCase": [
+      {
+        "caseId": "iitg-page-2-offered-technical-details-annexure",
+        "page": 2,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-2-manufacturer-or-dealership-certificate",
+        "page": 2,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-2-technical-leaflet",
+        "page": 2,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-2-certification-evidence",
+        "page": 2,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-2-warranty-details",
+        "page": 2,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-2-service-centre-details",
+        "page": 2,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-3-warranty-annexure-reference",
+        "page": 3,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-3-literature-supports-quoted-specifications",
+        "page": 3,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-3-india-after-sales-centre",
+        "page": 3,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-3-dealership-certificate",
+        "page": 3,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-3-quality-certificates",
+        "page": 3,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-12-compliance-form-technical-literature-and-warranty",
+        "page": 12,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-12-after-sales-service-checklist-field",
+        "page": 12,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-13-guwahati-service-centre-form-field",
+        "page": 13,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-4-installation-and-commissioning",
+        "page": 4,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-4-conditional-product-demonstration",
+        "page": 4,
+        "anchorsFound": 0,
+        "anchorCount": 1
+      },
+      {
+        "caseId": "iitg-page-11-five-year-amc-omitted",
+        "page": 11,
+        "anchorsFound": 0,
+        "anchorCount": 2
+      },
+      {
+        "caseId": "iitg-page-11-local-after-sales-presence-omitted",
+        "page": 11,
+        "anchorsFound": 0,
+        "anchorCount": 2
+      },
+      {
+        "caseId": "iitg-page-11-five-year-parts-support-omitted",
+        "page": 11,
+        "anchorsFound": 0,
+        "anchorCount": 2
+      },
+      {
+        "caseId": "iitg-page-11-operation-maintenance-manual-copies",
+        "page": 11,
+        "anchorsFound": 3,
+        "anchorCount": 3
+      },
+      {
+        "caseId": "iitg-page-11-calibration-certificate",
+        "page": 11,
+        "anchorsFound": 3,
+        "anchorCount": 3
+      },
+      {
+        "caseId": "iitg-page-11-installation-function-demonstration",
+        "page": 11,
+        "anchorsFound": 2,
+        "anchorCount": 2
+      },
+      {
+        "caseId": "iitg-page-11-service-visit-demonstration",
+        "page": 11,
+        "anchorsFound": 2,
+        "anchorCount": 2
+      }
+    ],
+    "page11CasesWithAllAnchorsPresent": 4,
+    "page11AnnotatedCases": 7,
+    "page11KnownMissesStillWithoutAllAnchors": [
+      "iitg-page-11-five-year-amc-omitted",
+      "iitg-page-11-local-after-sales-presence-omitted",
+      "iitg-page-11-five-year-parts-support-omitted"
+    ],
+    "sourceBoundCoverageByCase": [
+      {
+        "caseId": "iitg-page-11-five-year-amc-omitted",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-11-local-after-sales-presence-omitted",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-11-five-year-parts-support-omitted",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0.02
+      },
+      {
+        "caseId": "iitg-page-11-operation-maintenance-manual-copies",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0.926
+      },
+      {
+        "caseId": "iitg-page-11-calibration-certificate",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0.927
+      },
+      {
+        "caseId": "iitg-page-11-installation-function-demonstration",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0.896
+      },
+      {
+        "caseId": "iitg-page-11-service-visit-demonstration",
+        "page": 11,
+        "bestSourceBoundsCoverage": 0.928
+      },
+      {
+        "caseId": "iitg-page-2-offered-technical-details-annexure",
+        "page": 2,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-2-manufacturer-or-dealership-certificate",
+        "page": 2,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-2-technical-leaflet",
+        "page": 2,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-2-certification-evidence",
+        "page": 2,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-2-warranty-details",
+        "page": 2,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-2-service-centre-details",
+        "page": 2,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-3-warranty-annexure-reference",
+        "page": 3,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-3-literature-supports-quoted-specifications",
+        "page": 3,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-3-india-after-sales-centre",
+        "page": 3,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-3-dealership-certificate",
+        "page": 3,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-3-quality-certificates",
+        "page": 3,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-12-compliance-form-technical-literature-and-warranty",
+        "page": 12,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-12-after-sales-service-checklist-field",
+        "page": 12,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-13-guwahati-service-centre-form-field",
+        "page": 13,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-4-installation-and-commissioning",
+        "page": 4,
+        "bestSourceBoundsCoverage": 0
+      },
+      {
+        "caseId": "iitg-page-4-conditional-product-demonstration",
+        "page": 4,
+        "bestSourceBoundsCoverage": 0
+      }
+    ]
+  },
+  "limitations": [
+    "This is one nondeterministic live-model run on one public tender, not a before/after experiment.",
+    "The held-out source annotations are partial and assistant-reviewed, not an exhaustive or independently adjudicated gold set.",
+    "Exact anchor presence and source-bound overlap do not establish semantic correctness or complete claim support.",
+    "No cost or token telemetry was available.",
+    "All accepted requirement rows remained unchecked for human review."
+  ],
+  "sourceTextIncluded": false,
+  "sourceBoundsIncluded": false,
+  "candidateTextIncluded": false
+}
