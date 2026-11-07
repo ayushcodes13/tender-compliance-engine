@@ -31,11 +31,13 @@ let maximumVectorLabelConcurrency = 0;
 let vectorLabelRequestCount = 0;
 let activeGeneralExtractionRequests = 0;
 let maximumGeneralExtractionConcurrency = 0;
+const generalExtractionBatchEvents = [];
 const vectorAuditPageOrder = [];
 const progressObservations = [];
 const provider = http.createServer(async (request, response) => {
   let trackedVectorLabelRequest = false;
   let trackedGeneralExtractionRequest = false;
+  let trackedGeneralExtractionFirstPage = 0;
   try {
     let raw = '';
     for await (const chunk of request) raw += chunk;
@@ -46,7 +48,11 @@ const provider = http.createServer(async (request, response) => {
       trackedGeneralExtractionRequest = true;
       activeGeneralExtractionRequests += 1;
       maximumGeneralExtractionConcurrency = Math.max(maximumGeneralExtractionConcurrency, activeGeneralExtractionRequests);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      const pages = [...new Set([...raw.matchAll(/PDF PAGE (\d+)/g)].map(match => Number(match[1])))];
+      const firstPage = pages[0] ?? 0;
+      trackedGeneralExtractionFirstPage = firstPage;
+      generalExtractionBatchEvents.push({ firstPage, event: 'started', at: Date.now() });
+      await new Promise(resolve => setTimeout(resolve, firstPage === 1 ? 40 : firstPage === 4 ? 160 : firstPage === 7 ? 220 : 60));
     }
     if (scenario === 'vector-page-concurrency' && schema === 'visual_table_row_labels') {
       trackedVectorLabelRequest = true;
@@ -123,6 +129,9 @@ const provider = http.createServer(async (request, response) => {
     response.end(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}));
   } catch(error) {response.writeHead(500);response.end(JSON.stringify({error:String(error)}));}
   finally {
+    if (trackedGeneralExtractionRequest) {
+      generalExtractionBatchEvents.push({ firstPage: trackedGeneralExtractionFirstPage, event: 'completed', at: Date.now() });
+    }
     if (trackedVectorLabelRequest) activeVectorLabelRequests -= 1;
     if (trackedGeneralExtractionRequest) activeGeneralExtractionRequests -= 1;
   }
@@ -170,7 +179,7 @@ try {
   assert.equal(slowGeneral.ok,true,slowGeneral.error);
   const slowExtractionProgress=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
   const requestProgressIndex=slowExtractionProgress.findIndex(message=>message==='Requesting technical extraction batches 1–1 of 1');
-  const completedProgressIndex=slowExtractionProgress.findIndex(message=>message==='Received and parsed technical extraction batches 1–1 of 1');
+  const completedProgressIndex=slowExtractionProgress.findIndex(message=>message==='Received and parsed 1 of 1 technical extraction batches');
   assert.ok(requestProgressIndex>=0&&completedProgressIndex>requestProgressIndex,`Extraction progress reports the active request before reporting its parsed completion: ${JSON.stringify(slowExtractionProgress)}`);
   scenario='general-batch-concurrency';
   const multiPage=new jsPDF();
@@ -185,8 +194,10 @@ try {
   assert.equal(maximumGeneralExtractionConcurrency,3,'Independent general extraction batches run at the existing per-analysis concurrency limit');
   assert.deepEqual(batched.analysis.requirements.map(row=>row.quote),quotes,'Concurrent extraction preserves deterministic source order and all grounded fixture requirements');
   const batchedProgress=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
-  assert.ok(batchedProgress.some(message=>message.includes('Received and parsed technical extraction batches 1–3 of 4')));
-  assert.ok(batchedProgress.includes('Received and parsed technical extraction batches 4–4 of 4'));
+  assert.ok(batchedProgress.includes('Received and parsed 4 of 4 technical extraction batches'));
+  const batchThreeCompletedAt=generalExtractionBatchEvents.find(event=>event.firstPage===7&&event.event==='completed')?.at;
+  const batchFourStartedAt=generalExtractionBatchEvents.find(event=>event.firstPage===10&&event.event==='started')?.at;
+  assert.ok(Number.isFinite(batchThreeCompletedAt)&&Number.isFinite(batchFourStartedAt)&&batchFourStartedAt<batchThreeCompletedAt,'The fourth extraction batch starts when the first of the three active requests finishes, before the slow third request completes');
   scenario='page-disposition-only';
   const dispositionOnly=await analyze(short);
   assert.equal(dispositionOnly.ok,true,dispositionOnly.error);

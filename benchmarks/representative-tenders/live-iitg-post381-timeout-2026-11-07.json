@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePages": 15,
+  "codeCommit": "6a77af46e3f86bbf5846934daa2ee0fe1e55204c",
+  "runDate": "2026-11-07",
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "merged-main local production build; client deadline 290 seconds",
+  "elapsedSeconds": 290.8,
+  "terminalStatus": "client-timeout-no-response-sheet",
+  "providerConfiguration": {
+    "apiKeyPresent": true,
+    "baseUrlConfigured": true,
+    "model": "gpt-6-luna",
+    "credentialValuesRecorded": false,
+    "endpointHostnameRecorded": false
+  },
+  "stages": {
+    "sourceInventory": {
+      "status": "completed",
+      "firstProgressSeconds": 1.2
+    },
+    "pageRouting": {
+      "requests": 2,
+      "responsesParsed": 2,
+      "startedAtSeconds": 1.2,
+      "completedBySeconds": 79.6
+    },
+    "vectorTableMappingAndClassification": {
+      "status": "completed",
+      "pageNumbers": [
+        1,
+        7,
+        11,
+        12,
+        13
+      ],
+      "mappingAndClassificationCalls": 14,
+      "firstProgressSeconds": 79.6,
+      "completedBySeconds": 222.9
+    },
+    "generalRequirementExtraction": {
+      "startedAtSeconds": 222.9,
+      "batchesStarted": 4,
+      "batchesTotal": 4,
+      "batchesResponsesParsed": 3,
+      "pendingBatchIndicesAtClientTimeout": [
+        4
+      ]
+    },
+    "textPageOmissionAudit": {
+      "status": "not-reached"
+    },
+    "visualPageOmissionAudit": {
+      "status": "not-reached"
+    },
+    "responseSheet": {
+      "status": "not-produced"
+    }
+  },
+  "modelTiming": {
+    "page_routing": {
+      "requestsStarted": 2,
+      "responsesParsed": 2,
+      "requestHeaderWaitMs": 73937,
+      "completedTokens": 9002,
+      "pending": []
+    },
+    "vector_table_column_mapping": {
+      "requestsStarted": 9,
+      "responsesParsed": 9,
+      "requestHeaderWaitMs": 106107,
+      "completedTokens": 25102,
+      "pending": []
+    },
+    "vector_table_row_classification": {
+      "requestsStarted": 5,
+      "responsesParsed": 5,
+      "requestHeaderWaitMs": 113198,
+      "completedTokens": 33624,
+      "pending": []
+    },
+    "general_requirement_extraction": {
+      "requestsStarted": 4,
+      "responsesParsed": 3,
+      "requestHeaderWaitMs": 106687,
+      "completedTokens": 37498,
+      "pending": [
+        "batch-4"
+      ]
+    }
+  },
+  "completedCallObservedTokenTotal": 105226,
+  "cost": "not-recorded",
+  "diagnosis": "Routing completed by 79.6 seconds. Vector mapping and classification plus extraction setup delayed general extraction until 222.9 seconds. Three concurrent extraction calls were parsed by 266.9 seconds; batch 4 then started and remained pending at the 290.8-second client timeout. The instrumentation records 73.9 seconds of routing header wait, 219.3 seconds summed across vector mapping/classification, and 106.7 seconds summed across the three completed general extraction calls; these per-request waits overlap and cannot be interpreted as wall-clock stage durations.",
+  "qualityComparison": {
+    "responseRowsAvailable": false,
+    "sourceAnchorComparisonPerformed": false,
+    "recallOrPrecisionClaim": false
+  },
+  "limitations": [
+    "Client-side timeout occurred before a terminal analysis result or response sheet was produced.",
+    "Progress timestamps are client-observed and rounded to tenths of a second.",
+    "Header-wait sums are per-call durations that can overlap; they are not wall-clock totals.",
+    "Token counts include only parsed provider responses; the fourth extraction response remains unknown.",
+    "No extraction output, omission audit, compliance sheet, cost, or quality score was produced.",
+    "This non-controlled rerun cannot establish that earlier changes caused a latency improvement."
+  ],
+  "privacy": "No tender text, candidate text, provider request/response bodies, source bounds, credentials, or endpoint hostname are stored."
+}
