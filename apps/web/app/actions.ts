@@ -25,7 +25,8 @@ import { hasRasterImageOperators, selectImageRegionsForOcr, shouldRunPageOcr } f
 import { collectPdfImageRegions } from "./pdf-image-regions";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
-import { createModelCompletionClient, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
+import { createModelCompletionClient, MODEL_REQUESTS_PER_ANALYSIS, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
+import { mapInConcurrentWaves } from "./concurrent-waves";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { validatePageDispositions } from "./page-dispositions";
 import { buildRequirementSourceReference, buildSourcePageModel, createSourceDocumentModel, findUniqueSourceText, validateSourceDocumentInventory, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
@@ -1520,7 +1521,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         },
       };
       report("extracting rows from selected page images", { stage: "extracting", message: "Extracting rows from the selected pages", current: 0, total: visualPages.length });
-      const pageCalls = await Promise.all(visualPages.map(async (page) => {
+      const pageCalls = await mapInConcurrentWaves(visualPages, MODEL_REQUESTS_PER_ANALYSIS, async (page) => {
         const segments = pageSegments.filter((item) => item.page.page === page.page).map((item) => item.segment);
         if (segments.length !== 3) return { ok: false as const, status: 200, page: page.page, segments };
         const precedingPage = pages.find((candidatePage) => candidatePage.page === page.page - 1 && candidatePage.visualImage);
@@ -1555,7 +1556,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           return { ok: false as const, status: 200, page: page.page, segments };
         }
         return { ok: true as const, parsed, page: page.page, segments };
-      }));
+      }, (current, total) => report("extracting rows from selected page images", { stage: "extracting", message: "Extracting rows from the selected pages", current, total }));
       const pageResults = pageCalls.flatMap((result) => result.segments.map((segment) => result.ok
         ? { ok: true as const, page: result.page, segment, parsed: {
           columns: segment.index === 0 ? result.parsed.columns ?? [] : [],
@@ -1624,7 +1625,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           },
         },
       };
-      const coverageByPage = await Promise.all(visualPages.map(async (page) => {
+      const coverageByPage = await mapInConcurrentWaves(visualPages, MODEL_REQUESTS_PER_ANALYSIS, async (page) => {
         const regions = pageResults.filter((result) => result.page === page.page);
         const incomplete = () => regions.map((result) => ({ page: page.page, segmentIndex: result.segment.index, auditComplete: false, parsed: { requirements: [] as Candidate[] }, possibleOmissions: 0 }));
         if (regions.length !== 3 || regions.some((result) => !result.ok)) return incomplete();
@@ -1692,7 +1693,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           coverageCheckIncomplete = true;
           return incomplete();
         }
-      }));
+      }, (current, total) => report("checking page images for omitted table rows", { stage: "coverage", message: "Checking the selected table regions for omitted rows", current, total }));
       const coverageResults = coverageByPage.flat();
       for (const page of visualPages) {
         const results = coverageResults.filter((result) => result.page === page.page);
