@@ -716,12 +716,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     if (omittedFromRouting.length) routingWarnings.push(`PDF pages ${formatPageNumbers(omittedFromRouting)} had no selectable text and were not considered by the router.`);
     if (clippedFromRouting.length) routingWarnings.push(`The router used bounded excerpts; source text beyond the excerpts on PDF pages ${formatPageNumbers(clippedFromRouting)} was not in the routing context. Inspect these pages for omissions.`);
 
-    for (let batchIndex = 0; batchIndex < routingBatches.length; batchIndex += 1) {
-      const batch = routingBatches[batchIndex];
+    const routingOutcomes = await mapInConcurrentWaves(routingBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
       const batchPageNumbers = batch.pages.map((page) => page.page);
       const firstBatchPage = Math.min(...batchPageNumbers);
       const lastBatchPage = Math.max(...batchPageNumbers);
-      const validPageNumbers = new Set(batchPageNumbers);
       report("selecting technical table pages", {
         stage: "locating",
         message: `Locating technical sections · routing page group ${batchIndex + 1} of ${routingBatches.length}`,
@@ -788,13 +786,11 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       } catch (error) {
         emitModelTiming({ phase: "request_failed", requestKind: "page_routing", batchIndex: batchIndex + 1, totalBatches: routingBatches.length, batchPageCount: batch.pages.length, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), failureKind: modelTimingFailureKind(error, signal) });
         signal?.throwIfAborted();
-        await pdf.destroy();
         return { ok: false as const, error: `The configured model could not route PDF page group ${batchIndex + 1}. No extraction was attempted.` };
       }
       const requestHeadersWaitMs = Math.round(performance.now() - requestStartedAt);
       emitModelTiming({ phase: "headers_received", requestKind: "page_routing", batchIndex: batchIndex + 1, totalBatches: routingBatches.length, batchPageCount: batch.pages.length, inputCharacters, requestHeadersWaitMs, responseStatus: pageSelection.status });
       if (!pageSelection.ok) {
-        await pdf.destroy();
         return { ok: false as const, error: `The configured model could not route PDF page group ${batchIndex + 1} (${pageSelection.status}). No extraction was attempted.` };
       }
       const responseBodyStartedAt = performance.now();
@@ -802,7 +798,6 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       const responseBodyAndEnvelopeMs = Math.round(performance.now() - responseBodyStartedAt);
       const rawSelection = selection.choices?.[0]?.message?.content;
       if (typeof rawSelection !== "string") {
-        await pdf.destroy();
         return { ok: false as const, error: `The configured model returned no routing result for PDF page group ${batchIndex + 1}. No extraction was attempted.` };
       }
       const jsonParseStartedAt = performance.now();
@@ -818,9 +813,27 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       });
       if (!Array.isArray(selected.sections) || !Array.isArray(selected.uncertain_pages) || !Array.isArray(selected.routing_warnings)
         || !Array.isArray(selected.page_dispositions) || !Array.isArray(selected.possible_source_conflicts)) {
-        await pdf.destroy();
         return { ok: false as const, error: `The configured model returned an invalid routing result for PDF page group ${batchIndex + 1}. No extraction was attempted.` };
       }
+      return { ok: true as const, selected: selected as {
+        sections: unknown[];
+        uncertain_pages: unknown[];
+        page_dispositions: unknown[];
+        routing_warnings: unknown[];
+        possible_source_conflicts: unknown[];
+      } };
+    });
+
+    for (let batchIndex = 0; batchIndex < routingBatches.length; batchIndex += 1) {
+      const batch = routingBatches[batchIndex];
+      const batchPageNumbers = batch.pages.map((page) => page.page);
+      const validPageNumbers = new Set(batchPageNumbers);
+      const routingOutcome = routingOutcomes[batchIndex];
+      if (!routingOutcome.ok) {
+        await pdf.destroy();
+        return routingOutcome;
+      }
+      const selected = routingOutcome.selected;
       for (const rawSection of selected.sections) {
         if (!rawSection || typeof rawSection !== "object") {
           await pdf.destroy();

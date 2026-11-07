@@ -32,17 +32,30 @@ let vectorLabelRequestCount = 0;
 let activeGeneralExtractionRequests = 0;
 let maximumGeneralExtractionConcurrency = 0;
 const generalExtractionBatchEvents = [];
+let activeRoutingRequests = 0;
+let maximumRoutingConcurrency = 0;
+const routingBatchEvents = [];
 const vectorAuditPageOrder = [];
 const progressObservations = [];
 const provider = http.createServer(async (request, response) => {
   let trackedVectorLabelRequest = false;
   let trackedGeneralExtractionRequest = false;
   let trackedGeneralExtractionFirstPage = 0;
+  let trackedRoutingRequest = false;
+  let trackedRoutingGroup = 0;
   try {
     let raw = '';
     for await (const chunk of request) raw += chunk;
     const body = JSON.parse(raw);
     const schema = body.response_format?.json_schema?.name;
+    if (scenario === 'route-batch-concurrency' && schema === 'technical_section_route') {
+      trackedRoutingRequest = true;
+      activeRoutingRequests += 1;
+      maximumRoutingConcurrency = Math.max(maximumRoutingConcurrency, activeRoutingRequests);
+      trackedRoutingGroup = Number(raw.match(/page group (\d+) of/)?.[1] ?? 0);
+      routingBatchEvents.push({ group: trackedRoutingGroup, event: 'started', at: Date.now() });
+      await new Promise(resolve => setTimeout(resolve, trackedRoutingGroup === 1 ? 220 : 50));
+    }
     if (scenario === 'slow-general-extraction' && schema === 'tender_requirements') await new Promise(resolve => setTimeout(resolve, 150));
     if (scenario === 'general-batch-concurrency' && schema === 'tender_requirements') {
       trackedGeneralExtractionRequest = true;
@@ -129,6 +142,10 @@ const provider = http.createServer(async (request, response) => {
     response.end(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}));
   } catch(error) {response.writeHead(500);response.end(JSON.stringify({error:String(error)}));}
   finally {
+    if (trackedRoutingRequest) {
+      routingBatchEvents.push({ group: trackedRoutingGroup, event: 'completed', at: Date.now() });
+      activeRoutingRequests -= 1;
+    }
     if (trackedGeneralExtractionRequest) {
       generalExtractionBatchEvents.push({ firstPage: trackedGeneralExtractionFirstPage, event: 'completed', at: Date.now() });
     }
@@ -198,6 +215,20 @@ try {
   const batchThreeCompletedAt=generalExtractionBatchEvents.find(event=>event.firstPage===7&&event.event==='completed')?.at;
   const batchFourStartedAt=generalExtractionBatchEvents.find(event=>event.firstPage===10&&event.event==='started')?.at;
   assert.ok(Number.isFinite(batchThreeCompletedAt)&&Number.isFinite(batchFourStartedAt)&&batchFourStartedAt<batchThreeCompletedAt,'The fourth extraction batch starts when the first of the three active requests finishes, before the slow third request completes');
+  scenario='route-batch-concurrency';
+  const routingPdf=new jsPDF();
+  for(let page=1;page<=30;page++) {
+    if(page>1)routingPdf.addPage();
+    routingPdf.setFontSize(8);
+    routingPdf.text([quotes[(page-1)%quotes.length],...Array.from({length:20},(_,line)=>`Routing context ${page}-${line} describes a technical apparatus and its operating conditions.`)],20,30,{lineHeightFactor:1});
+  }
+  const concurrentRouting=await analyze(routingPdf);
+  assert.equal(concurrentRouting.ok,true,concurrentRouting.error);
+  assert.ok(maximumRoutingConcurrency>=2,'Independent page routing groups run concurrently within the analysis request limit');
+  const firstRouteCompletedAt=routingBatchEvents.find(event=>event.group===1&&event.event==='completed')?.at;
+  const secondRouteCompletedAt=routingBatchEvents.find(event=>event.group===2&&event.event==='completed')?.at;
+  assert.ok(Number.isFinite(firstRouteCompletedAt)&&Number.isFinite(secondRouteCompletedAt)&&secondRouteCompletedAt<firstRouteCompletedAt,'A faster later routing group completes first while results remain merged in source order');
+  assert.deepEqual(concurrentRouting.analysis.coverage.pages.map(page=>page.page),Array.from({length:30},(_,index)=>index+1),'Concurrent routing retains every page in deterministic source order');
   scenario='page-disposition-only';
   const dispositionOnly=await analyze(short);
   assert.equal(dispositionOnly.ok,true,dispositionOnly.error);
