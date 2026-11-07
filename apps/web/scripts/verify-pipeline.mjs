@@ -25,6 +25,7 @@ let routeCalls = 0;
 let initialExtractionReturnedRecovery = false;
 let omissionAuditReturnedRecovery = false;
 let corruptedNumericClaimProposed = false;
+const visualBatchObservations = [];
 const provider = http.createServer(async (request, response) => {
   try {
     let raw = '';
@@ -33,12 +34,13 @@ const provider = http.createServer(async (request, response) => {
     const schema = body.response_format?.json_schema?.name;
     const contents = body.messages.flatMap(message => typeof message.content === 'string' ? [{type:'text',text:message.content}] : message.content);
     const text = contents.filter(item=>item.type==='text').map(item=>item.text).join('\n');
+    if (schema === 'technical_table_page_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
     if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
-      result = {sections:scenario==='page-disposition-only'?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],page_dispositions:pages.map(page=>({page,classification:'relevant',reason:'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
+      result = {sections:scenario==='page-disposition-only'?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||scenario==='page-batched-fallback'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],page_dispositions:pages.map(page=>({page,classification:'relevant',reason:'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
       const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
@@ -55,7 +57,7 @@ const provider = http.createServer(async (request, response) => {
       if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly')){row.row_type='section';row.classification_reason='structural_heading';}}}
     } else if (schema === 'technical_table_page_rows') {
       const quote='The centrifuge shall accommodate 10 samples.';
-      result={columns:[],requirements:scenario==='unlocated-remark'&&text.includes(quote)?[{page:1,quote,remark:'Invented deviation: maximum 500 RPM.',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]};
+      result={columns:[],requirements:['unlocated-remark','page-batched-fallback'].includes(scenario)&&text.includes(quote)?[{page:1,quote,visual_region_index:0,remark:scenario==='unlocated-remark'?'Invented deviation: maximum 500 RPM.':'',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]};
     } else if (schema === 'technical_table_missing_rows') {
       result={columns:[],requirements:[]};
     } else if (schema === 'source_row_semantic_coverage') {
@@ -131,6 +133,15 @@ try {
   assert.equal(dispositionOnly.ok,true,dispositionOnly.error);
   assert.equal(dispositionOnly.analysis.requirements.length,1,'A relevant per-page disposition selects source extraction even without a section range');
   assert.equal(dispositionOnly.analysis.coverage.pages[0].routingDisposition,'selected');
+  scenario='page-batched-fallback';
+  const batchedFallback=await analyze(short);
+  assert.equal(batchedFallback.ok,true,batchedFallback.error);
+  assert.equal(batchedFallback.analysis.requirements.length,1,'The page-batched visual fallback preserves the literal source requirement');
+  assert.equal(batchedFallback.analysis.coverage.pages[0].auditStatus,'no_gaps_reported');
+  assert.deepEqual(visualBatchObservations.filter(item=>item.scenario==='page-batched-fallback'),[
+    {scenario:'page-batched-fallback',schema:'technical_table_page_rows',imageCount:3},
+    {scenario:'page-batched-fallback',schema:'technical_table_missing_rows',imageCount:3},
+  ],'one extraction and one independent audit request each receive the three indexed page regions');
   scenario='cross-section-conflict';
   const conflictPdf=new jsPDF();conflictPdf.text('Technical specifications for X-Band EPR spectrometer system',20,30);conflictPdf.text(quotes[0],20,50);conflictPdf.addPage();conflictPdf.text('Advanced Spectrofluorometer compliance sheet',20,30);
   const conflict=await analyze(conflictPdf);assert.equal(conflict.ok,true,conflict.error);

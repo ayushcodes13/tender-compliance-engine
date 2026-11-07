@@ -141,6 +141,7 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 - [x] Compare accepted output against 23 partial assistant-reviewed source-bound/anchor cases without promoting the overlap results to semantic recall.
 - [ ] Resolve or explicitly disposition all nine unrouted pages and nine pages without page-level completeness audits; review why three known page-11 omission anchors were not found by the audit.
 - [ ] Reconcile the post-routing-change IIT Guwahati rerun: routing completed but extraction hit the 270-second deadline with no response sheet. Design bounded/resumable work or otherwise reduce incomplete processing without weakening page recall; do not treat the single timeout as a before/after performance result.
+- [ ] Measure the page-batched visual inference path on representative bordered/borderless and complex multi-row pages. The scripted provider contract can verify region identity and separate audit flow, but live quality, request-size constraints, latency, and deadline completion remain unverified.
 - [ ] Repeat with an independently adjudicated gold set and token/cost telemetry before making a quality or capacity claim.
 
 ### Held-out parser-candidate/source-region overlap — 2026-11-07
