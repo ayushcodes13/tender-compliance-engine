@@ -84,6 +84,10 @@ A good PR should make review possible without reconstructing intent from the dif
 - **UI proof:** screenshots or clear manual-verification steps for user-facing changes when practical.
 - **Data/migration notes:** schema, migration, compatibility, or rollback considerations when persistence changes.
 
+## Active client POC parallel coordination (2026-11-07)
+
+Before working on the active client POC sprint, all three participants must read **docs/poc-90-parallel-coordination.md** and obey its lane ownership, acceptance gates, shared-branch protocol and stop conditions. This is an execution overlay only: this AGENTS.md remains the engineering rulebook and docs/checkpoint.md remains the canonical checkpoint plan. Two coding agents own disjoint runtime paths; the ChatGPT architecture lane owns only coordination/docs and joint PR review. Do not edit files assigned to another lane or run concurrent paid benchmarks.
+
 ## Canonical checkpoint plan
 
 `docs/checkpoint.md` is the execution source of truth for planned product work.
