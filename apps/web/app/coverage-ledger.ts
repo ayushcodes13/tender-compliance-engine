@@ -16,23 +16,27 @@ export function resolveRoutingDisposition(input: {
   if (!input.hasRoutingText) {
     return { disposition: "no_text", reason: "No native or OCR text was available to the router; inspect the page image." };
   }
-  if (input.selectedForExtraction) {
-    const sectionContext = input.matchingSections.length
-      ? input.matchingSections.map((section) => `${section.title.slice(0, 120)}: ${section.reason.slice(0, 280)}`).join("; ").slice(0, 800)
-        : input.pageDispositionReason
-          ? input.pageDispositionReason.slice(0, 400)
-          : input.selectedByAnnexureContinuation
+  const sectionContext = input.matchingSections.length
+    ? input.matchingSections.map((section) => `${section.title.slice(0, 120)}: ${section.reason.slice(0, 280)}`).join("; ").slice(0, 800)
+    : input.pageDispositionReason
+      ? input.pageDispositionReason.slice(0, 400)
+      : input.selectedByAnnexureContinuation
         ? "Retained as a page in a parser-detected annexure continuation."
         : "Selected by the router; no matching section reason was retained.";
+  if (input.markedUncertain) {
+    const detail = (input.pageDispositionReason || (input.selectedForExtraction ? sectionContext : "The router marked this page uncertain.")).slice(0, 300);
     return {
-      disposition: "selected",
-      reason: input.markedUncertain ? `${sectionContext} The router also marked this page uncertain.` : sectionContext,
+      disposition: "uncertain",
+      reason: input.selectedForExtraction
+        ? `${detail} The page was included for deeper extraction and still requires human review.`
+        : `${detail} The page was not included in extraction and needs source review.`,
     };
   }
-  if (input.markedUncertain) {
-    return { disposition: "uncertain", reason: input.pageDispositionReason
-      ? `${input.pageDispositionReason.slice(0, 300)} The page was not included in extraction and needs source review.`
-      : "The router marked this page uncertain; it was not included in extraction and needs source review." };
+  if (input.selectedForExtraction) {
+    return {
+      disposition: "selected",
+      reason: sectionContext,
+    };
   }
   if (input.explicitExclusionReason) {
     return { disposition: "excluded", reason: input.explicitExclusionReason.slice(0, 400) };

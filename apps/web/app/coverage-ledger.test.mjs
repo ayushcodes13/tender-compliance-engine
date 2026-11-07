@@ -140,8 +140,8 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
     markedUncertain: true,
     matchingSections: [{ title: "Technical specifications", reason: "Contains equipment limits" }],
   }), {
-    disposition: "selected",
-    reason: "Technical specifications: Contains equipment limits The router also marked this page uncertain.",
+    disposition: "uncertain",
+    reason: "Technical specifications: Contains equipment limits The page was included for deeper extraction and still requires human review.",
   });
   assert.deepEqual(resolveRoutingDisposition({
     hasRoutingText: true,
@@ -151,7 +151,7 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
     matchingSections: [],
   }), {
     disposition: "uncertain",
-    reason: "The router marked this page uncertain; it was not included in extraction and needs source review.",
+    reason: "The router marked this page uncertain. The page was not included in extraction and needs source review.",
   });
   assert.deepEqual(resolveRoutingDisposition({
     hasRoutingText: true,

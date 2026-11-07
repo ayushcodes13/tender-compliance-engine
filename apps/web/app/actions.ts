@@ -864,6 +864,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const modelSelectedPages = [...new Set([
       ...expandRoutedSections(uniqueSections, routingPages.map((page) => page.page)),
       ...directlyRelevantPages,
+      // Uncertainty is a reason for deeper inspection, not a reason to skip
+      // extraction. Keep the page marked uncertain in the coverage ledger.
+      ...uncertainPages,
       ...conflictRoutedPages,
     ])].sort((a, b) => a - b);
     visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.filter(section=>section.annexure).map((section) => section.page), pages.map((page) => page.page));
