@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "isolated production Next.js server on 127.0.0.1:3155; 270-second application deadline",
+  "attempts": [
+    {
+      "runCommit": "d79857cf20cf0f3a8d97f4c26c2ee677c761cc5a",
+      "outcome": "incomplete_deadline",
+      "elapsedSeconds": 271.4,
+      "progressTimingsSeconds": {
+        "inventoryPage15": 1.8,
+        "routingGroup2Of2": 22.7,
+        "mappingStarted": 42.8,
+        "vectorTableInspectionStarted": 47.2,
+        "textPageExtractionStarted": 224.1,
+        "modelResponseParsingStage": 238.6,
+        "applicationDeadline": 271.4
+      },
+      "vectorPagesDetected": 5,
+      "vectorPageCompletionCounts": null,
+      "responseSheetProduced": false,
+      "limitation": "The serial fallback did not emit per-page counters in this build, so parallel-path eligibility and exact vector page completion time are unknown."
+    },
+    {
+      "runCommit": "928f60efcbc8c82c589903278c1aa34f33a434ab",
+      "outcome": "analysis_returned_not_ok",
+      "elapsedSeconds": 240.1,
+      "progressTimingsSeconds": {
+        "routingGroup2Of2": 20.2,
+        "mappingStarted": 37.7,
+        "vectorTableInspectionStarted": 41.9,
+        "vectorPage1Of5": 59.9,
+        "vectorPage2Of5": 90.4,
+        "vectorPage3Of5": 109.5,
+        "vectorPage4Of5": 125.3,
+        "vectorPage5Of5": 142.4,
+        "textPageExtractionStarted": 142.4,
+        "modelResponseParsingStage": 150.0
+      },
+      "vectorPagesDetected": 5,
+      "vectorInspectionMode": "serial_fallback",
+      "responseSheetProduced": false,
+      "failureDetailPersisted": false
+    },
+    {
+      "runCommit": "928f60efcbc8c82c589903278c1aa34f33a434ab",
+      "outcome": "incomplete_deadline",
+      "elapsedSeconds": 271.2,
+      "progressTimingsSeconds": {
+        "routingGroup2Of2": 20.2,
+        "mappingStarted": 41.1,
+        "vectorTableInspectionStarted": 45.0,
+        "vectorPage1Of4": 80.1,
+        "vectorPage2Of4": 111.5,
+        "vectorPage3Of4": 133.7,
+        "vectorPage4Of4": 149.4,
+        "textPageExtractionStarted": 149.4,
+        "modelResponseParsingStageFirstObserved": 185.1,
+        "modelResponseParsingStageObservedAgain": 211.7,
+        "modelResponseParsingStageLastObserved": 252.4,
+        "applicationDeadline": 271.2
+      },
+      "vectorPagesDetected": 4,
+      "vectorInspectionMode": "serial_fallback",
+      "responseSheetProduced": false
+    }
+  ],
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "limitations": [
+    "Runs used the same hash-verified source but selected different counts of vector table pages; they are nondeterministic samples, not controlled before/after benchmarks.",
+    "The two runs with page counters show this tender used serial fallback because not every selected vector page repeated the initial verified headers.",
+    "Vector-stage timings improved in the second attempt compared with the first, but model latency varied and no causal speedup from parallelism was measured.",
+    "The latest attempt completed vector inspection but timed out while the model response for subsequent text-page extraction was being read or parsed; the progress label alone does not distinguish body transfer from JSON decoding.",
+    "No output sheet was produced, so coverage, candidate quality, page-level dispositions, and extraction recall are unavailable.",
+    "No tender text, model text, candidate text, token usage, or cost telemetry was retained."
+  ]
+}
