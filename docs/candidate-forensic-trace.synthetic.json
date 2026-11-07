@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "documentFingerprint": "synthetic-fixture-fingerprint",
+  "summary": {
+    "total": 3,
+    "accepted": 1,
+    "rejected": 1,
+    "duplicate": 1,
+    "merged": 0,
+    "discarded": 0,
+    "incomplete": 0
+  },
+  "candidates": [
+    {
+      "candidateId": "cand-synthetic-amc",
+      "documentFingerprint": "synthetic-fixture-fingerprint",
+      "page": 11,
+      "origin": "initial_extraction",
+      "modelQuote": "Provide five years of after-sales service.",
+      "sourceQuote": "The supplier shall provide after-sales service for five years.",
+      "sourceQuoteStatus": "matched",
+      "sourceElementIds": ["page-11:text-7"],
+      "disposition": "accepted",
+      "responsibleStage": "source_evidence_validation",
+      "finalRequirementId": "req-1"
+    },
+    {
+      "candidateId": "cand-synthetic-parts",
+      "documentFingerprint": "synthetic-fixture-fingerprint",
+      "page": 11,
+      "origin": "text_page_omission_audit",
+      "modelQuote": "Ensure availability of spare parts for 5 years.",
+      "sourceQuote": "The supplier shall provide spare parts for five years.",
+      "sourceQuoteStatus": "matched",
+      "sourceElementIds": ["page-11:text-8"],
+      "disposition": "rejected",
+      "responsibleStage": "source_evidence_validation",
+      "rejectionCategory": "source_quote_or_location_not_verified"
+    },
+    {
+      "candidateId": "cand-synthetic-contained",
+      "documentFingerprint": "synthetic-fixture-fingerprint",
+      "page": 11,
+      "origin": "text_page_omission_audit",
+      "modelQuote": "The supplier shall provide after-sales service for five years.",
+      "sourceQuote": "The supplier shall provide after-sales service for five years.",
+      "sourceQuoteStatus": "matched",
+      "sourceElementIds": ["page-11:text-7"],
+      "disposition": "duplicate",
+      "responsibleStage": "omission_containment",
+      "rejectionCategory": "contained_by_existing_extraction",
+      "relatedCandidateId": "cand-synthetic-amc"
+    }
+  ],
+  "expectedSourceUnits": [
+    {
+      "expectedUnitId": "amc-service",
+      "page": 11,
+      "sourceQuote": "The supplier shall provide after-sales service for five years.",
+      "sourceElementIds": ["page-11:text-7"]
+    },
+    {
+      "expectedUnitId": "local-support",
+      "page": 11,
+      "sourceQuote": "Maintain a local office in India for after-sales support.",
+      "sourceElementIds": ["page-11:text-9"]
+    },
+    {
+      "expectedUnitId": "spare-parts",
+      "page": 11,
+      "sourceQuote": "The supplier shall provide spare parts for five years.",
+      "sourceElementIds": ["page-11:text-8"]
+    }
+  ],
+  "expectedSourceUnitResults": [
+    { "expectedUnitId": "amc-service", "status": "generated_accepted", "candidateIds": ["cand-synthetic-amc", "cand-synthetic-contained"] },
+    { "expectedUnitId": "local-support", "status": "not_generated", "candidateIds": [] },
+    { "expectedUnitId": "spare-parts", "status": "generated_rejected", "candidateIds": ["cand-synthetic-parts"] }
+  ]
+}

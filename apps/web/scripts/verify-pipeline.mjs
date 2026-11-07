@@ -5,6 +5,8 @@ import { createHash } from 'node:crypto';
 import http from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
+import { readdir, readFile, unlink } from 'node:fs/promises';
+import path from 'node:path';
 import { jsPDF } from 'jspdf';
 import { buildResponseSections } from '../app/response-sections.ts';
 import { buildResponseSheet, updateResponseSheetCell, removeResponseSheetRow } from '../app/response-sheet.ts';
@@ -37,6 +39,8 @@ let maximumRoutingConcurrency = 0;
 const routingBatchEvents = [];
 const vectorAuditPageOrder = [];
 const progressObservations = [];
+const forensicTraceDirectory = path.join(process.cwd(), '.local', 'forensic-traces');
+const existingTraceFiles = new Set(await readdir(forensicTraceDirectory).catch(() => []));
 const provider = http.createServer(async (request, response) => {
   let trackedVectorLabelRequest = false;
   let trackedGeneralExtractionRequest = false;
@@ -111,7 +115,8 @@ const provider = http.createServer(async (request, response) => {
       const quote='The centrifuge shall accommodate 10 samples.';
       result={page_results:[{page:1,columns:[],requirements:['unlocated-remark','page-batched-fallback'].includes(scenario)&&text.includes(quote)?[{quote,visual_region_index:0,remark:scenario==='unlocated-remark'?'Invented deviation: maximum 500 RPM.':'',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]}]};
     } else if (schema === 'technical_table_missing_rows') {
-      result={columns:[],requirements:[]};
+      const duplicateQuote='The centrifuge shall accommodate 10 samples.';
+      result={columns:[],requirements:scenario==='page-batched-fallback'&&text.includes(duplicateQuote)?[{page:1,quote:duplicateQuote,visual_region_index:0,row_type:'requirement',category:'Performance',heading_prefix:'',remark:'',display_lines:[duplicateQuote],continues_previous:false}]:[]};
     } else if (schema === 'source_row_semantic_coverage') {
       const rows = JSON.parse(body.messages.at(-1)?.content ?? '[]');
       result = { rows: rows.map(row => row.source_cells.some(cell => cell.includes('Calibration report shall be supplied.'))
@@ -156,7 +161,7 @@ const provider = http.createServer(async (request, response) => {
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
 const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],{
-  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password'},stdio:['ignore','pipe','pipe'],
+  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',TCE_FORENSIC_TRACE:'1'},stdio:['ignore','pipe','pipe'],
 });
 let logs='';child.stdout.on('data',chunk=>{logs+=chunk;});child.stderr.on('data',chunk=>{logs+=chunk;});
 try {
@@ -477,10 +482,40 @@ try {
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
   assert.ok(mixed.analysis.requirements.some(row=>row.quote==='Calibration report shall be supplied.' && row.reviewed===false && row.sourceReference.sourceText==='Calibration report shall be supplied.'),'an exact source excerpt from a possible-gap audit re-enters as an unchecked, source-verified recovery candidate');
+  const generatedTraceFiles=(await readdir(forensicTraceDirectory)).filter(file=>!existingTraceFiles.has(file));
+  assert.ok(generatedTraceFiles.length>0,'Opt-in synthetic pipeline runs write local forensic traces');
+  const traces=await Promise.all(generatedTraceFiles.map(async file=>JSON.parse(await readFile(path.join(forensicTraceDirectory,file),'utf8'))));
+  for(const trace of traces){
+    const rows=trace.candidates;
+    const counts=rows.reduce((total,row)=>{total[row.disposition]=(total[row.disposition]??0)+1;return total;},{accepted:0,rejected:0,duplicate:0,merged:0,discarded:0,incomplete:0});
+    assert.equal(rows.length,trace.summary.total,'Every generated candidate is represented in the trace');
+    assert.equal(counts.accepted+counts.rejected+counts.duplicate+counts.merged+counts.discarded+counts.incomplete,trace.summary.total,'Accepted, rejected, duplicate, merged, discarded, and incomplete records reconcile');
+    assert.equal(counts.incomplete,0,'Every scripted fixture candidate reaches a terminal disposition');
+    assert.equal(new Set(rows.map(row=>row.candidateId)).size,rows.length,'Candidate IDs remain unique within each run');
+    assert.ok(rows.every(row=>row.documentFingerprint===trace.documentFingerprint));
+  }
+  const proseTrace=traces.find(trace=>trace.candidates.some(row=>row.modelQuote===recovery));
+  assert.ok(proseTrace,'The deliberate omission-audit recovery has a trace record');
+  const recoveredTrace=proseTrace.candidates.find(row=>row.modelQuote===recovery);
+  assert.equal(recoveredTrace.origin,'text_page_omission_audit');
+  assert.equal(recoveredTrace.disposition,'accepted');
+  assert.ok(recoveredTrace.finalRequirementId);
+  assert.equal(recoveredTrace.sourceQuote,recovery,'The parser source quote is retained separately from the model proposal');
+  assert.ok(proseTrace.candidates.some(row=>row.origin==='initial_extraction'&&row.rejectionCategory==='source_quote_or_location_not_verified'),'The fixture preserves an initially generated claim rejected by source validation');
+  const sourceRowRecoveryTrace=traces.find(trace=>trace.candidates.some(row=>row.origin==='source_row_recovery'&&row.modelQuote==='Calibration report shall be supplied.'));
+  const sourceRowRecovery=sourceRowRecoveryTrace?.candidates.find(row=>row.origin==='source_row_recovery'&&row.modelQuote==='Calibration report shall be supplied.');
+  assert.equal(sourceRowRecovery?.disposition,'accepted','Source-row recovery candidates are traced through acceptance');
+  assert.ok(sourceRowRecovery.sourceRowId&&sourceRowRecovery.sourceCellId,'Source-row recovery retains parser row and cell identity');
+  const visualAuditTrace=traces.find(trace=>trace.candidates.some(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.'));
+  const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
+  assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
+  assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
   console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
   if(child.exitCode===null)child.kill('SIGKILL');
+  const newTraceFiles=(await readdir(forensicTraceDirectory).catch(()=>[])).filter(file=>!existingTraceFiles.has(file));
+  await Promise.all(newTraceFiles.map(file=>unlink(path.join(forensicTraceDirectory,file)).catch(()=>undefined)));
   provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));
 }
