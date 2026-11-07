@@ -1308,13 +1308,18 @@ Product names and model/capacity labels are headings, but serials, page furnitur
               ],
             }),
           });
-          emitModelTiming({ phase: "headers_received", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), responseStatus: response.status });
+          const requestHeadersWaitMs = Math.round(performance.now() - requestStartedAt);
+          emitModelTiming({ phase: "headers_received", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs, responseStatus: response.status });
           if (!response.ok) coverageCheckIncomplete = true;
           else {
+            const responseBodyStartedAt = performance.now();
             const payload = await response.json();
+            const responseBodyAndEnvelopeMs = Math.round(performance.now() - responseBodyStartedAt);
             const content = payload?.choices?.[0]?.message?.content;
             if (typeof content === "string") {
+              const jsonParseStartedAt = performance.now();
               const result = parseJson(content) as { columns?: SourceColumn[]; rows?: typeof rowLabels; splits?: typeof rowSplits; loose_headings?: typeof looseHeadings; visual_completions?: typeof visualCompletions };
+              const jsonParseMs = Math.round(performance.now() - jsonParseStartedAt);
               if (Array.isArray(result.columns) && result.columns.length) {
                 const validatedColumns = validatePageColumnMap(result.columns, sourceRows.flatMap((row) => row.cells), (header) =>
                   matchesPageSourceText(header, page));
@@ -1335,6 +1340,15 @@ Product names and model/capacity labels are headings, but serials, page furnitur
               modelInspectionComplete = Array.isArray(result.rows) && Array.isArray(result.splits)
                 && rowClassificationComplete
                 && sourceRows.every((_, index) => rowLabels.some((label) => label.row_index === index && label.classification_reason));
+              const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
+              emitModelTiming({
+                phase: "response_parsed", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters,
+                requestHeadersWaitMs, responseBodyAndEnvelopeMs, jsonParseMs,
+                responseStatus: response.status, responseCharacters: content.length,
+                ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+                ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+                ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+              });
             } else coverageCheckIncomplete = true;
           }
         } catch (error) {
@@ -1497,13 +1511,27 @@ Product names and model/capacity labels are headings, but serials, page furnitur
                 ],
               }),
             });
-            emitModelTiming({ phase: "headers_received", requestKind: "vector_source_row_audit", batchIndex: auditBatchIndex + 1, totalBatches: rowAuditBatches.length, pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), responseStatus: auditResponse.status });
+            const requestHeadersWaitMs = Math.round(performance.now() - requestStartedAt);
+            emitModelTiming({ phase: "headers_received", requestKind: "vector_source_row_audit", batchIndex: auditBatchIndex + 1, totalBatches: rowAuditBatches.length, pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs, responseStatus: auditResponse.status });
             if (!auditResponse.ok) throw new Error("source row audit request failed");
+            const responseBodyStartedAt = performance.now();
             const payload = await auditResponse.json();
+            const responseBodyAndEnvelopeMs = Math.round(performance.now() - responseBodyStartedAt);
             const content = payload?.choices?.[0]?.message?.content;
+            const jsonParseStartedAt = performance.now();
             const parsed = typeof content === "string" ? parseJson(content) : null;
+            const jsonParseMs = Math.round(performance.now() - jsonParseStartedAt);
             const validated = validateSourceRowAuditResult(parsed, expectedRowIndices, batch);
             if (!validated.complete) throw new Error("source row audit response was incomplete");
+            const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
+            emitModelTiming({
+              phase: "response_parsed", requestKind: "vector_source_row_audit", batchIndex: auditBatchIndex + 1, totalBatches: rowAuditBatches.length,
+              pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs,
+              responseBodyAndEnvelopeMs, jsonParseMs, responseStatus: auditResponse.status, responseCharacters: typeof content === "string" ? content.length : 0,
+              ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+              ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+              ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+            });
             for (const row of validated.rows) {
               rowAuditState.set(row.rowIndex, { status: row.status, note: row.note });
               if (row.status !== "possible_gap") continue;
