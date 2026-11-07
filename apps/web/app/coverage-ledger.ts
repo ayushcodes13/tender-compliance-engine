@@ -84,6 +84,8 @@ export type CoverageSourceRow = {
   sourceMatchedCandidates: number;
   matchedRequirementIds: string[];
   acceptedLinkStatus: "not_applicable" | "no_candidate_suggestions" | "linked" | "unlinked";
+  /** Source association does not establish that every obligation in the row was extracted. */
+  semanticCoverageStatus: "not_applicable" | "not_assessed";
   sourceClassification: SourceRowClassification;
   classificationReason: SourceRowClassificationReason;
   sourceElementIds: string[];
@@ -163,6 +165,7 @@ export function collectSourceTableCoverageRows(
     const acceptedLinkStatus: CoverageSourceRow["acceptedLinkStatus"] = isHeader || !populated
       ? "not_applicable"
       : candidateSuggestions === 0 ? "no_candidate_suggestions" : "unlinked";
+    const semanticCoverageStatus: CoverageSourceRow["semanticCoverageStatus"] = isHeader || !populated ? "not_applicable" : "not_assessed";
     return [{
       rowNumber: rowIndex + 1,
       cells: normalizedCells,
@@ -172,6 +175,7 @@ export function collectSourceTableCoverageRows(
       sourceMatchedCandidates: 0,
       matchedRequirementIds: [],
       acceptedLinkStatus,
+      semanticCoverageStatus,
       sourceElementIds: row.sourceElementIds ?? [],
       sourceTableId: row.sourceTableId ?? null,
       sourceRowId: row.sourceRowId ?? null,
@@ -194,7 +198,7 @@ export function collectSourceTableCoverageRows(
   };
 }
 
-/** Link table-row inventory entries to accepted requirements; this proves source matching, not semantic completeness. */
+/** Link table-row inventory entries to accepted requirements; semantic completeness remains unassessed. */
 export function linkSourceRowsToRequirements(
   rows: CoverageSourceRow[],
   pageNumber: number,

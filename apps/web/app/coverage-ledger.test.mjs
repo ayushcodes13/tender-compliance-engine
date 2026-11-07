@@ -218,6 +218,7 @@ test("lists source table rows with disposition and page-relative evidence boxes"
     sourceMatchedCandidates: 0,
     matchedRequirementIds: [],
     acceptedLinkStatus: "no_candidate_suggestions",
+    semanticCoverageStatus: "not_assessed",
     sourceClassification: "unclassified",
     classificationReason: "classification_unavailable",
     sourceElementIds: [],
@@ -254,11 +255,13 @@ test("links source table rows to accepted requirements and keeps partial citatio
   assert.deepEqual(linked[0].matchedRequirementIds, ["req-10"]);
   assert.equal(linked[0].sourceMatchedCandidates, 1);
   assert.equal(linked[0].acceptedLinkStatus, "linked");
+  assert.equal(linked[0].semanticCoverageStatus, "not_assessed");
   assert.deepEqual(linked[0].sourceElementIds, ["table-1", "row-1", "cell-1", "cell-2"]);
   assert.equal(linked[0].sourceClassification, "requirement");
   assert.equal(linked[0].classificationReason, "technical_obligation");
   assert.deepEqual(linked[1].matchedRequirementIds, ["req-11"]);
   assert.equal(linked[1].acceptedLinkStatus, "linked");
+  assert.equal(linked[1].semanticCoverageStatus, "not_assessed");
   assert.deepEqual(linked[1].matchedRequirementIds, ["req-11"]);
 });
 
