@@ -30,6 +30,7 @@ let activeVectorLabelRequests = 0;
 let maximumVectorLabelConcurrency = 0;
 let vectorLabelRequestCount = 0;
 const vectorAuditPageOrder = [];
+const progressObservations = [];
 const provider = http.createServer(async (request, response) => {
   let trackedVectorLabelRequest = false;
   try {
@@ -137,7 +138,7 @@ try {
     const body=new FormData();body.set('file',new File([pdf.output('arraybuffer')],'synthetic-tender.pdf',{type:'application/pdf'}));
     const response = await fetch(base+'/api/analyze',{method:'POST',body,headers:{authorization:`Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`}});
     assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
-    return consumeAnalysisStream(response,{onProgress:()=>{}});
+    return consumeAnalysisStream(response,{onProgress:(progress)=>progressObservations.push({scenario, ...progress})});
   }
   const short=new jsPDF();short.text(quotes[0],20,30);
   const one=await analyze(short);
@@ -352,8 +353,10 @@ try {
     if(page===1)tables.text(outsideTable,40,600);
   }
   tables.addPage();tables.text('Technical safety requirements',40,40);tables.text(quotes[2],40,70);
+  const tableProgressStart = progressObservations.length;
   const mixed=await analyze(tables);
   assert.equal(mixed.ok,true,mixed.error);
+  assert.deepEqual(progressObservations.slice(tableProgressStart).filter(event=>event.message==='Reading table rows and auditing independent requirements').map(event=>[event.current,event.total]),[[0,2],[1,2],[2,2]],'Serial mixed-layout vector processing reports each completed page');
   assert.equal(mixed.analysis.normalizedTables,true);
   const ambiguousSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.cells.some(cell=>cell.includes('Unclear source row')));
   assert.ok(ambiguousSourceRow);
@@ -381,7 +384,7 @@ try {
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
   assert.ok(mixed.analysis.requirements.some(row=>row.quote==='Calibration report shall be supplied.' && row.reviewed===false && row.sourceReference.sourceText==='Calibration report shall be supplied.'),'an exact source excerpt from a possible-gap audit re-enters as an unchecked, source-verified recovery candidate');
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','vector pages with verified repeated headers run concurrently and keep audit budget order','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','vector pages with verified repeated headers run concurrently and keep audit budget order','serial mixed-layout vector processing reports each completed page','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
