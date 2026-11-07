@@ -684,6 +684,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const explicitExclusionReasons = new Map<number, string>();
     const pageDispositionReasons = new Map<number, string>();
     const directlyRelevantPages = new Set<number>();
+    const pageClassifications = new Map<number, string>();
     const conflictRoutedPages = new Set<number>();
     const routingWarnings: string[] = [];
     const unresolvedRasterPages = pages.filter((page) => page.hasRasterImageContent && page.ocrNeeded).map((page) => page.page);
@@ -812,10 +813,27 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         return { ok: false as const, error: "The configured model returned page dispositions that could not be verified. No extraction was attempted." };
       }
       for (const disposition of validatedDispositions.dispositions) {
+        const previousClassification = pageClassifications.get(disposition.page);
+        if (previousClassification && previousClassification !== disposition.classification) {
+          uncertainPages.add(disposition.page);
+          routingWarnings.push(`Routing groups disagreed about PDF page ${disposition.page}; it remains selected when any group marked it relevant and requires manual review.`);
+        }
+        if (!previousClassification || previousClassification === disposition.classification) {
+          pageClassifications.set(disposition.page, disposition.classification);
+        } else if (previousClassification === "relevant" || disposition.classification === "relevant") {
+          pageClassifications.set(disposition.page, "relevant");
+        }
         pageDispositionReasons.set(disposition.page, disposition.reason);
-        if (disposition.classification === "relevant") directlyRelevantPages.add(disposition.page);
-        else if (disposition.classification === "possibly_relevant") uncertainPages.add(disposition.page);
-        else explicitExclusionReasons.set(disposition.page, disposition.reason);
+        if (disposition.classification === "relevant") {
+          directlyRelevantPages.add(disposition.page);
+          explicitExclusionReasons.delete(disposition.page);
+        } else if (disposition.classification === "possibly_relevant") {
+          uncertainPages.add(disposition.page);
+          explicitExclusionReasons.delete(disposition.page);
+        }
+        else if (!uncertainPages.has(disposition.page) && !directlyRelevantPages.has(disposition.page)) {
+          explicitExclusionReasons.set(disposition.page, disposition.reason);
+        }
       }
       if (validatedDispositions.unresolvedPages.length) routingWarnings.push(
         `The router returned no explicit page disposition for PDF pages ${formatPageNumbers(validatedDispositions.unresolvedPages)}; those pages remain unresolved and require source review.`,
