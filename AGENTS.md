@@ -86,7 +86,9 @@ A good PR should make review possible without reconstructing intent from the dif
 
 ## Active client POC parallel coordination (2026-11-07)
 
-Before working on the active client POC sprint, all three participants must read **docs/poc-90-parallel-coordination.md** and obey its lane ownership, acceptance gates, shared-branch protocol and stop conditions. This is an execution overlay only: this AGENTS.md remains the engineering rulebook and docs/checkpoint.md remains the canonical checkpoint plan. Two coding agents own disjoint runtime paths; the ChatGPT architecture lane owns only coordination/docs and joint PR review. Do not edit files assigned to another lane or run concurrent paid benchmarks.
+For the active POC90 sprint, there are **three independent Goal Mode coding agents** (A: scope classifier; B: source provenance; C: client UI/export) **plus ChatGPT as the architect/integrator**. All must first read `docs/poc-90-parallel-coordination.md`. Its file ownership, isolated worktree rules, budget/no-live-call guardrails, handoff criteria and final integration requirements are mandatory. Two agents may not write the same file. The only integration writer for `apps/web/app/actions.ts` and shared coordination files is ChatGPT after the agents hand off.
+
+**Temporary checkpoint exception:** To prevent merge conflicts during concurrent sprint PRs, A/B/C must NOT edit `docs/checkpoint.md`, `AGENTS.md` or the coordination file in their PRs. ChatGPT updates canonical checkpoint completion and status in the final integration PR after all agent reviews. This specific exception supersedes the ordinary same-PR checkpoint-edit rule below for this sprint only. All other PR-first, security and traceability requirements stay in force. No agent makes a paid model call; a final controlled model benchmark is a separate post-integration decision.
 
 ## Canonical checkpoint plan
 
