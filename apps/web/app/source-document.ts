@@ -102,7 +102,7 @@ export type RequirementSourceReference = {
   offsetScope?: "page-source-text";
   bbox: SourceBox | null;
   bboxCoordinateSystem: "pdfjs-viewport-scale-1";
-  extractionMethod: "pdfjs-native-text" | "visual-transcription" | "tesseract-ocr";
+  extractionMethod: "pdfjs-native-text" | "visual-transcription" | "tesseract-ocr" | "operator-entered";
   locationPrecision: "exact" | "approximate";
   transcribedText?: string;
   ocrConfidence?: "high" | "medium" | "low";
