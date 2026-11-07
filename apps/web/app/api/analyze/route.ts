@@ -3,7 +3,8 @@ import { createAnalysisResponse } from "../../analysis-stream";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-const ANALYSIS_DEADLINE_MS = 270_000;
+// Leave ten seconds for stream completion and cleanup before the function cap.
+const ANALYSIS_DEADLINE_MS = 290_000;
 
 export async function POST(request: Request) {
   let form: FormData;
