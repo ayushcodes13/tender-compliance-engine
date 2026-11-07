@@ -193,7 +193,7 @@ test("reports per-page router dispositions in document totals", () => {
 });
 
 test("retains approximate page image-region bounds in the coverage report", () => {
-  const imageRegions = [{ id: "doc:page:4:image:1", bbox: { x: 12, y: 8, width: 64, height: 72 }, areaRatio: 0.31 }];
+  const imageRegions = [{ id: "doc:page:4:image:1", bbox: { x: 12, y: 8, width: 64, height: 72 }, areaRatio: 0.31, ocrDisposition: "no-text-found" }];
   const report = buildCoverageReport([record(4, { hasRasterImageContent: true, imageRegions })]);
   assert.deepEqual(report.pages[0].imageRegions, imageRegions);
 });

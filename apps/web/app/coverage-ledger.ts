@@ -122,7 +122,7 @@ export type PageCoverageRecord = {
   auditStatus: CoverageAuditStatus;
   possibleOmissionSuggestions: number;
   hasRasterImageContent: boolean;
-  imageRegions: Array<{ id: string; bbox: SourceBox; areaRatio: number }>;
+  imageRegions: Array<{ id: string; bbox: SourceBox; areaRatio: number; ocrDisposition: "not-targeted" | "not-attempted" | "text-found" | "no-text-found" | "failed"; ocrSkipReason?: SourcePageOcrSkipReason }>;
   ocrRecommended: boolean;
   ocrStatus: SourcePageOcrStatus;
   ocrSkipReason?: SourcePageOcrSkipReason;

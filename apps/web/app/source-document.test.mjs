@@ -37,6 +37,31 @@ test("accepts a complete inventory with exact native spans and source structure"
   });
   document.pages.push(page);
   assert.deepEqual(validateSourceDocumentInventory(document), []);
+  assert.equal(page.imageRegions[0].ocrDisposition, "text-found", "an exact OCR-to-image link records region OCR coverage");
+});
+
+test("preserves selected image-region OCR outcomes and explicit skip reasons", () => {
+  const document = createSourceDocumentModel(new Uint8Array([21]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 1,
+    width: 300,
+    height: 400,
+    sourceText: "Header",
+    positionedItems: [{ start: 0, end: 6, text: "Header", box: { x: 5, y: 5, width: 20, height: 5 } }],
+    imageRegions: [
+      { bbox: { x: 20, y: 80, width: 100, height: 80 }, areaRatio: 0.1, operator: "image", ocrDisposition: "no-text-found" },
+      { bbox: { x: 150, y: 80, width: 100, height: 80 }, areaRatio: 0.1, operator: "image", ocrDisposition: "not-attempted", ocrSkipReason: "time-budget" },
+      { bbox: { x: 20, y: 200, width: 10, height: 10 }, areaRatio: 0.001, operator: "image", ocrDisposition: "not-targeted" },
+    ],
+  });
+  document.pages.push(page);
+  assert.deepEqual(page.imageRegions.map((region) => [region.ocrDisposition, region.ocrSkipReason]), [
+    ["no-text-found", undefined], ["not-attempted", "time-budget"], ["not-targeted", undefined],
+  ]);
+  assert.deepEqual(validateSourceDocumentInventory(document), []);
+  page.imageRegions[1].ocrSkipReason = undefined;
+  assert.ok(validateSourceDocumentInventory(document).some((issue) => issue.code === "invalid_image_region_ocr_state"));
 });
 
 test("reports incomplete pages, invalid text spans, duplicate IDs, and broken source links", () => {

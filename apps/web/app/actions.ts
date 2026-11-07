@@ -414,6 +414,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       let ocrResult: OcrPageText = { text: "", lines: [] };
       let ocrStatus: SourcePageModel["ocrStatus"] = ocrRecommended ? "not-attempted" : "not-recommended";
       let ocrSkipReason: SourcePageModel["ocrSkipReason"];
+      const ocrTargets = text.trim()
+        ? selectImageRegionsForOcr(imageRegions, positioned.map((item) => item.box))
+        : [];
+      const attemptedImageRegionIndices = new Set<number>();
       if (ocrRecommended && ocrAttemptedPages < MAX_PAGES && Date.now() - ocrStartedAt < MAX_TOTAL_OCR_MS) {
         if (tesseractAvailable === undefined) tesseractAvailable = await isTesseractAvailable(undefined, signal);
         if (tesseractAvailable) {
@@ -445,9 +449,6 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               image = ocrCanvas.toBuffer("image/png");
               imageSize = { width: ocrCanvas.width, height: ocrCanvas.height };
             }
-            const ocrTargets = text.trim()
-              ? selectImageRegionsForOcr(imageRegions, positioned.map((item) => item.box))
-              : [];
             if (ocrTargets.length) {
               const rendered = await loadImage(Buffer.from(image));
               const scaleX = imageSize.width / viewport.width;
@@ -467,6 +468,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
                 if (right <= left || bottom <= top) continue;
                 const crop = createCanvas(right - left, bottom - top);
                 crop.getContext("2d").drawImage(rendered, left, top, right - left, bottom - top, 0, 0, right - left, bottom - top);
+                attemptedImageRegionIndices.add(target.index);
                 const cropResult = await recognizePageImage({
                   image: crop.toBuffer("image/png"),
                   imageSize: { width: right - left, height: bottom - top },
@@ -558,7 +560,22 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         ocrRecommended,
         ocrStatus,
         ocrSkipReason,
-        imageRegions,
+        imageRegions: imageRegions.map((region, index) => {
+          const targeted = ocrTargets.some((target) => target.index === index);
+          if (!targeted) return { ...region, ocrDisposition: "not-targeted" as const };
+          if (ocrStatus === "failed") return { ...region, ocrDisposition: "failed" as const };
+          if (!attemptedImageRegionIndices.has(index)) {
+            return {
+              ...region,
+              ocrDisposition: "not-attempted" as const,
+              ocrSkipReason: ocrSkipReason ?? (ocrAttemptedPages >= MAX_PAGES ? "page-limit" as const : "time-budget" as const),
+            };
+          }
+          return {
+            ...region,
+            ocrDisposition: ocrResult.lines.some((line) => line.imageRegionIndex === index) ? "text-found" as const : "no-text-found" as const,
+          };
+        }),
         ocrRegions: ocrResult.lines,
         vectorRows,
       });
@@ -1929,6 +1946,8 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             height: region.bbox.height / page.height * 100,
           },
           areaRatio: region.areaRatio,
+          ocrDisposition: region.ocrDisposition,
+          ...(region.ocrSkipReason ? { ocrSkipReason: region.ocrSkipReason } : {}),
         })),
         ocrRecommended: page.sourceModel.ocrRecommended,
         ocrStatus: page.sourceModel.ocrStatus,
