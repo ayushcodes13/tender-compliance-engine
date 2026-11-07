@@ -26,6 +26,7 @@ import { collectPdfImageRegions } from "./pdf-image-regions";
 import type { ProcessingProgress } from "./processing-progress";
 import { buildOcrTextPositionMap, combineOcrConfidence, createPopplerPageRenderer, isPopplerAvailable, isTesseractAvailable, offsetOcrPageText, recognizePageImage, type OcrConfidence, type OcrLine, type OcrPageText, type PositionedOcrLine, type PopplerPageRenderer } from "./local-ocr";
 import { createModelCompletionClient, MODEL_REQUESTS_PER_ANALYSIS, ModelProviderBusyError, ModelProviderConnectionError, resolveModelProvider } from "./model-provider";
+import { emitModelTiming } from "./model-timing";
 import { mapInConcurrentWaves } from "./concurrent-waves";
 import { groupVisualPages, validateVisualPageBatchResponse } from "./visual-page-batching";
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
@@ -999,6 +1000,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
       for (const batch of buildExtractionBatches(generalPages)) {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
+        const requestStartedAt = performance.now();
         const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           signal,
@@ -1017,12 +1019,37 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             ],
           }),
         });
+        emitModelTiming({
+          phase: "headers_received",
+          requestKind: "general_requirement_extraction",
+          batchPageCount: batch.pageNumbers.length,
+          inputCharacters: batch.input.length,
+          requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt),
+          responseStatus: response.status,
+        });
         if (!response.ok) return { ok: false as const, error: response.status === 401 ? "The configured model credential was rejected." : `The model request failed (${response.status}).` };
         report("reading the model response", { stage: "extracting", message: "Parsing the model's extracted technical requirements" });
+        const responseBodyStartedAt = performance.now();
         const payload = await response.json();
+        const responseBodyAndEnvelopeMs = Math.round(performance.now() - responseBodyStartedAt);
         const content = payload.choices?.[0]?.message?.content;
         if (typeof content !== "string") return { ok: false as const, error: "The model returned an empty result." };
+        const jsonParseStartedAt = performance.now();
         const parsed = parseJson(content) as ParsedExtraction;
+        const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
+        emitModelTiming({
+          phase: "response_parsed",
+          requestKind: "general_requirement_extraction",
+          batchPageCount: batch.pageNumbers.length,
+          inputCharacters: batch.input.length,
+          responseStatus: response.status,
+          responseBodyAndEnvelopeMs,
+          jsonParseMs: Math.round(performance.now() - jsonParseStartedAt),
+          responseCharacters: content.length,
+          ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+          ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+          ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+        });
         if (!Array.isArray(parsed.requirements)) return { ok: false as const, error: "The model response did not contain a requirements list." };
         // Never accept an otherwise real quote attributed to a page outside this request.
         parsedResponses.push({ parsed, origin: "extraction", allowedPages: batch.pageNumbers });
