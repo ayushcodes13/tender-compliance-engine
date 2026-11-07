@@ -133,6 +133,13 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 ## Checkpoint 73 — Client tender document reliability
 
+### Fresh held-out live-pipeline baseline — 2026-11-07
+
+- [x] Run the current pipeline once on the SHA-256-verified 15-page IIT Guwahati public tender and retain a text-free aggregate artifact tied to the code commit.
+- [x] Compare accepted output against 23 partial assistant-reviewed source-bound/anchor cases without promoting the overlap results to semantic recall.
+- [ ] Resolve or explicitly disposition all nine unrouted pages and nine pages without page-level completeness audits; review why three known page-11 omission anchors were not found by the audit.
+- [ ] Repeat with an independently adjudicated gold set and token/cost telemetry before making a quality or capacity claim.
+
 ### Held-out parser-candidate/source-region overlap — 2026-11-07
 
 - [x] Run PyMuPDF `lines`, `lines_strict`, and `text` table-candidate geometry against 23 SHA-256-bound source-region annotations from the separate IIT Guwahati tender; store a text-free, geometry-free report and a reproducible evaluator.
