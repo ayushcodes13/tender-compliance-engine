@@ -27,6 +27,13 @@ export type CandidateTraceRecord = CandidateTraceInput & {
   rejectionCategory?: string;
   finalRequirementId?: string;
   relatedCandidateId?: string;
+  classificationDecision?: {
+    originalRowType: string;
+    effectiveRowType: string;
+    outcome: "kept" | "reclassified_for_review" | "retained_for_review" | "rejected";
+    reason: string;
+    requiresHumanReview: boolean;
+  };
 };
 
 export type ExpectedSourceUnit = {
@@ -97,6 +104,12 @@ export class CandidateTraceLedger {
     const prior = this.entries.get(candidateId);
     if (!prior || prior.disposition !== "incomplete") return;
     this.entries.set(candidateId, { ...prior, ...result });
+  }
+
+  recordClassification(candidateId: string, decision: CandidateTraceRecord["classificationDecision"]): void {
+    const prior = this.entries.get(candidateId);
+    if (!prior || prior.disposition !== "incomplete" || !decision) return;
+    this.entries.set(candidateId, { ...prior, classificationDecision: decision });
   }
 
   get records(): CandidateTraceRecord[] {
