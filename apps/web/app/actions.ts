@@ -1107,6 +1107,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
       const extractionBatches = buildExtractionBatches(generalPages);
       const extractionRequestStartedAt: number[] = [];
+      const extractionRequestSettledAt: number[] = [];
       report("requesting extraction batches", {
         stage: "extracting",
         message: `Requesting technical extraction batches 1–${Math.min(MODEL_REQUESTS_PER_ANALYSIS, extractionBatches.length)} of ${extractionBatches.length}`,
@@ -1182,7 +1183,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           traceCandidateId: registerTraceCandidate(candidate, "initial_extraction", batchIndex * 100_000 + candidateOrdinal),
         }));
         return { ok: true as const, parsed, allowedPages: batch.pageNumbers };
-      }, (completed, total, settled) => {
+      }, (completed, total, settled, batchIndex) => {
+        // Record actual settlement time, not the later all-batches inspection time.
+        extractionRequestSettledAt[batchIndex] = performance.now();
         const parsed = settled.status === "fulfilled" && settled.value.ok;
         if (parsed) parsedBatchCount += 1;
         report("completed extraction batch", {
@@ -1204,7 +1207,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             totalBatches: extractionBatches.length,
             batchPageCount: extractionBatches[batchIndex].pageNumbers.length,
             inputCharacters: extractionBatches[batchIndex].input.length,
-            requestElapsedMs: Math.round(performance.now() - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
+            requestElapsedMs: Math.round((extractionRequestSettledAt[batchIndex] ?? performance.now()) - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
             failureKind: modelTimingFailureKind(settled.reason, signal),
           });
           failedBatches.push({ batchIndex, error: settled.reason });
@@ -1219,7 +1222,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             totalBatches: extractionBatches.length,
             batchPageCount: extractionBatches[batchIndex].pageNumbers.length,
             inputCharacters: extractionBatches[batchIndex].input.length,
-            requestElapsedMs: Math.round(performance.now() - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
+            requestElapsedMs: Math.round((extractionRequestSettledAt[batchIndex] ?? performance.now()) - (extractionRequestStartedAt[batchIndex] ?? performance.now())),
             failureKind: "other",
           });
           failedBatches.push({ batchIndex, error: new Error(outcome.error) });
