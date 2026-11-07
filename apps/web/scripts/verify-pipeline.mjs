@@ -29,16 +29,25 @@ const visualBatchObservations = [];
 let activeVectorLabelRequests = 0;
 let maximumVectorLabelConcurrency = 0;
 let vectorLabelRequestCount = 0;
+let activeGeneralExtractionRequests = 0;
+let maximumGeneralExtractionConcurrency = 0;
 const vectorAuditPageOrder = [];
 const progressObservations = [];
 const provider = http.createServer(async (request, response) => {
   let trackedVectorLabelRequest = false;
+  let trackedGeneralExtractionRequest = false;
   try {
     let raw = '';
     for await (const chunk of request) raw += chunk;
     const body = JSON.parse(raw);
     const schema = body.response_format?.json_schema?.name;
     if (scenario === 'slow-general-extraction' && schema === 'tender_requirements') await new Promise(resolve => setTimeout(resolve, 150));
+    if (scenario === 'general-batch-concurrency' && schema === 'tender_requirements') {
+      trackedGeneralExtractionRequest = true;
+      activeGeneralExtractionRequests += 1;
+      maximumGeneralExtractionConcurrency = Math.max(maximumGeneralExtractionConcurrency, activeGeneralExtractionRequests);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
     if (scenario === 'vector-page-concurrency' && schema === 'visual_table_row_labels') {
       trackedVectorLabelRequest = true;
       activeVectorLabelRequests += 1;
@@ -108,7 +117,10 @@ const provider = http.createServer(async (request, response) => {
     response.writeHead(200, {'content-type':'application/json'});
     response.end(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}));
   } catch(error) {response.writeHead(500);response.end(JSON.stringify({error:String(error)}));}
-  finally { if (trackedVectorLabelRequest) activeVectorLabelRequests -= 1; }
+  finally {
+    if (trackedVectorLabelRequest) activeVectorLabelRequests -= 1;
+    if (trackedGeneralExtractionRequest) activeGeneralExtractionRequests -= 1;
+  }
 });
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
@@ -152,9 +164,24 @@ try {
   const slowGeneral=await analyze(short);
   assert.equal(slowGeneral.ok,true,slowGeneral.error);
   const slowExtractionProgress=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
-  const requestProgressIndex=slowExtractionProgress.findIndex(message=>message==='Requesting technical extraction batch 1 of 1');
-  const parsingProgressIndex=slowExtractionProgress.findIndex(message=>message==='Parsing the model\'s extracted technical requirements');
-  assert.ok(requestProgressIndex>=0&&parsingProgressIndex>requestProgressIndex,`Extraction progress reports the active model request before switching to response parsing: ${JSON.stringify(slowExtractionProgress)}`);
+  const requestProgressIndex=slowExtractionProgress.findIndex(message=>message==='Requesting technical extraction batches 1–1 of 1');
+  const completedProgressIndex=slowExtractionProgress.findIndex(message=>message==='Received and parsed technical extraction batches 1–1 of 1');
+  assert.ok(requestProgressIndex>=0&&completedProgressIndex>requestProgressIndex,`Extraction progress reports the active request before reporting its parsed completion: ${JSON.stringify(slowExtractionProgress)}`);
+  scenario='general-batch-concurrency';
+  const multiPage=new jsPDF();
+  for(let page=1;page<=12;page++) {
+    if(page>1)multiPage.addPage();
+    multiPage.setFontSize(8);
+    const pageQuote=quotes[page-1]??`Technical equipment page ${page} contains a specified test procedure.`;
+    multiPage.text([pageQuote,...Array.from({length:60},(_,line)=>`Technical context ${page}-${line} describes the equipment and its operating conditions.`)],20,30,{lineHeightFactor:1});
+  }
+  const batched=await analyze(multiPage);
+  assert.equal(batched.ok,true,batched.error);
+  assert.equal(maximumGeneralExtractionConcurrency,3,'Independent general extraction batches run at the existing per-analysis concurrency limit');
+  assert.deepEqual(batched.analysis.requirements.map(row=>row.quote),quotes,'Concurrent extraction preserves deterministic source order and all grounded fixture requirements');
+  const batchedProgress=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
+  assert.ok(batchedProgress.some(message=>message.includes('Received and parsed technical extraction batches 1–3 of 4')));
+  assert.ok(batchedProgress.includes('Received and parsed technical extraction batches 4–4 of 4'));
   scenario='page-disposition-only';
   const dispositionOnly=await analyze(short);
   assert.equal(dispositionOnly.ok,true,dispositionOnly.error);
