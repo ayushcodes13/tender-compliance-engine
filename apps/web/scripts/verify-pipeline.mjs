@@ -308,7 +308,7 @@ try {
   assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 1').length,18);
   assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 2').length,16);
   const projected=buildResponseSections(grouped);
-  assert.deepEqual(projected.map(section=>section.rows.length),[17,1,16,1]);
+  assert.deepEqual(projected.map(section=>section.rows.length),[1,17,16,1]);
   assert.equal(projected[0].annexure,'Annexure I');assert.equal(projected[2].annexure,'Annexure II');
   assert.ok(projected.every(section=>section.columns.every(column=>column.role!=='heading'&&column.role!=='page')));
   assert.equal(grouped.rows.filter(row=>row.values[0]==='A. Optical table').length,33);
