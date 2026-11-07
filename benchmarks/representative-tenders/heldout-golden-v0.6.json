@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 6,
+  "status": "assistant-reviewed-source-anchors; human-adjudication-pending",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourceUrl": "https://www.iitg.ac.in/pdf/987dde7a7b7c5bca0e8cbed1b6b7afec.pdf",
+  "physicalPdfPage": 11,
+  "coordinateSystem": "PDF points; PyMuPDF page coordinates",
+  "boundsFormat": "x-y-width-height",
+  "boundsProvenance": "Inherited from heldout-golden-v0.2.json; PyMuPDF 1.26.5 text-search bounds, visually checked on the 125 DPI rendered physical page 11.",
+  "sourceTextVerification": "Every sourceAnchor was matched after whitespace normalization against pdftotext output for physical PDF page 11 from the SHA-256-verified official source PDF; token spelling and order were unchanged. No complete clause text is copied into this repository.",
+  "basedOn": "heldout-golden-v0.2.json",
+  "cases": [
+    {
+      "caseId": "iitg-page-11-five-year-amc-omitted",
+      "bounds": { "x": 207.05, "y": 20.51, "width": 344.28, "height": 40.28 },
+      "sourceAnchors": [
+        "a separate charge for a Five-year Annual Maintenance Contract (AMC)",
+        "Service visits; Yearly calibration; Routine maintenance services"
+      ],
+      "criticalConstraints": ["separately charged", "five-year duration", "service visits", "yearly calibration", "routine maintenance", "spare parts", "consumables"],
+      "expectedDisposition": "independently-answerable-documentary-and-service-obligation",
+      "comparisonStatus": "prior-run-miss-recorded; candidate text unavailable"
+    },
+    {
+      "caseId": "iitg-page-11-local-after-sales-presence-omitted",
+      "bounds": { "x": 207.05, "y": 74.65, "width": 252.52, "height": 26.12 },
+      "sourceAnchors": [
+        "a local office or an authorized associate in India",
+        "timely after-sales support and maintenance"
+      ],
+      "criticalConstraints": ["local office or authorized associate", "India", "after-sales support", "maintenance"],
+      "expectedDisposition": "independently-answerable-service-obligation",
+      "comparisonStatus": "prior-run-miss-recorded; candidate text unavailable"
+    },
+    {
+      "caseId": "iitg-page-11-five-year-parts-support-omitted",
+      "bounds": { "x": 207.05, "y": 101.29, "width": 344.28, "height": 39.8 },
+      "sourceAnchors": [
+        "availability of spare parts for a minimum period of five years beyond",
+        "the initial warranty period"
+      ],
+      "criticalConstraints": ["after-sales service", "spare-parts availability", "minimum five years", "duration begins after initial warranty"],
+      "expectedDisposition": "independently-answerable-service-obligation",
+      "comparisonStatus": "prior-run-miss-recorded; candidate text unavailable"
+    },
+    {
+      "caseId": "iitg-page-11-operation-maintenance-manual-copies",
+      "bounds": { "x": 207.05, "y": 141.61, "width": 344.32, "height": 39.8 },
+      "sourceAnchors": [
+        "operation and maintenance instructions",
+        "one soft copy",
+        "one hard copy"
+      ],
+      "criticalConstraints": ["comprehensive user manual", "operation instructions", "maintenance instructions", "one soft copy", "one hard copy"],
+      "expectedDisposition": "independently-answerable-documentation-obligation",
+      "comparisonStatus": "previous summary reported present; exact output text and source link unavailable"
+    },
+    {
+      "caseId": "iitg-page-11-calibration-certificate",
+      "bounds": { "x": 207.05, "y": 181.93, "width": 343.88, "height": 40.04 },
+      "sourceAnchors": [
+        "A calibration certificate must be provided",
+        "compliance with all relevant standards",
+        "ensuring optimal performance"
+      ],
+      "criticalConstraints": ["calibration certificate", "standard compliance", "performance verification"],
+      "expectedDisposition": "independently-answerable-documentation-obligation",
+      "comparisonStatus": "previous summary reported present; exact output text and source link unavailable"
+    },
+    {
+      "caseId": "iitg-page-11-installation-function-demonstration",
+      "bounds": { "x": 207.05, "y": 237.13, "width": 331.36, "height": 27.11 },
+      "sourceAnchors": [
+        "demonstrate all functionalities of the system",
+        "upon successful installation at the institute"
+      ],
+      "criticalConstraints": ["all system functionalities", "after successful installation", "at the institute"],
+      "expectedDisposition": "independently-answerable-acceptance-demonstration-obligation",
+      "comparisonStatus": "previous summary reported present; exact output text and source link unavailable"
+    },
+    {
+      "caseId": "iitg-page-11-service-visit-demonstration",
+      "bounds": { "x": 207.05, "y": 264.76, "width": 331.15, "height": 40.88 },
+      "sourceAnchors": [
+        "during service visits",
+        "proper operation and adherence to performance standards"
+      ],
+      "criticalConstraints": ["functional demonstrations", "during service visits", "proper operation", "performance standards"],
+      "expectedDisposition": "independently-answerable-recurring-demonstration-obligation",
+      "comparisonStatus": "previous summary reported present; exact output text and source link unavailable"
+    }
+  ],
+  "limitations": [
+    "These records make source anchors and critical terms auditable; they do not recover the exact candidate rows from the earlier model run.",
+    "The labels and obligation boundaries have not been independently human-adjudicated.",
+    "This is a seven-unit page annotation, not an exhaustive tender annotation or a recall/precision score.",
+    "Parser-reported bounds are approximate evidence locations; they are not semantic source-element IDs or exact word-level highlights."
+  ]
+}
