@@ -1,6 +1,6 @@
 export type ModelTimingEvent = {
   phase: "request_started" | "headers_received" | "response_parsed" | "request_failed";
-  requestKind: "general_requirement_extraction" | "text_page_omission_audit" | "vector_table_column_mapping" | "vector_table_row_classification" | "vector_source_row_audit";
+  requestKind: "page_routing" | "general_requirement_extraction" | "text_page_omission_audit" | "vector_table_column_mapping" | "vector_table_row_classification" | "vector_source_row_audit";
   failureKind?: "provider_busy" | "provider_connection" | "request_aborted" | "other";
   batchIndex?: number;
   totalBatches?: number;

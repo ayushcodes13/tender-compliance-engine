@@ -161,3 +161,30 @@ test('vector response timing includes safe parse, response-size, and provider-us
     totalTokens: 900,
   });
 });
+
+test('page-routing response timing records bounded request and usage metadata only', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'response_parsed',
+    requestKind: 'page_routing',
+    batchIndex: 1,
+    totalBatches: 2,
+    batchPageCount: 8,
+    inputCharacters: 18_000,
+    requestHeadersWaitMs: 32_000,
+    responseBodyAndEnvelopeMs: 3,
+    jsonParseMs: 1,
+    responseStatus: 200,
+    responseCharacters: 2_400,
+    promptTokens: 8_000,
+    completionTokens: 600,
+    totalTokens: 8_600,
+    pageReasons: ['private tender content'],
+  }, (line) => lines.push(line), true);
+
+  const record = JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length));
+  assert.equal(record.requestKind, 'page_routing');
+  assert.equal(record.batchPageCount, 8);
+  assert.equal(record.totalTokens, 8_600);
+  assert.equal('pageReasons' in record, false);
+});
