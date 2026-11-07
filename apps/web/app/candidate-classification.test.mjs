@@ -360,7 +360,7 @@ test("records a validated source-list parent/member relationship without changin
   assert.equal(retained.effectiveRowType, "requirement");
   assert.equal(retained.outcome, "kept");
   assert.equal(retained.reason, "validated_source_obligation_group_parent");
-  assert.equal(retained.requiresHumanReview, false);
+  assert.equal(retained.requiresHumanReview, true, "grouping cannot silently clear earlier scope review");
   assert.equal(retained.sourceObligationGroupId, group.id);
   assert.equal(retained.sourceObligationGroupRole, "parent");
 
@@ -373,6 +373,7 @@ test("records a validated source-list parent/member relationship without changin
   assert.equal(member.reason, "validated_source_obligation_group_member");
   assert.equal(member.sourceObligationGroupId, group.id);
   assert.equal(member.sourceObligationGroupParentCandidateId, parentId);
+  assert.equal(member.requiresHumanReview, true, "parent context does not independently adjudicate a fragment");
 });
 
 test("does not let source grouping override administrative or mixed-form scope decisions", () => {
