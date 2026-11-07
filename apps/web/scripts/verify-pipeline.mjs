@@ -60,7 +60,9 @@ const provider = http.createServer(async (request, response) => {
       result={columns:[],requirements:[]};
     } else if (schema === 'source_row_semantic_coverage') {
       const rows = JSON.parse(body.messages.at(-1)?.content ?? '[]');
-      result = { rows: rows.map(row => ({ row_index: row.row_index, status: 'no_gap_reported', note: '' })) };
+      result = { rows: rows.map(row => row.source_cells.includes('Calibration report shall be supplied.')
+        ? { row_index: row.row_index, status: 'possible_gap', note: 'The source row contains a second independently assessable obligation.' }
+        : { row_index: row.row_index, status: 'no_gap_reported', note: '' }) };
     } else if (schema === 'technical_text_missing_requirements') {
       const requirements=[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
@@ -271,7 +273,7 @@ try {
   const locked=sheet.rows[0].values[pageColumn];
   sheet=updateResponseSheetCell(sheet,sheet.rows[0].id,pageColumn,'Fake page');assert.equal(sheet.rows[0].values[pageColumn],locked);
   assert.equal(removeResponseSheetRow(sheet,sheet.rows[0].id).rows.length,5);
-  scenario='tables';
+  scenario='table-row-audit-gap';
   const tables=new jsPDF({unit:'pt',format:'a4'});
   for(let page=1;page<=2;page++){
     if(page>1)tables.addPage();
@@ -279,7 +281,7 @@ try {
     const widths=page===1?[35,100,380]:[35,100,230,75,75];
     const sourceRows=[['A. Optical table',...widths.slice(1).map(()=>'')],['S. No.','Specification','Description',...(page===2?['Comply (Yes/No)','Remarks']:[])],
       ...(page===1?[['0','Unclear source row','Source layout cannot be resolved',...(page===2?['','']:[])]]:[]),
-      ...Array.from({length:16},(_,index)=>[String(index+1),`Parameter ${index+1}`,`Required value ${index+1} mm`,...(page===2?['','']:[])])];
+      ...Array.from({length:16},(_,index)=>[String(index+1),`Parameter ${index+1}`,`Required value ${index+1} mm${scenario==='table-row-audit-gap'&&index===0?'. Calibration report shall be supplied.':''}`,...(page===2?['','']:[])])];
     tables.setFontSize(11);tables.text(page===1?'Annexure I':'Annexure II',40,25);tables.text(page===1?'Technical Specifications for Optical Tables':'Technical Compliance Report for Optical Tables',40,45);
     tables.setFontSize(8);
     sourceRows.forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{tables.rect(x,70+row*26,widths[column],26);if(value)tables.text(value,x+3,85+row*26);x+=widths[column];});});
@@ -294,27 +296,28 @@ try {
   assert.equal(ambiguousSourceRow.sourceClassification,'ambiguous');
   assert.equal(ambiguousSourceRow.classificationReason,'ambiguous_source_structure');
   assert.equal(ambiguousSourceRow.disposition,'unmapped');
-  const auditedSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.sourceClassification==='requirement');
-  assert.equal(auditedSourceRow.semanticCoverageStatus,'no_gap_reported');
-  assert.equal(auditedSourceRow.semanticCoverageNote,'');
+  const auditedSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.cells.some(cell=>cell.includes('Calibration report shall be supplied.')));
+  assert.equal(auditedSourceRow?.semanticCoverageStatus,'possible_gap','possible semantic omission is surfaced on its detected source row');
+  assert.match(auditedSourceRow?.semanticCoverageNote ?? '',/second independently assessable obligation/i);
   assert.equal(mixed.analysis.coverage.pages[0].sourceTableRowsNotShown,7,'audit states are retained for all rows even when the UI preview is capped');
   assert.deepEqual(ambiguousSourceRow.matchedRequirementIds,[],'Ambiguous source content stays out of output requirements and remains reviewable');
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
   const grouped=buildResponseSheet(mixed.analysis);
-  assert.equal(grouped.rows.length,34,'Both tables, prose outside the grid, and the prose page retained');
-  assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 1').length,17);
+  assert.equal(grouped.rows.length,35,'Both tables, the added independent obligation, prose outside the grid, and the prose page retained');
+  assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 1').length,18);
   assert.equal(grouped.rows.filter(row=>row.values[7]==='Page 2').length,16);
   const projected=buildResponseSections(grouped);
-  assert.deepEqual(projected.map(section=>section.rows.length),[16,1,16,1]);
+  assert.deepEqual(projected.map(section=>section.rows.length),[1,17,16,1]);
   assert.equal(projected[0].annexure,'Annexure I');assert.equal(projected[2].annexure,'Annexure II');
   assert.ok(projected.every(section=>section.columns.every(column=>column.role!=='heading'&&column.role!=='page')));
-  assert.equal(grouped.rows.filter(row=>row.values[0]==='A. Optical table').length,32);
+  assert.equal(grouped.rows.filter(row=>row.values[0]==='A. Optical table').length,17);
   assert.ok(mixed.analysis.requirements.some(row=>row.quote===outsideTable&&row.sourceReference.locationPrecision==='exact'));
   assert.ok(!mixed.analysis.requirements.some(row=>row.quote.includes('Letterhead contact')));
   assert.ok(grouped.rows.every(row=>row.values[4]===''&&row.values[5]===''));
   assert.ok(grouped.rows.some(row=>row.values[3]===quotes[2]&&row.values[7]==='Page 3'));
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),realTenderQualityScore:null},routeCalls,extractionCalls}));
+  assert.ok(mixed.analysis.requirements.some(row=>row.quote.includes('Calibration report shall be supplied.')),'audit findings do not silently remove or rewrite the grounded extraction');
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
