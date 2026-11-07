@@ -101,7 +101,7 @@ function coverageRowReviewLabel(row: CoverageSourceRow): string {
   if (row.sourceClassification === "ambiguous") return `AMBIGUOUS SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
   if (row.disposition === "unmapped") return `UNMAPPED SOURCE ROW ${row.rowNumber} · NEEDS INSPECTION`;
   if (row.sourceMatchedCandidates < row.candidateSuggestions) return `SOURCE ROW ${row.rowNumber} · COVERAGE MISMATCH`;
-  return `SOURCE TABLE ROW ${row.rowNumber} · CANDIDATES SOURCE MATCHED`;
+  return `SOURCE TABLE ROW ${row.rowNumber} · SOURCE MATCHED · COMPLETENESS UNVERIFIED`;
 }
 
 function coverageRowReviewMessage(row: CoverageSourceRow): string {
@@ -112,7 +112,7 @@ function coverageRowReviewMessage(row: CoverageSourceRow): string {
   if (row.sourceMatchedCandidates < row.candidateSuggestions) {
     return `${row.sourceMatchedCandidates} of ${row.candidateSuggestions} generated candidates from this source row matched the source; inspect the unmatched candidate and confirm the row grouping.`;
   }
-  return `${countLabel(row.candidateSuggestions, "candidate")} from this source row matched the source. Check that the extracted wording and grouping preserve the full row meaning.`;
+  return `${countLabel(row.candidateSuggestions, "candidate")} from this source row matched the source. Semantic completeness has not been assessed; check that every independent obligation in the full row is represented.`;
 }
 
 
@@ -972,8 +972,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                       const status = row.disposition === "header" ? "repeated header"
                         : row.disposition === "empty" ? "empty row"
                           : row.disposition === "unmapped" ? "no candidate generated"
-                          : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")}`;
-                      const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions;
+                          : `${countLabel(row.candidateSuggestions, "candidate")} · ${countLabel(row.sourceMatchedCandidates, "source-matched candidate")} · completeness unverified`;
+                      const needsInspection = row.disposition === "unmapped" || row.sourceMatchedCandidates < row.candidateSuggestions || row.semanticCoverageStatus === "not_assessed";
                       return <div className="mvp-coverage-row-finding" key={`${item.page}-${row.rowNumber}`}>
                         <span className={needsInspection ? "is-warning" : ""}><b>Detected row {row.rowNumber}</b> · {status} · classified {row.sourceClassification.replaceAll("_", " ")} ({row.classificationReason.replaceAll("_", " ")}){row.textTruncated ? " · excerpt shortened" : ""}</span>
                         <p>{row.cells.filter(Boolean).join(" | ") || "(No cell text available)"}</p>
