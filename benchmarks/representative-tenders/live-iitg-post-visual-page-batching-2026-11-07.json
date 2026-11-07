@@ -13,7 +13,9 @@
   "lastDetailedProgress": {
     "current": 4,
     "total": 5,
-    "unit": "visual pages"
+    "unit": "pages",
+    "progressMessageCaptured": false,
+    "subpathAttribution": "unknown"
   },
   "sourceInventoryCompleted": true,
   "routingCompleted": true,
@@ -28,7 +30,7 @@
   },
   "limitations": [
     "No response sheet means routing dispositions, extraction coverage, and omission-audit results are unavailable.",
-    "The final progress event reported four of five visual pages when the application deadline ended the run; no candidate text was retained.",
+    "The final captured progress counters were four of five at the extracting stage; the progress message was not retained, so the vector-table versus visual subpath cannot be attributed.",
     "This is one nondeterministic sample on one tender; the source annotations remain partial and assistant-reviewed, not independently adjudicated.",
     "No request-level latency, token usage, or cost telemetry was collected."
   ]
