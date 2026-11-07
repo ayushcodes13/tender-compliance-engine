@@ -9,6 +9,7 @@ import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type ProcessingProgress } from "./processing-progress";
 import { consumeAnalysisStream } from "./analysis-events";
 import { visibleCitationEvidence } from "./poc90-client-citation";
+import { createOperatorPageReference, recoverDocumentIdentity } from "./operator-recovery";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
@@ -62,7 +63,7 @@ type Analysis = {
   filename: string;
   pageCount: number;
   textPages: number;
-  document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number; inventoryIntegrity: "structurally-verified" };
+  document: { documentId: string; documentVersionId: string; documentFingerprint: string; pageCount: number; inventoryIntegrity: "structurally-verified" | "unverified" };
   normalizedTables?: boolean;
   sectionTitle?: string;
   sectionHeading?: string;
@@ -175,6 +176,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [newReqText, setNewReqText] = useState("");
   const [newReqCategory, setNewReqCategory] = useState("Technical");
   const [formError, setFormError] = useState<string | null>(null);
+  const manualIdCounterRef = useRef(0);
   const activeRequestRef = useRef<AbortController | null>(null);
   const processingStartedAtRef = useRef(0);
 
@@ -425,7 +427,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     e.preventDefault();
     if (!analysis || !responseSheet) return;
     const pageNum = Number(newReqPage);
-    if (!pageNum || pageNum < 1 || pageNum > analysis.pageCount) {
+    if (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > analysis.pageCount) {
       setFormError(`Please enter a valid page number between 1 and ${analysis.pageCount}.`);
       return;
     }
@@ -434,7 +436,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       return;
     }
 
-    const reqId = `req-manual-${Date.now()}`;
+    const reqId = `req-manual-${Date.now()}-${++manualIdCounterRef.current}`;
     const newReq: Requirement = {
       id: reqId,
       text: newReqText.trim(),
@@ -451,18 +453,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       reviewed: false,
       isOperatorAdded: true,
       bbox: null,
-      sourceReference: {
-        documentId: analysis.document.documentId,
-        documentVersionId: analysis.document.documentVersionId,
-        documentFingerprint: analysis.document.documentFingerprint,
-        physicalPdfPageNumber: pageNum,
-        sourceText: newReqText.trim(),
-        sourceElementIds: [],
-        bbox: null,
-        bboxCoordinateSystem: "pdfjs-viewport-scale-1",
-        extractionMethod: "pdfjs-native-text",
-        locationPrecision: "approximate",
-      },
+      sourceReference: createOperatorPageReference(analysis.document, pageNum),
     };
 
     const updatedAnalysisRequirements = [...analysis.requirements, newReq];
@@ -499,12 +490,14 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       page: candidate.page,
       category: "Promoted Specification",
       rowType: "requirement",
-      precision: candidate.sourceReference?.locationPrecision === "exact" ? "exact" : "page-only",
+      // A parser bbox is in PDF viewport units, not the percentages required
+      // for the UI overlay. Preserve its reference, but inspect the page.
+      precision: "page-only",
       verdict: "needs_human_review",
       needsHumanReview: true,
       reviewed: false,
       isPromoted: true,
-      bbox: candidate.sourceReference?.bbox ?? null,
+      bbox: null,
       sourceReference: candidate.sourceReference,
     };
 
@@ -524,6 +517,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
 
   function handlePromoteFromDiagnostics(candidate: ClassificationReviewCandidate, candidateIndex: number) {
     if (!failureDiagnostics) return;
+    const recoveredDocument = recoverDocumentIdentity(candidate.sourceReference, failureDiagnostics.pageCount);
+    if (!recoveredDocument || candidate.sourceReference.physicalPdfPageNumber !== candidate.page) {
+      setError("The original document reference could not be verified. Keep this candidate in review and inspect the PDF.");
+      return;
+    }
     const promotedReqId = candidate.candidateId || `req-promoted-${Date.now()}-${candidateIndex}`;
     const promotedReq: Requirement = {
       id: promotedReqId,
@@ -532,12 +530,14 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       page: candidate.page,
       category: "Promoted Specification",
       rowType: "requirement",
-      precision: candidate.sourceReference?.locationPrecision === "exact" ? "exact" : "page-only",
+      // A parser bbox is in PDF viewport units, not the percentages required
+      // for the UI overlay. Preserve its reference, but inspect the page.
+      precision: "page-only",
       verdict: "needs_human_review",
       needsHumanReview: true,
       reviewed: false,
       isPromoted: true,
-      bbox: candidate.sourceReference?.bbox ?? null,
+      bbox: null,
       sourceReference: candidate.sourceReference,
     };
 
@@ -546,13 +546,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       filename: file?.name || "Tender Document",
       pageCount: failureDiagnostics.pageCount,
       textPages: failureDiagnostics.coverageSummary.documentPages,
-      document: {
-        documentId: `doc-${Date.now()}`,
-        documentVersionId: `v-${Date.now()}`,
-        documentFingerprint: "manual-recovery",
-        pageCount: failureDiagnostics.pageCount,
-        inventoryIntegrity: "structurally-verified",
-      },
+      document: recoveredDocument,
       requirements: [promotedReq],
       classificationReviewCandidates: remaining,
       rejectedCandidates: failureDiagnostics.rejectedCandidates,
@@ -561,7 +555,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         summary: failureDiagnostics.coverageSummary,
         pages: [],
       },
-      reviewNote: "Session recovered via operator candidate promotion.",
+      reviewNote: "Operator-recovered from a partial analysis. Original source identity is retained, but document inventory integrity and extraction completeness have not been verified. Inspect the tender before using this sheet.",
     };
 
     const sheet = buildResponseSheet(newAnalysis);
