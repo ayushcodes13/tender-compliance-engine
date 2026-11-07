@@ -134,7 +134,8 @@ try {
   assert.equal(dispositionOnly.analysis.requirements.length,1,'A relevant per-page disposition selects source extraction even without a section range');
   assert.equal(dispositionOnly.analysis.coverage.pages[0].routingDisposition,'selected');
   scenario='page-batched-fallback';
-  const batchedFallback=await analyze(short);
+  const batchedPdf=new jsPDF();batchedPdf.text('The centrifuge shall accommodate 10 samples.',20,30);
+  const batchedFallback=await analyze(batchedPdf);
   assert.equal(batchedFallback.ok,true,batchedFallback.error);
   assert.equal(batchedFallback.analysis.requirements.length,1,'The page-batched visual fallback preserves the literal source requirement');
   assert.equal(batchedFallback.analysis.coverage.pages[0].auditStatus,'no_gaps_reported');
