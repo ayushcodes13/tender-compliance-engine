@@ -38,7 +38,8 @@ import { validatePossibleSourceConflicts } from "./section-consistency";
 import { batchSourceRowsForAudit, isSourceRowAuditBatchWithinLimits, SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS, validateSourceRowAuditResult } from "./source-row-audit";
 import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page-audit";
 import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, type CandidateOrigin } from "./candidate-trace";
-import { classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
+import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGroup, classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
+import { groupSourceObligationCandidates, orderCandidatesBySourceObligationGroups, type SourceObligationGroupReference } from "./source-obligation-grouping";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
@@ -63,6 +64,7 @@ type Requirement = {
   sourceColumnMap?: SourceColumn[];
   sourceSectionTitle?: string;
   sourceSectionHeadings?: string[];
+  sourceObligationGroup?: SourceObligationGroupReference;
   sourceSpecificationColumnIndex?: number;
   sourceSpecificationBlank?: boolean;
   sourceRowIndex?: number;
@@ -1030,7 +1032,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       },
     };
 
-    type Candidate = { page?: number; quote?: string; visual_region_index?: number; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean; traceOrigin?: CandidateOrigin; traceSourceElementIds?: string[]; traceSourceRowId?: string; traceSourceCellId?: string; traceCandidateId?: string; classificationDecision?: CandidateClassificationDecision; classificationReviewReason?: string; classificationReviewOnly?: boolean; originalClassification?: string; allowedPages?: number[]; ordinal?: number };
+    type Candidate = { page?: number; quote?: string; visual_region_index?: number; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean; traceOrigin?: CandidateOrigin; traceSourceElementIds?: string[]; traceSourceRowId?: string; traceSourceCellId?: string; traceCandidateId?: string; classificationDecision?: CandidateClassificationDecision; classificationReviewReason?: string; classificationReviewOnly?: boolean; originalClassification?: string; allowedPages?: number[]; ordinal?: number; sourceObligationGroup?: SourceObligationGroupReference };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
     const registeredTraceCandidateIds = new Set<string>();
     const registerTraceCandidate = (candidate: Candidate, origin: CandidateOrigin, candidateOrdinal?: number, trustedSourceMetadata = false): string | undefined => {
@@ -2341,6 +2343,77 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       return kept;
     });
 
+    // Recover parent/child obligation relationships only from unique native
+    // text spans that form a complete, delimiter-bounded source list. OCR,
+    // vector-cell-only rows, administrative rejections, and bidder form fields
+    // stay on their existing validation paths.
+    const groupingCandidates = parsedCandidates.flatMap((candidate) => {
+      const pageNumber = typeof candidate.page === "number" ? candidate.page : Number.NaN;
+      const sourcePage = pages.find((page) => page.page === pageNumber);
+      const quote = typeof candidate.quote === "string" ? candidate.quote.trim() : "";
+      if (!sourcePage || !quote || candidate.source_cells_exact === true || candidate.visualOcr === true) return [];
+      const sourceMatch = findUniqueSourceText(sourcePage.rawText, quote);
+      if (!sourceMatch) return [];
+      const candidateId = candidate.traceCandidateId ?? `candidate-p${pageNumber}-o${sourceMatch.startOffset}-e${sourceMatch.endOffset}`;
+      const decision = candidate.classificationDecision ?? classifyCandidateScope(candidate.row_type, quote);
+      return [{
+        candidate,
+        candidateId,
+        decision,
+        sourceCandidate: {
+          candidateId,
+          page: pageNumber,
+          quote,
+          sourceQuote: sourceMatch.sourceText,
+          rowType: candidate.row_type,
+          sourceSpan: { startOffset: sourceMatch.startOffset, endOffset: sourceMatch.endOffset },
+        },
+      }];
+    });
+    const eligibleGroupCandidateIds = new Set(groupingCandidates
+      .filter(({ decision }) => canJoinValidatedSourceObligationGroup(decision))
+      .map(({ candidateId }) => candidateId));
+    const candidatesByGroupId = new Map(groupingCandidates.map(({ candidateId, candidate }) => [candidateId, candidate]));
+    const sourceObligationGroups = pages.flatMap((sourcePage) => groupSourceObligationCandidates({
+      documentFingerprint: sourceDocument.fingerprint,
+      page: sourcePage.page,
+      sourceText: sourcePage.rawText,
+      sourceElements: sourcePage.sourceModel.textBlocks,
+      candidates: groupingCandidates.map(({ sourceCandidate }) => sourceCandidate),
+      eligibleCandidateIds: eligibleGroupCandidateIds,
+    }));
+    const candidateIdsByObject = new Map(groupingCandidates.map(({ candidateId, candidate }) => [candidate, candidateId]));
+    const sourceOrderedCandidates = orderCandidatesBySourceObligationGroups({
+      candidates: parsedCandidates,
+      groups: sourceObligationGroups,
+      candidateId: (candidate) => candidateIdsByObject.get(candidate),
+    });
+    parsedCandidates.splice(0, parsedCandidates.length, ...sourceOrderedCandidates);
+    for (const group of sourceObligationGroups) {
+      for (const member of group.members) {
+        const candidate = candidatesByGroupId.get(member.candidateId);
+        if (!candidate) continue;
+        const baseDecision = candidate.classificationDecision ?? classifyCandidateScope(candidate.row_type, candidate.quote ?? "");
+        // Group membership permits a source-linked row to enter the matrix;
+        // it must not silently clear a prior classification review warning.
+        if (baseDecision.requiresHumanReview) {
+          candidate.classificationReviewReason ??= baseDecision.reason;
+        }
+        candidate.classificationDecision = applyValidatedSourceObligationGroup(baseDecision, {
+          id: group.id,
+          role: member.role,
+          parentCandidateId: group.parentCandidateId,
+        });
+        candidate.sourceObligationGroup = {
+          id: group.id,
+          role: member.role,
+          parentCandidateId: group.parentCandidateId,
+          memberOrder: member.memberOrder,
+        };
+        candidate.row_type = "requirement";
+      }
+    }
+
     report("validating source quotes", { stage: "verifying", message: "Verifying each quote and citation against the PDF", current: 0, total: parsedCandidates.length });
     let rejected = rejectedSuggestionDetails.length;
     const seen = new Map<string, string>();
@@ -2507,6 +2580,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         sourceSpecificationColumnIndex: candidate.specification_column_index ?? candidate.source_column_index,
         sourceSpecificationBlank: candidate.specification_blank,
         sourceRowIndex: candidate.source_row_index,
+        sourceObligationGroup: candidate.sourceObligationGroup,
         page: pageNumber,
         quote,
         sourceReference,
