@@ -77,3 +77,23 @@ test('request-start timing identifies incomplete coverage requests without conte
     inputCharacters: 8_000,
   });
 });
+
+test('vector timing records only numeric page and request metadata', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'request_started',
+    requestKind: 'vector_table_row_classification',
+    pageNumber: 7,
+    batchPageCount: 1,
+    inputCharacters: 12_345,
+    sourceCells: ['secret source content'],
+  }, (line) => lines.push(line), true);
+
+  assert.deepEqual(JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length)), {
+    phase: 'request_started',
+    requestKind: 'vector_table_row_classification',
+    pageNumber: 7,
+    batchPageCount: 1,
+    inputCharacters: 12_345,
+  });
+});
