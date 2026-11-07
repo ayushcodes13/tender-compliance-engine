@@ -38,7 +38,7 @@ import { validatePossibleSourceConflicts } from "./section-consistency";
 import { batchSourceRowsForAudit, isSourceRowAuditBatchWithinLimits, SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS, validateSourceRowAuditResult } from "./source-row-audit";
 import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page-audit";
 import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, type CandidateOrigin } from "./candidate-trace";
-import { classifyInstructionCandidate, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
+import { classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
@@ -1468,25 +1468,29 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           const groupHeading = sourceTableGroupHeading(row.cells, pageColumns);
           let label = groupHeading ? { ...sourceLabel, row_type: "section" as const, classification_reason: "structural_heading" as const } : sourceLabel;
           const sourceCell = sourceRequirementCell(row.cells, pageColumns, requirementColumnIndex);
-          const classificationDecision = label && ["instruction", "ambiguous", "header"].includes(label.row_type ?? "")
-            ? classifyInstructionCandidate(label.row_type, sourceCell?.quote ?? row.cells.join(" "))
+          const classificationDecision = label
+            ? classifyCandidateScope(label.row_type, sourceCell?.quote ?? row.cells.join(" "))
             : undefined;
           if (classificationDecision?.effectiveRowType === "requirement"
             && (classificationDecision.outcome === "reclassified_for_review" || classificationDecision.outcome === "retained_for_review")) {
             label = { ...label, row_type: "requirement", classification_reason: "technical_obligation" };
-          } else if (sourceLabel?.row_type === "instruction" && classificationDecision?.effectiveRowType === "ambiguous") {
+          } else if (classificationDecision?.effectiveRowType === "ambiguous") {
             label = { ...label, row_type: "ambiguous", classification_reason: "ambiguous_source_structure" };
+          } else if (classificationDecision?.outcome === "rejected") {
+            label = { ...label, row_type: "instruction", classification_reason: "process_or_submission_instruction" };
           }
-          const classificationReviewOnly = sourceLabel?.row_type === "instruction"
-            && classificationDecision?.outcome === "retained_for_review"
-            && classificationDecision.effectiveRowType === "ambiguous";
+          const classificationReviewOnly = classificationDecision?.outcome === "retained_for_review"
+            && classificationDecision.effectiveRowType === "ambiguous"
+            && (classificationDecision.reason === "mixed_administrative_and_supplier_obligation"
+              || sourceLabel?.row_type === "ambiguous"
+              || sourceLabel?.row_type === "instruction" && classificationDecision.reason !== "unresolved_source_structure");
           const nativePrefix=row.cellHeadingPrefixes?.[requirementColumnIndex];
           const nativeHeadingPrefix=!groupHeading?confirmedNativeHeadingPrefix(nativePrefix,label?.row_type,label?.heading_prefix):undefined;
           if(nativeHeadingPrefix){
             label={...label,row_type:'requirement',classification_reason:'technical_obligation',heading_prefix:nativeHeadingPrefix};
           }
           if (label) labelByIndex.set(index, label);
-          if (classificationDecision?.outcome === "rejected" || label?.row_type === "header" || label?.row_type === "instruction"
+          if (label?.row_type === "header"
             || (label?.row_type === "ambiguous" && !classificationReviewOnly)
             || isRepeatedTableHeader(row.cells, pageColumns.map((column) => column.header))) return [];
           const isSection = label?.row_type === "section" || label?.row_type === "optional_heading";
@@ -1564,6 +1568,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         }
         const candidateCountBySourceRow = new Map<number, number>();
         for (const candidate of requirements) {
+          // Preserve rejected source rows in the forensic trace, but do not count
+          // their rejected proposals as mapped compliance candidates.
+          if (candidate.classificationDecision?.outcome === "rejected") continue;
           const rowIndex = candidate.source_row_index;
           if (Number.isInteger(rowIndex)) candidateCountBySourceRow.set(rowIndex!, (candidateCountBySourceRow.get(rowIndex!) ?? 0) + 1);
         }
@@ -2312,7 +2319,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "candidate_text_validation", rejectionCategory: "invalid_candidate_text" });
         continue;
       }
-      const classificationDecision = candidate.classificationDecision ?? classifyInstructionCandidate(candidate.row_type, quote);
+      const classificationDecision = candidate.classificationDecision ?? classifyCandidateScope(candidate.row_type, quote);
       candidate.classificationDecision = classificationDecision;
       if (candidate.traceCandidateId) forensicTrace?.recordClassification(candidate.traceCandidateId, classificationDecision);
       if (classificationDecision.outcome === "rejected") {
