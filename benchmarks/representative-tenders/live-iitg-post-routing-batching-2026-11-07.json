@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "256078870bf380b3144e2b7922556c6e8e5e1920",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna compatible endpoint",
+  "execution": "isolated local production Next.js API on 127.0.0.1:3155; application wall-clock deadline 270 seconds",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 270,
+  "stagesObserved": ["uploading", "reading", "locating", "mapping", "extracting"],
+  "sourceInventoryCompleted": true,
+  "routingCompleted": true,
+  "lastDetailedExtractionProgress": {
+    "stage": "extracting",
+    "completedVisualPages": 4,
+    "totalVisualPages": 5
+  },
+  "responseSheetProduced": false,
+  "coverageMetricsAvailable": false,
+  "candidateOrRequirementTextPersisted": false,
+  "sourceTextPersisted": false,
+  "costTelemetry": "not available",
+  "limitations": [
+    "The response deadline ended the run during extraction; no matrix or coverage report was returned.",
+    "The page inventory and routing completed, but selected-page totals and per-page routing dispositions were not available in the terminal result.",
+    "This is one nondeterministic run and cannot establish a before/after latency or quality comparison with earlier runs.",
+    "The source annotations remain partial and assistant-reviewed; this run provides no recall estimate."
+  ]
+}
