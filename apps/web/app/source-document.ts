@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { alignTokenSequence, findUniqueTokenBoundedMatch } from "./token-sequence-alignment.ts";
+import { alignExactTokenSequence, alignTokenSequence, findUniqueTokenBoundedMatch, hasTechnicalAgreement } from "./token-sequence-alignment.ts";
 
 export type SourceBox = { x: number; y: number; width: number; height: number };
 
@@ -332,6 +332,19 @@ export function buildRequirementSourceReference(input: {
 }): RequirementSourceReference {
   const transcription = input.visualTranscription;
   const match = transcription ? null : findUniqueSourceText(input.page.sourceText, input.quote);
+  // A repeated native quote may be verified on this page without identifying
+  // which occurrence supplied the candidate. Preserve literal page text, but
+  // never invent a unique span, parser element IDs, or exact location for it.
+  const nonUniqueAlignment = !transcription && !match
+    ? alignExactTokenSequence(input.quote, input.page.sourceText, { requireUnique: false })
+    : null;
+  const pageTextWithoutUniqueLocation = nonUniqueAlignment
+    ? input.page.sourceText.slice(nonUniqueAlignment.startOffset, nonUniqueAlignment.endOffset)
+    : "";
+  const sourceTextWithoutUniqueLocation = pageTextWithoutUniqueLocation
+    && hasTechnicalAgreement(input.quote, pageTextWithoutUniqueLocation)
+    ? pageTextWithoutUniqueLocation
+    : "";
   let sourceCell: RequirementSourceReference["sourceCell"];
   if (input.sourceCellLocation) {
     const table = input.page.tables[0];
@@ -377,7 +390,7 @@ export function buildRequirementSourceReference(input: {
     documentVersionId: input.document.documentVersionId,
     documentFingerprint: input.document.fingerprint,
     physicalPdfPageNumber: input.page.physicalPdfPageNumber,
-    sourceText: transcription ? input.selectableTextContext ?? "" : match?.sourceText ?? exactCellText ?? "",
+    sourceText: transcription ? input.selectableTextContext ?? "" : match?.sourceText ?? exactCellText ?? sourceTextWithoutUniqueLocation,
     sourceElementIds: [...sourceElementIds],
     ...(match ? { startOffset: match.startOffset, endOffset: match.endOffset } : {}),
     ...(match ? { offsetUnit: "utf16-code-unit" as const, offsetScope: "page-source-text" as const } : {}),
