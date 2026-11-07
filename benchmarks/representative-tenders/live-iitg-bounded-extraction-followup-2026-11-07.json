@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "360c94dd0b5b9fc2e4bc6d1e38d9c7c96844d775",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "isolated production Next.js server on 127.0.0.1:3155; 270-second application deadline; TCE_MODEL_TIMING=1",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 271.5,
+  "vectorInspection": {
+    "pagesDetected": 5,
+    "mode": "serial_fallback",
+    "allPagesCompletedAtSeconds": 228.8
+  },
+  "generalExtractionWave": {
+    "batchesStartedAtSeconds": 228.8,
+    "batchCount": 3,
+    "perBatchPageCounts": [3, 3, 2],
+    "perBatchInputCharacters": [8147, 9875, 2379],
+    "headersReceived": false,
+    "responsesParsed": false
+  },
+  "textPageOmissionAudit": {
+    "requestStarted": false
+  },
+  "responseSheetProduced": false,
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "limitations": [
+    "All three general extraction batches began in one wave at 228.8 seconds; none returned response headers before the 270-second application deadline.",
+    "The text-page omission audit did not start and no response sheet was produced.",
+    "This provider run was slower than the earlier sample; it does not show that bounded concurrency improved latency or deadline completion.",
+    "The artifact contains only safe counts and timing state; no tender/model text, requirement content, source coordinates, or cost estimate was retained.",
+    "A single run cannot establish typical provider latency, extraction quality, or recall."
+  ]
+}
