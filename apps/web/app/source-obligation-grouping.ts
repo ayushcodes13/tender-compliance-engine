@@ -54,12 +54,25 @@ function occursExactlyOnce(sourceText: string, quote: string): boolean {
   return first >= 0 && sourceText.indexOf(quote, first + 1) < 0;
 }
 
+// A bullet may introduce *another item in the same list*, not a new
+// independent clause. Require an explicit actor/action at the next boundary
+// rather than promoting a partial list on the presence of a bullet alone.
+function beginsIndependentClause(text: string): boolean {
+  const clause = text.trimStart();
+  return /^(?:the\s+)?(?:supplier|vendor|manufacturer|oem|contractor|purchaser|buyer|institute|bidder)\b.{0,160}\b(?:shall|must|will|should|is required to|is responsible for|undertakes? to)\b/i.test(clause)
+    || /^(?:an?|the)\s+(?:undertaking|declaration|certificate)\b.{0,100}\b(?:must|shall|will|is required to)\b/i.test(clause);
+}
+
 function isDefiniteListBoundary(sourceText: string, endOffset: number, elements: SourceObligationGroupTextElement[]): boolean {
   const tail = sourceText.slice(endOffset);
   const literalBoundary = tail.match(/^\s*(?:[.;]\s*)?(?:\r?\n\s*[○◦●▪•\u2022\u25cb\u25e6\u25aa\u25cf]|[○◦●▪•\u2022\u25cb\u25e6\u25aa\u25cf])/u);
   // End-of-page is not proof that a list is complete: its remaining items
   // may continue onto the next physical PDF page.
-  if (literalBoundary) return true;
+  if (literalBoundary) {
+    // Find the source text after the bullet, not just the marker.
+    const marker = /[○◦●▪•\u2022\u25cb\u25e6\u25aa\u25cf]/u.exec(tail);
+    return Boolean(marker && beginsIndependentClause(tail.slice(marker.index + marker[0].length)));
+  }
 
   // PDF.js may expose a hollow-circle list marker as a standalone "o" text
   // block. Treat it as a boundary only when parser geometry places it left of
@@ -74,7 +87,8 @@ function isDefiniteListBoundary(sourceText: string, endOffset: number, elements:
   const sameBaseline = Math.abs(nextText.bbox.y - marker.bbox.y) <= Math.max(marker.bbox.height, nextText.bbox.height, 3);
   const indentedAfterMarker = nextText.bbox.x > marker.bbox.x + Math.max(4, marker.bbox.width);
   const onlySpacingBetween = /^\s*$/.test(sourceText.slice(marker.endOffset, nextText.startOffset));
-  return sameBaseline && indentedAfterMarker && onlySpacingBetween;
+  return sameBaseline && indentedAfterMarker && onlySpacingBetween
+    && beginsIndependentClause(sourceText.slice(marker.endOffset));
 }
 
 /**
