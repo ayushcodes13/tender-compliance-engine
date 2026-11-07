@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "0693e10160ce70329ee4cf590ce45a5b49da8954",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "isolated production Next.js server on 127.0.0.1:3155; 270-second application deadline; TCE_MODEL_TIMING=1",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 271.2,
+  "vectorInspection": {
+    "pagesDetected": 5,
+    "mode": "serial_fallback",
+    "allPagesCompletedAtSeconds": 214.9
+  },
+  "generalExtractionRequests": [
+    {
+      "batchIndex": 1,
+      "totalBatches": 4,
+      "batchPageCount": 3,
+      "inputCharacters": 12981,
+      "requestHeadersWaitMs": 14431,
+      "responseBodyAndEnvelopeMs": 1,
+      "jsonParseMs": 2,
+      "responseStatus": 200,
+      "responseCharacters": 1067,
+      "promptTokens": 9608,
+      "completionTokens": 1149,
+      "totalTokens": 10757
+    },
+    {
+      "batchIndex": 2,
+      "totalBatches": 4,
+      "batchPageCount": 3,
+      "inputCharacters": 9266,
+      "requestHeadersWaitMs": 29582,
+      "responseBodyAndEnvelopeMs": 2,
+      "jsonParseMs": 0,
+      "responseStatus": 200,
+      "responseCharacters": 9887,
+      "promptTokens": 8814,
+      "completionTokens": 3794,
+      "totalTokens": 12608
+    },
+    {
+      "batchIndex": 3,
+      "totalBatches": 4,
+      "batchPageCount": 3,
+      "inputCharacters": 10417,
+      "requestStartedAtSeconds": 229.3,
+      "headersReceived": false,
+      "responseParsed": false
+    }
+  ],
+  "textPageOmissionAudit": {
+    "requestStarted": false
+  },
+  "responseSheetProduced": false,
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "limitations": [
+    "The run ended during the third of four general extraction batches; the new text-page omission audit instrumentation recorded no audit request because that stage was never reached.",
+    "The third request began at 229.3 seconds and did not receive response headers before the 270-second application deadline.",
+    "The UI progress message at 229.3 seconds said it was parsing extracted requirements even though timing telemetry shows the third model request had just started; the progress message is stale or misleading for this interval.",
+    "Two batches produced responses with short body and JSON parsing time; provider latency was in request-to-headers wait.",
+    "No model payload, tender text, requirement text, token-cost estimate, or source coordinates were retained.",
+    "This is one nondeterministic sample on one tender and does not establish extraction quality or a latency improvement."
+  ]
+}
