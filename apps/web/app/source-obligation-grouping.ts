@@ -57,7 +57,9 @@ function occursExactlyOnce(sourceText: string, quote: string): boolean {
 function isDefiniteListBoundary(sourceText: string, endOffset: number, elements: SourceObligationGroupTextElement[]): boolean {
   const tail = sourceText.slice(endOffset);
   const literalBoundary = tail.match(/^\s*(?:[.;]\s*)?(?:\r?\n\s*[○◦●▪•\u2022\u25cb\u25e6\u25aa\u25cf]|[○◦●▪•\u2022\u25cb\u25e6\u25aa\u25cf])/u);
-  if (literalBoundary || tail.trim().length === 0) return true;
+  // End-of-page is not proof that a list is complete: its remaining items
+  // may continue onto the next physical PDF page.
+  if (literalBoundary) return true;
 
   // PDF.js may expose a hollow-circle list marker as a standalone "o" text
   // block. Treat it as a boundary only when parser geometry places it left of
