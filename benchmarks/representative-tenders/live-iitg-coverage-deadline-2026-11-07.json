@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePages": 15,
+  "codeCommit": "0a10ff6391ac7cbe9a210ee43c03a4d9de0dd58e",
+  "runDate": "2026-11-07",
+  "elapsedSeconds": 271.2,
+  "terminalStatus": "incomplete-no-response-sheet",
+  "terminalError": "Analysis time limit reached. Processing is incomplete; no response sheet was produced.",
+  "pipeline": {
+    "sourceInventory": "completed",
+    "routing": "completed; routing batches 2/2",
+    "vectorTableInspection": {
+      "pagesCompleted": 5,
+      "pageNumbers": [1, 7, 11, 12, 13],
+      "modelRowClassificationResponses": 5
+    },
+    "generalRequirementExtraction": {
+      "batchesCompleted": 5,
+      "batchesTotal": 5,
+      "pagesPerBatch": [3, 3, 3, 3, 2]
+    },
+    "textPageOmissionAudit": {
+      "batchesCompleted": 1,
+      "batchesTotal": 4,
+      "pagesPerBatch": 4,
+      "completedBatchIndices": [2]
+    },
+    "visualPageOmissionAudit": "not-reached"
+  },
+  "modelTiming": {
+    "vectorColumnMapping": {
+      "requestsStarted": 6,
+      "responsesReceived": 6,
+      "responsesParsed": 6,
+      "sumRequestHeaderWaitMs": 30336,
+      "observedTokens": 16826
+    },
+    "vectorRowClassification": {
+      "requestsStarted": 5,
+      "responsesReceived": 5,
+      "responseParseTelemetryAvailable": false,
+      "sumRequestHeaderWaitMs": 82863
+    },
+    "generalRequirementExtraction": {
+      "requestsStarted": 5,
+      "responsesReceived": 5,
+      "responsesParsed": 5,
+      "sumRequestHeaderWaitMs": 201385,
+      "observedTokens": 56631
+    },
+    "textPageOmissionAudit": {
+      "requestsStarted": 3,
+      "responsesReceived": 1,
+      "responsesParsed": 1,
+      "observedTokens": 5181
+    },
+    "observedTokenTotal": 78638,
+    "cost": "not-recorded"
+  },
+  "qualityComparison": {
+    "responseRowsAvailable": false,
+    "routingDispositionCountsAvailable": false,
+    "sourceAnchorComparisonPerformed": false,
+    "recallOrPrecisionClaim": false
+  },
+  "limitations": [
+    "The synchronous run stopped during the text-page omission audit; accepted requirements and final coverage states were not returned.",
+    "Request-header wait sums are per-request elapsed times and overlap for concurrent requests; they are not wall-clock stage durations.",
+    "Row-classification responses do not emit parsed token telemetry in this run, so observed token total is a partial count.",
+    "This single live-provider run does not establish a causal latency comparison, completeness, recall, or precision."
+  ],
+  "privacy": "No tender text, candidate text, request bodies, response bodies, or source bounds are stored."
+}
