@@ -1,81 +1,100 @@
-# POC 90: three-lane parallel execution contract
+# POC90: three independent Goal Mode agents + ChatGPT integration
 
-Status: active coordination plan, 2026-11-07. Initial engineering baseline: main 26cc04769f13cad92d5e498570c80e34b13dcdc3 (PR #389). Future lanes must branch from the main SHA containing this coordination document.
+Status: active sprint contract, 2026-11-07. Base before this revision: `e0f9a44eaf27f0f0ff66426ee096873c10e9258f`. **All agents must use the SHA of main after this coordination PR merges**, never the historic base. ChatGPT is the **fourth participant** (architect/integrator), not one of the three coding agents.
 
-## Authority and scope
+## 1. Authority, product and success metric
 
-Read this file, AGENTS.md, docs/checkpoint.md and docs/architecture/ADR-0001-document-intelligence-redesign.md before work. AGENTS.md continues to govern engineering safety and PR requirements; docs/checkpoint.md remains the canonical checkpoint plan. This file is the temporary **execution/ownership overlay** for the client POC sprint. Do not interpret historical checked boxes as current acceptance evidence.
+Every agent MUST read `AGENTS.md`, this file, `docs/checkpoint.md`, `docs/architecture/ADR-0001-document-intelligence-redesign.md`, and the current open PR list before doing anything. `AGENTS.md` governs safety and PR-first engineering; `docs/checkpoint.md` remains the canonical product backlog. **This file temporarily overrides the chronological first-unchecked-checkpoint order for this sprint, including the usual requirement that each agent modify checkpoint.md.** Only ChatGPT integrates checkpoint and status updates later. Do not rewrite old history or mark unknown work done.
 
-Phase 1 only: tender PDF -> source-linked technical requirement candidates -> human review -> blank OEM response sheet -> DOCX/XLSX/PDF exports. No OEM evidence matching, autonomous compliance verdict, RAG, accounts/multi-tenancy, worker/queue, or unrelated product features. This sprint targets a **single-user, operator-assisted client POC**, not a general-production service.
+Product = **operator-assisted single-user client POC**: upload a tender PDF -> create source-linked, independently reviewable technical/supplier obligations -> reviewer checks/edits -> export blank OEM compliance/deviation/remarks in DOCX/XLSX/PDF. There is no supplier capability ingestion, evidence-backed compliance verdict, multi-tenant production service, RAG, agent orchestration or autonomous tender assessment. A useful, inspectable draft is the promise, NOT exhaustive source coverage.
 
-## How to interpret 70% -> 90%
+"70% -> 90%" is a **gated planning estimate, not a measured completion ratio or accuracy**. Starting from the prior 70% estimate, award potential points only with evidence:
 
-70% was an approximate readiness assessment, not a measured repository metric. These **incremental 20 readiness points** are a planning score, awarded only after the evidence is reviewed. They do not establish model recall or production readiness:
-
-| Workstream | Possible gain | Evidence required |
+| Final gate | Potential incremental points | Required evidence |
 | --- | ---: | --- |
-| A. Execution reliability | +6 | One controlled full IIT Guwahati run reaches a terminal completed response sheet on pinned code; measured stage/batch timing, response count, usage and final trace. A timeout gives 0 here. |
-| A. Extraction correctness | +7 | In that completed run, all 20 previously flagged administrative rows are outside the accepted matrix; the three page-11 AMC/local support/spares obligations are present with literal source evidence; direct source/PDF inspection records judgments on these and at least ten varied citations/technical values (agent-reviewed, with later independent human sign-off still pending); inspect the seven-group/16-anchor provisional evaluator without mislabeling it exhaustive recall. Zero fabricated citations and no observed critical-value corruption in the sample. |
-| B. Review/export journey | +5 | Browser walkthrough from a real saved extraction or controlled scripted upload to source inspection/highlighting, reviewer decision, edit invalidation, removal/reset and export; compare DOCX/XLSX/PDF against reviewed sheet for requirement counts, units, blank OEM fields and sources. Browser evidence and defects reported. |
-| B. Pilot operability | +2 | A repeatable private local operator-led start/upload/review/export procedure, clean secret handling and fail-closed access tested; explicit client limitations and a usable demo handoff. Remote hosting/custom domain is not assumed ready. |
+| G1. Controlled execution | +6 | A real hash-verified tender completes end-to-end on a pinned code version, with a terminal response, timed phases, tokens, and reconciled trace. The completed 157.002-second IITG result on `26cc047` is historical evidence for this gate; any new code must not invalidate it. |
+| G2. Precision + grounding | +7 | Scope false positives addressed on the full saved candidate set, original and novel admin cases excluded/review-only, all three critical page-11 service obligations retained, mixed clauses review-only, at least ten technical value/citation spot-checks and three flagged page-8 evidence gaps diagnosed; one controlled final post-integration benchmark if explicitly authorized and feasible, with no critical source corruption. Offline fixtures alone are insufficient to claim end-to-end generalization. |
+| G3. Review and export | +5 | Browser review/editor workflow verified with scripted or saved result: correct cited page/quote/highlight/approximation; review invalidation; independent rows; remove/reset; DOCX/XLSX/PDF preserve source wording, numbers, grouping and intentionally blank supplier fields. |
+| G4. Usable private pilot | +2 | Repeatable operator-led local startup and handoff, access gate, clean secrets, supported PDF/OCR limits, documented failure behavior and no silent loss of unreviewed text. Remote-hosted availability is a separate gate if required by the client. |
 
-**90% is conditional, not a deadline promise**: all four gates must have evidence, no blocking critical issues, no falsely green CI and no incomplete analysis masquerading as success. If A's paid run fails, report below target; do not inflate the number by merging PRs. A non-developer customer's sign-off and broader gold-set coverage remain beyond this milestone. Do not claim exhaustive tender completeness.
+At 90% all four gates require evidence and **zero unresolved P0 correctness/safety issues**. Scores are not additive if G2 remains blocked; don't assert 90% simply because PRs were merged. Even 90% does not mean production-ready, independent client validation or complete recall. Provide the score as an assessment with its evidence.
 
-## Concurrency protocol — mandatory for all three
+## 2. Most recent confirmed evidence (historical run, NOT a new instruction to retry)
 
-1. Begin from the same merged coordination baseline on **three separate git worktrees/branches**. Never share a working directory or uncommitted changes. Read open PRs before starting and again before requesting merge.
-2. Exactly one owner per code file. Changes outside a lane's ownership require a handoff and a decision by the Architect; do **not** silently edit another lane's files. Do not cherry-pick unreviewed work across lanes.
-3. Each coding agent operates in Goal Mode **only inside its lane** and may diagnose, implement, test and open **one focused PR**. No automatic merging, unlimited retries, unrelated cleanup, or multiple PR chains. A lane with no justified code change reports evidence without fabricating a PR.
-4. Coordination and status are communicated through each PR description (prefix title [POC90/A] or [POC90/B]), with commit SHA, changed paths, tests, blockers and required handoffs. Do not concurrently edit this document, AGENTS.md, docs/checkpoint.md, README.md or the architecture ADR.
-5. A dependency or edit conflict is **not** an invitation to take over. Stop the affected subtask, document the interface requested, and continue only independent work.
-6. Do not edit requirements or source to make an evaluator pass. No secret keys, private tender PDFs, customer exports, raw source text or full model responses in committed test fixtures or logs.
-7. No unbounded live model calls. Only Agent A owns the IIT Guwahati paid benchmark, maximum **one** full run after preflight on the selected SHA. No automatic retries. Agent B uses saved artifacts/scripted provider/browser fixtures and must not consume live model tokens.
-8. Integration order: each lane finishes and submits evidence; Architect inspects both PRs and final acceptance; required web CI must be green; merges are serialized, followed by checking final main CI. If shared API/types need changes, coordinate explicitly before merge. A passed synthetic test is not a real-tender result.
+- Latest merged code before this coordination revision: `e0f9a44`; no PRs open at inspection.
+- Completed IIT Guwahati 15-page tender analysis on `26cc047`, source SHA-256 `88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967`: **157.002 seconds, 137,770 provider-reported tokens, 172 accepted rows (146 requirements + 26 sections), 9 classification-review candidates; 228 trace candidates reconcile**. Do not confuse two runs' combined 208,847 tokens with this run's usage.
+- The original 20 administrative false inclusions and four adjacent cases were absent from the accepted sheet, and the three page-11 AMC/local service/spares obligations appeared source-grounded. Provisional page-11 evaluation: **14/16 literal anchors; manual PDF comparison reported 7/7 obligation groups semantically covered**. This is not exhaustive recall.
+- **P0 failure:** at least 12 *different* administrative/commercial rows remained accepted (PAN/TIN, vendor registration/banker/PO history, PO terms, financial guarantee, delivery logistics/penalty and HSN/GST); 3 mixed/document clauses also accepted instead of review. The `no_administrative_scope_conflict` fallback on model-labelled `requirement` is a plausible code-level mechanism. Precise classification transitions must use saved source quotes, not this summary.
+- **P1 provenance:** page-8 accepted requirements `req-86`, `req-90`, `req-92` reportedly have empty `sourceReference.sourceText`, empty element IDs and null offsets although literal PDF inspection matches their wording. Need distinguish exact source, OCR/visual-only fallback, multiple matches, and honest approximate provenance.
+- All four general-extraction batches completed in the successful run, source page IDs recorded in the report. Coverage includes incomplete/possible/not-run audits; do NOT assert 100% source recall.
+- The saved result lives in an ignored local tree under `apps/web/.local/benchmark-runs/iitg-20261107T142219Z/`; trace in ignored `apps/web/.local/forensic-traces/`. These exist on the user's local machine, **not necessarily in each isolated worktree or accessible to GitHub**. Inspect or explicitly report inaccessible. Do not copy raw tender files into Git or make up their contents.
+- Vercel project author permissions, hosted model configuration, custom DNS and hosted OCR remain unverified/deferred. The target POC is a **private local operator-assisted demo**. Hosted client access would require an additional acceptance decision.
 
-## Lane ARCH — ChatGPT, architecture/integration owner
+## 3. Worktree, ownership and concurrency rules — NON-NEGOTIABLE
 
-Owned files during setup: docs/poc-90-parallel-coordination.md, AGENTS.md and docs/checkpoint.md. After setup merge, **freeze** these shared documents until integration. May read every file but does not implement pipeline/UI code, upload tenders, make paid calls, or run browser/model/PDF tests for other lanes. Owns acceptance matrix, technical risk assessment, scope/interface decisions, PR review and final go/no-go assessment.
+There are **three coding agents A/B/C running concurrently plus ARCH (ChatGPT)**. Every agent must be given the same merged coordination commit and a distinct workspace. **Use isolated `git worktree` folders and branches, not merely branches checked out in one directory.** Each worktree has its own `.next` build, `node_modules` as appropriate, `.local` output and Git index. Check main and open PRs at start; don't pull other agents' unmerged branches. Never run cleanup/reset that touches other worktrees.
 
-Deliverable: merged coordination plan, two independent Goal Mode prompts and final integrated evidence report. Architecture recommendations do not count as successful implementation.
+Example (adjust paths safely; don't overwrite an existing worktree):
+```bash
+git fetch origin main
+git worktree add ../tce-poc90-a -b poc90/a-scope origin/main
+git worktree add ../tce-poc90-b -b poc90/b-provenance origin/main
+git worktree add ../tce-poc90-c -b poc90/c-client-journey origin/main
+```
+Each coding agent executes ONLY its own `git worktree add` command, not all three. If branch/worktree exists, inspect and reuse safely instead of deleting. Verify HEAD contains this file and the exact merged coordination SHA. Each agent only stages and commits its own owned paths.
 
-## Lane A — Agent 1: extraction reliability, real-tender evaluation
+**Exclusive write ownership** (read-only inspection across lanes is allowed):
+- **Agent A: Scope/classification.** `apps/web/app/candidate-classification.ts`, `candidate-classification.test.mjs`, and **new** self-contained offline classification tests/utilities named `apps/web/app/poc90-scope-*`. Do not edit `actions.ts`, `source-document.ts`, benchmark golden labels, any UI/export file or shared docs.
+- **Agent B: Source provenance/validation.** `apps/web/app/source-document.ts`, `source-document.test.mjs`, `candidate-evidence.ts`, `candidate-evidence.test.mjs`, `tiered-validation.ts`, `tiered-validation.test.mjs`, and **new** self-contained provenance tests/utilities named `apps/web/app/poc90-provenance-*`. Do not edit classification logic, `actions.ts`, UI/export or shared docs. Need an `actions.ts` contract change? Report a precise integration handoff for ARCH; do not cross ownership.
+- **Agent C: Review UI, export and pilot walkthrough.** `apps/web/app/tender-mvp.tsx`, `page.tsx`, `new/page.tsx`, `globals.css`, `response-sheet.ts`, `response-sheet.test.mjs`, `response-sections.ts`, `response-sections.test.mjs`, `sectioned-exports.ts`, `sectioned-exports.test.mjs`, `pdf-export.ts`, `pdf-export.test.mjs`, `remark-verification.ts`, `remark-verification.test.mjs`, and **new** `apps/web/app/poc90-client-*` tests. Source/PDF drawer components under `apps/web/components` are C-owned if needed. Do not touch classification/provenance, `actions.ts` or shared docs. Use `127.0.0.1:3308` if manually launching app; DO NOT run `make pilot-start` or `pilot-stop` on its fixed 3307 because it may collide. Scripted pipeline dynamically allocates ports.
+- **ARCH (ChatGPT): shared architecture and integration only.** Owns `docs/poc-90-parallel-coordination.md`, `AGENTS.md`, `docs/checkpoint.md`, `README.md`, `docs/architecture/*`, `apps/web/app/actions.ts`, `apps/web/app/api/analyze/route.ts`, `apps/web/scripts/verify-pipeline.mjs`, `benchmarks/**`, provider/concurrency/coverage modules and all otherwise-unassigned files. ARCH does not change another lane's owned files while they work; may make a strictly necessary integration PR after all lanes hand off.
 
-Exclusive code ownership (only if needed): apps/web/app/actions.ts; document-input.ts; model-provider.ts; model-timing.ts; concurrent-map.ts; concurrent-waves.ts; analysis-stream.ts; candidate-classification.ts; coverage-ledger.ts; source-row-audit.ts; text-page-audit.ts; corresponding focused tests; apps/web/app/api/analyze/route.ts; apps/web/scripts/verify-pipeline.mjs; benchmarks/**. Agent A also owns existing ignored local benchmark, trace and quality artifacts.
+**No cross-lane code writes.** If a true blocker requires a foreign file, submit an interface request (exact symbols, paths, expected type/behavior, regression) to ARCH through PR notes; keep work independent. No shared-file edits in any agent PR, including AGENTS/checkpoint/coordination/README. Only ARCH updates shared checkpoint status after integration; this explicit sprint exception overrides the ordinary AGENTS checkpoint-update rule.
 
-Goals:
-- Preflight main SHA, existing 15-page IITG source SHA 88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967, model configuration, safe timing/forensic logging, output paths and GitHub CI.
-- Execute at most **one** full, paid, controlled benchmark. On success compare 20 administrative rows, 4 adjacent rows, 3 page-11 obligations, provisional 7 groups/16 source anchors, numerical/citation errors, trace reconciliation, tokens and runtime. No score without a completed result.
-- On failure preserve event/page IDs/timings/partial trace and provide root-cause hypothesis with uncertainty. Do not silently retry or replace actual results with offline classifier replay.
-- A code fix is justified only for a reproducible, lane-owned P0 that prevents acceptance; create one focused PR with synthetic regression. Do not widen timeouts or change batch limits reflexively. Distinguish failure from quality evidence.
+Each agent can run local tests and scripted-provider tests (synthetic only). Each runs **at most one focused PR** if code changes are justified (title prefix `[POC90/A]`, `[POC90/B]`, `[POC90/C]`). Never merge, change another lane's branch, or create a chain of PRs. PR body includes original base SHA, current head, exact touched paths, root cause, tests, screenshots/artifacts when suitable, regressions, limitations, handoffs and explicit note whether live model was called (it should be **NO**).
 
-Forbidden: edit UI/export code, add hosting/DNS features, alter shared docs, change classification solely to match one golden file, run additional paid benchmarks. Report interface requests to ARCH.
+No coding agent may run a new paid live tender analysis, retry the old run, change provider model, adjust timeout/batch limits, deploy, mutate Vercel/DNS/secrets, or build new persistent infrastructure. **One final full-tender paid run is reserved for a post-merge integration decision, by ARCH/user-approved operator only**. Saving money and avoiding repeated inconclusive results is part of the sprint.
 
-## Lane B — Agent 2: client walkthrough, review/export, operator handoff
+## 4. Agent A acceptance: administrative scope
 
-Exclusive code ownership (only if needed): apps/web/app/tender-mvp.tsx; page.tsx; new/page.tsx; relevant browser UI components; globals.css; response-sheet.ts; response-sections.ts; sectioned-exports.ts; pdf-export.ts; remark-verification.ts; corresponding focused UI/export tests and browser test artifacts. May read the rest but must not modify A-owned extraction or CI pipeline scripts.
+Start from saved **172-row** completed IITG result when accessible, not from the older 192-row result or invented quote strings. Diagnose at least 12 fresh admin accepted rows `req-6,7,8,9,21,25,26,28,29,31,32,33` and mixed `req-3,5,15` using exact original quotes and trace decisions. Preserve 20 original admin exclusions, four adjacent exclusions and page-11 `req-159,160,161` service obligations. Requirements should be equipment/product technical characteristics, technical documents and supplier fulfillment (including installation, calibration, AMC, training, spares and service presence). Exclude routine bidder identification, qualification, procurement accounting/financial/bid mechanics and pure delivery logistics. Mixed or insufficiently supported content is review-only with literal quote, not silently dropped.
 
-Goals:
-- Use existing saved **completed** analyses and/or isolated scripted model fixtures to test the actual client workflow. Do not claim a replay constitutes fresh model extraction.
-- Verify correct PDF/quote/page/highlight display; source uncertainty and human review; edit invalidates prior reviewed status; remove/reset; independently assessable requirement rows; export integrity and blank supplier compliance fields. Include 42-page/93-row saved client-style example if it is accessible and lawful to use.
-- Check local startup, basic-auth gating, clear error handling, supported PDF limits and a private demo handoff. No deployment credentials or environment file commits. Treat hosted Vercel access, custom domain and scan-only hosted OCR as explicitly deferred or blocked, not silently complete.
-- If genuine POC-blocking defect appears in owned files, repair with focused tests and one PR. Otherwise report complete evidence without unnecessary code changes.
+Do NOT produce a tender-specific 12-string blacklist or assume absence of one admin keyword proves technical relevance. Avoid default-keeping a `requirement` merely because no blacklist matched, but also avoid suppressing unfamiliar legitimate technical criteria. Build source-grounded positive/negative counterexamples from *existing available evidence* plus synthetics; compare classification for ALL available saved candidates offline; report newly blocked technical candidates as possible false negatives. Source evidence invariants unchanged. One focused classification-only PR, or report a blocker if cannot justify safe correction.
 
-Forbidden: edit actions.ts, model-provider, extraction/routing, benchmark labels, AGENTS/checkpoint/coordination docs, or shared verify-pipeline script; no live model calls; no Vercel/DNS/account mutation; no OEM-compliance scoring.
+## 5. Agent B acceptance: provenance/grounding
 
-## Joint acceptance and review
+Diagnose the three cited page-8 `req-86/90/92` sourceReference cases in saved terminal result plus trace, if locally accessible. Check exact vs duplicate native quote, OCR transcript, visual extraction, genuine text blocks/cells and existing bounding boxes. An accepted requirement with no sourceText/ID/offset must not be represented to reviewer as an **exact grounded text citation**. It may be legitimate visual/OCR evidence explicitly marked approximate/review-only; don't invent text/IDs/offsets. Fix source reference generation/matching in owned helpers only if validated by fixtures; add tests for repeated passages, Unicode/engineering units, source cell identity, positioned OCR, unmatched visual content and empty source text. If the only repair requires `actions.ts`, report a minimal typed glue/interface for ARCH instead of editing it. No classification changes, paid model calls or benchmark reruns. One focused provenance-only PR or evidence report.
 
-ARCH reviews both lanes together **after** their evidence/PRs arrive, checks exact source SHA, final required GitHub CI, cross-lane source-to-UI compatibility, row/citation/edit/export correctness and deployment limitations. No green-light if a critical source error, incomplete paid benchmark, missing reviewer path or unsafe client access remains.
+## 6. Agent C acceptance: client journey/export
 
-Report: final main SHA; PR links/merge state; evidence by score gate; known P0/P1/P2 issues; operator demo steps; credible readiness percentage; explicit next decision. For untested or uncertain aspects state "not verified". No unsupported claims that one successful run proves robustness.
+Use saved *completed* real analysis if accessible or a clearly labelled scripted fixture. Verify supported upload -> completed sheet -> cited PDF page/quote/highlight or explicit approximate/no-box state -> reviewer check -> edit invalidates check -> independent obligations -> remove/reset -> DOCX/XLSX/PDF export. Inspect source values, page references where format requires them, units and numeric operators, long cells, grouping and blank OEM decision fields. Run a basic-auth and secrets visibility check with test values, source warning/cancellation/errors, responsive desktop/mobile review. Prepare a reproducible private local demo walkthrough that does not require private client files or provider spend. A necessary UI/export bug may yield one focused PR with screenshot and regression; otherwise just provide evidence. No backend/model changes or real provider calls.
 
-## Shared status at creation
+## 7. Checks, review and integration
 
-- PRs #386–#389 merged; main 26cc047, required GitHub CI green at previous review.
-- Last completed IITG extraction: 192 accepted, 20 known false administrative inclusions, 3 service obligations recovered, 5/7 provisional page-11 groups, 14/16 exact anchors (pre-#387).
-- #387 offline classifier replay: 19/20 rejected, 1 review-only; all three service items retained. **Not** fresh end-to-end proof.
-- Latest IITG attempt failed after 173.561 s with only 2/4 extraction batches parsed. #388 adds distinct timeout attribution; #389 adds safe physical page IDs. Neither proves a completed post-filter real tender.
-- The private local app is the intended near-term pilot. Vercel author access, deployed model secrets, custom domain and hosted OCR are not confirmed ready.
+Each lane: `npm --prefix apps/web test`, `npm --prefix apps/web run typecheck`, `npm --prefix apps/web run build`, `npm --prefix apps/web run test:pipeline` (if it launches with isolated build/worktree), and `git diff --check`. UI lane adds browser/export proof; if tool/runtime unavailable, state that exactly, do not fake PASS. Scripts use dynamic test ports; manual servers must be isolated. Required GitHub `web` check on each PR must be green; Vercel author permission failure is tracked separately but does not excuse required CI failure.
 
-## Final stop rule
+**Integration order:** (i) all three agents submit evidence and optional PR; (ii) ARCH reviews diffs/evidence, no cross-lane edits, resolves handoffs, merges PRs sequentially only when required CI is green; (iii) ARCH writes minimum integration glue in a **separate PR** if needed and updates checkpoint; (iv) run final main CI and source-to-UI contract tests; (v) decide whether **one** controlled final live IITG run is justified/authorized; (vi) issue evidence-backed readiness score and P0/P1/P2 list. A replay of a saved model result is not fresh extraction quality; a single successful real run is not generalization.
 
-Once independent lanes submit results, stop new feature work. ARCH runs one joint review and chooses: (1) ready for operator-led client POC, (2) one narrowly scoped blocker fix, or (3) not ready. Do not launch an unlimited third development wave.
+**Stop rule:** after one round of three PR/evidence handoffs and one joint review, do not launch new autonomous goal-mode waves. Choose: pilot-ready locally, one narrowly scoped remaining blocker, or not ready. Need real-client sign-off and independently adjudicated broader tenders later.
+
+## 8. Common handoff format
+
+All agents end with:
+
+```text
+LANE: A/B/C
+BASE SHA:
+HEAD SHA:
+PR: link or "none—no code change"
+OWNED FILES CHANGED:
+EVIDENCE USED: saved / synthetic / browser / direct-PDF inspection / real live [should be none]
+TESTS: commands with PASS/FAIL/SKIPPED
+ACCEPTANCE CHECKS: PASS/FAIL/UNKNOWN and supporting artifact paths
+REGRESSIONS / FALSE NEGATIVE RISKS:
+P0/P1/P2:
+NEEDS ARCH HANDOFF: file + exact interface + reason
+LIVE MODEL REQUESTS: 0
+READY FOR INTEGRATION: yes/no
+```
+
+Do not copy private PDF text or confidential results into public GitHub comments. Reports must distinguish observed evidence from estimates and unknowns.
