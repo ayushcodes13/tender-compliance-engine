@@ -3,6 +3,8 @@ export type ModelProviderResult = { ok: true; config: ModelProviderConfig } | { 
 type Environment = Record<string, string | undefined>;
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+export const MODEL_REQUESTS_PER_ANALYSIS = 3;
+
 export class ModelProviderConnectionError extends Error {
   constructor() {
     super("Could not reach the configured GPT-6 Luna endpoint. Check the network connection and retry.");
@@ -110,7 +112,7 @@ export function createModelCompletionClient(
   fetcher: FetchLike = fetch,
   options: { maxConcurrent?: number; executionTimeoutMs?: number; admission?: ModelRequestAdmission } = {},
 ) {
-  const maxConcurrent = options.maxConcurrent ?? 3;
+  const maxConcurrent = options.maxConcurrent ?? MODEL_REQUESTS_PER_ANALYSIS;
   const executionTimeoutMs = options.executionTimeoutMs ?? 90_000;
   const admission = options.admission ?? processModelRequestAdmission;
   const clientKey = {};
