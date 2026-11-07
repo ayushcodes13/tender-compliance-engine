@@ -86,9 +86,9 @@ A good PR should make review possible without reconstructing intent from the dif
 
 ## Active client POC parallel coordination (2026-11-07)
 
-For the active POC90 sprint, there are **three independent Goal Mode coding agents** (A: scope classifier; B: source provenance; C: client UI/export) **plus ChatGPT as the architect/integrator**. All must first read `docs/poc-90-parallel-coordination.md`. Its file ownership, isolated worktree rules, budget/no-live-call guardrails, handoff criteria and final integration requirements are mandatory. Two agents may not write the same file. The only integration writer for `apps/web/app/actions.ts` and shared coordination files is ChatGPT after the agents hand off.
+For the active sprint, there are **exactly two Goal Mode coding agents plus ChatGPT as a third, active working engineer/integrator**. Agent A owns scope classification; Agent B owns the client UI/export journey; ChatGPT writes source-provenance/architecture code and tests and performs final integration. **All three make substantive contributions**, on disjoint file paths, using the same merged baseline. See `docs/poc-90-parallel-coordination.md` for exclusive ownership, isolated worktrees, no-live-model-call policy, deliverables and stop rules.
 
-**Temporary checkpoint exception:** To prevent merge conflicts during concurrent sprint PRs, A/B/C must NOT edit `docs/checkpoint.md`, `AGENTS.md` or the coordination file in their PRs. ChatGPT updates canonical checkpoint completion and status in the final integration PR after all agent reviews. This specific exception supersedes the ordinary same-PR checkpoint-edit rule below for this sprint only. All other PR-first, security and traceability requirements stay in force. No agent makes a paid model call; a final controlled model benchmark is a separate post-integration decision.
+**Temporary checkpoint exception:** during parallel work neither coding agent edits `docs/checkpoint.md`, `AGENTS.md`, `README.md` or the coordination file; ChatGPT owns the canonical checkpoint update after integration. This limited rule overrides the ordinary same-PR checkpoint update below only for this sprint. Other PR-first, tests, provenance and security requirements still apply.
 
 ## Canonical checkpoint plan
 
