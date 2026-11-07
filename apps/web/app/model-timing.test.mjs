@@ -121,3 +121,43 @@ test('vector request failure logs use a bounded enum and never an error message'
     requestHeadersWaitMs: 90_000,
   });
 });
+
+test('vector response timing includes safe parse, response-size, and provider-usage fields', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'response_parsed',
+    requestKind: 'vector_source_row_audit',
+    batchIndex: 2,
+    totalBatches: 4,
+    pageNumber: 11,
+    batchPageCount: 1,
+    inputCharacters: 2_400,
+    requestHeadersWaitMs: 8_000,
+    responseBodyAndEnvelopeMs: 12,
+    jsonParseMs: 1,
+    responseStatus: 200,
+    responseCharacters: 120,
+    promptTokens: 800,
+    completionTokens: 100,
+    totalTokens: 900,
+    responseBody: 'must never be logged',
+  }, (line) => lines.push(line), true);
+
+  assert.deepEqual(JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length)), {
+    phase: 'response_parsed',
+    requestKind: 'vector_source_row_audit',
+    batchIndex: 2,
+    totalBatches: 4,
+    pageNumber: 11,
+    batchPageCount: 1,
+    inputCharacters: 2_400,
+    requestHeadersWaitMs: 8_000,
+    responseBodyAndEnvelopeMs: 12,
+    jsonParseMs: 1,
+    responseStatus: 200,
+    responseCharacters: 120,
+    promptTokens: 800,
+    completionTokens: 100,
+    totalTokens: 900,
+  });
+});
