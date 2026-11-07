@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { classifyInstructionCandidate } from "./candidate-classification.ts";
 import { CandidateTraceLedger } from "./candidate-trace.ts";
+import { collectSourceTableCoverageRows } from "./coverage-ledger.ts";
 
 const iitgServiceAnchorGroups = [
   "a separate charge for a Five-year Annual Maintenance Contract (AMC); Service visits; Yearly calibration; Routine maintenance services",
@@ -38,13 +39,33 @@ test("excludes procurement mechanics, commercial terms, and document navigation"
   }
 });
 
-test("does not accept a single service, warranty, or maintenance keyword as sufficient", () => {
+test("does not promote unmatched instruction candidates into requirements", () => {
   for (const quote of ["Service information is available on request.", "Warranty is described in the brochure.", "Maintenance is discussed in this section."]) {
     const result = classifyInstructionCandidate("instruction", quote);
     assert.equal(result.outcome, "retained_for_review");
-    assert.equal(result.effectiveRowType, "requirement");
+    assert.equal(result.effectiveRowType, "ambiguous");
     assert.equal(result.requiresHumanReview, true);
   }
+});
+
+test("keeps a supplier-required calibration certificate despite the submission verb", () => {
+  const quote = "The supplier shall submit calibration certificates.";
+  const result = classifyInstructionCandidate("instruction", quote);
+  assert.equal(result.outcome, "reclassified_for_review");
+  assert.equal(result.effectiveRowType, "requirement");
+  assert.equal(result.reason, "supplier_technical_document_submission");
+  assert.equal(result.requiresHumanReview, true);
+});
+
+test("retains mixed administrative and supplier-service clauses as review-only with their source intact", () => {
+  const quote = "The tender submission must include the bid form, and the supplier shall provide calibration certificates.";
+  const result = classifyInstructionCandidate("instruction", quote);
+  assert.equal(result.outcome, "retained_for_review");
+  assert.equal(result.effectiveRowType, "ambiguous");
+  assert.equal(result.reason, "mixed_administrative_and_supplier_obligation");
+  assert.equal(result.requiresHumanReview, true);
+  assert.ok(quote.includes("tender submission"));
+  assert.ok(quote.includes("supplier shall provide calibration certificates"));
 });
 
 test("keeps unresolved source structure separate from a technical obligation", () => {
@@ -67,6 +88,7 @@ test("records why a candidate was reclassified while retaining literal evidence 
     sourceElementIds: ["page-11:text-fixture"],
   });
   ledger.recordClassification(candidateId, decision);
+  ledger.recordClassification(candidateId, classifyInstructionCandidate("requirement", quote));
   ledger.terminate(candidateId, { disposition: "accepted", responsibleStage: "source_evidence_validation", finalRequirementId: "req-11" });
   const adminQuote = "Earnest Money Deposit (EMD) shall accompany the bid.";
   const adminDecision = classifyInstructionCandidate("instruction", adminQuote);
@@ -85,4 +107,22 @@ test("records why a candidate was reclassified while retaining literal evidence 
   assert.equal(rejectedRecord?.classificationDecision?.reason, "bid_security_or_tender_fee");
   assert.equal(rejectedRecord?.classificationDecision?.outcome, "rejected");
   assert.equal(rejectedRecord?.responsibleStage, "candidate_type_validation");
+});
+
+test("coverage keeps a review-only vector obligation visible without counting it as an excluded instruction", () => {
+  const { rows } = collectSourceTableCoverageRows([
+    {
+      cells: ["The tender submission includes the bid form; supplier shall provide calibration certificates."],
+      cellBoxes: [],
+      bbox: null,
+      sourceClassification: "ambiguous",
+      originalSourceClassification: "instruction",
+      classificationReason: "ambiguous_source_structure",
+    },
+  ], new Map([[0, 1]]), new Set(), { width: 100, height: 100 });
+
+  assert.equal(rows[0].disposition, "candidate");
+  assert.equal(rows[0].sourceClassification, "ambiguous");
+  assert.equal(rows[0].originalSourceClassification, "instruction");
+  assert.equal(rows[0].acceptedLinkStatus, "unlinked");
 });

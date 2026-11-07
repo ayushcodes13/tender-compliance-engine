@@ -1,9 +1,21 @@
+import type { RequirementSourceReference } from "./source-document";
+
 export type CandidateClassificationDecision = {
   originalRowType: string;
   effectiveRowType: "requirement" | "section" | "optional_heading" | "instruction" | "header" | "ambiguous";
   outcome: "kept" | "reclassified_for_review" | "retained_for_review" | "rejected";
   reason: string;
   requiresHumanReview: boolean;
+};
+
+export type ClassificationReviewCandidate = {
+  candidateId?: string;
+  page: number;
+  quote: string;
+  originalClassification: string;
+  effectiveClassification: string;
+  reason: string;
+  sourceReference: RequirementSourceReference;
 };
 
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
@@ -24,13 +36,14 @@ const SERVICE_OBLIGATION_PATTERNS: Array<[RegExp, string]> = [
   [/(?:local office|authorized associate|authorised associate).{0,100}\bindia\b|\bindia\b.{0,100}(?:local office|authorized associate|authorised associate)/, "local_after_sales_presence"],
   [/(?:after[ -]sales|service support).{0,100}(?:support|maintenance|timely)|(?:timely|maintenance).{0,100}(?:after[ -]sales|service support)/, "after_sales_support_commitment"],
   [/spare parts?.{0,140}(?:minimum|five|5|warranty|years?)|(?:minimum|five|5|warranty|years?).{0,140}spare parts?/, "time_bound_spare_parts_support"],
+  [/(?:supplier|vendor|contractor|oem).{0,100}(?:shall|must|will|is required to).{0,100}(?:submit|provide|furnish|supply).{0,100}(?:calibration|maintenance|operation|service).{0,100}(?:certificate|manual|instruction|record)|(?:calibration|maintenance|operation|service).{0,100}(?:certificate|manual|instruction|record).{0,100}(?:submit|provide|furnish|supply)/, "supplier_technical_document_submission"],
 ];
 
 /**
- * Reconciles a model's broad "instruction" label with the source meaning. Only
- * explicit procurement mechanics are discarded. Recognized supplier service
- * commitments are retained as unchecked requirements, and unresolved cases
- * remain visible for human review. Source quote validation still runs later.
+ * Reconciles a model's broad "instruction" label with the source meaning.
+ * Recognized supplier service commitments become unchecked requirements.
+ * Unresolved and mixed clauses stay review-only; procurement mechanics remain
+ * excluded. Source quote validation still runs later.
  */
 export function classifyInstructionCandidate(rowType: string | undefined, sourceQuote: string): CandidateClassificationDecision {
   const originalRowType = rowType ?? "unclassified";
@@ -43,19 +56,28 @@ export function classifyInstructionCandidate(rowType: string | undefined, source
   }
 
   const text = normalize(sourceQuote);
-  for (const [pattern, reason] of ADMINISTRATIVE_PATTERNS) {
-    if (pattern.test(text)) {
-      return { originalRowType, effectiveRowType: "instruction", outcome: "rejected", reason, requiresHumanReview: false };
+  const administrativeMatches = ADMINISTRATIVE_PATTERNS.filter(([pattern]) => pattern.test(text));
+  const serviceMatches = SERVICE_OBLIGATION_PATTERNS.filter(([pattern]) => pattern.test(text));
+  const administrativeReasons = administrativeMatches.map(([, reason]) => reason);
+  const serviceReasons = serviceMatches.map(([, reason]) => reason);
+
+  if (administrativeMatches.length > 0 && serviceMatches.length > 0) {
+    const onlyFormSubmissionConflict = administrativeReasons.every((reason) => reason === "bid_submission_or_form_instruction")
+      && serviceReasons.includes("supplier_technical_document_submission")
+      && !/\b(?:tender|bid|proposal)\s+submission\b|\bbid form\b|\bsubmit (?:the )?(?:tender|bid|technical proposal)\b/.test(text);
+    if (onlyFormSubmissionConflict) {
+      return { originalRowType, effectiveRowType: "requirement", outcome: "reclassified_for_review", reason: "supplier_technical_document_submission", requiresHumanReview: true };
     }
+    return { originalRowType, effectiveRowType: "ambiguous", outcome: "retained_for_review", reason: "mixed_administrative_and_supplier_obligation", requiresHumanReview: true };
   }
 
-  for (const [pattern, reason] of SERVICE_OBLIGATION_PATTERNS) {
-    if (pattern.test(text)) {
-      return { originalRowType, effectiveRowType: "requirement", outcome: "reclassified_for_review", reason, requiresHumanReview: true };
-    }
+  if (administrativeMatches.length > 0) {
+    return { originalRowType, effectiveRowType: "instruction", outcome: "rejected", reason: administrativeReasons[0], requiresHumanReview: false };
   }
 
-  return originalRowType === "ambiguous"
-    ? { originalRowType, effectiveRowType: "ambiguous", outcome: "retained_for_review", reason: "unresolved_source_structure", requiresHumanReview: true }
-    : { originalRowType, effectiveRowType: "requirement", outcome: "retained_for_review", reason: "unresolved_instruction_classification", requiresHumanReview: true };
+  if (serviceMatches.length > 0) {
+    return { originalRowType, effectiveRowType: "requirement", outcome: "reclassified_for_review", reason: serviceReasons[0], requiresHumanReview: true };
+  }
+
+  return { originalRowType, effectiveRowType: "ambiguous", outcome: "retained_for_review", reason: originalRowType === "ambiguous" ? "unresolved_source_structure" : "unresolved_instruction_classification", requiresHumanReview: true };
 }

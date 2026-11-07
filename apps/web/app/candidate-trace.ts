@@ -108,7 +108,7 @@ export class CandidateTraceLedger {
 
   recordClassification(candidateId: string, decision: CandidateTraceRecord["classificationDecision"]): void {
     const prior = this.entries.get(candidateId);
-    if (!prior || prior.disposition !== "incomplete" || !decision) return;
+    if (!prior || prior.disposition !== "incomplete" || !decision || prior.classificationDecision) return;
     this.entries.set(candidateId, { ...prior, classificationDecision: decision });
   }
 
