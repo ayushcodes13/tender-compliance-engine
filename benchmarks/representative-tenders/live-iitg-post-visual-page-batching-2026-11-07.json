@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runCommit": "00f51e3",
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePageCount": 15,
+  "provider": "configured GPT-6 Luna-compatible endpoint",
+  "execution": "isolated production Next.js server on 127.0.0.1:3155; 270-second application deadline",
+  "outcome": "incomplete_deadline",
+  "elapsedSeconds": 270,
+  "lastObservedStage": "extracting",
+  "lastDetailedProgress": {
+    "current": 4,
+    "total": 5,
+    "unit": "visual pages"
+  },
+  "sourceInventoryCompleted": true,
+  "routingCompleted": true,
+  "responseSheetProduced": false,
+  "coverageMetricsAvailable": false,
+  "candidateOrRequirementTextPersisted": false,
+  "costTelemetry": "not available",
+  "comparison": {
+    "priorRun": "live-iitg-post-routing-batching-2026-11-07.json",
+    "priorOutcome": "incomplete_deadline",
+    "interpretation": "The prior run also reached the 270-second deadline during extraction, but ran commit 2560788 before PR #361. This single post-batching run remains incomplete and does not establish a latency or quality improvement."
+  },
+  "limitations": [
+    "No response sheet means routing dispositions, extraction coverage, and omission-audit results are unavailable.",
+    "The final progress event reported four of five visual pages when the application deadline ended the run; no candidate text was retained.",
+    "This is one nondeterministic sample on one tender; the source annotations remain partial and assistant-reviewed, not independently adjudicated.",
+    "No request-level latency, token usage, or cost telemetry was collected."
+  ]
+}
