@@ -2394,6 +2394,11 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         const candidate = candidatesByGroupId.get(member.candidateId);
         if (!candidate) continue;
         const baseDecision = candidate.classificationDecision ?? classifyCandidateScope(candidate.row_type, candidate.quote ?? "");
+        // Group membership permits a source-linked row to enter the matrix;
+        // it must not silently clear a prior classification review warning.
+        if (baseDecision.requiresHumanReview) {
+          candidate.classificationReviewReason ??= baseDecision.reason;
+        }
         candidate.classificationDecision = applyValidatedSourceObligationGroup(baseDecision, {
           id: group.id,
           role: member.role,
