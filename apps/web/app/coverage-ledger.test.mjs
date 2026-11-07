@@ -138,6 +138,7 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
     selectedForExtraction: true,
     selectedByAnnexureContinuation: false,
     markedUncertain: true,
+    markedUnrouted: false,
     matchingSections: [{ title: "Technical specifications", reason: "Contains equipment limits" }],
   }), {
     disposition: "uncertain",
@@ -148,6 +149,7 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
     selectedForExtraction: false,
     selectedByAnnexureContinuation: false,
     markedUncertain: true,
+    markedUnrouted: false,
     matchingSections: [],
   }), {
     disposition: "uncertain",
@@ -155,9 +157,34 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
   });
   assert.deepEqual(resolveRoutingDisposition({
     hasRoutingText: true,
+    selectedForExtraction: true,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: false,
+    markedUnrouted: true,
+    pageDispositionReason: undefined,
+    explicitExclusionReason: undefined,
+    matchingSections: [],
+  }), {
+    disposition: "unrouted",
+    reason: "The router returned no page disposition. The page was included for deeper extraction but remains unresolved and needs human review.",
+  });
+  assert.deepEqual(resolveRoutingDisposition({
+    hasRoutingText: true,
     selectedForExtraction: false,
     selectedByAnnexureContinuation: false,
     markedUncertain: false,
+    markedUnrouted: true,
+    matchingSections: [],
+  }), {
+    disposition: "unrouted",
+    reason: "The router returned no page disposition; the page remains unresolved and needs source review.",
+  });
+  assert.deepEqual(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: false,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: false,
+    markedUnrouted: false,
     matchingSections: [],
   }), {
     disposition: "unrouted",
@@ -168,6 +195,7 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
     selectedForExtraction: false,
     selectedByAnnexureContinuation: false,
     markedUncertain: false,
+    markedUnrouted: false,
     matchingSections: [],
   }).disposition, "no_text");
   assert.equal(resolveRoutingDisposition({
@@ -175,6 +203,7 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
     selectedForExtraction: true,
     selectedByAnnexureContinuation: true,
     markedUncertain: false,
+    markedUnrouted: false,
     matchingSections: [],
   }).reason, "Retained as a page in a parser-detected annexure continuation.");
 });
@@ -185,6 +214,7 @@ test("only records a page as excluded when the router supplies an explicit reaso
     selectedForExtraction: false,
     selectedByAnnexureContinuation: false,
     markedUncertain: false,
+    markedUnrouted: false,
     explicitExclusionReason: "Visible page contains only bid opening dates and financial schedules.",
     matchingSections: [],
   }), {
@@ -196,6 +226,7 @@ test("only records a page as excluded when the router supplies an explicit reaso
     selectedForExtraction: false,
     selectedByAnnexureContinuation: false,
     markedUncertain: false,
+    markedUnrouted: false,
     matchingSections: [],
   }).disposition, "unrouted");
 });

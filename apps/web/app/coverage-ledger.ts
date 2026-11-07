@@ -9,12 +9,21 @@ export function resolveRoutingDisposition(input: {
   selectedForExtraction: boolean;
   selectedByAnnexureContinuation: boolean;
   markedUncertain: boolean;
+  markedUnrouted: boolean;
   pageDispositionReason?: string;
   explicitExclusionReason?: string;
   matchingSections: Array<{ title: string; reason: string }>;
 }): { disposition: RoutingDisposition; reason: string } {
   if (!input.hasRoutingText) {
     return { disposition: "no_text", reason: "No native or OCR text was available to the router; inspect the page image." };
+  }
+  if (input.markedUnrouted) {
+    return {
+      disposition: "unrouted",
+      reason: input.selectedForExtraction
+        ? "The router returned no page disposition. The page was included for deeper extraction but remains unresolved and needs human review."
+        : "The router returned no page disposition; the page remains unresolved and needs source review.",
+    };
   }
   const sectionContext = input.matchingSections.length
     ? input.matchingSections.map((section) => `${section.title.slice(0, 120)}: ${section.reason.slice(0, 280)}`).join("; ").slice(0, 800)

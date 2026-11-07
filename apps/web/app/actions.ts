@@ -681,6 +681,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const routingBatches = buildRoutingBatches(routingPages.map((page) => ({ ...page, routingText: page.text })));
     const routingSections: RoutedSection[] = [];
     const uncertainPages = new Set<number>();
+    const unroutedPages = new Set<number>();
     const explicitExclusionReasons = new Map<number, string>();
     const pageDispositionReasons = new Map<number, string>();
     const directlyRelevantPages = new Set<number>();
@@ -835,9 +836,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           explicitExclusionReasons.set(disposition.page, disposition.reason);
         }
       }
-      if (validatedDispositions.unresolvedPages.length) routingWarnings.push(
-        `The router returned no explicit page disposition for PDF pages ${formatPageNumbers(validatedDispositions.unresolvedPages)}; those pages remain unresolved and require source review.`,
-      );
+      if (validatedDispositions.unresolvedPages.length) {
+        validatedDispositions.unresolvedPages.forEach((page) => unroutedPages.add(page));
+        routingWarnings.push(
+          `The router returned no explicit page disposition for PDF pages ${formatPageNumbers(validatedDispositions.unresolvedPages)}; those pages remain unresolved and require source review.`,
+        );
+      }
       routingWarnings.push(...selected.routing_warnings.filter((warning): warning is string => typeof warning === "string").map((warning) => warning.slice(0, 400)));
       const verifiedConflicts = validatePossibleSourceConflicts(
         selected.possible_source_conflicts,
@@ -867,6 +871,9 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       // Uncertainty is a reason for deeper inspection, not a reason to skip
       // extraction. Keep the page marked uncertain in the coverage ledger.
       ...uncertainPages,
+      // Missing dispositions are also inspected, but remain explicitly
+      // unrouted until a reviewer resolves the routing decision.
+      ...unroutedPages,
       ...conflictRoutedPages,
     ])].sort((a, b) => a - b);
     visualPageNumbers = expandSelectedAnnexures(modelSelectedPages, sourceAnnexures.filter(section=>section.annexure).map((section) => section.page), pages.map((page) => page.page));
@@ -1983,6 +1990,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         selectedForExtraction,
         selectedByAnnexureContinuation: annexureContinuationPages.has(page.page),
         markedUncertain: uncertainPages.has(page.page),
+        markedUnrouted: unroutedPages.has(page.page),
         pageDispositionReason: pageDispositionReasons.get(page.page),
         explicitExclusionReason: explicitExclusionReasons.get(page.page),
         matchingSections,

@@ -40,7 +40,7 @@ const provider = http.createServer(async (request, response) => {
     if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
-      result = {sections:['page-disposition-only','possibly-relevant-page'].includes(scenario)?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||scenario==='page-batched-fallback'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:scenario==='possibly-relevant-page'?pages:[],page_dispositions:pages.map(page=>({page,classification:scenario==='possibly-relevant-page'?'possibly_relevant':'relevant',reason:scenario==='possibly-relevant-page'?'The page excerpt is ambiguous and may contain technical obligations.':'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
+      result = {sections:['page-disposition-only','possibly-relevant-page','unrouted-page'].includes(scenario)?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||scenario==='page-batched-fallback'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:scenario==='possibly-relevant-page'?pages:[],page_dispositions:scenario==='unrouted-page'?[]:pages.map(page=>({page,classification:scenario==='possibly-relevant-page'?'possibly_relevant':'relevant',reason:scenario==='possibly-relevant-page'?'The page excerpt is ambiguous and may contain technical obligations.':'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
       const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
@@ -139,6 +139,12 @@ try {
   assert.equal(uncertainPage.analysis.requirements.length,1,'A possibly relevant page receives the normal source-grounded extraction pass');
   assert.equal(uncertainPage.analysis.coverage.pages[0].routingDisposition,'uncertain','Deeper extraction does not erase the unresolved routing disposition');
   assert.equal(uncertainPage.analysis.coverage.pages[0].selectedForExtraction,true);
+  scenario='unrouted-page';
+  const unroute=await analyze(short);
+  assert.equal(unroute.ok,true,unroute.error);
+  assert.equal(unroute.analysis.requirements.length,1,'A page with no routing disposition receives source-grounded extraction');
+  assert.equal(unroute.analysis.coverage.pages[0].routingDisposition,'unrouted','Extraction does not resolve a missing routing decision');
+  assert.equal(unroute.analysis.coverage.pages[0].selectedForExtraction,true);
   scenario='page-batched-fallback';
   const batchedPdf=new jsPDF();batchedPdf.text('The centrifuge shall accommodate 10 samples.',20,30);
   const batchedFallback=await analyze(batchedPdf);
