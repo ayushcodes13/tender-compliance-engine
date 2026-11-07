@@ -2,13 +2,15 @@ import type { SourceBox, SourcePageOcrSkipReason, SourcePageOcrStatus } from "./
 
 export type CoverageAuditStatus = "not_run" | "incomplete" | "no_gaps_reported" | "possible_gaps_reported";
 export type ExtractionStatus = "not_selected" | "complete" | "incomplete";
-export type RoutingDisposition = "selected" | "uncertain" | "unrouted" | "no_text";
+export type RoutingDisposition = "selected" | "uncertain" | "excluded" | "unrouted" | "no_text";
 
 export function resolveRoutingDisposition(input: {
   hasRoutingText: boolean;
   selectedForExtraction: boolean;
   selectedByAnnexureContinuation: boolean;
   markedUncertain: boolean;
+  pageDispositionReason?: string;
+  explicitExclusionReason?: string;
   matchingSections: Array<{ title: string; reason: string }>;
 }): { disposition: RoutingDisposition; reason: string } {
   if (!input.hasRoutingText) {
@@ -17,7 +19,9 @@ export function resolveRoutingDisposition(input: {
   if (input.selectedForExtraction) {
     const sectionContext = input.matchingSections.length
       ? input.matchingSections.map((section) => `${section.title.slice(0, 120)}: ${section.reason.slice(0, 280)}`).join("; ").slice(0, 800)
-      : input.selectedByAnnexureContinuation
+        : input.pageDispositionReason
+          ? input.pageDispositionReason.slice(0, 400)
+          : input.selectedByAnnexureContinuation
         ? "Retained as a page in a parser-detected annexure continuation."
         : "Selected by the router; no matching section reason was retained.";
     return {
@@ -26,7 +30,12 @@ export function resolveRoutingDisposition(input: {
     };
   }
   if (input.markedUncertain) {
-    return { disposition: "uncertain", reason: "The router marked this page uncertain; it was not included in extraction and needs source review." };
+    return { disposition: "uncertain", reason: input.pageDispositionReason
+      ? `${input.pageDispositionReason.slice(0, 300)} The page was not included in extraction and needs source review.`
+      : "The router marked this page uncertain; it was not included in extraction and needs source review." };
+  }
+  if (input.explicitExclusionReason) {
+    return { disposition: "excluded", reason: input.explicitExclusionReason.slice(0, 400) };
   }
   return {
     disposition: "unrouted",
@@ -235,6 +244,7 @@ export type CoverageReport = {
     routingPages: number;
     selectedTechnicalPages: number;
     routingPagesUncertain: number;
+    routingPagesExplicitlyExcluded: number;
     routingPagesUnrouted: number;
     routingPagesWithoutText: number;
     pagesWithoutSelectableText: number;
@@ -282,6 +292,7 @@ export function buildCoverageReport(
       routingPages: count((page) => page.routingInputIncluded),
       selectedTechnicalPages: count((page) => page.selectedForExtraction),
       routingPagesUncertain: count((page) => page.routingDisposition === "uncertain" || page.routerMarkedUncertain),
+      routingPagesExplicitlyExcluded: count((page) => page.routingDisposition === "excluded"),
       routingPagesUnrouted: count((page) => page.routingDisposition === "unrouted"),
       routingPagesWithoutText: count((page) => page.routingDisposition === "no_text"),
       pagesWithoutSelectableText: count((page) => !page.selectableTextAvailable),
