@@ -1,0 +1,86 @@
+{
+  "document": { "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967" },
+  "audit": { "page11": "no_gaps_reported" },
+  "requirements": [
+    {
+      "id": "synthetic-req-manual-1",
+      "page": 11,
+      "text": "Provide operating and maintenance instructions.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "operation and maintenance instructions"
+      }
+    },
+    {
+      "id": "synthetic-req-manual-2",
+      "page": 11,
+      "text": "Supply one soft copy.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "one soft copy"
+      }
+    },
+    {
+      "id": "synthetic-req-manual-3",
+      "page": 11,
+      "text": "Supply one hard copy.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "one hard copy"
+      }
+    },
+    {
+      "id": "synthetic-req-calibration",
+      "page": 11,
+      "text": "Provide a calibration certificate demonstrating standards compliance and performance verification.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "A calibration certificate must be provided"
+      }
+    },
+    {
+      "id": "synthetic-req-calibration-standards",
+      "page": 11,
+      "text": "The certificate should demonstrate compliance with relevant standards.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "compliance with all relevant standards"
+      }
+    },
+    {
+      "id": "synthetic-req-calibration-performance",
+      "page": 11,
+      "text": "Verify that the equipment delivers optimal performance.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "ensuring optimal performance"
+      }
+    },
+    {
+      "id": "synthetic-req-installation-demo",
+      "page": 11,
+      "text": "Demonstrate system functionality after successful installation at the institute.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "demonstrate all functionalities of the system; upon successful installation at the institute"
+      }
+    },
+    {
+      "id": "synthetic-req-service-demo",
+      "page": 11,
+      "text": "Demonstrate proper operation during service visits.",
+      "sourceReference": {
+        "documentFingerprint": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+        "physicalPdfPageNumber": 11,
+        "sourceText": "during service visits; proper operation and adherence to performance standards"
+      }
+    }
+  ]
+}
