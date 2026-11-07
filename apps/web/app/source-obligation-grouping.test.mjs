@@ -172,3 +172,10 @@ test("keeps validated group rows together in source order without reordering unr
     "outside-after",
   ]);
 });
+
+test("does not treat an abrupt PDF page end as proof the service list is complete", () => {
+  // A cross-page list is not safely complete when all the extractor saw was
+  // the first child and then the end of the current physical page's text.
+  const sourceText = `${parentQuote} ${items[0]}`;
+  assert.deepEqual(group(sourceText, [parentQuote, items[0]]), []);
+});
