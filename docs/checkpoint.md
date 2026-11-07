@@ -40,7 +40,7 @@ Model calls now keep analysis cancellation active while waiting for a concurrenc
 
 ### Evidence-first redesign sequence update — 2026-11-07
 
-- [ ] Require an explicit per-page routing disposition and reason. Relevant pages must enter extraction even without a section range; possibly relevant pages remain unresolved; only explicit, reasoned exclusions count as excluded; absent model decisions remain unrouted. Verify schema validation and the review ledger before using this as evidence of page coverage.
+- [x] Require an explicit per-page routing disposition and reason. Relevant pages enter extraction even without a section range; possibly relevant pages remain unresolved; only explicit, reasoned exclusions count as excluded; absent model decisions remain unrouted. Schema validation, duplicate/out-of-group rejection, and scripted upload-to-sheet routing are covered in PR #353. This is an explicit routing record, not proof of page-level or document completeness.
 
 The additional adversarial audit was written against `c198300`, before PRs #309–316. Rechecking current `main` confirms its listed hybrid OCR, independent response rows, production access gate, visual-completion separation, value-level OCR confidence, long-cell Excel splitting, DOCX/XLSX page citations, and queued execution-timeout findings have each been addressed in separate PRs. The model provider now also applies a bounded process-local admission gate; global per-user/tenant quotas and cross-instance concurrency remain open because this single-user app has no shared state. Printable PDF page citations remain intentionally omitted under the earlier user clarification; DOCX and XLSX include them.
 
