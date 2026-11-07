@@ -699,6 +699,7 @@ a { color: inherit; }
 .mvp-source-drawer .mvp-pdf-stage { min-height: 160px; }
 .mvp-source-drawer .mvp-citation-detail { max-height: 34dvh; overflow-y: auto; overscroll-behavior: contain; }
 .mvp-source-drawer .mvp-citation-label { flex-wrap: wrap; }
+.mvp-source-element-ids { display: inline-block; font-size: 9px; font-weight: 550; color: #506179; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: 0; }
 .mvp-source-drawer .mvp-pdf-stage { overscroll-behavior: contain; }
 @media (max-width: 800px) {
   .mvp-source-drawer { width: 100%; }

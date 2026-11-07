@@ -4,7 +4,7 @@ import { Packer } from 'docx';
 import JSZip from 'jszip';
 import { fixture } from './test-fixtures/response-sections.mjs';
 import { createSectionedResponseDocument, createSectionedWorkbook } from './sectioned-exports.ts';
-import { buildResponseSheet } from './response-sheet.ts';
+import { buildResponseSheet, updateResponseSheetCell } from './response-sheet.ts';
 
 test('Word annexures and table headings are paragraphs outside specification tables', async () => {
   const zip = await JSZip.loadAsync(await Packer.toBuffer(createSectionedResponseDocument(fixture())));
@@ -141,4 +141,25 @@ test('Excel splits long requirement text across bounded-height rows without addi
     Object.values(worksheet._merges || {}).some((range) => range.model?.top === dataRows[0].number && range.model?.bottom === dataRows.at(-1).number && range.model?.left === responseColumn),
     'OEM response field is vertically merged across requirement continuation rows',
   );
+});
+
+test('preserves user-edited supplier compliance and remark responses in DOCX and XLSX exports', async () => {
+  const base = fixture();
+  const complyColIdx = base.columns.findIndex((c) => /comply/i.test(c.header));
+  const remarkColIdx = base.columns.findIndex((c) => /remark|justification/i.test(c.header));
+  const edited = updateResponseSheetCell(base, base.rows[0].id, complyColIdx, 'Yes - Complied');
+  const doublyEdited = updateResponseSheetCell(edited, base.rows[0].id, remarkColIdx, 'Compliant with standard warranty.');
+
+  // DOCX
+  const docxZip = await JSZip.loadAsync(await Packer.toBuffer(createSectionedResponseDocument(doublyEdited)));
+  const docxXml = await docxZip.file('word/document.xml').async('string');
+  assert.ok(docxXml.includes('Yes - Complied'));
+  assert.ok(docxXml.includes('Compliant with standard warranty.'));
+
+  // XLSX
+  const wb = createSectionedWorkbook(doublyEdited);
+  const rows = [];
+  wb.worksheets[0].eachRow((r) => rows.push(r.values));
+  assert.ok(rows.some((r) => r.includes('Yes - Complied')));
+  assert.ok(rows.some((r) => r.includes('Compliant with standard warranty.')));
 });
