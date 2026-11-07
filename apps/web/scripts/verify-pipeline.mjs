@@ -460,12 +460,13 @@ try {
   assert.ok(ambiguousSourceRow);
   assert.equal(ambiguousSourceRow.sourceClassification,'ambiguous');
   assert.equal(ambiguousSourceRow.classificationReason,'ambiguous_source_structure');
-  assert.equal(ambiguousSourceRow.disposition,'unmapped');
+  assert.equal(ambiguousSourceRow.disposition,'candidate','ambiguous source rows remain visible as review candidates without entering the response matrix');
   const auditedSourceRow = mixed.analysis.coverage.pages[0].sourceTableCoverageRows.find(row=>row.cells.some(cell=>cell.includes('Calibration report shall be supplied.')));
   assert.equal(auditedSourceRow?.semanticCoverageStatus,'possible_gap','possible semantic omission is surfaced on its detected source row');
   assert.match(auditedSourceRow?.semanticCoverageNote ?? '',/second independently assessable obligation/i);
   assert.equal(mixed.analysis.coverage.pages[0].sourceTableRowsNotShown,7,'audit states are retained for all rows even when the UI preview is capped');
   assert.deepEqual(ambiguousSourceRow.matchedRequirementIds,[],'Ambiguous source content stays out of output requirements and remains reviewable');
+  assert.ok(mixed.analysis.classificationReviewCandidates.some(candidate=>candidate.page===1&&candidate.quote.includes('Source layout cannot be resolved')),'ambiguous source content is retained for explicit classification review');
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Specifications for Optical Tables')));
   assert.ok(mixed.analysis.requirements.some(row=>row.sourceSectionHeadings?.includes('Technical Compliance Report for Optical Tables')));
   const grouped=buildResponseSheet(mixed.analysis);
