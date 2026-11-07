@@ -179,6 +179,27 @@ test("keeps uncertain, unrouted, and textless pages distinct from selected pages
   }).reason, "Retained as a page in a parser-detected annexure continuation.");
 });
 
+test("only records a page as excluded when the router supplies an explicit reason", () => {
+  assert.deepEqual(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: false,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: false,
+    explicitExclusionReason: "Visible page contains only bid opening dates and financial schedules.",
+    matchingSections: [],
+  }), {
+    disposition: "excluded",
+    reason: "Visible page contains only bid opening dates and financial schedules.",
+  });
+  assert.equal(resolveRoutingDisposition({
+    hasRoutingText: true,
+    selectedForExtraction: false,
+    selectedByAnnexureContinuation: false,
+    markedUncertain: false,
+    matchingSections: [],
+  }).disposition, "unrouted");
+});
+
 test("reports per-page router dispositions in document totals", () => {
   const report = buildCoverageReport([
     record(1),

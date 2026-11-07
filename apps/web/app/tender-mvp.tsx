@@ -941,7 +941,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           {analysis.coverage && <details className="mvp-coverage-ledger">
             <summary>
               <span>Coverage ledger</span>
-              <small>{countLabel(analysis.coverage.summary.selectedTechnicalPages, "routed page")} · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(analysis.coverage.summary.rejectedSuggestions, "rejected suggestion")}</small>
+              <small>{countLabel(analysis.coverage.summary.selectedTechnicalPages, "routed page")} · {countLabel(analysis.coverage.summary.routingPagesExplicitlyExcluded, "explicitly excluded page")} · {countLabel(analysis.coverage.summary.routingPagesUnrouted, "unresolved route")} · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(analysis.coverage.summary.rejectedSuggestions, "rejected suggestion")}</small>
             </summary>
             <p className="mvp-coverage-caveat">Counts describe what the parser, router, and page audit actually processed. A model audit reporting no gaps does not prove that the tender is complete.</p>
             <dl className="mvp-coverage-summary">

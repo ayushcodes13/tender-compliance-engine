@@ -38,7 +38,7 @@ const provider = http.createServer(async (request, response) => {
     if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
-      result = {sections:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
+      result = {sections:scenario==='page-disposition-only'?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:[],page_dispositions:pages.map(page=>({page,classification:'relevant',reason:'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
     } else if (schema === 'tender_source_column_map' || schema === 'visual_table_row_labels') {
       const page = Number([...text.matchAll(/(?:begins on PDF page|Rendered PDF page) (\d+)/g)].at(-1)?.[1]);
       const columns = ['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
@@ -126,6 +126,11 @@ try {
   assert.equal(one.analysis.document.inventoryIntegrity,'structurally-verified');
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
+  scenario='page-disposition-only';
+  const dispositionOnly=await analyze(short);
+  assert.equal(dispositionOnly.ok,true,dispositionOnly.error);
+  assert.equal(dispositionOnly.analysis.requirements.length,1,'A relevant per-page disposition selects source extraction even without a section range');
+  assert.equal(dispositionOnly.analysis.coverage.pages[0].routingDisposition,'selected');
   scenario='cross-section-conflict';
   const conflictPdf=new jsPDF();conflictPdf.text('Technical specifications for X-Band EPR spectrometer system',20,30);conflictPdf.text(quotes[0],20,50);conflictPdf.addPage();conflictPdf.text('Advanced Spectrofluorometer compliance sheet',20,30);
   const conflict=await analyze(conflictPdf);assert.equal(conflict.ok,true,conflict.error);
