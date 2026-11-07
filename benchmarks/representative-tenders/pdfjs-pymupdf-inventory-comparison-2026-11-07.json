@@ -1,0 +1,5589 @@
+{
+  "schemaVersion": 1,
+  "runDate": "2026-11-07",
+  "runtimeCommit": "79dbce0aabea45999c498198cf67dfe6b95c5959",
+  "pdfjsVersion": "4.10.38",
+  "pymupdfVersion": "1.26.5",
+  "sourceTextIncluded": false,
+  "elementBoundsIncluded": false,
+  "pdfjsWarningCount": 4,
+  "documents": [
+    {
+      "id": "gandhinagar",
+      "filename": "FinalTenderDocument.pdf",
+      "sha256": "be39fd08ab61011d7281c7f355b61864b28b091001712fbdeecd1c5181e3c491",
+      "pages": 42,
+      "coordinateSystems": {
+        "pdfjs": "pdfjs-viewport-scale-1",
+        "pymupdf": "pymupdf-page-points"
+      },
+      "pageComparison": [
+        {
+          "page": 1,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 406,
+            "nativeWords": 61,
+            "nativeTextItems": 74,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.08,
+            "pathOperators": 114
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 458,
+            "nativeWords": 50,
+            "nativeTextBlocks": 11,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0804,
+            "vectorDrawingCount": 14
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 100
+          }
+        },
+        {
+          "page": 2,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1256,
+            "nativeWords": 245,
+            "nativeTextItems": 257,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 610
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1349,
+            "nativeWords": 209,
+            "nativeTextBlocks": 36,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 291
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 319
+          }
+        },
+        {
+          "page": 3,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1975,
+            "nativeWords": 309,
+            "nativeTextItems": 184,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 350
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2074,
+            "nativeWords": 287,
+            "nativeTextBlocks": 27,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 117
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 233
+          }
+        },
+        {
+          "page": 4,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 863,
+            "nativeWords": 136,
+            "nativeTextItems": 83,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 93
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 894,
+            "nativeWords": 126,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 78
+          }
+        },
+        {
+          "page": 5,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2741,
+            "nativeWords": 460,
+            "nativeTextItems": 208,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 212
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2827,
+            "nativeWords": 437,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 16
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 196
+          }
+        },
+        {
+          "page": 6,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3300,
+            "nativeWords": 547,
+            "nativeTextItems": 244,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 246
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3375,
+            "nativeWords": 520,
+            "nativeTextBlocks": 26,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 231
+          }
+        },
+        {
+          "page": 7,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3800,
+            "nativeWords": 638,
+            "nativeTextItems": 296,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 272
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3874,
+            "nativeWords": 591,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 16
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 256
+          }
+        },
+        {
+          "page": 8,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3156,
+            "nativeWords": 497,
+            "nativeTextItems": 267,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 274
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3264,
+            "nativeWords": 465,
+            "nativeTextBlocks": 15,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 17
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 257
+          }
+        },
+        {
+          "page": 9,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3504,
+            "nativeWords": 561,
+            "nativeTextItems": 208,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 238
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3595,
+            "nativeWords": 546,
+            "nativeTextBlocks": 19,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 223
+          }
+        },
+        {
+          "page": 10,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2948,
+            "nativeWords": 461,
+            "nativeTextItems": 159,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 166
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3015,
+            "nativeWords": 449,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 151
+          }
+        },
+        {
+          "page": 11,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 456,
+            "nativeWords": 69,
+            "nativeTextItems": 39,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 93
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 473,
+            "nativeWords": 65,
+            "nativeTextBlocks": 7,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 78
+          }
+        },
+        {
+          "page": 12,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2547,
+            "nativeWords": 406,
+            "nativeTextItems": 233,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 247
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2630,
+            "nativeWords": 367,
+            "nativeTextBlocks": 15,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 16
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 231
+          }
+        },
+        {
+          "page": 13,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1255,
+            "nativeWords": 224,
+            "nativeTextItems": 107,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.01,
+            "pathOperators": 126
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1520,
+            "nativeWords": 208,
+            "nativeTextBlocks": 13,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0061,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 111
+          }
+        },
+        {
+          "page": 14,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1035,
+            "nativeWords": 173,
+            "nativeTextItems": 118,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 172
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1099,
+            "nativeWords": 166,
+            "nativeTextBlocks": 29,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 16
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 156
+          }
+        },
+        {
+          "page": 15,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 675,
+            "nativeWords": 115,
+            "nativeTextItems": 98,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 409
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 750,
+            "nativeWords": 114,
+            "nativeTextBlocks": 42,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 250
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 159
+          }
+        },
+        {
+          "page": 16,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1125,
+            "nativeWords": 182,
+            "nativeTextItems": 60,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 129
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1177,
+            "nativeWords": 177,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 31
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 98
+          }
+        },
+        {
+          "page": 17,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2437,
+            "nativeWords": 383,
+            "nativeTextItems": 333,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 890
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2596,
+            "nativeWords": 373,
+            "nativeTextBlocks": 43,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 527
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 363
+          }
+        },
+        {
+          "page": 18,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1606,
+            "nativeWords": 272,
+            "nativeTextItems": 218,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 691
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1768,
+            "nativeWords": 255,
+            "nativeTextBlocks": 35,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 387
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 304
+          }
+        },
+        {
+          "page": 19,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2603,
+            "nativeWords": 451,
+            "nativeTextItems": 155,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 242
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2703,
+            "nativeWords": 405,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 66
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 176
+          }
+        },
+        {
+          "page": 20,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1652,
+            "nativeWords": 290,
+            "nativeTextItems": 232,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 631
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1772,
+            "nativeWords": 275,
+            "nativeTextBlocks": 34,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 340
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 291
+          }
+        },
+        {
+          "page": 21,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2091,
+            "nativeWords": 346,
+            "nativeTextItems": 265,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 546
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2215,
+            "nativeWords": 320,
+            "nativeTextBlocks": 35,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 273
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 273
+          }
+        },
+        {
+          "page": 22,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1307,
+            "nativeWords": 216,
+            "nativeTextItems": 125,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 192
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1349,
+            "nativeWords": 210,
+            "nativeTextBlocks": 10,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 59
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 133
+          }
+        },
+        {
+          "page": 23,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1685,
+            "nativeWords": 289,
+            "nativeTextItems": 268,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 832
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1886,
+            "nativeWords": 276,
+            "nativeTextBlocks": 45,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 463
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 369
+          }
+        },
+        {
+          "page": 24,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1442,
+            "nativeWords": 239,
+            "nativeTextItems": 277,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 718
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1638,
+            "nativeWords": 223,
+            "nativeTextBlocks": 47,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 387
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 331
+          }
+        },
+        {
+          "page": 25,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2005,
+            "nativeWords": 324,
+            "nativeTextItems": 357,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 353
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2138,
+            "nativeWords": 316,
+            "nativeTextBlocks": 20,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 166
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 187
+          }
+        },
+        {
+          "page": 26,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 807,
+            "nativeWords": 126,
+            "nativeTextItems": 94,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 151
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 856,
+            "nativeWords": 123,
+            "nativeTextBlocks": 11,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 66
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 85
+          }
+        },
+        {
+          "page": 27,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2736,
+            "nativeWords": 434,
+            "nativeTextItems": 157,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 170
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2792,
+            "nativeWords": 422,
+            "nativeTextBlocks": 17,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 155
+          }
+        },
+        {
+          "page": 28,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2445,
+            "nativeWords": 411,
+            "nativeTextItems": 419,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 567
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2630,
+            "nativeWords": 393,
+            "nativeTextBlocks": 38,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 204
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 363
+          }
+        },
+        {
+          "page": 29,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 626,
+            "nativeWords": 96,
+            "nativeTextItems": 81,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 885
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 803,
+            "nativeWords": 88,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 531
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 354
+          }
+        },
+        {
+          "page": 30,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 584,
+            "nativeWords": 95,
+            "nativeTextItems": 38,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 90
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 625,
+            "nativeWords": 92,
+            "nativeTextBlocks": 8,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 32
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 58
+          }
+        },
+        {
+          "page": 31,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2282,
+            "nativeWords": 326,
+            "nativeTextItems": 158,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 111
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2352,
+            "nativeWords": 315,
+            "nativeTextBlocks": 29,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 96
+          }
+        },
+        {
+          "page": 32,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1366,
+            "nativeWords": 178,
+            "nativeTextItems": 99,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 97
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1516,
+            "nativeWords": 172,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 16
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 81
+          }
+        },
+        {
+          "page": 33,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 566,
+            "nativeWords": 97,
+            "nativeTextItems": 42,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 85
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 597,
+            "nativeWords": 92,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 23
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 62
+          }
+        },
+        {
+          "page": 34,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 693,
+            "nativeWords": 113,
+            "nativeTextItems": 62,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 251
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 761,
+            "nativeWords": 108,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 141
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 110
+          }
+        },
+        {
+          "page": 35,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2033,
+            "nativeWords": 297,
+            "nativeTextItems": 126,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 170
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2132,
+            "nativeWords": 290,
+            "nativeTextBlocks": 16,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 155
+          }
+        },
+        {
+          "page": 36,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 914,
+            "nativeWords": 144,
+            "nativeTextItems": 61,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 88
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 968,
+            "nativeWords": 142,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 73
+          }
+        },
+        {
+          "page": 37,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1665,
+            "nativeWords": 282,
+            "nativeTextItems": 75,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 95
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1724,
+            "nativeWords": 276,
+            "nativeTextBlocks": 33,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 80
+          }
+        },
+        {
+          "page": 38,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1993,
+            "nativeWords": 257,
+            "nativeTextItems": 124,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 118
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2063,
+            "nativeWords": 238,
+            "nativeTextBlocks": 21,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 103
+          }
+        },
+        {
+          "page": 39,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3426,
+            "nativeWords": 554,
+            "nativeTextItems": 134,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 154
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3533,
+            "nativeWords": 543,
+            "nativeTextBlocks": 6,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 139
+          }
+        },
+        {
+          "page": 40,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3527,
+            "nativeWords": 556,
+            "nativeTextItems": 226,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 167
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3605,
+            "nativeWords": 543,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 152
+          }
+        },
+        {
+          "page": 41,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2938,
+            "nativeWords": 464,
+            "nativeTextItems": 129,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 149
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3014,
+            "nativeWords": 450,
+            "nativeTextBlocks": 15,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 134
+          }
+        },
+        {
+          "page": 42,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2468,
+            "nativeWords": 391,
+            "nativeTextItems": 122,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 135
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2538,
+            "nativeWords": 382,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 15
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 120
+          }
+        }
+      ]
+    },
+    {
+      "id": "madras",
+      "filename": "Tendernotice_1.pdf",
+      "sha256": "7e8f042fd10d4edd7572c41b2f946b61db9b93853dff81b72579901df1bde7ca",
+      "pages": 32,
+      "coordinateSystems": {
+        "pdfjs": "pdfjs-viewport-scale-1",
+        "pymupdf": "pymupdf-page-points"
+      },
+      "pageComparison": [
+        {
+          "page": 1,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2092,
+            "nativeWords": 338,
+            "nativeTextItems": 222,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.01,
+            "pathOperators": 344
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2422,
+            "nativeWords": 298,
+            "nativeTextBlocks": 19,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.0127,
+            "vectorDrawingCount": 105
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 239
+          }
+        },
+        {
+          "page": 2,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2621,
+            "nativeWords": 459,
+            "nativeTextItems": 228,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 218
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2720,
+            "nativeWords": 440,
+            "nativeTextBlocks": 9,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 59
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 159
+          }
+        },
+        {
+          "page": 3,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2880,
+            "nativeWords": 503,
+            "nativeTextItems": 294,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 189
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2966,
+            "nativeWords": 490,
+            "nativeTextBlocks": 8,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 56
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 133
+          }
+        },
+        {
+          "page": 4,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2469,
+            "nativeWords": 433,
+            "nativeTextItems": 166,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 201
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2555,
+            "nativeWords": 412,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 57
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 144
+          }
+        },
+        {
+          "page": 5,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2775,
+            "nativeWords": 486,
+            "nativeTextItems": 222,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 228
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2843,
+            "nativeWords": 453,
+            "nativeTextBlocks": 27,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 42
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 186
+          }
+        },
+        {
+          "page": 6,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3568,
+            "nativeWords": 618,
+            "nativeTextItems": 210,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 264
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3645,
+            "nativeWords": 589,
+            "nativeTextBlocks": 16,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 74
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 190
+          }
+        },
+        {
+          "page": 7,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3081,
+            "nativeWords": 532,
+            "nativeTextItems": 161,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 217
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3151,
+            "nativeWords": 506,
+            "nativeTextBlocks": 20,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 66
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 151
+          }
+        },
+        {
+          "page": 8,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3860,
+            "nativeWords": 681,
+            "nativeTextItems": 314,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 270
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3936,
+            "nativeWords": 612,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 46
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 224
+          }
+        },
+        {
+          "page": 9,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3450,
+            "nativeWords": 607,
+            "nativeTextItems": 199,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 295
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3520,
+            "nativeWords": 553,
+            "nativeTextBlocks": 14,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 96
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 199
+          }
+        },
+        {
+          "page": 10,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3891,
+            "nativeWords": 642,
+            "nativeTextItems": 197,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 244
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3969,
+            "nativeWords": 604,
+            "nativeTextBlocks": 11,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 74
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 170
+          }
+        },
+        {
+          "page": 11,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1146,
+            "nativeWords": 187,
+            "nativeTextItems": 52,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 120
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1195,
+            "nativeWords": 180,
+            "nativeTextBlocks": 18,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 34
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 86
+          }
+        },
+        {
+          "page": 12,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 442,
+            "nativeWords": 72,
+            "nativeTextItems": 31,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 47
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 478,
+            "nativeWords": 68,
+            "nativeTextBlocks": 11,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 4
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 43
+          }
+        },
+        {
+          "page": 13,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1581,
+            "nativeWords": 274,
+            "nativeTextItems": 253,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 428
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1703,
+            "nativeWords": 232,
+            "nativeTextBlocks": 32,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 176
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 252
+          }
+        },
+        {
+          "page": 14,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1886,
+            "nativeWords": 329,
+            "nativeTextItems": 276,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 306
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1967,
+            "nativeWords": 304,
+            "nativeTextBlocks": 19,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 112
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 194
+          }
+        },
+        {
+          "page": 15,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1495,
+            "nativeWords": 239,
+            "nativeTextItems": 134,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 371
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1592,
+            "nativeWords": 228,
+            "nativeTextBlocks": 36,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 190
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 181
+          }
+        },
+        {
+          "page": 16,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1723,
+            "nativeWords": 262,
+            "nativeTextItems": 118,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 306
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1811,
+            "nativeWords": 245,
+            "nativeTextBlocks": 29,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 152
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 154
+          }
+        },
+        {
+          "page": 17,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1825,
+            "nativeWords": 279,
+            "nativeTextItems": 135,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 315
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1913,
+            "nativeWords": 251,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 150
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 165
+          }
+        },
+        {
+          "page": 18,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1995,
+            "nativeWords": 313,
+            "nativeTextItems": 134,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 236
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2073,
+            "nativeWords": 288,
+            "nativeTextBlocks": 19,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 98
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 138
+          }
+        },
+        {
+          "page": 19,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1699,
+            "nativeWords": 259,
+            "nativeTextItems": 118,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 244
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1772,
+            "nativeWords": 234,
+            "nativeTextBlocks": 20,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 110
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 134
+          }
+        },
+        {
+          "page": 20,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1770,
+            "nativeWords": 283,
+            "nativeTextItems": 134,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 314
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1857,
+            "nativeWords": 252,
+            "nativeTextBlocks": 27,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 150
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 164
+          }
+        },
+        {
+          "page": 21,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1860,
+            "nativeWords": 298,
+            "nativeTextItems": 139,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 365
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1967,
+            "nativeWords": 270,
+            "nativeTextBlocks": 31,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 180
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 185
+          }
+        },
+        {
+          "page": 22,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 858,
+            "nativeWords": 156,
+            "nativeTextItems": 105,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 208
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 925,
+            "nativeWords": 136,
+            "nativeTextBlocks": 9,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 75
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 133
+          }
+        },
+        {
+          "page": 23,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1652,
+            "nativeWords": 268,
+            "nativeTextItems": 188,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 342
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2157,
+            "nativeWords": 261,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 136
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 206
+          }
+        },
+        {
+          "page": 24,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3062,
+            "nativeWords": 507,
+            "nativeTextItems": 390,
+            "imageRegions": 1,
+            "imageAreaRatio": 0,
+            "pathOperators": 447
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3370,
+            "nativeWords": 460,
+            "nativeTextBlocks": 14,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0002,
+            "vectorDrawingCount": 41
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 406
+          }
+        },
+        {
+          "page": 25,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1782,
+            "nativeWords": 281,
+            "nativeTextItems": 93,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 116
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1873,
+            "nativeWords": 273,
+            "nativeTextBlocks": 29,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 4
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 112
+          }
+        },
+        {
+          "page": 26,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1209,
+            "nativeWords": 160,
+            "nativeTextItems": 231,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 258
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1414,
+            "nativeWords": 138,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 4
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 254
+          }
+        },
+        {
+          "page": 27,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1573,
+            "nativeWords": 263,
+            "nativeTextItems": 198,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 236
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1850,
+            "nativeWords": 258,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 4
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 232
+          }
+        },
+        {
+          "page": 28,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1058,
+            "nativeWords": 173,
+            "nativeTextItems": 294,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 317
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1117,
+            "nativeWords": 164,
+            "nativeTextBlocks": 17,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 1
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 316
+          }
+        },
+        {
+          "page": 29,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 25,
+            "nativeWords": 10,
+            "nativeTextItems": 12,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.59,
+            "pathOperators": 31
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 41,
+            "nativeWords": 9,
+            "nativeTextBlocks": 4,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.5941,
+            "vectorDrawingCount": 1
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 30
+          }
+        },
+        {
+          "page": 30,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1476,
+            "nativeWords": 238,
+            "nativeTextItems": 279,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 439
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2083,
+            "nativeWords": 232,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 109
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 330
+          }
+        },
+        {
+          "page": 31,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 884,
+            "nativeWords": 168,
+            "nativeTextItems": 223,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 249
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1103,
+            "nativeWords": 156,
+            "nativeTextBlocks": 31,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 7
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 242
+          }
+        },
+        {
+          "page": 32,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1934,
+            "nativeWords": 351,
+            "nativeTextItems": 209,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 251
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2449,
+            "nativeWords": 330,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 17
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 234
+          }
+        }
+      ]
+    },
+    {
+      "id": "saha",
+      "filename": "Tender for ESR  EPR From SHAH Institute Kolkata.pdf",
+      "sha256": "ff72ab64cd94d9507ec1c169ce064315bcc862a5c0e663984aa0a3e69af347b6",
+      "pages": 13,
+      "coordinateSystems": {
+        "pdfjs": "pdfjs-viewport-scale-1",
+        "pymupdf": "pymupdf-page-points"
+      },
+      "pageComparison": [
+        {
+          "page": 1,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.11,
+            "pathOperators": 1042
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.1102,
+            "vectorDrawingCount": 1033
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 9
+          }
+        },
+        {
+          "page": 2,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 1666
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 1665
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 3,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 1874
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 1873
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 4,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 1606
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 1605
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 5,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 901
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 900
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 6,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 627
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 626
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 7,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 2335
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 2334
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 8,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 2673
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 2672
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 9,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 2544
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 2543
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 10,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 2735
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 2734
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 11,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 2974
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 2973
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 12,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 2231
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 2230
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 13,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextItems": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.09,
+            "pathOperators": 1911
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 0,
+            "nativeWords": 0,
+            "nativeTextBlocks": 0,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0884,
+            "vectorDrawingCount": 1908
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "iisc",
+      "filename": "input 1.pdf",
+      "sha256": "7e381ceb3acbc7b08abe1c958cd793972ce89831d94d1586f9a84eab55640d2f",
+      "pages": 18,
+      "coordinateSystems": {
+        "pdfjs": "pdfjs-viewport-scale-1",
+        "pymupdf": "pymupdf-page-points"
+      },
+      "pageComparison": [
+        {
+          "page": 1,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1255,
+            "nativeWords": 201,
+            "nativeTextItems": 137,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 280
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1344,
+            "nativeWords": 200,
+            "nativeTextBlocks": 18,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 169
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 111
+          }
+        },
+        {
+          "page": 2,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 832,
+            "nativeWords": 125,
+            "nativeTextItems": 85,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 159
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 883,
+            "nativeWords": 124,
+            "nativeTextBlocks": 7,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 91
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 68
+          }
+        },
+        {
+          "page": 3,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1102,
+            "nativeWords": 169,
+            "nativeTextItems": 53,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1146,
+            "nativeWords": 168,
+            "nativeTextBlocks": 10,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 4,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2035,
+            "nativeWords": 315,
+            "nativeTextItems": 149,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2104,
+            "nativeWords": 314,
+            "nativeTextBlocks": 10,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 5,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2092,
+            "nativeWords": 343,
+            "nativeTextItems": 73,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2157,
+            "nativeWords": 342,
+            "nativeTextBlocks": 9,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 6,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1912,
+            "nativeWords": 325,
+            "nativeTextItems": 106,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1981,
+            "nativeWords": 324,
+            "nativeTextBlocks": 11,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 7,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1941,
+            "nativeWords": 302,
+            "nativeTextItems": 100,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2014,
+            "nativeWords": 301,
+            "nativeTextBlocks": 12,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 8,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2441,
+            "nativeWords": 389,
+            "nativeTextItems": 74,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2503,
+            "nativeWords": 388,
+            "nativeTextBlocks": 7,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 9,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1365,
+            "nativeWords": 211,
+            "nativeTextItems": 89,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1412,
+            "nativeWords": 210,
+            "nativeTextBlocks": 7,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 10,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1966,
+            "nativeWords": 314,
+            "nativeTextItems": 137,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 166
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 2064,
+            "nativeWords": 313,
+            "nativeTextBlocks": 12,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 83
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 83
+          }
+        },
+        {
+          "page": 11,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 610,
+            "nativeWords": 90,
+            "nativeTextItems": 36,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 18
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 639,
+            "nativeWords": 89,
+            "nativeTextBlocks": 5,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 3
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 12,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 856,
+            "nativeWords": 132,
+            "nativeTextItems": 83,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 71
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 927,
+            "nativeWords": 131,
+            "nativeTextBlocks": 9,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 3
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 68
+          }
+        },
+        {
+          "page": 13,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 800,
+            "nativeWords": 121,
+            "nativeTextItems": 48,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 18
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 860,
+            "nativeWords": 120,
+            "nativeTextBlocks": 7,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 3
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 14,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1358,
+            "nativeWords": 211,
+            "nativeTextItems": 84,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 56
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1445,
+            "nativeWords": 208,
+            "nativeTextBlocks": 13,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 35
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 21
+          }
+        },
+        {
+          "page": 15,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 942,
+            "nativeWords": 146,
+            "nativeTextItems": 49,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 18
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 991,
+            "nativeWords": 145,
+            "nativeTextBlocks": 7,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 3
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 16,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 768,
+            "nativeWords": 113,
+            "nativeTextItems": 63,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 811,
+            "nativeWords": 112,
+            "nativeTextBlocks": 6,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        },
+        {
+          "page": 17,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1263,
+            "nativeWords": 195,
+            "nativeTextItems": 119,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 477
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1450,
+            "nativeWords": 192,
+            "nativeTextBlocks": 20,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 337
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 140
+          }
+        },
+        {
+          "page": 18,
+          "pdfjs": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1301,
+            "nativeWords": 210,
+            "nativeTextItems": 74,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.04,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.02,
+            "height": 841.98,
+            "nativeTextChars": 1358,
+            "nativeWords": 209,
+            "nativeTextBlocks": 15,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.037,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "iitd",
+      "filename": "input 2.pdf",
+      "sha256": "e2eac72281a707a8855646f70acbd5a35e5ff680ecb0b25cb48375f990780b7d",
+      "pages": 37,
+      "coordinateSystems": {
+        "pdfjs": "pdfjs-viewport-scale-1",
+        "pymupdf": "pymupdf-page-points"
+      },
+      "pageComparison": [
+        {
+          "page": 1,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2815,
+            "nativeWords": 535,
+            "nativeTextItems": 268,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 282
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2881,
+            "nativeWords": 469,
+            "nativeTextBlocks": 18,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 65
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 217
+          }
+        },
+        {
+          "page": 2,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1572,
+            "nativeWords": 277,
+            "nativeTextItems": 215,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 415
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1800,
+            "nativeWords": 229,
+            "nativeTextBlocks": 27,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 171
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 244
+          }
+        },
+        {
+          "page": 3,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3405,
+            "nativeWords": 702,
+            "nativeTextItems": 244,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 169
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3473,
+            "nativeWords": 630,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 6
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 163
+          }
+        },
+        {
+          "page": 4,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3735,
+            "nativeWords": 790,
+            "nativeTextItems": 289,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 217
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3806,
+            "nativeWords": 743,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 215
+          }
+        },
+        {
+          "page": 5,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4033,
+            "nativeWords": 889,
+            "nativeTextItems": 277,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 213
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4107,
+            "nativeWords": 824,
+            "nativeTextBlocks": 20,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 211
+          }
+        },
+        {
+          "page": 6,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3667,
+            "nativeWords": 693,
+            "nativeTextItems": 224,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 142
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3761,
+            "nativeWords": 666,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 3
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 139
+          }
+        },
+        {
+          "page": 7,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 896,
+            "nativeWords": 189,
+            "nativeTextItems": 76,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 113
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 901,
+            "nativeWords": 165,
+            "nativeTextBlocks": 9,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 18
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 95
+          }
+        },
+        {
+          "page": 8,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2703,
+            "nativeWords": 437,
+            "nativeTextItems": 275,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 439
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2806,
+            "nativeWords": 395,
+            "nativeTextBlocks": 33,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 161
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 278
+          }
+        },
+        {
+          "page": 9,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3955,
+            "nativeWords": 636,
+            "nativeTextItems": 322,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 510
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4071,
+            "nativeWords": 579,
+            "nativeTextBlocks": 42,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 209
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 301
+          }
+        },
+        {
+          "page": 10,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4270,
+            "nativeWords": 724,
+            "nativeTextItems": 320,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 535
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4396,
+            "nativeWords": 651,
+            "nativeTextBlocks": 32,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 193
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 342
+          }
+        },
+        {
+          "page": 11,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4091,
+            "nativeWords": 625,
+            "nativeTextItems": 245,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 355
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4186,
+            "nativeWords": 593,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 129
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 226
+          }
+        },
+        {
+          "page": 12,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4045,
+            "nativeWords": 641,
+            "nativeTextItems": 341,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 561
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4169,
+            "nativeWords": 595,
+            "nativeTextBlocks": 45,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 216
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 345
+          }
+        },
+        {
+          "page": 13,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2559,
+            "nativeWords": 410,
+            "nativeTextItems": 182,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 293
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 2630,
+            "nativeWords": 399,
+            "nativeTextBlocks": 20,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 125
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 168
+          }
+        },
+        {
+          "page": 14,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4087,
+            "nativeWords": 684,
+            "nativeTextItems": 201,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 309
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4173,
+            "nativeWords": 652,
+            "nativeTextBlocks": 3,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 124
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 185
+          }
+        },
+        {
+          "page": 15,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3730,
+            "nativeWords": 612,
+            "nativeTextItems": 183,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 294
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3807,
+            "nativeWords": 592,
+            "nativeTextBlocks": 6,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 119
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 175
+          }
+        },
+        {
+          "page": 16,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3312,
+            "nativeWords": 561,
+            "nativeTextItems": 182,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 236
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3389,
+            "nativeWords": 544,
+            "nativeTextBlocks": 6,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 79
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 157
+          }
+        },
+        {
+          "page": 17,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3595,
+            "nativeWords": 563,
+            "nativeTextItems": 191,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 257
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3684,
+            "nativeWords": 551,
+            "nativeTextBlocks": 9,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 96
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 161
+          }
+        },
+        {
+          "page": 18,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4063,
+            "nativeWords": 664,
+            "nativeTextItems": 196,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 304
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4149,
+            "nativeWords": 653,
+            "nativeTextBlocks": 6,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 146
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 158
+          }
+        },
+        {
+          "page": 19,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3724,
+            "nativeWords": 604,
+            "nativeTextItems": 160,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 252
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3802,
+            "nativeWords": 597,
+            "nativeTextBlocks": 8,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 121
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 131
+          }
+        },
+        {
+          "page": 20,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4090,
+            "nativeWords": 654,
+            "nativeTextItems": 215,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 284
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4161,
+            "nativeWords": 638,
+            "nativeTextBlocks": 9,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 124
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 160
+          }
+        },
+        {
+          "page": 21,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4075,
+            "nativeWords": 686,
+            "nativeTextItems": 176,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 267
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4142,
+            "nativeWords": 653,
+            "nativeTextBlocks": 10,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 120
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 147
+          }
+        },
+        {
+          "page": 22,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3832,
+            "nativeWords": 633,
+            "nativeTextItems": 175,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 205
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3898,
+            "nativeWords": 621,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 69
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 136
+          }
+        },
+        {
+          "page": 23,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 895,
+            "nativeWords": 145,
+            "nativeTextItems": 31,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 64
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 914,
+            "nativeWords": 143,
+            "nativeTextBlocks": 2,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 34
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 30
+          }
+        },
+        {
+          "page": 24,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3282,
+            "nativeWords": 529,
+            "nativeTextItems": 334,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 531
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3415,
+            "nativeWords": 460,
+            "nativeTextBlocks": 41,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 213
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 318
+          }
+        },
+        {
+          "page": 25,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4004,
+            "nativeWords": 644,
+            "nativeTextItems": 279,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 676
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4194,
+            "nativeWords": 610,
+            "nativeTextBlocks": 42,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 319
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 357
+          }
+        },
+        {
+          "page": 26,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4151,
+            "nativeWords": 700,
+            "nativeTextItems": 333,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 609
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4308,
+            "nativeWords": 626,
+            "nativeTextBlocks": 41,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 231
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 378
+          }
+        },
+        {
+          "page": 27,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3619,
+            "nativeWords": 541,
+            "nativeTextItems": 281,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 585
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 3772,
+            "nativeWords": 513,
+            "nativeTextBlocks": 19,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 264
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 321
+          }
+        },
+        {
+          "page": 28,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4139,
+            "nativeWords": 671,
+            "nativeTextItems": 288,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 552
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 4290,
+            "nativeWords": 630,
+            "nativeTextBlocks": 51,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 231
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 321
+          }
+        },
+        {
+          "page": 29,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1846,
+            "nativeWords": 281,
+            "nativeTextItems": 147,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 294
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1934,
+            "nativeWords": 273,
+            "nativeTextBlocks": 32,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 134
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 160
+          }
+        },
+        {
+          "page": 30,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1640,
+            "nativeWords": 283,
+            "nativeTextItems": 142,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 254
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1732,
+            "nativeWords": 270,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 113
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 141
+          }
+        },
+        {
+          "page": 31,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 673,
+            "nativeWords": 91,
+            "nativeTextItems": 51,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 422
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 812,
+            "nativeWords": 89,
+            "nativeTextBlocks": 32,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 253
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 169
+          }
+        },
+        {
+          "page": 32,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 563,
+            "nativeWords": 73,
+            "nativeTextItems": 88,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 194
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 699,
+            "nativeWords": 72,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 65
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 129
+          }
+        },
+        {
+          "page": 33,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1584,
+            "nativeWords": 260,
+            "nativeTextItems": 116,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 118
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1667,
+            "nativeWords": 247,
+            "nativeTextBlocks": 11,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 2
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 116
+          }
+        },
+        {
+          "page": 34,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 994,
+            "nativeWords": 149,
+            "nativeTextItems": 55,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 75
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1059,
+            "nativeWords": 139,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 1
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 74
+          }
+        },
+        {
+          "page": 35,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1404,
+            "nativeWords": 216,
+            "nativeTextItems": 68,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 90
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1463,
+            "nativeWords": 199,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 1
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 89
+          }
+        },
+        {
+          "page": 36,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 816,
+            "nativeWords": 136,
+            "nativeTextItems": 57,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 67
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 855,
+            "nativeWords": 132,
+            "nativeTextBlocks": 21,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 0
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 67
+          }
+        },
+        {
+          "page": 37,
+          "pdfjs": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1686,
+            "nativeWords": 285,
+            "nativeTextItems": 230,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 452
+          },
+          "pymupdf": {
+            "width": 612,
+            "height": 792,
+            "nativeTextChars": 1793,
+            "nativeWords": 262,
+            "nativeTextBlocks": 28,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 198
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 254
+          }
+        }
+      ]
+    },
+    {
+      "id": "indore",
+      "filename": "input 3.pdf",
+      "sha256": "607966f4e1957c9921216734fce3d69c1dc6ea19d9979a45f217cbd0c2c1777e",
+      "pages": 41,
+      "coordinateSystems": {
+        "pdfjs": "pdfjs-viewport-scale-1",
+        "pymupdf": "pymupdf-page-points"
+      },
+      "pageComparison": [
+        {
+          "page": 1,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 374,
+            "nativeWords": 71,
+            "nativeTextItems": 61,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.17,
+            "pathOperators": 16
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 409,
+            "nativeWords": 54,
+            "nativeTextBlocks": 15,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.1679,
+            "vectorDrawingCount": 14
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        },
+        {
+          "page": 2,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1344,
+            "nativeWords": 196,
+            "nativeTextItems": 114,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.11,
+            "pathOperators": 47
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1448,
+            "nativeWords": 188,
+            "nativeTextBlocks": 17,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.1115,
+            "vectorDrawingCount": 42
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 5
+          }
+        },
+        {
+          "page": 3,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1725,
+            "nativeWords": 341,
+            "nativeTextItems": 280,
+            "imageRegions": 1,
+            "imageAreaRatio": 0,
+            "pathOperators": 87
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1780,
+            "nativeWords": 269,
+            "nativeTextBlocks": 23,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0039,
+            "vectorDrawingCount": 52
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 35
+          }
+        },
+        {
+          "page": 4,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2696,
+            "nativeWords": 427,
+            "nativeTextItems": 207,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 17
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2768,
+            "nativeWords": 414,
+            "nativeTextBlocks": 20,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 17
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 5,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3265,
+            "nativeWords": 529,
+            "nativeTextItems": 351,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 51
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3339,
+            "nativeWords": 513,
+            "nativeTextBlocks": 11,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 33
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 18
+          }
+        },
+        {
+          "page": 6,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3761,
+            "nativeWords": 614,
+            "nativeTextItems": 222,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 85
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3819,
+            "nativeWords": 613,
+            "nativeTextBlocks": 17,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 57
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 28
+          }
+        },
+        {
+          "page": 7,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 4044,
+            "nativeWords": 645,
+            "nativeTextItems": 190,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 53
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 4103,
+            "nativeWords": 638,
+            "nativeTextBlocks": 18,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 37
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 16
+          }
+        },
+        {
+          "page": 8,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3719,
+            "nativeWords": 590,
+            "nativeTextItems": 218,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 30
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3778,
+            "nativeWords": 589,
+            "nativeTextBlocks": 14,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 24
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 6
+          }
+        },
+        {
+          "page": 9,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3233,
+            "nativeWords": 503,
+            "nativeTextItems": 258,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 13
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3285,
+            "nativeWords": 502,
+            "nativeTextBlocks": 18,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 13
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 10,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3243,
+            "nativeWords": 534,
+            "nativeTextItems": 224,
+            "imageRegions": 1,
+            "imageAreaRatio": 0,
+            "pathOperators": 8
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3346,
+            "nativeWords": 531,
+            "nativeTextBlocks": 25,
+            "imageRegions": 1,
+            "imageAreaRatio": 0.0002,
+            "vectorDrawingCount": 7
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 11,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2825,
+            "nativeWords": 454,
+            "nativeTextItems": 111,
+            "imageRegions": 2,
+            "imageAreaRatio": 0,
+            "pathOperators": 8
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2903,
+            "nativeWords": 454,
+            "nativeTextBlocks": 10,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.0005,
+            "vectorDrawingCount": 6
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        },
+        {
+          "page": 12,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3115,
+            "nativeWords": 480,
+            "nativeTextItems": 159,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 58
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3187,
+            "nativeWords": 474,
+            "nativeTextBlocks": 24,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 45
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 13
+          }
+        },
+        {
+          "page": 13,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2485,
+            "nativeWords": 404,
+            "nativeTextItems": 153,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 39
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2550,
+            "nativeWords": 400,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 39
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 14,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2524,
+            "nativeWords": 379,
+            "nativeTextItems": 372,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 59
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2671,
+            "nativeWords": 372,
+            "nativeTextBlocks": 19,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 37
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 22
+          }
+        },
+        {
+          "page": 15,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2190,
+            "nativeWords": 340,
+            "nativeTextItems": 300,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 43
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2300,
+            "nativeWords": 339,
+            "nativeTextBlocks": 14,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 34
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 9
+          }
+        },
+        {
+          "page": 16,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1917,
+            "nativeWords": 316,
+            "nativeTextItems": 252,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 42
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2007,
+            "nativeWords": 313,
+            "nativeTextBlocks": 17,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 31
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 11
+          }
+        },
+        {
+          "page": 17,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2003,
+            "nativeWords": 328,
+            "nativeTextItems": 204,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 31
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2123,
+            "nativeWords": 320,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 29
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        },
+        {
+          "page": 18,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1556,
+            "nativeWords": 269,
+            "nativeTextItems": 203,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 25
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1659,
+            "nativeWords": 269,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 25
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 19,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 914,
+            "nativeWords": 155,
+            "nativeTextItems": 153,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 28
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 999,
+            "nativeWords": 155,
+            "nativeTextBlocks": 28,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 28
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 20,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1513,
+            "nativeWords": 235,
+            "nativeTextItems": 103,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 24
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1578,
+            "nativeWords": 231,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 24
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 21,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 584,
+            "nativeWords": 99,
+            "nativeTextItems": 29,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.37,
+            "pathOperators": 10
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 609,
+            "nativeWords": 99,
+            "nativeTextBlocks": 16,
+            "imageRegions": 2,
+            "imageAreaRatio": 0.3703,
+            "vectorDrawingCount": 8
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        },
+        {
+          "page": 22,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1368,
+            "nativeWords": 227,
+            "nativeTextItems": 224,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 83
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1503,
+            "nativeWords": 217,
+            "nativeTextBlocks": 37,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 70
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 13
+          }
+        },
+        {
+          "page": 23,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1855,
+            "nativeWords": 312,
+            "nativeTextItems": 112,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 11
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1917,
+            "nativeWords": 305,
+            "nativeTextBlocks": 13,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 11
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 24,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 762,
+            "nativeWords": 126,
+            "nativeTextItems": 80,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 22
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 841,
+            "nativeWords": 115,
+            "nativeTextBlocks": 15,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 22
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 25,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1077,
+            "nativeWords": 170,
+            "nativeTextItems": 118,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 8
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1142,
+            "nativeWords": 159,
+            "nativeTextBlocks": 25,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 8
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 26,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1561,
+            "nativeWords": 232,
+            "nativeTextItems": 110,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 9
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1631,
+            "nativeWords": 225,
+            "nativeTextBlocks": 9,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 9
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 27,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 671,
+            "nativeWords": 114,
+            "nativeTextItems": 52,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 10
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 735,
+            "nativeWords": 109,
+            "nativeTextBlocks": 23,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 10
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 28,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 878,
+            "nativeWords": 152,
+            "nativeTextItems": 98,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 9
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 958,
+            "nativeWords": 137,
+            "nativeTextBlocks": 28,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 9
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 29,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 853,
+            "nativeWords": 143,
+            "nativeTextItems": 161,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 92
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 935,
+            "nativeWords": 137,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 59
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 33
+          }
+        },
+        {
+          "page": 30,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 590,
+            "nativeWords": 100,
+            "nativeTextItems": 104,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 32
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 659,
+            "nativeWords": 89,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 32
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 31,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2307,
+            "nativeWords": 396,
+            "nativeTextItems": 206,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 12
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2451,
+            "nativeWords": 386,
+            "nativeTextBlocks": 16,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 11
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 1
+          }
+        },
+        {
+          "page": 32,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2415,
+            "nativeWords": 386,
+            "nativeTextItems": 119,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 5
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2480,
+            "nativeWords": 386,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 5
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 33,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 514,
+            "nativeWords": 80,
+            "nativeTextItems": 94,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 80
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 679,
+            "nativeWords": 65,
+            "nativeTextBlocks": 30,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 71
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 9
+          }
+        },
+        {
+          "page": 34,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2437,
+            "nativeWords": 414,
+            "nativeTextItems": 153,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 8
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2512,
+            "nativeWords": 401,
+            "nativeTextBlocks": 7,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 8
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 35,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1307,
+            "nativeWords": 217,
+            "nativeTextItems": 160,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 58
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1473,
+            "nativeWords": 210,
+            "nativeTextBlocks": 22,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 56
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        },
+        {
+          "page": 36,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1378,
+            "nativeWords": 211,
+            "nativeTextItems": 71,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 7
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1432,
+            "nativeWords": 209,
+            "nativeTextBlocks": 10,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 7
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 37,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1862,
+            "nativeWords": 273,
+            "nativeTextItems": 193,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 9
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 1925,
+            "nativeWords": 271,
+            "nativeTextBlocks": 10,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 9
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 38,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3245,
+            "nativeWords": 444,
+            "nativeTextItems": 132,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 8
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 3327,
+            "nativeWords": 441,
+            "nativeTextBlocks": 16,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 8
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 0
+          }
+        },
+        {
+          "page": 39,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 5018,
+            "nativeWords": 763,
+            "nativeTextItems": 109,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 7
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 5087,
+            "nativeWords": 763,
+            "nativeTextBlocks": 19,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 5
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        },
+        {
+          "page": 40,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 4145,
+            "nativeWords": 630,
+            "nativeTextItems": 129,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 9
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 4218,
+            "nativeWords": 630,
+            "nativeTextBlocks": 21,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 5
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 4
+          }
+        },
+        {
+          "page": 41,
+          "pdfjs": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2127,
+            "nativeWords": 304,
+            "nativeTextItems": 85,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperators": 7
+          },
+          "pymupdf": {
+            "width": 595.32,
+            "height": 841.92,
+            "nativeTextChars": 2892,
+            "nativeWords": 315,
+            "nativeTextBlocks": 12,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "vectorDrawingCount": 5
+          },
+          "delta": {
+            "width": 0,
+            "height": 0,
+            "imageRegions": 0,
+            "imageAreaRatio": 0,
+            "pathOperatorsVsVectorDrawings": 2
+          }
+        }
+      ]
+    }
+  ],
+  "comparisonSummary": {
+    "pagesCompared": 183,
+    "pageDimensionMismatches": 0,
+    "imageRegionCountMismatches": 0,
+    "imageAreaRatioMismatches": 0,
+    "vectorOperatorCountDiffersFromDrawingObjectCount": 165,
+    "textMetricsAreSideBySideOnly": true
+  },
+  "limitations": [
+    "Counts and coordinate systems are parser diagnostics, not table or requirement precision/recall.",
+    "PDF.js nativeTextItems are positioned text objects, not semantic text blocks; PyMuPDF nativeTextBlocks are parser text blocks.",
+    "Image draw counts can differ because parser operators and image placements are not one-to-one.",
+    "Image-area ratios sum approximate draw bounds and may double-count overlaps.",
+    "pathOperators and vectorDrawingCount are different parser primitives, not equivalent table-grid counts."
+  ]
+}

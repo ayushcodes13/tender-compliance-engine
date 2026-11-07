@@ -133,6 +133,12 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 ## Checkpoint 73 — Client tender document reliability
 
+### PDF.js and PyMuPDF inventory parity baseline — 2026-11-07
+
+- [x] Verify all six representative tender PDFs against manifest SHA-256 fingerprints and page counts; run the production PDF.js parser and compare page inventory signals with the PyMuPDF 1.26.5 shadow artifact.
+- [x] Record a text-free, geometry-free 183-page comparison artifact and reproducible script. Page dimensions, image-region counts, and summed image-area ratios match across this sample; vector primitive counts differ and are not treated as equivalent table evidence.
+- [ ] Compare table/region candidates against independently adjudicated source bounds and obligation labels. Current parity metrics are not accuracy scores and do not justify changing parser defaults.
+
 ### Per-image-region OCR dispositions — 2026-11-07
 
 - [x] Store a per-region OCR disposition in the page source inventory, distinguishing not-targeted, not-attempted with a skip reason, text-found, no-text-found, and failed states.

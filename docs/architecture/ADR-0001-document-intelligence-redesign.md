@@ -42,6 +42,8 @@ The next engineering steps are:
 4. Represent each independently answerable obligation as an atomic proposal and preserve all source locations through review and export.
 5. Add independently annotated golden and held-out tenders before changing parser defaults or claiming improved recall.
 
+The first direct production-parser comparison now runs PDF.js against the existing PyMuPDF shadow inventory on the six local, hash-verified PDFs. Page dimensions, image-region counts, and summed image-area ratios matched on all 183 pages; vector operator counts are intentionally not compared as equivalent table evidence. Text segmentation metrics are retained side by side without a numeric diff because their APIs use different boundaries and whitespace conventions. This is a parser inventory parity observation only; per the benchmark record it does not establish table fidelity, semantic completeness, or generalization. Continue with adjudicated region/table comparisons before changing production parser behavior.
+
 ## Parser evaluation and licensing
 
 PyMuPDF 1.26.5 was run in shadow mode on the six local samples. Its `lines` candidate counts were broadly similar to the current vector detector on several documents and differed substantially on the Indore sample. Its `text` strategy generated table candidates on nearly every text-bearing page, which illustrates why raw candidate count is not a quality metric. The scanned Shah sample had no native text for PyMuPDF to recover. These results do not establish precision or recall, and do not justify switching production parsers.
