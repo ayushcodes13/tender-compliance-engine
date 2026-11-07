@@ -961,6 +961,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <ul className="mvp-coverage-pages">
               {coveragePagesToShow.map((item) => {
                 const rejectedOnPage = (analysis.rejectedSuggestionDetails ?? []).filter((suggestion) => suggestion.page === item.page);
+                const imageOcrCounts = item.imageRegions.reduce((counts, region) => {
+                  counts[region.ocrDisposition] = (counts[region.ocrDisposition] ?? 0) + 1;
+                  return counts;
+                }, {} as Partial<Record<(typeof item.imageRegions)[number]["ocrDisposition"], number>>);
                 return <li key={item.page}>
                   <div className="mvp-coverage-page-title"><strong>PDF page {item.page}</strong><button type="button" onClick={() => { setCoverageFocus(null); setPage(item.page); setSourceOpen(true); }}>Open source page</button></div>
                   <span className={item.routingDisposition === "selected" && !item.routerMarkedUncertain ? "" : "is-warning"}>Router disposition: {item.routingDisposition.replace(/_/g, " ")}{item.routerMarkedUncertain && item.routingDisposition === "selected" ? " · also marked uncertain" : ""} · {item.routingReason}</span>
@@ -969,7 +973,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                       : item.ocrStatus === "failed" ? "Local OCR failed"
                         : item.ocrStatus === "not-attempted" ? `OCR recommended but not attempted${item.ocrSkipReason ? ` · ${item.ocrSkipReason.replaceAll("-", " ")}` : ""}`
                           : item.hasRasterImageContent ? "Raster image present · OCR not recommended" : item.selectedForExtraction ? "Selected for extraction" : "Not selected for extraction"}</span>
-                  {item.imageRegions.length > 0 && <span>{countLabel(item.imageRegions.length, "raster image region")} detected · approximate bounds; inspect whether any contain technical content</span>}
+                  {item.imageRegions.length > 0 && <span>{countLabel(item.imageRegions.length, "raster image region")} detected · OCR: {Object.entries(imageOcrCounts).map(([state, count]) => `${count} ${state.replaceAll("-", " ")}`).join(", ")} · bounds are approximate; inspect regions not covered by OCR</span>}
                   {item.ocrSkipReason && item.ocrStatus !== "not-attempted" && <span className="is-warning">Some image regions were not OCR processed ({item.ocrSkipReason.replaceAll("-", " ")}); inspect remaining regions.</span>}
                   {(item.ocrStatus === "not-attempted" || item.ocrStatus === "no-text-found" || item.ocrStatus === "failed") && <span className="is-warning">Check this source page visually; OCR state does not establish that the image contains no requirement.</span>}
                   {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}

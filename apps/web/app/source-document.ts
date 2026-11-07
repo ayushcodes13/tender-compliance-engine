@@ -28,6 +28,8 @@ export type SourceImageRegion = {
   areaRatio: number;
   operator: "image" | "image-group" | "image-repeat";
   bboxPrecision: "approximate";
+  ocrDisposition: "not-targeted" | "not-attempted" | "text-found" | "no-text-found" | "failed";
+  ocrSkipReason?: SourcePageOcrSkipReason;
 };
 
 export type SourceTableCell = {
@@ -79,6 +81,7 @@ export type SourceInventoryIssueCode =
   | "invalid_text_span"
   | "invalid_geometry"
   | "invalid_ocr_image_link"
+  | "invalid_image_region_ocr_state"
   | "invalid_table_relationship";
 
 export type SourceInventoryIssue = { code: SourceInventoryIssueCode; page?: number; elementId?: string };
@@ -183,11 +186,20 @@ export function validateSourceDocumentInventory(document: SourceDocumentModel): 
       if (!validBox(region.bbox) || !Number.isFinite(region.areaRatio) || region.areaRatio < 0 || region.areaRatio > 1) {
         addIssue({ code: "invalid_geometry", page: expectedPageNumber, elementId: region.id });
       }
+      if ((region.ocrDisposition === "not-targeted" && Boolean(region.ocrSkipReason))
+        || (region.ocrDisposition === "not-attempted" && !region.ocrSkipReason)
+        || (region.ocrDisposition !== "not-attempted" && Boolean(region.ocrSkipReason))) {
+        addIssue({ code: "invalid_image_region_ocr_state", page: expectedPageNumber, elementId: region.id });
+      }
     }
     for (const region of page.ocrRegions) {
       registerId(region.id, expectedPageNumber);
       if (region.imageRegionId && !imageIds.has(region.imageRegionId)) {
         addIssue({ code: "invalid_ocr_image_link", page: expectedPageNumber, elementId: region.id });
+      }
+      const linkedImageRegion = page.imageRegions.find((imageRegion) => imageRegion.id === region.imageRegionId);
+      if (linkedImageRegion && linkedImageRegion.ocrDisposition !== "text-found") {
+        addIssue({ code: "invalid_image_region_ocr_state", page: expectedPageNumber, elementId: linkedImageRegion.id });
       }
       if (!validBox(region.bbox)) addIssue({ code: "invalid_geometry", page: expectedPageNumber, elementId: region.id });
     }
@@ -227,7 +239,7 @@ export function buildSourcePageModel(input: {
   ocrRecommended?: boolean;
   ocrStatus?: SourcePageOcrStatus;
   ocrSkipReason?: SourcePageOcrSkipReason;
-  imageRegions?: Array<Omit<SourceImageRegion, "id" | "bboxPrecision">>;
+  imageRegions?: Array<Omit<SourceImageRegion, "id" | "bboxPrecision" | "ocrDisposition"> & { ocrDisposition?: SourceImageRegion["ocrDisposition"] }>;
   ocrRegions?: Array<Omit<SourceOcrRegion, "id" | "extractionMethod" | "imageRegionId"> & { imageRegionIndex?: number }>;
   vectorRows?: VectorRowInput[];
 }): SourcePageModel {
@@ -246,6 +258,8 @@ export function buildSourcePageModel(input: {
     id: `${pageId}:image:${index + 1}`,
     bbox: { ...region.bbox },
     bboxPrecision: "approximate",
+    ocrDisposition: region.ocrDisposition ?? "not-targeted",
+    ...(region.ocrSkipReason ? { ocrSkipReason: region.ocrSkipReason } : {}),
   }));
   const ocrRegions: SourceOcrRegion[] = (input.ocrRegions ?? []).map((region, index) => {
     const { imageRegionIndex, ...sourceRegion } = region;
@@ -256,6 +270,11 @@ export function buildSourcePageModel(input: {
       bbox: { ...region.bbox },
       extractionMethod: "tesseract-ocr",
     };
+  });
+  imageRegions.forEach((region, index) => {
+    if (!input.imageRegions?.[index]?.ocrDisposition && ocrRegions.some((ocrRegion) => ocrRegion.imageRegionId === region.id)) {
+      region.ocrDisposition = "text-found";
+    }
   });
   const ocrText = ocrRegions.map((region) => region.text).join("\n");
   const ocrRecommended = input.ocrRecommended ?? false;

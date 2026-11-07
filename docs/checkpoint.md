@@ -133,6 +133,13 @@ The client reported that `FinalTenderDocument.pdf` (42 pages) lost or misgrouped
 
 ## Checkpoint 73 — Client tender document reliability
 
+### Per-image-region OCR dispositions — 2026-11-07
+
+- [x] Store a per-region OCR disposition in the page source inventory, distinguishing not-targeted, not-attempted with a skip reason, text-found, no-text-found, and failed states.
+- [x] Reject inconsistent OCR-to-image links and show per-page region disposition counts in the coverage ledger.
+- [x] Unit coverage verifies stable region states, skip reasons, source links, and inventory validation.
+- [ ] Adjudicate region-level dispositions on hybrid/scanned real tenders; PDF.js image operator bounds are approximate and full-page OCR may not map back to individual image operators.
+
 ### Verbatim source-row omission recovery — 2026-11-07
 
 - [x] Allow the bounded semantic row audit to return exact source-cell excerpts for likely omissions; reject paraphrases, excerpts not contained in a single source cell, excessive suggestions, and excerpts on non-gap dispositions.
