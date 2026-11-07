@@ -110,7 +110,7 @@ test("requires unique exact source spans and refuses duplicated or inconsistent 
   const sourceText = `${parentQuote} ${items.join(" ")}\n○ ${items[1]}`;
   assert.deepEqual(group(sourceText), []);
 
-  const cleanText = `${parentQuote} ${items.join(" ")}\n○ Next clause.`;
+  const cleanText = `${parentQuote} ${items.join(" ")}\n○ The supplier must provide local support.`;
   const candidates = candidatesFor(cleanText);
   candidates[2].sourceSpan = { startOffset: candidates[2].sourceSpan.startOffset + 1, endOffset: candidates[2].sourceSpan.endOffset + 1 };
   assert.deepEqual(groupSourceObligationCandidates({
@@ -123,7 +123,7 @@ test("requires unique exact source spans and refuses duplicated or inconsistent 
 });
 
 test("keeps groups within one page and an explicitly eligible source set", () => {
-  const sourceText = `${parentQuote} ${items.join(" ")}\n○ Next clause.`;
+  const sourceText = `${parentQuote} ${items.join(" ")}\n○ The supplier must provide local support.`;
   const candidates = candidatesFor(sourceText);
   candidates[4].page = 12;
   const result = groupSourceObligationCandidates({
@@ -137,7 +137,7 @@ test("keeps groups within one page and an explicitly eligible source set", () =>
 });
 
 test("keeps validated group rows together in source order without reordering unrelated candidates", () => {
-  const sourceText = `${parentQuote} ${items[0]} ${items[1]} ${items[2]} ${items[3]}\n○ Next clause.`;
+  const sourceText = `${parentQuote} ${items[0]} ${items[1]} ${items[2]} ${items[3]}\n○ The supplier must provide local support.`;
   const candidates = candidatesFor(sourceText);
   const groups = groupSourceObligationCandidates({
     documentFingerprint: fingerprint,
@@ -177,5 +177,12 @@ test("does not treat an abrupt PDF page end as proof the service list is complet
   // A cross-page list is not safely complete when all the extractor saw was
   // the first child and then the end of the current physical page's text.
   const sourceText = `${parentQuote} ${items[0]}`;
+  assert.deepEqual(group(sourceText, [parentQuote, items[0]]), []);
+});
+
+test("rejects an apparent boundary that actually introduces another list item", () => {
+  const sourceText = `${parentQuote} ${items[0]}\n○ ${items[1]}\n○ ${items[2]}`;
+  assert.deepEqual(group(sourceText, [parentQuote, items[0], items[1], items[2]]), []);
+  // Even with an unextracted child, the bullet is not proof of list completion.
   assert.deepEqual(group(sourceText, [parentQuote, items[0]]), []);
 });
