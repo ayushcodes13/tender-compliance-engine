@@ -7,6 +7,8 @@ test('model timing is opt-in and emits only whitelisted aggregate fields', () =>
   emitModelTiming({
     phase: 'response_parsed',
     requestKind: 'general_requirement_extraction',
+    batchIndex: 2,
+    totalBatches: 3,
     batchPageCount: 3,
     inputCharacters: 16_000,
     requestHeadersWaitMs: 1_200,
@@ -27,6 +29,8 @@ test('model timing is opt-in and emits only whitelisted aggregate fields', () =>
   assert.deepEqual(record, {
     phase: 'response_parsed',
     requestKind: 'general_requirement_extraction',
+    batchIndex: 2,
+    totalBatches: 3,
     batchPageCount: 3,
     inputCharacters: 16_000,
     requestHeadersWaitMs: 1_200,
@@ -50,4 +54,26 @@ test('model timing emits nothing when disabled', () => {
     responseStatus: 200,
   }, (line) => lines.push(line), false);
   assert.deepEqual(lines, []);
+});
+
+test('request-start timing identifies incomplete coverage requests without content', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'request_started',
+    requestKind: 'text_page_omission_audit',
+    batchIndex: 1,
+    totalBatches: 4,
+    batchPageCount: 2,
+    inputCharacters: 8_000,
+    sourceText: 'must not be logged',
+  }, (line) => lines.push(line), true);
+
+  assert.deepEqual(JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length)), {
+    phase: 'request_started',
+    requestKind: 'text_page_omission_audit',
+    batchIndex: 1,
+    totalBatches: 4,
+    batchPageCount: 2,
+    inputCharacters: 8_000,
+  });
 });

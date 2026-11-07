@@ -998,9 +998,18 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const otherPages = visualPages.filter((page) => !vectorPages.includes(page));
     const extractGeneralPages = async (generalPages: typeof visualPages) => {
       report("connecting to the extraction model", { stage: "extracting", message: "Extracting technical requirements from the selected pages" });
-      for (const batch of buildExtractionBatches(generalPages)) {
+      const extractionBatches = buildExtractionBatches(generalPages);
+      for (const [batchIndex, batch] of extractionBatches.entries()) {
         const batchPages = generalPages.filter((page) => batch.pageNumbers.includes(page.page));
         const requestStartedAt = performance.now();
+        emitModelTiming({
+          phase: "request_started",
+          requestKind: "general_requirement_extraction",
+          batchIndex: batchIndex + 1,
+          totalBatches: extractionBatches.length,
+          batchPageCount: batch.pageNumbers.length,
+          inputCharacters: batch.input.length,
+        });
         const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
           method: "POST",
           signal,
@@ -1022,6 +1031,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         emitModelTiming({
           phase: "headers_received",
           requestKind: "general_requirement_extraction",
+          batchIndex: batchIndex + 1,
+          totalBatches: extractionBatches.length,
           batchPageCount: batch.pageNumbers.length,
           inputCharacters: batch.input.length,
           requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt),
@@ -1040,6 +1051,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         emitModelTiming({
           phase: "response_parsed",
           requestKind: "general_requirement_extraction",
+          batchIndex: batchIndex + 1,
+          totalBatches: extractionBatches.length,
           batchPageCount: batch.pageNumbers.length,
           inputCharacters: batch.input.length,
           responseStatus: response.status,
@@ -1837,14 +1850,33 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       }
       const recoveredTextAuditRows: Candidate[] = [];
       let textAuditBatchesCompleted = 0;
+      if (textAudit.batches.length > 0) {
+        report("auditing text pages for omitted requirements", {
+          stage: "coverage",
+          message: "Checking routed technical text for omitted requirements",
+          current: 0,
+          total: textAudit.batches.length,
+        });
+      }
       for (let offset = 0; offset < textAudit.batches.length; offset += TEXT_PAGE_AUDIT_CONCURRENCY) {
         const wave = textAudit.batches.slice(offset, offset + TEXT_PAGE_AUDIT_CONCURRENCY);
-        const outcomes = await Promise.all(wave.map(async (batch) => {
+        const outcomes = await Promise.all(wave.map(async (batch, waveIndex) => {
           try {
             const auditPages = batch.pages;
+            const batchIndex = offset + waveIndex;
             const batchPageNumbers = new Set(auditPages.map((page) => page.page));
             const batchPageInput = auditPages.map(({ page, text }) => `PDF PAGE ${page}\n${text}`).join("\n\n");
             const batchDraftRows = auditPages.map(({ page, knownRows }) => `PDF page ${page}:\n${knownRows.map((quote) => `- ${quote}`).join("\n") || "(No draft rows)"}`).join("\n\n");
+            const inputCharacters = batchPageInput.length + batchDraftRows.length;
+            const requestStartedAt = performance.now();
+            emitModelTiming({
+              phase: "request_started",
+              requestKind: "text_page_omission_audit",
+              batchIndex: batchIndex + 1,
+              totalBatches: textAudit.batches.length,
+              batchPageCount: auditPages.length,
+              inputCharacters,
+            });
             const auditResponse = await modelClient.fetch(`${baseUrl}/chat/completions`, {
               method: "POST",
               signal,
@@ -1857,11 +1889,42 @@ Product names and model/capacity labels are headings, but serials, page furnitur
                 ],
               }),
             });
+            emitModelTiming({
+              phase: "headers_received",
+              requestKind: "text_page_omission_audit",
+              batchIndex: batchIndex + 1,
+              totalBatches: textAudit.batches.length,
+              batchPageCount: auditPages.length,
+              inputCharacters,
+              requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt),
+              responseStatus: auditResponse.status,
+            });
             if (!auditResponse.ok) throw new Error("text page coverage audit request failed");
+            const responseBodyStartedAt = performance.now();
             const payload = await auditResponse.json();
+            const responseBodyAndEnvelopeMs = Math.round(performance.now() - responseBodyStartedAt);
             const content = payload?.choices?.[0]?.message?.content;
-            const parsed = typeof content === "string" ? parseJson(content) as ParsedExtraction : null;
-            if (!parsed || !Array.isArray(parsed.requirements)) throw new Error("text page coverage audit response was invalid");
+            if (typeof content !== "string") throw new Error("text page coverage audit response was invalid");
+            const jsonParseStartedAt = performance.now();
+            const parsed = parseJson(content) as ParsedExtraction;
+            const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
+            emitModelTiming({
+              phase: "response_parsed",
+              requestKind: "text_page_omission_audit",
+              batchIndex: batchIndex + 1,
+              totalBatches: textAudit.batches.length,
+              batchPageCount: auditPages.length,
+              inputCharacters,
+              responseStatus: auditResponse.status,
+              responseBodyAndEnvelopeMs,
+              jsonParseMs: Math.round(performance.now() - jsonParseStartedAt),
+              responseCharacters: content.length,
+              ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+              ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+              ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+            });
+
+            if (!Array.isArray(parsed.requirements)) throw new Error("text page coverage audit response was invalid");
             const validPageSuggestions = parsed.requirements.filter((candidate) => Number.isInteger(candidate.page) && batchPageNumbers.has(candidate.page!));
             const recoveryRows = discardContainedSuggestionsByPage(extractedRows, validPageSuggestions);
             return { batch, complete: validPageSuggestions.length === parsed.requirements.length, recoveryRows };
