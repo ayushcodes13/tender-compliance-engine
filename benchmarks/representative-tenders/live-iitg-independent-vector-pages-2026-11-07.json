@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "documentId": "iitg-utm",
+  "sourceSha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+  "sourcePages": 15,
+  "codeCommit": "5225fc46a724c6eb22ec326bf35ecddf1ec8382a",
+  "runDate": "2026-11-07",
+  "provider": "configured GPT-6 Luna Azure-compatible endpoint",
+  "execution": "local production build; 290-second application/client deadline",
+  "elapsedSeconds": 291.2,
+  "terminalStatus": "client-timeout-no-response-sheet",
+  "stages": {
+    "sourceInventory": { "status": "completed", "elapsedSeconds": 1.6 },
+    "pageRouting": {
+      "batchesCompleted": 2,
+      "batchesTotal": 2,
+      "completedBySeconds": 98.5,
+      "requestsStarted": 2,
+      "responsesParsed": 2
+    },
+    "vectorTableInspection": {
+      "pageNumbers": [1, 7, 11, 12, 13],
+      "startedAtSeconds": 103.9,
+      "completedBySeconds": 185,
+      "columnMappingRequests": 9,
+      "rowClassificationRequests": 5,
+      "responsesParsed": 14
+    },
+    "generalRequirementExtraction": {
+      "startedAtSeconds": 185,
+      "batchesStarted": 4,
+      "batchesTotal": 4,
+      "responsesParsed": 4,
+      "completedBySeconds": 274.3
+    },
+    "textPageOmissionAudit": {
+      "startedAtSeconds": 274.3,
+      "batchesStarted": 3,
+      "batchesTotal": 4,
+      "responsesParsed": 0,
+      "fourthBatchStarted": false
+    },
+    "responseSheet": { "status": "not-produced" }
+  },
+  "modelTiming": {
+    "pageRouting": { "requestsStarted": 2, "responsesParsed": 2, "sumRequestHeaderWaitMs": 92351, "observedTokens": 10065 },
+    "vectorColumnMapping": { "requestsStarted": 9, "responsesParsed": 9, "sumRequestHeaderWaitMs": 46312, "observedTokens": 25122 },
+    "vectorRowClassification": { "requestsStarted": 5, "responsesParsed": 5, "sumRequestHeaderWaitMs": 103432, "observedTokens": 33851 },
+    "generalRequirementExtraction": { "requestsStarted": 4, "responsesParsed": 4, "observedTokens": 47436 },
+    "textPageOmissionAudit": { "requestsStarted": 3, "responsesParsed": 0, "observedTokens": 0 },
+    "completedCallObservedTokenTotal": 116474,
+    "pendingResponsesAtTimeout": 3,
+    "cost": "not-recorded"
+  },
+  "qualityComparison": {
+    "responseRowsAvailable": false,
+    "coverageResultsAvailable": false,
+    "sourceAnchorComparisonPerformed": false,
+    "recallOrPrecisionClaim": false
+  },
+  "limitations": [
+    "The run used the page-local mapping/classification change before its PR was merged; the post-merge rerun is still required.",
+    "Provider wait sums overlap for concurrent calls and are not wall-clock stage durations.",
+    "Only completed-call token metadata is counted; the three omission-audit responses were still pending at timeout.",
+    "The analysis reached omission auditing but the 290-second client deadline ended the stream before any audit response or compliance sheet returned.",
+    "This single nondeterministic run does not establish a causal latency improvement, complete tender processing, citation correctness, or extraction quality."
+  ],
+  "privacy": "No tender text, candidate text, provider request/response bodies, source bounds, credentials, endpoint hostname, or exported sheet is stored."
+}
