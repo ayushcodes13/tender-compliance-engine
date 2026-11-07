@@ -8,6 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type ProcessingProgress } from "./processing-progress";
 import { consumeAnalysisStream } from "./analysis-events";
+import { visibleCitationEvidence } from "./poc90-client-citation";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
@@ -244,6 +245,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     () => analysis?.requirements.find((item) => item.id === activeId) ?? analysis?.requirements[0] ?? null,
     [analysis, activeId],
   );
+  const displayedCitationEvidence = visibleCitationEvidence(active, page, coverageFocus?.page);
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const previousRequest = activeRequestRef.current;
@@ -1069,7 +1071,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           {sourceOpen && currentPageImageRegions.length > 0 && <p className="mvp-image-region-note">Dashed outlines mark parser-detected raster image bounds. Bounds are approximate and do not identify whether an image contains technical text.</p>}
           {sourceOpen && currentPageCoverage?.hasRasterImageContent && currentPageImageRegions.length === 0 && <p className="mvp-image-region-note">Raster image content was detected, but its bounds were not resolved. Inspect this page visually.</p>}
           <div className="mvp-citation-detail">
-            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.needsHumanReview || active?.ocrWarning || active?.precision === "page-only" || active?.sourceReference?.locationPrecision === "approximate" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : active?.sourceReference?.locationPrecision === "approximate" ? "APPROXIMATE CITATION · VERIFY ON PAGE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}{active?.sourceReference?.sourceElementIds?.length ? <span className="mvp-source-element-ids">({countLabel(active.sourceReference.sourceElementIds.length, "element")}: {active.sourceReference.sourceElementIds.join(", ")})</span> : active?.sourceReference?.locationPrecision === "approximate" ? <span className="mvp-source-element-ids">(Approximate citation)</span> : null}</div>
+            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : active?.needsHumanReview || active?.ocrWarning || active?.precision === "page-only" || active?.sourceReference?.locationPrecision === "approximate" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : active?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : active?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : active?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : active?.sourceReference?.locationPrecision === "approximate" ? "APPROXIMATE CITATION · VERIFY ON PAGE" : active?.parameter ? "SOURCE TABLE / LIST TEXT" : "EXACT SOURCE QUOTE"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : active?.page ?? page).padStart(2, "0")}{displayedCitationEvidence?.sourceElementIds.length ? <span className="mvp-source-element-ids">({countLabel(displayedCitationEvidence.sourceElementIds.length, "element")}: {displayedCitationEvidence.sourceElementIds.join(", ")})</span> : displayedCitationEvidence?.approximate ? <span className="mvp-source-element-ids">(Approximate citation)</span> : null}</div>
             <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : active?.quote ?? "Choose a requirement to inspect its tender source."}</blockquote>
             {coverageFocus?.page !== page && active?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{active.selectableTextQuote}</p></div>}
             {coverageFocus?.page !== page && active?.unverifiedVisualCompletion && <div className="mvp-selectable-excerpt"><span>UNVERIFIED VISUAL COMPLETION · NOT EXPORTED</span><p>{active.unverifiedVisualCompletion}</p><p>Model-proposed wording; compare it with the page image before using it.</p></div>}
