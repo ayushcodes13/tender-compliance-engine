@@ -34,7 +34,7 @@ const provider = http.createServer(async (request, response) => {
     const schema = body.response_format?.json_schema?.name;
     const contents = body.messages.flatMap(message => typeof message.content === 'string' ? [{type:'text',text:message.content}] : message.content);
     const text = contents.filter(item=>item.type==='text').map(item=>item.text).join('\n');
-    if (schema === 'technical_table_page_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
+    if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
     if (schema === 'technical_section_route') {
@@ -55,9 +55,9 @@ const provider = http.createServer(async (request, response) => {
         if(row)result.visual_completions=[{row_index:row.row_index,quote:'Pump shall deliver 200 bar and be compatible with ISO 9001',confidence:'high'}];
       }
       if(scenario==='mixed-native-heading'&&schema==='visual_table_row_labels'){for(const row of result.rows){const line=text.split('\n').find(line=>line.startsWith(row.row_index+'. CELL 0:'));if(line?.includes('16. Source shutter assembly')){row.row_type='section';row.classification_reason='structural_heading';}}}
-    } else if (schema === 'technical_table_page_rows') {
+    } else if (schema === 'technical_table_page_batch_rows') {
       const quote='The centrifuge shall accommodate 10 samples.';
-      result={columns:[],requirements:['unlocated-remark','page-batched-fallback'].includes(scenario)&&text.includes(quote)?[{page:1,quote,visual_region_index:0,remark:scenario==='unlocated-remark'?'Invented deviation: maximum 500 RPM.':'',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]};
+      result={page_results:[{page:1,columns:[],requirements:['unlocated-remark','page-batched-fallback'].includes(scenario)&&text.includes(quote)?[{quote,visual_region_index:0,remark:scenario==='unlocated-remark'?'Invented deviation: maximum 500 RPM.':'',row_type:'requirement',category:'Performance',heading_prefix:'',display_lines:[quote],continues_previous:false}]:[]}]};
     } else if (schema === 'technical_table_missing_rows') {
       result={columns:[],requirements:[]};
     } else if (schema === 'source_row_semantic_coverage') {
@@ -152,7 +152,7 @@ try {
   assert.equal(batchedFallback.analysis.requirements.length,1,'The page-batched visual fallback preserves the literal source requirement');
   assert.equal(batchedFallback.analysis.coverage.pages[0].auditStatus,'no_gaps_reported');
   assert.deepEqual(visualBatchObservations.filter(item=>item.scenario==='page-batched-fallback'),[
-    {scenario:'page-batched-fallback',schema:'technical_table_page_rows',imageCount:3},
+    {scenario:'page-batched-fallback',schema:'technical_table_page_batch_rows',imageCount:3},
     {scenario:'page-batched-fallback',schema:'technical_table_missing_rows',imageCount:3},
   ],'one extraction and one independent audit request each receive the three indexed page regions');
   scenario='cross-section-conflict';
