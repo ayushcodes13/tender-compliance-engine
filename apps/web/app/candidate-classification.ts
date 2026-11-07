@@ -64,6 +64,19 @@ const PACKAGE_HANDOFF_PROCEDURE = /\bpackage\b.{0,80}\b(?:opened|opening)\b.{0,8
 const HISTORICAL_QUALIFICATION_CONTEXT = /\b(?:past performance|prior experience|similar orders?|previously executed|orders? have been executed|last (?:two|three|\d+) (?:years?|financial years?))\b/;
 
 /**
+ * Checklist confirmations and contact-information fields are not independently
+ * assessable equipment or supplier-performance commitments. A form line can
+ * contain words like "warranty" or "after-sales" that would otherwise satisfy
+ * broad positive service patterns. Keep it visible for human scope review.
+ *
+ * Source section/form context is not passed into this classifier, so these
+ * conservative quote-local tests must not claim to reconstruct document layout.
+ */
+const CHECKLIST_AGREEMENT_FIELD = /^\s*(?:(?:\(?[a-z0-9ivxlcdm]+\)?[.):]\s*)?)(?:warranty(?:\s+period)?|after[ -]sales(?:\s+service)?(?:\s+terms?)?|service(?:\s+terms?)?|maintenance(?:\s+terms?)?|delivery(?:\s+terms?)?|payment(?:\s+terms?)?|penalty(?:\s+clause)?)\s+(?:agreed|accepted|confirmed|acknowledged|complied)\b/i;
+const SERVICE_CONTACT_INFORMATION_FIELD = /\b(?:service\s+cent(?:er|re)|after[ -]sales(?:\s+service)?)\b.{0,130}\b(?:contact(?:\s+(?:person|details?|number))?|details?|address|telephone|phone|mobile|e[ -]?mail|fax)\b|\b(?:contact(?:\s+(?:person|details?|number))?|details?|address|telephone|phone|mobile|e[ -]?mail|fax)\b.{0,130}\b(?:service\s+cent(?:er|re)|after[ -]sales(?:\s+service)?)\b/i;
+
+
+/**
  * Classifies scope using source wording and clause function. Clear procurement
  * mechanics are excluded; conflicting technical/service context and unclear
  * fulfillment wording remain reviewable. A model label alone cannot admit an
@@ -79,6 +92,18 @@ export function classifyCandidateScope(rowType: string | undefined, sourceQuote:
   }
 
   const text = normalize(sourceQuote);
+  // Guard form answers before broad service terms can promote them into the
+  // accepted technical matrix. Human review can distinguish an actual local
+  // service obligation from a bidder's contact-data disclosure.
+  if (CHECKLIST_AGREEMENT_FIELD.test(text) || SERVICE_CONTACT_INFORMATION_FIELD.test(text)) {
+    return {
+      originalRowType,
+      effectiveRowType: "ambiguous",
+      outcome: "retained_for_review",
+      reason: CHECKLIST_AGREEMENT_FIELD.test(text) ? "form_agreement_not_supplier_obligation" : "service_contact_form_requires_scope_review",
+      requiresHumanReview: true,
+    };
+  }
   const administrativeMatches = ADMINISTRATIVE_PATTERNS.filter(([pattern]) => pattern.test(text));
   const serviceMatches = SERVICE_OBLIGATION_PATTERNS.filter(([pattern]) => pattern.test(text));
   const administrativeReasons = administrativeMatches.map(([, reason]) => reason);
