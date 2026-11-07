@@ -1,6 +1,7 @@
 export type ModelTimingEvent = {
-  phase: "request_started" | "headers_received" | "response_parsed";
+  phase: "request_started" | "headers_received" | "response_parsed" | "request_failed";
   requestKind: "general_requirement_extraction" | "text_page_omission_audit" | "vector_table_column_mapping" | "vector_table_row_classification" | "vector_source_row_audit";
+  failureKind?: "provider_busy" | "provider_connection" | "request_aborted" | "other";
   batchIndex?: number;
   totalBatches?: number;
   pageNumber?: number;
@@ -32,6 +33,8 @@ const SAFE_NUMERIC_FIELDS = [
   "totalTokens",
 ] as const;
 
+const SAFE_ENUM_FIELDS = ["failureKind"] as const;
+
 /**
  * Opt-in operational timing. The whitelist intentionally excludes prompts,
  * tender text, filenames, model output, credentials, and document identifiers.
@@ -49,6 +52,10 @@ export function emitModelTiming(
   for (const field of SAFE_NUMERIC_FIELDS) {
     const value = event[field];
     if (typeof value === "number" && Number.isFinite(value)) safe[field] = value;
+  }
+  for (const field of SAFE_ENUM_FIELDS) {
+    const value = event[field];
+    if (typeof value === "string" && ["provider_busy", "provider_connection", "request_aborted", "other"].includes(value)) safe[field] = value;
   }
   logger(`[TCE_MODEL_TIMING] ${JSON.stringify(safe)}`);
 }
