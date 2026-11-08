@@ -27,7 +27,10 @@ export function createResponsePdf(sheet: ResponseSheet, _title: string, _filenam
   pdf.setFont('TenderUnicode', 'normal');
 
   const metadata = pdf.getFont().metadata as unknown as { characterToGlyph?: (codePoint: number) => number };
-  const visible = (value: string) => value.replace(/\uF0B7/g, '•');
+  // PDF text extraction can expose visually ordinary bullets as private-use
+  // glyphs depending on the source font. Normalize the two encountered forms
+  // before checking/rendering with the embedded Unicode font.
+  const visible = (value: string) => value.replace(/[\uF0A7\uF0B7]/g, '•');
   const texts = sections.flatMap((section) => [
     section.annexure,
     ...section.titleLines,
