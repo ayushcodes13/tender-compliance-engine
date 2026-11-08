@@ -3,6 +3,71 @@ import type { RequirementSourceReference } from "./source-document";
 type DocumentIdentity = Pick<RequirementSourceReference,
   "documentId" | "documentVersionId" | "documentFingerprint">;
 
+/** Insert a recovered requirement beside its physical source page while
+ * preserving the existing extraction order for items on that same page. */
+export function insertRequirementByPhysicalPage<T extends { page: number }>(
+  requirements: readonly T[],
+  requirement: T,
+): T[] {
+  const insertIndex = requirements.findIndex((existing) => existing.page > requirement.page);
+  return insertIndex < 0
+    ? [...requirements, requirement]
+    : [...requirements.slice(0, insertIndex), requirement, ...requirements.slice(insertIndex)];
+}
+
+export type OperatorAddedRequirement = {
+  id: string;
+  text: string;
+  quote: string;
+  page: number;
+  category: string;
+  parameter?: string;
+  sourceSectionTitle?: string;
+  headingPrefix?: string;
+  rowType: "requirement";
+  precision: "page-only";
+  verdict: "needs_human_review";
+  needsHumanReview: true;
+  reviewed: false;
+  isOperatorAdded: true;
+  bbox: null;
+  sourceReference: RequirementSourceReference;
+};
+
+/** Keep an operator's source transcription separate from parser-owned evidence. */
+export function createOperatorAddedRequirement(input: {
+  id: string;
+  page: number;
+  text: string;
+  category: string;
+  heading?: string;
+  document: DocumentIdentity;
+}): OperatorAddedRequirement {
+  const text = input.text.trim();
+  const heading = input.heading?.trim() || undefined;
+  const sourceReference = createOperatorPageReference(input.document, input.page);
+
+  return {
+    id: input.id,
+    text,
+    quote: text,
+    page: input.page,
+    category: input.category.trim() || "Technical",
+    parameter: heading,
+    sourceSectionTitle: heading,
+    headingPrefix: heading,
+    rowType: "requirement",
+    precision: "page-only",
+    verdict: "needs_human_review",
+    needsHumanReview: true,
+    reviewed: false,
+    isOperatorAdded: true,
+    bbox: null,
+    // Retain operator wording in text/quote, not parser-owned sourceText.
+    sourceReference,
+  };
+}
+
 /**
  * A manual row's wording is supplied by the operator, NOT extracted from the
  * PDF. The page is a navigation pointer only; source text, offsets, geometry,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { visibleCitationEvidence } from "./poc90-client-citation.ts";
+import { visibleCitationEvidence, visibleCitationRequirement } from "./poc90-client-citation.ts";
 
 const requirement = { page: 8, sourceReference: { sourceElementIds: ["page-8:text:12"], locationPrecision: "exact" } };
 
@@ -17,4 +17,10 @@ test("coverage row inspection never borrows IDs or uncertainty from selected req
   const approximate = { page: 8, sourceReference: { sourceElementIds: [], locationPrecision: "approximate" } };
   assert.equal(visibleCitationEvidence(approximate, 8, 8), null);
   assert.deepEqual(visibleCitationEvidence(approximate, 8), { sourceElementIds: [], approximate: true });
+});
+
+test("page-only inspection never shows a stale requirement from another physical page", () => {
+  assert.equal(visibleCitationRequirement({ id: "p2", page: 2 }, 18), null);
+  assert.deepEqual(visibleCitationRequirement({ id: "p18", page: 18 }, 18), { id: "p18", page: 18 });
+  assert.equal(visibleCitationRequirement({ id: "p18", page: 18 }, 18, 18), null);
 });

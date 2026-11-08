@@ -22,7 +22,6 @@ export function AppShell({ active, children }: { active: "dashboard" | "new" | "
     <div className="app-main">
       <header className="app-topbar">
         <div className="app-breadcrumb"><span>Workspace</span><b>/</b><strong>{items.find(item=>item.key===active)?.label}</strong></div>
-        <span className="app-session-pill"><i/>Single-user demo</span>
       </header>
       {children}
     </div>
