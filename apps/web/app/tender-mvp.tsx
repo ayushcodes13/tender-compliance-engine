@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, Plus, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -27,6 +27,7 @@ import {
 } from "./oem-compliance-engine";
 import { parseProductPdfFile, getSampleProductDocument, getSampleProductFile } from "./product-document-parser";
 import { resolveClientMaxFileBytes } from "./upload-limits";
+import { deleteLocalReviewDraft, getLocalReviewDraftSummary, loadLocalReviewDraft, saveLocalReviewDraft, type ReviewDraftSummary } from "./local-review-draft";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -168,6 +169,11 @@ function TenderReviewMark() {
 export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload?: boolean } = {}) {
   const motionRoot = useRef<HTMLElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [localSaveEnabled, setLocalSaveEnabled] = useState(false);
+  const [savedDraftSummary, setSavedDraftSummary] = useState<ReviewDraftSummary | null>(null);
+  const [draftSaveState, setDraftSaveState] = useState<"checking" | "idle" | "saving" | "saved" | "error">("checking");
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [restoringDraft, setRestoringDraft] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [responseSheet, setResponseSheet] = useState<ResponseSheet | null>(null);
   const [sheetEdited, setSheetEdited] = useState(false);
@@ -201,6 +207,59 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const manualIdCounterRef = useRef(0);
   const activeRequestRef = useRef<AbortController | null>(null);
   const processingStartedAtRef = useRef(0);
+  const draftSaveGenerationRef = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    void getLocalReviewDraftSummary().then((summary) => {
+      if (!active) return;
+      setSavedDraftSummary(summary);
+      setDraftSaveState(summary ? "saved" : "idle");
+    }).catch((cause) => {
+      if (!active) return;
+      setDraftSaveState("error");
+      setDraftSaveError(cause instanceof Error ? cause.message : "Local save/resume is unavailable in this browser.");
+    });
+    return () => { active = false; };
+  }, []);
+
+  const saveCurrentDraft = useCallback(async (allowReplacement = false) => {
+    if (!file || !analysis || !responseSheet || complianceReport) return;
+    if (allowReplacement) {
+      const priorName = savedDraftSummary?.filename ?? "the other saved tender";
+      if (!window.confirm(`Replace ${priorName} with ${analysis.filename} as the one saved review on this device?`)) return;
+    }
+    const generation = ++draftSaveGenerationRef.current;
+    setDraftSaveState("saving");
+    setDraftSaveError(null);
+    try {
+      const summary = await saveLocalReviewDraft({
+        file,
+        analysis,
+        responseSheet,
+        sheetEdited,
+        activeRequirementId: activeId,
+        page,
+        replaceExisting: allowReplacement,
+      });
+      if (generation === draftSaveGenerationRef.current) {
+        setSavedDraftSummary(summary);
+        setLocalSaveEnabled(true);
+        setDraftSaveState("saved");
+      }
+    } catch (cause) {
+      if (generation === draftSaveGenerationRef.current) {
+        setDraftSaveState("error");
+        setDraftSaveError(cause instanceof Error ? cause.message : "This device could not save the review.");
+      }
+    }
+  }, [file, analysis, responseSheet, sheetEdited, activeId, page, complianceReport, savedDraftSummary]);
+
+  useEffect(() => {
+    if (!localSaveEnabled || !file || !analysis || !responseSheet) return;
+    const timer = window.setTimeout(() => { void saveCurrentDraft(); }, 700);
+    return () => window.clearTimeout(timer);
+  }, [localSaveEnabled, file, analysis, responseSheet, sheetEdited, activeId, page, saveCurrentDraft]);
 
   useEffect(() => {
     if (!busy) return;
@@ -280,6 +339,50 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const sourcePageRequirement = visibleCitationRequirement(active, page, coverageFocus?.page);
   const displayedCitationEvidence = visibleCitationEvidence(active, page, coverageFocus?.page);
 
+  async function resumeSavedReview() {
+    setRestoringDraft(true);
+    setDraftSaveError(null);
+    try {
+      const draft = await loadLocalReviewDraft<Analysis, ResponseSheet>();
+      if (!draft) {
+        setSavedDraftSummary(null);
+        setDraftSaveState("idle");
+        return;
+      }
+      setFile(draft.file);
+      setLocalSaveEnabled(true);
+      setAnalysis(draft.analysis);
+      setResponseSheet(draft.responseSheet);
+      setSheetEdited(draft.sheetEdited);
+      setActiveId(draft.activeRequirementId ?? draft.analysis.requirements[0]?.id ?? null);
+      setPage(draft.page);
+      setError(null);
+      setFailureDiagnostics(null);
+      setProcessing(null);
+      setCoverageFocus(null);
+      setSavedDraftSummary(draft);
+      setDraftSaveState("saved");
+    } catch (cause) {
+      setDraftSaveState("error");
+      setDraftSaveError(cause instanceof Error ? cause.message : "The saved review could not be restored.");
+    } finally {
+      setRestoringDraft(false);
+    }
+  }
+
+  async function clearSavedReview() {
+    if (!window.confirm("Delete the locally saved tender review from this browser?")) return;
+    try {
+      await deleteLocalReviewDraft();
+      setSavedDraftSummary(null);
+      setDraftSaveState("idle");
+      setDraftSaveError(null);
+    } catch (cause) {
+      setDraftSaveState("error");
+      setDraftSaveError(cause instanceof Error ? cause.message : "The saved review could not be deleted.");
+    }
+  }
+
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const previousRequest = activeRequestRef.current;
     activeRequestRef.current = null;
@@ -290,6 +393,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setProcessing(null);
     setAnalysis(null);
     setResponseSheet(null);
+    setLocalSaveEnabled(false);
     setSheetEdited(false);
     setActiveId(null);
     setCoverageFocus(null);
@@ -1034,7 +1138,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <p>It processes text-based PDFs in this browser session. The local app can OCR scanned pages when Tesseract 5 and the selected language data are installed; the hosted preview does not include OCR tools. OCR-derived wording needs visual review. Extracted rows are a review starting point, not a guarantee that every tender requirement was found. Always check the tender source before relying on the response sheet.</p>
         </section>
         <section className="mvp-bottom-cta mvp-motion-section"><div><h2>Start with your tender PDF.</h2></div><a className="mvp-primary" href="/new">Start a review <ArrowRight size={17} /></a></section>
-        <footer className="mvp-landing-footer"><span>Tender Review</span><span>Your document and review marks stay in this browser session and are not saved as project history.</span></footer>
+        <footer className="mvp-landing-footer"><span>Tender Review</span><span>Completed review drafts can be saved in this browser profile; there is no cloud project history.</span></footer>
       </main>
     );
   }
@@ -1050,6 +1154,15 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum {CLIENT_MAX_FILE_MEGABYTES} MB</li><li>Up to 120 pages</li><li>Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable</li></ul></div>
           <div className="mvp-upload-card">
             <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span></div>
+            {savedDraftSummary && <section className="mvp-local-draft-card" aria-label="Saved local tender review">
+              <div><strong>Resume a saved review</strong><span>{savedDraftSummary.filename} · {savedDraftSummary.pageCount} pages · saved {new Date(savedDraftSummary.savedAt).toLocaleString()}</span><small>Stored only in this browser profile; not encrypted or synced. Browser cleanup can remove it.</small></div>
+              <div className="mvp-local-draft-actions">
+                <button type="button" className="mvp-primary" disabled={restoringDraft} onClick={() => void resumeSavedReview()}>{restoringDraft ? "Restoring…" : "Resume review"}</button>
+                <button type="button" className="mvp-text-button" disabled={restoringDraft} onClick={() => void clearSavedReview()}>Delete local copy</button>
+              </div>
+            </section>}
+            {draftSaveState === "checking" && <p className="mvp-local-draft-note" role="status">Checking this browser for a saved review…</p>}
+            {draftSaveError && <p className="mvp-local-draft-error" role="alert">Local save/resume: {draftSaveError}</p>}
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
                 <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} disabled={busy} />
@@ -1164,8 +1277,20 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     <main ref={motionRoot} className="tender-mvp-root mvp-review-screen">
       <header className="mvp-topbar mvp-review-topbar">
         <a className="mvp-brand" href="/" aria-label="Start a new tender"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Review workspace</small></span></a>
-        <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span></div>
+        <div className="mvp-topbar-right">
+          <span className={`mvp-draft-save-state is-${complianceReport || !localSaveEnabled ? "idle" : draftSaveState}`} role="status" aria-live="polite" aria-label={`${complianceReport ? "OEM assessment remains in this session only." : draftSaveState === "saved" && localSaveEnabled ? "Tender review saved in this browser profile. OEM files and results are not saved. Local data is not encrypted or synced." : "Local review save status"}`}>
+            {complianceReport ? "OEM assessment is session-only" : !localSaveEnabled ? "Not saved on this device" : draftSaveState === "saving" ? "Saving on this device…" : draftSaveState === "saved" ? "Tender review saved locally" : draftSaveState === "error" ? "Local save failed" : "Local save pending"}
+          </span>
+          <button type="button" className="mvp-text-button mvp-save-now" disabled={Boolean(complianceReport) || draftSaveState === "saving" || restoringDraft} onClick={() => void saveCurrentDraft(Boolean(
+            (savedDraftSummary && (!localSaveEnabled || savedDraftSummary.documentFingerprint !== analysis.document.documentFingerprint))
+            || draftSaveError?.includes("different tender review"),
+          ))}>
+            {savedDraftSummary && (!localSaveEnabled || savedDraftSummary.documentFingerprint !== analysis.document.documentFingerprint) || draftSaveError?.includes("different tender review") ? "Replace saved review" : localSaveEnabled ? "Save now" : "Save on this device"}
+          </button>
+          <span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span>
+        </div>
       </header>
+      {draftSaveError && <div className="mvp-local-draft-error mvp-local-draft-error-inline" role="alert">Your review is still open, but this device could not save it: {draftSaveError}</div>}
       <section className="mvp-review-summarybar">
         <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}</div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
