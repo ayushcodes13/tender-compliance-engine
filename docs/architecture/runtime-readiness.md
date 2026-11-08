@@ -38,6 +38,23 @@ Before accepting 32 MiB customer PDFs, measure representative text-heavy and ima
 
 The contract deliberately excludes OEM evidence, compliance status, contradiction resolution, and generated clarifications; those are a separately authorized phase.
 
+## Candidate feature fit and reusable interfaces
+
+These are architecture directions only, not approved customer-facing work:
+
+| Candidate | Existing pieces to reuse | Missing boundary / future contract |
+| --- | --- | --- |
+| Multi-document packages and annexures | `source-document.ts`, sectioned response projection, page citations | Add ordered `DocumentPackage` / `PackageMember` links with explicit attachment/annexure role; every citation keeps its own document-version ID. |
+| Eligibility/admin requirements and mandatory-document checklist | Candidate classification, human review states, citation validation | Add typed requirement categories and checklist items with source citation plus pending/received/reviewed state. Keep them separate from technical specifications and never infer legal eligibility. |
+| Source-linked evidence and action tracking | Citation model, candidate trace, operator recovery | Add evidence records and append-only actions keyed to requirement/version; do not introduce supplier-compliance status until a separate evidence-assessment contract is approved. |
+| Submission-readiness audit | Coverage ledger, unresolved-page diagnostics, reviewed export snapshot | Add deterministic blocking/warning rules over explicitly reviewed checklist and document states; output reasons and cited sources, not a model-generated readiness score. |
+| Corrigendum/amendment comparison | Immutable document versions, fingerprints, source inventory | Add parent/supersedes relationships and a version-pair diff artifact; text/page alignment is advisory and every mapped change needs review before replacing an active requirement. |
+| Reusable supplier documents | Document/version contract and future tenant boundary | Add tenant-owned library records, access policy, expiry/validity metadata, and explicit selection per tender; never silently reuse stale evidence. |
+| Save/resume and document versioning | Existing fingerprints, stable requirement/citation IDs, review actions | Requires persistent transactional metadata plus encrypted object storage. Persist review actions append-only and bind them to immutable extraction/citation versions. |
+| Original Word/Excel response-template preservation | Current DOCX/XLSX exporters and section projection | Add format-specific import/export adapters that preserve supported styles, formulas, merged cells, and template anchors. Define a supported-feature contract and fixture-based round-trip tests before claiming fidelity. |
+
+Dependency order: establish identity/version and tenant access boundaries first; then durable upload/run lifecycle and source inventory; then append-only review persistence; then package/checklist/amendment views; then template adapters and audited exports. Readiness audits depend on reviewed, versioned checklist and requirement data. Reusable supplier evidence depends on tenant isolation, retention, and provenance. No new database or queue abstraction belongs in the current single-user app until product owner approval and an actual persistence requirement.
+
 ## Migration sequence
 
 1. Measure the synchronous pilot before setting a supported file/concurrency target. Keep the current single-process route for private trials; cap request bodies and fail clearly on limits.
