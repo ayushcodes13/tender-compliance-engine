@@ -449,3 +449,63 @@ export function evaluateSheetCompliance(
     assessments,
   };
 }
+
+// -------------------------------------------------------------
+// Project Compliance Report to ResponseSheet (for UI & Export)
+// -------------------------------------------------------------
+
+export function projectComplianceReportToSheet(
+  sheet: ResponseSheet,
+  report: ComplianceAssessmentReport
+): ResponseSheet {
+  const assessmentMap = new Map<string, OEMComplianceAssessment>();
+  for (const a of report.assessments) {
+    assessmentMap.set(a.rowId, a);
+  }
+
+  const columns = [
+    { header: "Tender Requirement", role: "requirement" as const },
+    { header: "Tender Source", role: "page" as const },
+    { header: "Compliance Status", role: "compliance" as const },
+    { header: "Offered Specification & Technical Reason", role: "response" as const },
+    { header: "OEM Evidence Citation", role: "source" as const },
+    { header: "Deviation Remarks", role: "deviation" as const },
+  ];
+
+  const rows: ResponseSheetRow[] = sheet.rows.map((row) => {
+    if (row.section) {
+      return { ...row, values: [row.values[0] || "", "", "", "", "", ""] };
+    }
+
+    const assessment = assessmentMap.get(row.id);
+    const tenderSourceText = assessment?.tenderCitation?.page ? `p. ${assessment.tenderCitation.page}` : `p. 1`;
+    const complianceStatusText = assessment?.complianceLabel || "Needs Review";
+    const offeredSpecAndReason = assessment
+      ? `${assessment.offeredSpecification}\n\nTechnical Justification: ${assessment.reason}`
+      : "Pending evaluation";
+    const oemCitationText = assessment?.productCitation
+      ? `${assessment.productCitation.documentName} (p. ${assessment.productCitation.page})`
+      : "No OEM citation";
+    const deviationText = assessment?.deviationRemarks || (assessment?.status === "DEVIATION" ? assessment.reason : "");
+
+    const tenderReqText = row.values.filter(Boolean)[0] || "";
+
+    return {
+      ...row,
+      values: [
+        tenderReqText,
+        tenderSourceText,
+        complianceStatusText,
+        offeredSpecAndReason,
+        oemCitationText,
+        deviationText,
+      ],
+    };
+  });
+
+  return {
+    columns,
+    rows,
+    layout: "sectioned",
+  };
+}

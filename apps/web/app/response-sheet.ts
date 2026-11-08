@@ -1,7 +1,7 @@
 export type SourceColumnRole = "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other";
 export type ResponseSheetColumn = {
   header: string;
-  role: "heading" | "requirement" | "source" | "response" | "page";
+  role: "heading" | "requirement" | "source" | "response" | "page" | "compliance" | "deviation";
   sourceIndex?: number;
 };
 export type ResponseSheetRow = {
