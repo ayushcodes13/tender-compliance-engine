@@ -506,6 +506,18 @@ The OCR acceptance path still had a separate permissive comparator after the nat
 
 OCR and stress results remain bounded by the tested synthetic documents and installed OCR runtime; they do not establish real-document recall.
 
+### Portable encrypted Phase 1 review sessions — 2026-11-09
+
+- [x] Add a manually downloaded `.tce-review` file for analysis, citations, reviewer marks, and response-sheet edits; encrypt locally with Web Crypto PBKDF2-HMAC-SHA-256 (600,000 iterations) and AES-256-GCM.
+- [x] Exclude the original PDF from the bundle. Require the exact PDF bytes to be reselected and SHA-256 verified before restoring citation access.
+- [x] Bound bundle and payload sizes, validate format/version and core review/source structure, reject wrong passphrases and modified ciphertext, and limit this feature to Phase 1 state.
+- [x] Document passphrase loss, source file, size, browser security-context, and plaintext-in-memory constraints in `docs/runbooks/local-review-sessions.md`.
+- [x] Add tests for encrypted round-trip, tampering, invalid source identity, and exact source-PDF fingerprint matching.
+- [x] Manually verify browser download, unlock, matching-source restoration, preserved review state, and citation drawer behavior with a synthetic PDF/session fixture; no client tender or model endpoint was used.
+- [ ] Complete required PR CI.
+
+This is a user-controlled encrypted file workflow, not autosave, cloud persistence, or multi-user history. It does not make an extraction more complete or verified.
+
 
 
 
