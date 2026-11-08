@@ -14,17 +14,16 @@ This runbook uses an existing customer-controlled machine or private VM. It avoi
 ```sh
 cp .env.example apps/web/.env.local
 # Edit apps/web/.env.local with the approved model endpoint and a strong APP_ACCESS_PASSWORD.
-make web-install
-make pilot-start
+npm ci --prefix apps/web
+npm --prefix apps/web run build
+npm --prefix apps/web run start -- --hostname 127.0.0.1 --port 3308
 ```
 
-Open `http://127.0.0.1:3307` from the same machine. Keep the service on loopback. For remote access, use the customer's existing VPN or an approved TLS reverse proxy with access controls; do not expose the development port directly to the internet. Process one document at a time until memory and concurrency testing has been completed on the target machine.
+Open `http://127.0.0.1:3308` from the same machine. This uses Next's production server, not the development server. Keep the service on loopback. For remote access, use the customer's existing VPN or an approved TLS reverse proxy with access controls; do not expose the app directly to the internet. Process one document at a time until memory and concurrency testing has been completed on the target machine. Stop with Ctrl-C after the session.
 
 After analysis, inspect every cited page, correct/remove rows, and export the reviewed response sheet. Refreshing the browser loses the review. Stop the service when the session ends:
 
-```sh
-make pilot-stop
-```
+No project data or review state survives a browser refresh. Download the export before closing the session.
 
 ## Offline verification without model calls
 
