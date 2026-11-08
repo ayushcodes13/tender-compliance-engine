@@ -13,10 +13,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY apps/web ./
-RUN npm run build
+RUN npm run build && npm prune --omit=dev
 
 EXPOSE 10000
 CMD ["sh", "-c", "npm run start -- --hostname 0.0.0.0 --port ${PORT:-10000}"]
