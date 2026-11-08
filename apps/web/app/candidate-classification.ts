@@ -180,7 +180,12 @@ export function classifyCandidateScope(rowType: string | undefined, sourceQuote:
     "administrative_notice",
   ]);
 
-  const hasPureAdministrativeOnly = administrativeMatches.length > 0 && serviceMatches.length === 0 && administrativeMatches.every(([, reason]) => PURE_ADMINISTRATIVE_REASONS.has(reason));
+  // A real supplier delivery/installation commitment can include PO or insurance
+  // mechanics. Keep that mixed source clause visible for adjudication instead
+  // of rejecting the complete supplier obligation as pure administration.
+  const hasPureAdministrativeOnly = administrativeMatches.length > 0 && serviceMatches.length === 0
+    && !CURRENT_SUPPLIER_FULFILLMENT.test(text)
+    && administrativeMatches.every(([, reason]) => PURE_ADMINISTRATIVE_REASONS.has(reason));
 
   if (administrativeMatches.length > 0 && !hasPureAdministrativeOnly && (
     serviceMatches.length > 0
