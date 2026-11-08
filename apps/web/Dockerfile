@@ -1,6 +1,9 @@
 FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production
+# Build-time value is embedded into the client bundle so upload guidance and
+# browser-side checks match the free Render service's runtime limit.
+ENV MAX_FILE_BYTES=33554432
 WORKDIR /app
 
 # Keep OCR available on the free Node host without adding it to the runtime's

@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveMaxFileBytes, MAX_FILE_BYTES, LOCAL_MAX_FILE_BYTES } from './upload-limits.ts';
+import { resolveClientMaxFileBytes, resolveMaxFileBytes, MAX_FILE_BYTES, LOCAL_MAX_FILE_BYTES } from './upload-limits.ts';
+
+test('resolveClientMaxFileBytes matches the configured deployment upload ceiling', () => {
+  assert.equal(resolveClientMaxFileBytes(String(LOCAL_MAX_FILE_BYTES), 'production'), LOCAL_MAX_FILE_BYTES);
+  assert.equal(resolveClientMaxFileBytes(String(MAX_FILE_BYTES), 'production'), MAX_FILE_BYTES);
+});
+
+test('resolveClientMaxFileBytes falls back to local and Vercel limits by build environment', () => {
+  assert.equal(resolveClientMaxFileBytes(undefined, 'development'), LOCAL_MAX_FILE_BYTES);
+  assert.equal(resolveClientMaxFileBytes(undefined, 'production'), MAX_FILE_BYTES);
+  assert.equal(resolveClientMaxFileBytes('invalid', 'production'), MAX_FILE_BYTES);
+});
 
 test('resolveMaxFileBytes defaults to 32 MB for local development and on-premise runs', () => {
   const bytes = resolveMaxFileBytes({});
