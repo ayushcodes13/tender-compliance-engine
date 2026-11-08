@@ -63,7 +63,8 @@ export function createOperatorAddedRequirement(input: {
     reviewed: false,
     isOperatorAdded: true,
     bbox: null,
-    sourceReference: { ...sourceReference, sourceText: text },
+    // Retain operator wording in text/quote, not parser-owned sourceText.
+    sourceReference,
   };
 }
 
