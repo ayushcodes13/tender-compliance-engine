@@ -464,3 +464,15 @@ test("retains NIOT instrument hardware deliverables while excluding pure commerc
   assert.equal(installObligation.outcome, "kept");
   assert.equal(installObligation.effectiveRowType, "requirement");
 });
+
+test("keeps supplier installation commitments mixed with PO mechanics in scope review", () => {
+  const quoted = "The supplier shall install and commission the equipment at the institute within 30 days of receipt of PO.";
+  const decision = classifyCandidateScope("requirement", quoted);
+  assert.equal(decision.outcome, "retained_for_review");
+  assert.equal(decision.effectiveRowType, "ambiguous");
+  assert.equal(decision.reason, "mixed_administrative_and_supplier_obligation");
+  assert.equal(decision.requiresHumanReview, true);
+  const purelyAdministrative = classifyCandidateScope("requirement",
+    "The OEM should accept the Order acceptance within 7 days from the receipt of PO.");
+  assert.equal(purelyAdministrative.outcome, "rejected");
+});
