@@ -8,6 +8,7 @@ import {
   calculateTargetScrollTop,
   getVisiblePageFromOffsets,
 } from "@/app/pdf-viewer-cache";
+import { guardPageSyncUntilScrollSettles } from "@/app/programmatic-scroll";
 
 type Box = { x: number; y: number; width: number; height: number };
 type ImageRegion = { id: string; bbox: Box; areaRatio: number };
@@ -279,7 +280,6 @@ export function PdfEvidenceViewer({
     const targetEl = document.getElementById(`mvp-pdf-page-${pageNumber}`);
     if (!targetEl) return;
 
-    isAutoScrollingRef.current = true;
     lastTargetPageRef.current = pageNumber;
 
     const pageHeight = targetEl.clientHeight || baseDimensions.height * scale;
@@ -290,16 +290,22 @@ export function PdfEvidenceViewer({
       stage.clientHeight
     );
 
+    if (Math.abs(targetScrollTop - stage.scrollTop) < 1) {
+      isAutoScrollingRef.current = false;
+      return;
+    }
+
+    isAutoScrollingRef.current = true;
+    const cancelScrollGuard = guardPageSyncUntilScrollSettles(stage, () => {
+      isAutoScrollingRef.current = false;
+    });
+
     stage.scrollTo({
       top: targetScrollTop,
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
     });
 
-    const timer = setTimeout(() => {
-      isAutoScrollingRef.current = false;
-    }, 450);
-
-    return () => clearTimeout(timer);
+    return cancelScrollGuard;
   }, [pageNumber, selectedBox, scale, status, pdfDoc, baseDimensions.height]);
 
   // Handle page scrolling updates
