@@ -2258,6 +2258,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         const batchDraftRows = auditPages.map(({ page, knownRows }) => `PDF page ${page}:\n${knownRows.map((quote) => `- ${quote}`).join("\n") || "(No draft rows)"}`).join("\n\n");
         const inputCharacters = batchPageInput.length + batchDraftRows.length;
         const requestStartedAt = performance.now();
+        let providerUsage: Record<string, unknown> = {};
         try {
           emitModelTiming({
             phase: "request_started",
@@ -2294,24 +2295,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           const payload = await auditResponse.json();
           const responseBodyAndEnvelopeMs = Math.round(performance.now() - responseBodyStartedAt);
           const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage as Record<string, unknown> : {};
+          providerUsage = usage;
           const content = payload?.choices?.[0]?.message?.content;
-          if (typeof content !== "string") {
-            emitModelTiming({
-              phase: "request_failed",
-              requestKind: "text_page_omission_audit",
-              batchIndex: batchIndex + 1,
-              totalBatches: textAudit.batches.length,
-              batchPageCount: auditPages.length,
-              inputCharacters,
-              responseStatus: auditResponse.status,
-              responseBodyAndEnvelopeMs,
-              failureKind: "other",
-              ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
-              ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
-              ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
-            });
-            throw new Error("text page coverage audit response was invalid");
-          }
+          if (typeof content !== "string") throw new Error("text page coverage audit response was invalid");
           const jsonParseStartedAt = performance.now();
           const parsed = parseJson(content) as ParsedExtraction;
           emitModelTiming({
@@ -2366,6 +2352,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             inputCharacters,
             requestElapsedMs: Math.round(performance.now() - requestStartedAt),
             failureKind: modelTimingFailureKind(error, signal),
+            ...(typeof providerUsage.prompt_tokens === "number" && Number.isFinite(providerUsage.prompt_tokens) ? { promptTokens: providerUsage.prompt_tokens } : {}),
+            ...(typeof providerUsage.completion_tokens === "number" && Number.isFinite(providerUsage.completion_tokens) ? { completionTokens: providerUsage.completion_tokens } : {}),
+            ...(typeof providerUsage.total_tokens === "number" && Number.isFinite(providerUsage.total_tokens) ? { totalTokens: providerUsage.total_tokens } : {}),
           });
           signal?.throwIfAborted();
           return { batch, complete: false as const, recoveryRows: [] as Candidate[] };
