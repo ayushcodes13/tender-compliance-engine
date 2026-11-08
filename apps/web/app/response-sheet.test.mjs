@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates } from "./response-sheet.ts";
+import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates, canReconcileScheduleDuplicate } from "./response-sheet.ts";
 
 const structured = {
   extractionMode: "structured-table",
@@ -644,4 +644,172 @@ test("reconcileScheduleDuplicates does not merge near-duplicates with different 
   const reconciled = reconcileScheduleDuplicates(rawSheet);
   assert.equal(reconciled.rows.length, 6);
   assert.deepEqual(reconciled.rows.map((r) => r.sourceRequirementId), ["req-1", "req-2", "req-3", "req-4", "req-5", "req-6"]);
+});
+
+test("reconcileScheduleDuplicates never mutates the original response sheet or its row objects", () => {
+  const source = {
+    normalizedTables: true,
+    requirements: [
+      {
+        id: "req-1",
+        text: "Conductivity range: 0.004 to 76 mS/cm",
+        quote: "Conductivity range: 0.004 to 76 mS/cm",
+        page: 18,
+        rowType: "requirement",
+        sourceSectionTitle: "Section II Compliance",
+      },
+      {
+        id: "req-2",
+        text: "Conductivity range: 0.004 to 76 mS/cm",
+        quote: "Conductivity range: 0.004 to 76 mS/cm",
+        page: 20,
+        rowType: "requirement",
+        sourceSectionTitle: "Annexure I Specs",
+      },
+    ],
+  };
+
+  const rawSheet = buildResponseSheet(source);
+  const snapshotBefore = structuredClone(rawSheet);
+  const originalRow0 = rawSheet.rows[0];
+  const originalRow0Values = [...originalRow0.values];
+  const originalRow0Ids = [...originalRow0.sourceRequirementIds];
+
+  const reconciled = reconcileScheduleDuplicates(rawSheet);
+
+  // Original sheet must be completely untouched
+  assert.deepEqual(rawSheet, snapshotBefore);
+  assert.deepEqual(originalRow0.values, originalRow0Values);
+  assert.deepEqual(originalRow0.sourceRequirementIds, originalRow0Ids);
+
+  // Reconciled sheet is a separate object with merged result
+  assert.equal(reconciled.rows.length, 1);
+  assert.notEqual(reconciled.rows[0], originalRow0);
+  assert.deepEqual(reconciled.rows[0].sourceRequirementIds, ["req-1", "req-2"]);
+  assert.equal(reconciled.rows[0].values.at(-1), "Pages 18 and 20");
+});
+
+test("canReconcileScheduleDuplicate enforces identical eligibility across detectScheduleDuplicates and reconcileScheduleDuplicates", () => {
+  const source = {
+    normalizedTables: true,
+    requirements: [
+      {
+        id: "req-a",
+        text: "Salinity range: 2 to 42 PSU",
+        quote: "Salinity range: 2 to 42 PSU",
+        page: 18,
+        rowType: "requirement",
+        sourceSectionTitle: "Section II",
+      },
+      {
+        id: "req-b",
+        text: "Salinity range: 2 to 42 PSU",
+        quote: "Salinity range: 2 to 42 PSU",
+        page: 20,
+        rowType: "requirement",
+        sourceSectionTitle: "Annexure I",
+      },
+      {
+        id: "req-diff-param-a",
+        text: "Range: 0 to 100",
+        quote: "Range: 0 to 100",
+        page: 18,
+        rowType: "requirement",
+        sourceSectionTitle: "Section II",
+        sourceColumnMap: [{ header: "Param", role: "heading" }, { header: "Spec", role: "specification" }],
+        sourceCells: ["Temperature Sensor", "Range: 0 to 100"],
+      },
+      {
+        id: "req-diff-param-b",
+        text: "Range: 0 to 100",
+        quote: "Range: 0 to 100",
+        page: 20,
+        rowType: "requirement",
+        sourceSectionTitle: "Annexure I",
+        sourceColumnMap: [{ header: "Param", role: "heading" }, { header: "Spec", role: "specification" }],
+        sourceCells: ["Pressure Sensor", "Range: 0 to 100"],
+      },
+    ],
+  };
+
+  const rawSheet = buildResponseSheet(source);
+  const detected = detectScheduleDuplicates(rawSheet);
+
+  // Only the salinity pair is eligible; the different-param pair is ineligible
+  assert.equal(detected.length, 1);
+  assert.equal(detected[0].text, "Salinity range: 2 to 42 PSU");
+
+  const isSectioned = rawSheet.layout === "sectioned";
+  const salinCheck = canReconcileScheduleDuplicate(rawSheet.rows[0], rawSheet.rows[1], rawSheet.columns, isSectioned);
+  assert.equal(salinCheck.eligible, true);
+
+  const paramCheck = canReconcileScheduleDuplicate(rawSheet.rows[2], rawSheet.rows[3], rawSheet.columns, isSectioned);
+  assert.equal(paramCheck.eligible, false);
+  assert.equal(paramCheck.reason, "parameter_mismatch");
+
+  const reconciled = reconcileScheduleDuplicates(rawSheet);
+  // Reconciled count must match detection: 4 rows -> 3 rows (1 pair merged, 1 pair kept separate)
+  assert.equal(reconciled.rows.length, 3);
+});
+
+test("reconcileScheduleDuplicates refuses to merge conflicting nonempty OEM responses", () => {
+  const source = {
+    normalizedTables: true,
+    requirements: [
+      {
+        id: "req-1",
+        text: "Power supply: 230 V AC, 50 Hz",
+        quote: "Power supply: 230 V AC, 50 Hz",
+        page: 18,
+        rowType: "requirement",
+        sourceSectionTitle: "Section II",
+      },
+      {
+        id: "req-2",
+        text: "Power supply: 230 V AC, 50 Hz",
+        quote: "Power supply: 230 V AC, 50 Hz",
+        page: 20,
+        rowType: "requirement",
+        sourceSectionTitle: "Annexure I",
+      },
+    ],
+  };
+
+  const sheet = buildResponseSheet(source);
+  const complyCol = sheet.columns.findIndex((c) => /comply|compliance/i.test(c.header));
+  assert.ok(complyCol >= 0);
+
+  // Case 1: Conflicting nonempty responses ("Yes" vs "No")
+  sheet.rows[0].values[complyCol] = "Yes";
+  sheet.rows[1].values[complyCol] = "No";
+
+  const eligibility = canReconcileScheduleDuplicate(sheet.rows[0], sheet.rows[1], sheet.columns, sheet.layout === "sectioned");
+  assert.equal(eligibility.eligible, false);
+  assert.equal(eligibility.hasConflictingResponses, true);
+  assert.equal(eligibility.reason, "conflicting_oem_response");
+
+  const detected = detectScheduleDuplicates(sheet);
+  assert.equal(detected.length, 0);
+
+  const reconciledConflict = reconcileScheduleDuplicates(sheet);
+  assert.equal(reconciledConflict.rows.length, 2);
+  assert.equal(reconciledConflict.rows[0].values[complyCol], "Yes");
+  assert.equal(reconciledConflict.rows[1].values[complyCol], "No");
+
+  // Case 2: One empty, one nonempty -> Non-conflicting, response preserved
+  sheet.rows[0].values[complyCol] = "";
+  sheet.rows[1].values[complyCol] = "Complied with standard adapter";
+
+  const reconciledNonConflict = reconcileScheduleDuplicates(sheet);
+  assert.equal(reconciledNonConflict.rows.length, 1);
+  assert.equal(reconciledNonConflict.rows[0].values[complyCol], "Complied with standard adapter");
+  assert.deepEqual(reconciledNonConflict.rows[0].sourceRequirementIds, ["req-1", "req-2"]);
+
+  // Case 3: Identical responses ("Yes" vs "yes") -> Merged cleanly
+  sheet.rows[0].values[complyCol] = "Yes";
+  sheet.rows[1].values[complyCol] = "yes";
+
+  const reconciledIdentical = reconcileScheduleDuplicates(sheet);
+  assert.equal(reconciledIdentical.rows.length, 1);
+  assert.equal(reconciledIdentical.rows[0].values[complyCol], "Yes");
 });
