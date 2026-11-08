@@ -395,3 +395,84 @@ test("does not let source grouping override administrative or mixed-form scope d
   assert.equal(canJoinValidatedSourceObligationGroup(parent), true);
   assert.equal(canJoinValidatedSourceObligationGroup(member), true);
 });
+
+test("retains NIOT instrument hardware deliverables while excluding pure commercial/logistics clauses", () => {
+  // P0 Missing technical requirements
+  const displayDecision = classifyCandidateScope("requirement", "Display: Digital readout");
+  assert.equal(displayDecision.outcome, "kept");
+  assert.equal(displayDecision.effectiveRowType, "requirement");
+  assert.equal(displayDecision.reason, "source_grounded_technical_scope");
+
+  const readoutDecision = classifyCandidateScope("requirement", "Digital readout");
+  assert.equal(readoutDecision.outcome, "kept");
+  assert.equal(readoutDecision.effectiveRowType, "requirement");
+
+  const packingCaseDecision = classifyCandidateScope("requirement", "Autosal packing case for Auatosal 8400B-1 No.");
+  assert.equal(packingCaseDecision.outcome, "kept");
+  assert.equal(packingCaseDecision.effectiveRowType, "requirement");
+
+  // P0 Administrative contamination: Pure commercial/logistics clauses must be rejected
+  const orderAcceptance = classifyCandidateScope("instruction", "The OEM should accept the Order acceptance within 7 days from the date of receipt of PO , failing which it shall be presumed that the bidder is not interested, and");
+  assert.equal(orderAcceptance.outcome, "rejected");
+  assert.equal(orderAcceptance.effectiveRowType, "instruction");
+  assert.equal(orderAcceptance.reason, "order_acceptance_or_po_receipt");
+
+  const dapInsurance = classifyCandidateScope("requirement", "Insurance should be arranged from SHIPPERS WAREHOUSE TO CONSIGNEE’S WAREHOUSE up to installation and commissioning... for DAP value plus 10%...");
+  assert.equal(dapInsurance.outcome, "rejected");
+  assert.equal(dapInsurance.effectiveRowType, "instruction");
+  assert.equal(dapInsurance.reason, "insurance_or_transit_logistics");
+
+  const seaWorthyPacking = classifyCandidateScope("requirement", "Sufficient care should be taken on packing and it should be sea worthy packing as per International standard.");
+  assert.equal(seaWorthyPacking.outcome, "rejected");
+  assert.equal(seaWorthyPacking.effectiveRowType, "instruction");
+  assert.equal(seaWorthyPacking.reason, "cargo_packaging_logistics");
+
+  const wireTransferTpi = classifyCandidateScope("requirement", "The Third Party Inspection is not mandatory for Indian bidders and payment made after acceptance at sight through Wire Transfer...");
+  assert.equal(wireTransferTpi.outcome, "rejected");
+  assert.equal(wireTransferTpi.effectiveRowType, "instruction");
+  assert.equal(wireTransferTpi.reason, "payment_method_or_inspection_administration");
+
+  const woodPackaging = classifyCandidateScope("requirement", "If Seller uses wood packaging materials such as pallets, crates, boxes, dunnages, cases, skids and ply wood, it shall be heat treated or fumigated with methyl bromide as per ISPM 15 standards and packing should contain phytosanitary certificate.");
+  assert.equal(woodPackaging.outcome, "rejected");
+  assert.equal(woodPackaging.effectiveRowType, "instruction");
+  assert.equal(woodPackaging.reason, "wood_packaging_or_phytosanitary_logistics");
+
+  const itemCommentary = classifyCandidateScope("requirement", "An item-by- item commentary on the Purchaser’s Technical Specifications demonstrating substantial responsiveness");
+  assert.equal(itemCommentary.outcome, "rejected");
+  assert.equal(itemCommentary.effectiveRowType, "instruction");
+
+  const bidderSubstitution = classifyCandidateScope("requirement", "The Bidder may substitute these in its bid, provided that it demonstrates to the Purchaser’s satisfaction");
+  assert.equal(bidderSubstitution.outcome, "rejected");
+  assert.equal(bidderSubstitution.effectiveRowType, "instruction");
+
+  // Mixed bidder submission requirement retained for review
+  const mixedSubmission = classifyCandidateScope("requirement", "Wherever the submission of documentary evidence (as proof of some parameter) is mentioned in the SCC, the same shall be enclosed in the quotation.");
+  assert.equal(mixedSubmission.outcome, "retained_for_review");
+  assert.equal(mixedSubmission.effectiveRowType, "ambiguous");
+  assert.equal(mixedSubmission.reason, "mixed_administrative_and_supplier_obligation");
+
+  // Genuine technical obligations must not be suppressed
+  const warranty = classifyCandidateScope("requirement", "This warranty should be minimum for the period of 12 months from the date of installation.");
+  assert.equal(warranty.outcome, "kept");
+  assert.equal(warranty.effectiveRowType, "requirement");
+
+  const training = classifyCandidateScope("requirement", "Operational training to be provided at NIOT at the time of installation and commissioning.");
+  assert.equal(training.outcome, "kept");
+  assert.equal(training.effectiveRowType, "requirement");
+
+  const installObligation = classifyCandidateScope("requirement", "The supplier shall install and commission the Autosal at NIOT.");
+  assert.equal(installObligation.outcome, "kept");
+  assert.equal(installObligation.effectiveRowType, "requirement");
+});
+
+test("keeps supplier installation commitments mixed with PO mechanics in scope review", () => {
+  const quoted = "The supplier shall install and commission the equipment at the institute within 30 days of receipt of PO.";
+  const decision = classifyCandidateScope("requirement", quoted);
+  assert.equal(decision.outcome, "retained_for_review");
+  assert.equal(decision.effectiveRowType, "ambiguous");
+  assert.equal(decision.reason, "mixed_administrative_and_supplier_obligation");
+  assert.equal(decision.requiresHumanReview, true);
+  const purelyAdministrative = classifyCandidateScope("requirement",
+    "The OEM should accept the Order acceptance within 7 days from the receipt of PO.");
+  assert.equal(purelyAdministrative.outcome, "rejected");
+});
