@@ -341,6 +341,8 @@ Real customer tender documents frequently exceed 4 MB (e.g. 7 MB+ documents with
 - [x] Updated upload validation in `apps/web/app/actions.ts` and client helper text in `apps/web/app/tender-mvp.tsx`.
 - [x] Added unit tests in `apps/web/app/upload-limits.test.mjs` verifying local, hosted Vercel, and custom `MAX_FILE_BYTES` overrides.
 
+**Route-boundary correction (2026-11-09):** `/api/analyze` is a Route Handler and parses multipart data with `Request.formData()`. The Next.js `serverActions.bodySizeLimit` setting does not bound this route. A streaming byte cap now runs before form parsing and returns HTTP 413 for oversized request bodies (file allowance plus 256 KiB multipart metadata). Vercel still enforces its own 4.5 MB function request cap; this route guard does not enable 32 MB uploads on Vercel. Local 32 MB acceptance still needs a representative PDF and memory/concurrency measurement before any capacity claim.
+
 ### Tiered validation ladder and hierarchical response sheet — 2026-11-05
 
 A formal 3-tier validation ladder and hierarchical response sheet architecture were implemented to support complex multi-level tender specifications and audit requirements:
