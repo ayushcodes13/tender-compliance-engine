@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet } from "./response-sheet.ts";
+import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates } from "./response-sheet.ts";
 
 const structured = {
   extractionMode: "structured-table",
@@ -516,4 +516,132 @@ test("promoteCandidateToSheet adds classification-review candidate directly to r
   const pageCol = updated.columns.findIndex((c) => c.role === "page");
   assert.equal(promotedRow.values[reqCol], "Comprehensive AMC for 3 years post standard warranty period");
   assert.equal(promotedRow.values[pageCol], "Page 12");
+});
+
+test("reconcileScheduleDuplicates reconciles identical technical specifications across schedules while combining source references", () => {
+  const source = {
+    normalizedTables: true,
+    requirements: [
+      {
+        id: "req-p18-1",
+        text: "Conductivity ratio range: 0.0001 to 1.15",
+        quote: "Conductivity ratio range: 0.0001 to 1.15",
+        page: 18,
+        rowType: "requirement",
+        sourceSectionTitle: "Section II Technical Compliance Sheet",
+        sourceColumnMap: [{ header: "Sl.No", role: "serial" }, { header: "Description", role: "specification" }, { header: "Remarks", role: "compliance" }],
+        sourceCells: ["1", "Conductivity ratio range: 0.0001 to 1.15", ""],
+      },
+      {
+        id: "req-p20-1",
+        text: "Conductivity ratio range: 0.0001 to 1.15",
+        quote: "Conductivity ratio range: 0.0001 to 1.15",
+        page: 20,
+        rowType: "requirement",
+        sourceSectionTitle: "Annexure I Technical Specifications",
+      },
+      {
+        id: "req-p18-2",
+        text: "Short - term stability: < ±0.00005 over 24 hours",
+        quote: "Short - term stability: < ±0.00005 over 24 hours",
+        page: 18,
+        rowType: "requirement",
+        sourceSectionTitle: "Section II Technical Compliance Sheet",
+        sourceColumnMap: [{ header: "Sl.No", role: "serial" }, { header: "Description", role: "specification" }, { header: "Remarks", role: "compliance" }],
+        sourceCells: ["2", "Short - term stability: < ±0.00005 over 24 hours", ""],
+      },
+      {
+        id: "req-p20-2",
+        text: "Short-term stability: < ±0.00005 over 24 hours",
+        quote: "Short-term stability: < ±0.00005 over 24 hours",
+        page: 20,
+        rowType: "requirement",
+        sourceSectionTitle: "Annexure I Technical Specifications",
+      },
+    ],
+  };
+
+  const rawSheet = buildResponseSheet(source);
+  assert.equal(rawSheet.rows.length, 4);
+
+  const duplicates = detectScheduleDuplicates(rawSheet);
+  assert.equal(duplicates.length, 2);
+  assert.equal(duplicates[0].primaryPage, "Page 18");
+  assert.equal(duplicates[0].duplicatePage, "Page 20");
+
+  const reconciled = reconcileScheduleDuplicates(rawSheet);
+  assert.equal(reconciled.rows.length, 2);
+
+  const pageCol = reconciled.columns.findIndex((c) => c.role === "page");
+  assert.equal(reconciled.rows[0].values[pageCol], "Pages 18 and 20");
+  assert.deepEqual(reconciled.rows[0].sourceRequirementIds, ["req-p18-1", "req-p20-1"]);
+
+  assert.equal(reconciled.rows[1].values[pageCol], "Pages 18 and 20");
+  assert.deepEqual(reconciled.rows[1].sourceRequirementIds, ["req-p18-2", "req-p20-2"]);
+});
+
+test("reconcileScheduleDuplicates does not merge near-duplicates with different numeric limits, parameters, or scopes", () => {
+  const source = {
+    normalizedTables: true,
+    requirements: [
+      {
+        id: "req-1",
+        text: "Operating pressure: 200 bar",
+        quote: "Operating pressure: 200 bar",
+        page: 5,
+        rowType: "requirement",
+        sourceSectionTitle: "Section A",
+      },
+      {
+        id: "req-2",
+        text: "Operating pressure: 500 bar",
+        quote: "Operating pressure: 500 bar",
+        page: 10,
+        rowType: "requirement",
+        sourceSectionTitle: "Section B",
+      },
+      {
+        id: "req-3",
+        text: "Input voltage: 230 V AC",
+        quote: "Input voltage: 230 V AC",
+        page: 5,
+        rowType: "requirement",
+        sourceSectionTitle: "Section A",
+      },
+      {
+        id: "req-4",
+        text: "Input voltage: 110 V AC",
+        quote: "Input voltage: 110 V AC",
+        page: 10,
+        rowType: "requirement",
+        sourceSectionTitle: "Section B",
+      },
+      {
+        id: "req-5",
+        text: "1 No. Replacement Pump Kit",
+        quote: "1 No. Replacement Pump Kit",
+        page: 21,
+        rowType: "requirement",
+        sourceSectionTitle: "Spares",
+      },
+      {
+        id: "req-6",
+        text: "1 No. External Sample Pump",
+        quote: "1 No. External Sample Pump",
+        page: 21,
+        rowType: "requirement",
+        sourceSectionTitle: "Spares",
+      },
+    ],
+  };
+
+  const rawSheet = buildResponseSheet(source);
+  assert.equal(rawSheet.rows.length, 6);
+
+  const duplicates = detectScheduleDuplicates(rawSheet);
+  assert.equal(duplicates.length, 0);
+
+  const reconciled = reconcileScheduleDuplicates(rawSheet);
+  assert.equal(reconciled.rows.length, 6);
+  assert.deepEqual(reconciled.rows.map((r) => r.sourceRequirementId), ["req-1", "req-2", "req-3", "req-4", "req-5", "req-6"]);
 });

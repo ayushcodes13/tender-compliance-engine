@@ -13,7 +13,7 @@ import { createOperatorAddedRequirement, insertRequirementByPhysicalPage, recove
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
-import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, type ResponseSheet } from "./response-sheet";
+import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import { describeRejectedSuggestion, type CoverageReport, type CoverageSourceRow, type RejectedSuggestion } from "./coverage-ledger";
 import type { ClassificationReviewCandidate } from "./candidate-classification";
@@ -572,6 +572,13 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setSheetEdited(false);
   }
 
+  function handleReconcileDuplicates() {
+    if (!responseSheet) return;
+    const reconciled = reconcileScheduleDuplicates(responseSheet);
+    setResponseSheet(reconciled);
+    setSheetEdited(true);
+  }
+
   async function exportDocx() {
     if (!analysis || !responseSheet?.rows.length) return;
     setExporting(true);
@@ -1035,7 +1042,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const uncertainRoutingCount = analysis.coverage?.summary.routingPagesUncertain ?? 0;
   const unmappedTableRowsCount = analysis.coverage?.summary.tableRowsUnmapped ?? 0;
   const clippedRoutingCount = analysis.coverage?.summary.clippedRoutingPages ?? 0;
-  const hasUnresolvedIssues = unresolvedAuditCount > 0 || possibleGapsCount > 0 || uncertainRoutingCount > 0 || unmappedTableRowsCount > 0 || clippedRoutingCount > 0 || heldCandidatesCount > 0;
+  const scheduleDuplicates = responseSheet ? detectScheduleDuplicates(responseSheet) : [];
+  const hasUnresolvedIssues = unresolvedAuditCount > 0 || possibleGapsCount > 0 || uncertainRoutingCount > 0 || unmappedTableRowsCount > 0 || clippedRoutingCount > 0 || heldCandidatesCount > 0 || scheduleDuplicates.length > 0;
 
   const coveragePagesToShow = analysis.coverage?.pages.filter((item) => item.selectedForExtraction
     || item.routingDisposition !== "selected"
@@ -1117,6 +1125,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                 <strong>{clippedRoutingCount}</strong> clipped router page{clippedRoutingCount === 1 ? "" : "s"}
               </span>
             )}
+            {scheduleDuplicates.length > 0 && (
+              <span className="mvp-banner-pill is-warning">
+                <strong>{scheduleDuplicates.length}</strong> duplicate schedule specification{scheduleDuplicates.length === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
           {heldCandidatesCount > 0 && (
             <div className="mvp-banner-held-candidates">
@@ -1144,7 +1157,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       {responseSheet && <section className="mvp-sheet-panel" aria-label="Editable response sheet">
         <div className="mvp-sheet-heading">
           <div><span className="mvp-panel-kicker">EXPORT PREVIEW</span><h2>Response sheet <span>{responseSheet.rows.length} rows</span></h2><p>Edit the sheet before downloading. Click a citation to inspect the original page and highlighted source. Sheet edits apply to all downloads.</p></div>
-          <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button mvp-add-row-action" onClick={() => { setFormError(null); setNewReqPage(page || 1); setAddRequirementOpen(true); }}><Plus size={14} /> Add requirement</button>{sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}<button type="button" className="mvp-text-button mvp-sheet-reset" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); setSourceOpen(false); }}>New tender</button></div>
+          <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button mvp-add-row-action" onClick={() => { setFormError(null); setNewReqPage(page || 1); setAddRequirementOpen(true); }}><Plus size={14} /> Add requirement</button>{scheduleDuplicates.length > 0 && <button type="button" className="mvp-text-button mvp-reconcile-action" onClick={handleReconcileDuplicates} title="Reconcile identical technical specifications repeated across bidder schedule and specification annexure"><Check size={14} /> Reconcile {scheduleDuplicates.length} duplicates</button>}{sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}<button type="button" className="mvp-text-button mvp-sheet-reset" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); setSourceOpen(false); }}>New tender</button></div>
         </div>
         <div className="mvp-sheet-scroll">
           {buildResponseSections(responseSheet, true).map((section, sectionIndex, sections) => <section className="mvp-response-section" key={section.id}>

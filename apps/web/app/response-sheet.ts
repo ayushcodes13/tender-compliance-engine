@@ -156,8 +156,12 @@ function detectMultiLevelHeadings(requirements: ResponseRequirement[]): boolean 
   return false;
 }
 
-export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
-  if (source.normalizedTables) return buildGroupedTableSheet(source);
+export function buildResponseSheet(source: ResponseSheetSource, options?: { reconcileDuplicates?: boolean }): ResponseSheet {
+  const sheet = source.normalizedTables ? buildGroupedTableSheet(source) : buildStandardResponseSheet(source);
+  return options?.reconcileDuplicates ? reconcileScheduleDuplicates(sheet) : sheet;
+}
+
+function buildStandardResponseSheet(source: ResponseSheetSource): ResponseSheet {
   const structured = source.extractionMode === "structured-table";
   const hasMultiLevel = !structured && detectMultiLevelHeadings(source.requirements);
 
@@ -339,6 +343,156 @@ export function buildResponseSheet(source: ResponseSheetSource): ResponseSheet {
     return { columns, rows: merged };
   }
   return { columns, rows };
+}
+
+function normalizeForScheduleComparison(text: string): string {
+  return text
+    .replace(/^[\s•▪●\uF0B7\-\*]+/, "")
+    .replace(/\b([a-zA-Z]+)\s*-\s*([a-zA-Z]+)\b/g, "$1-$2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Reconciles identical technical obligations duplicated across separate tender schedules
+ * (e.g. bidder-fill compliance schedule vs detailed technical specifications annexure),
+ * while strictly preserving all source references and page citations.
+ */
+export function reconcileScheduleDuplicates(sheet: ResponseSheet): ResponseSheet {
+  const reqColIndex = sheet.columns.findIndex((col) => col.role === "requirement");
+  const pageColIndex = sheet.columns.findIndex((col) => col.role === "page");
+  if (reqColIndex < 0 || pageColIndex < 0) return sheet;
+
+  const paramColIndex = sheet.layout === "sectioned" ? 2 : sheet.columns.findIndex((col) => col.role === "heading");
+  const equipColIndex = sheet.layout === "sectioned" ? 0 : -1;
+
+  const reconciledRows: ResponseSheetRow[] = [];
+  const seenIndexByKey = new Map<string, number>();
+
+  for (const row of sheet.rows) {
+    if (row.section) {
+      reconciledRows.push(row);
+      continue;
+    }
+
+    const text = row.values[reqColIndex]?.trim() ?? "";
+    const normText = normalizeForScheduleComparison(text);
+
+    if (normText.length >= 6) {
+      const existingIndex = seenIndexByKey.get(normText);
+      if (existingIndex !== undefined) {
+        const existingRow = reconciledRows[existingIndex];
+
+        // If parameter columns exist and differ materially, keep them separate
+        let differentParam = false;
+        if (paramColIndex >= 0) {
+          const existingParam = existingRow.values[paramColIndex]?.trim().toLowerCase();
+          const currentParam = row.values[paramColIndex]?.trim().toLowerCase();
+          if (existingParam && currentParam && existingParam !== currentParam) {
+            differentParam = true;
+          }
+        }
+
+        // If major equipment groups differ materially, keep them separate
+        let differentEquip = false;
+        if (equipColIndex >= 0) {
+          const existingEquip = existingRow.values[equipColIndex]?.trim().toLowerCase();
+          const currentEquip = row.values[equipColIndex]?.trim().toLowerCase();
+          if (existingEquip && currentEquip && existingEquip !== currentEquip) {
+            const isGeneric = (val: string) => /^(?:technical|specification|general|annexure|section)/i.test(val);
+            if (!isGeneric(existingEquip) && !isGeneric(currentEquip)) {
+              differentEquip = true;
+            }
+          }
+        }
+
+        if (!differentParam && !differentEquip) {
+          const existingPages = [...(existingRow.values[pageColIndex]?.matchAll(/\d+/g) ?? [])].map((m) => Number(m[0]));
+          const currentPages = [...(row.values[pageColIndex]?.matchAll(/\d+/g) ?? [])].map((m) => Number(m[0]));
+          const pagesOverlap = existingPages.some((p) => currentPages.includes(p));
+          const differentSections = Boolean(existingRow.mergeScope && row.mergeScope && existingRow.mergeScope !== row.mergeScope);
+
+          if (!pagesOverlap || differentSections) {
+            // Merge source requirement IDs without duplicates
+            const mergedIds = [...new Set([...existingRow.sourceRequirementIds, ...row.sourceRequirementIds])];
+            existingRow.sourceRequirementIds = mergedIds;
+
+            // Merge page citations: e.g. "Pages 18 and 20"
+            const allPages = [...new Set([...existingPages, ...currentPages])].sort((a, b) => a - b);
+            existingRow.values[pageColIndex] = allPages.length > 1 ? `Pages ${allPages.join(" and ")}` : `Page ${allPages[0] ?? currentPages[0]}`;
+
+            // Preserve any existing non-empty response values
+            for (let colIdx = 0; colIdx < sheet.columns.length; colIdx++) {
+              if (sheet.columns[colIdx].role === "response" && !existingRow.values[colIdx]?.trim() && row.values[colIdx]?.trim()) {
+                existingRow.values[colIdx] = row.values[colIdx];
+              }
+            }
+            continue;
+          }
+        }
+      } else {
+        seenIndexByKey.set(normText, reconciledRows.length);
+      }
+    }
+
+    reconciledRows.push(row);
+  }
+
+  return { ...sheet, rows: reconciledRows };
+}
+
+export type ScheduleDuplicateMatch = {
+  primaryRowId: string;
+  duplicateRowId: string;
+  text: string;
+  primaryPage: string;
+  duplicatePage: string;
+};
+
+/**
+ * Identifies identical requirements repeated across separate tender schedules
+ * (e.g. bidder-fill schedule vs technical specification annexure) so operators can inspect them.
+ */
+export function detectScheduleDuplicates(sheet: ResponseSheet): ScheduleDuplicateMatch[] {
+  const reqColIndex = sheet.columns.findIndex((col) => col.role === "requirement");
+  const pageColIndex = sheet.columns.findIndex((col) => col.role === "page");
+  if (reqColIndex < 0 || pageColIndex < 0) return [];
+
+  const matches: ScheduleDuplicateMatch[] = [];
+  const seenIndexByKey = new Map<string, number>();
+
+  for (let i = 0; i < sheet.rows.length; i++) {
+    const row = sheet.rows[i];
+    if (row.section) continue;
+
+    const text = row.values[reqColIndex]?.trim() ?? "";
+    const normText = normalizeForScheduleComparison(text);
+    if (normText.length < 6) continue;
+
+    const existingIndex = seenIndexByKey.get(normText);
+    if (existingIndex !== undefined) {
+      const existingRow = sheet.rows[existingIndex];
+      const existingPages = [...(existingRow.values[pageColIndex]?.matchAll(/\d+/g) ?? [])].map((m) => Number(m[0]));
+      const currentPages = [...(row.values[pageColIndex]?.matchAll(/\d+/g) ?? [])].map((m) => Number(m[0]));
+      const pagesOverlap = existingPages.some((p) => currentPages.includes(p));
+      const differentSections = Boolean(existingRow.mergeScope && row.mergeScope && existingRow.mergeScope !== row.mergeScope);
+
+      if (!pagesOverlap || differentSections) {
+        matches.push({
+          primaryRowId: existingRow.id,
+          duplicateRowId: row.id,
+          text,
+          primaryPage: existingRow.values[pageColIndex],
+          duplicatePage: row.values[pageColIndex],
+        });
+      }
+    } else {
+      seenIndexByKey.set(normText, i);
+    }
+  }
+
+  return matches;
 }
 
 export function updateResponseSheetCell(sheet: ResponseSheet, rowId: string, columnIndex: number, value: string): ResponseSheet {
