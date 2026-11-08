@@ -820,7 +820,22 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         return { ok: false as const, error: `The configured model returned no routing result for PDF page group ${batchIndex + 1}. No extraction was attempted.` };
       }
       const jsonParseStartedAt = performance.now();
-      const selected = parseJson(rawSelection) as { sections?: unknown[]; uncertain_pages?: unknown[]; page_dispositions?: unknown[]; routing_warnings?: unknown[]; possible_source_conflicts?: unknown[] };
+      let selected: { sections?: unknown[]; uncertain_pages?: unknown[]; page_dispositions?: unknown[]; routing_warnings?: unknown[]; possible_source_conflicts?: unknown[] };
+      try {
+        selected = parseJson(rawSelection) as typeof selected;
+      } catch {
+        // A completed billable envelope may contain malformed model JSON.
+        // Preserve provider-reported usage even when the content cannot be parsed.
+        emitModelTiming({
+          phase: "request_failed", requestKind: "page_routing", batchIndex: batchIndex + 1, totalBatches: routingBatches.length,
+          batchPageCount: batch.pages.length, inputCharacters, requestHeadersWaitMs, responseBodyAndEnvelopeMs,
+          responseStatus: pageSelection.status, failureKind: "other",
+          ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+          ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+          ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+        });
+        return { ok: false as const, error: `The configured model returned an invalid routing result for PDF page group ${batchIndex + 1}. No extraction was attempted.` };
+      }
       emitModelTiming({
         phase: "response_parsed", requestKind: "page_routing", batchIndex: batchIndex + 1, totalBatches: routingBatches.length,
         batchPageCount: batch.pages.length, inputCharacters, requestHeadersWaitMs, responseBodyAndEnvelopeMs,
@@ -1183,7 +1198,22 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           return { ok: false as const, error: "The model returned an empty result." };
         }
         const jsonParseStartedAt = performance.now();
-        const parsed = parseJson(content) as ParsedExtraction;
+        let parsed: ParsedExtraction;
+        try {
+          parsed = parseJson(content) as ParsedExtraction;
+        } catch {
+          emitModelTiming({
+            phase: "request_failed",
+            ...timingContext,
+            responseStatus: response.status,
+            responseBodyAndEnvelopeMs,
+            failureKind: "other",
+            ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+            ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+            ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+          });
+          return { ok: false as const, error: "The model returned invalid JSON for a technical extraction batch." };
+        }
         emitModelTiming({
           phase: "response_parsed",
           ...timingContext,
