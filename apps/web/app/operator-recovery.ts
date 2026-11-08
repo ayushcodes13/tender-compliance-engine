@@ -3,6 +3,18 @@ import type { RequirementSourceReference } from "./source-document";
 type DocumentIdentity = Pick<RequirementSourceReference,
   "documentId" | "documentVersionId" | "documentFingerprint">;
 
+/** Insert a recovered requirement beside its physical source page while
+ * preserving the existing extraction order for items on that same page. */
+export function insertRequirementByPhysicalPage<T extends { page: number }>(
+  requirements: readonly T[],
+  requirement: T,
+): T[] {
+  const insertIndex = requirements.findIndex((existing) => existing.page > requirement.page);
+  return insertIndex < 0
+    ? [...requirements, requirement]
+    : [...requirements.slice(0, insertIndex), requirement, ...requirements.slice(insertIndex)];
+}
+
 /**
  * A manual row's wording is supplied by the operator, NOT extracted from the
  * PDF. The page is a navigation pointer only; source text, offsets, geometry,

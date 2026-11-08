@@ -9,7 +9,7 @@ import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type ProcessingProgress } from "./processing-progress";
 import { consumeAnalysisStream } from "./analysis-events";
 import { visibleCitationEvidence } from "./poc90-client-citation";
-import { createOperatorPageReference, recoverDocumentIdentity } from "./operator-recovery";
+import { createOperatorPageReference, insertRequirementByPhysicalPage, recoverDocumentIdentity } from "./operator-recovery";
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
@@ -456,7 +456,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       sourceReference: createOperatorPageReference(analysis.document, pageNum),
     };
 
-    const updatedAnalysisRequirements = [...analysis.requirements, newReq];
+    const updatedAnalysisRequirements = insertRequirementByPhysicalPage(analysis.requirements, newReq);
     const updatedSheet = addManualRequirementToSheet(responseSheet, {
       id: reqId,
       page: pageNum,
@@ -501,7 +501,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       sourceReference: candidate.sourceReference,
     };
 
-    const updatedRequirements = [...analysis.requirements, promotedReq];
+    const updatedRequirements = insertRequirementByPhysicalPage(analysis.requirements, promotedReq);
     const remainingCandidates = (analysis.classificationReviewCandidates ?? []).filter((_, i) => i !== candidateIndex);
 
     setAnalysis({
@@ -940,7 +940,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <p>It processes text-based PDFs in this browser session. The local app can OCR scanned pages when Tesseract 5 and the selected language data are installed; the hosted preview does not include OCR tools. OCR-derived wording needs visual review. Extracted rows are a review starting point, not a guarantee that every tender requirement was found. Always check the tender source before relying on the response sheet.</p>
         </section>
         <section className="mvp-bottom-cta mvp-motion-section"><div><h2>Start with your tender PDF.</h2></div><a className="mvp-primary" href="/new">Start a review <ArrowRight size={17} /></a></section>
-        <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> Single-user pilot</span><span>Your document and review marks stay in this browser session and are not saved as project history.</span></footer>
+        <footer className="mvp-landing-footer"><span>Tender Review</span><span>Your document and review marks stay in this browser session and are not saved as project history.</span></footer>
       </main>
     );
   }
@@ -955,7 +955,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <section className="mvp-upload-page">
           <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum 32 MB locally (4 MB hosted)</li><li>Up to 120 pages</li><li>Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable</li></ul></div>
           <div className="mvp-upload-card">
-            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span><span className="mvp-upload-private"><span /> Single browser session</span></div>
+            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
                 <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} disabled={busy} />
@@ -1028,7 +1028,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <p className="mvp-review-note">No response-sheet row was created for the rejected suggestion. Review the page manually to decide whether it contains a requirement.</p>
           </section>
         </dialog>}
-        <footer className="mvp-landing-footer"><span>Tender Review <span>·</span> Single-user pilot</span><span>Review the cited source before relying on any extracted requirement.</span></footer>
+        <footer className="mvp-landing-footer"><span>Tender Review</span><span>Review the cited source before relying on any extracted requirement.</span></footer>
       </main>
     );
   }
@@ -1069,7 +1069,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     <main ref={motionRoot} className="tender-mvp-root mvp-review-screen">
       <header className="mvp-topbar mvp-review-topbar">
         <a className="mvp-brand" href="/" aria-label="Start a new tender"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Review workspace</small></span></a>
-        <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span><span className="mvp-private"><span /> Single-user demo</span></div>
+        <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span></div>
       </header>
       <section className="mvp-review-summarybar">
         <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}</div>
