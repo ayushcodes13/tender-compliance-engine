@@ -15,6 +15,58 @@ export function insertRequirementByPhysicalPage<T extends { page: number }>(
     : [...requirements.slice(0, insertIndex), requirement, ...requirements.slice(insertIndex)];
 }
 
+export type OperatorAddedRequirement = {
+  id: string;
+  text: string;
+  quote: string;
+  page: number;
+  category: string;
+  parameter?: string;
+  sourceSectionTitle?: string;
+  headingPrefix?: string;
+  rowType: "requirement";
+  precision: "page-only";
+  verdict: "needs_human_review";
+  needsHumanReview: true;
+  reviewed: false;
+  isOperatorAdded: true;
+  bbox: null;
+  sourceReference: RequirementSourceReference;
+};
+
+/** Keep an operator's source transcription separate from parser-owned evidence. */
+export function createOperatorAddedRequirement(input: {
+  id: string;
+  page: number;
+  text: string;
+  category: string;
+  heading?: string;
+  document: DocumentIdentity;
+}): OperatorAddedRequirement {
+  const text = input.text.trim();
+  const heading = input.heading?.trim() || undefined;
+  const sourceReference = createOperatorPageReference(input.document, input.page);
+
+  return {
+    id: input.id,
+    text,
+    quote: text,
+    page: input.page,
+    category: input.category.trim() || "Technical",
+    parameter: heading,
+    sourceSectionTitle: heading,
+    headingPrefix: heading,
+    rowType: "requirement",
+    precision: "page-only",
+    verdict: "needs_human_review",
+    needsHumanReview: true,
+    reviewed: false,
+    isOperatorAdded: true,
+    bbox: null,
+    sourceReference: { ...sourceReference, sourceText: text },
+  };
+}
+
 /**
  * A manual row's wording is supplied by the operator, NOT extracted from the
  * PDF. The page is a navigation pointer only; source text, offsets, geometry,

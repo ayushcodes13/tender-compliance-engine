@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createOperatorPageReference, insertRequirementByPhysicalPage, recoverDocumentIdentity } from "./operator-recovery.ts";
+import { createOperatorAddedRequirement, createOperatorPageReference, insertRequirementByPhysicalPage, recoverDocumentIdentity } from "./operator-recovery.ts";
 
 const fingerprint = "a".repeat(64);
 const document = {
@@ -48,6 +48,29 @@ test("diagnostic recovery uses the original PDF fingerprint and never fabricates
 test("manual page references require physical integer pages", () => {
   assert.throws(() => createOperatorPageReference(document, 1.5), RangeError);
   assert.throws(() => createOperatorPageReference(document, 0), RangeError);
+});
+
+test("operator additions preserve manually transcribed wording without claiming parser evidence", () => {
+  const requirement = createOperatorAddedRequirement({
+    id: "req-manual-display",
+    page: 18,
+    text: " Display: Digital readout ",
+    category: "Technical",
+    heading: "Display",
+    document,
+  });
+
+  assert.equal(requirement.quote, "Display: Digital readout");
+  assert.equal(requirement.sourceReference.sourceText, "Display: Digital readout");
+  assert.equal(requirement.sourceReference.extractionMethod, "operator-entered");
+  assert.equal(requirement.sourceReference.locationPrecision, "approximate");
+  assert.deepEqual(requirement.sourceReference.sourceElementIds, []);
+  assert.equal(requirement.sourceReference.bbox, null);
+  assert.equal("startOffset" in requirement.sourceReference, false);
+  assert.equal("endOffset" in requirement.sourceReference, false);
+  assert.equal(requirement.reviewed, false);
+  assert.equal(requirement.needsHumanReview, true);
+  assert.equal(requirement.isOperatorAdded, true);
 });
 
 test("recovered requirements keep physical page order and stable same-page ordering", () => {
