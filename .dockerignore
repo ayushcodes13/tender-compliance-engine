@@ -1,0 +1,10 @@
+.git
+.next
+**/.next
+**/node_modules
+**/.local
+**/.playwright-cli
+**/.env*
+**/*.log
+output
+dist
