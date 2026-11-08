@@ -61,7 +61,7 @@ test("operator additions preserve manually transcribed wording without claiming 
   });
 
   assert.equal(requirement.quote, "Display: Digital readout");
-  assert.equal(requirement.sourceReference.sourceText, "Display: Digital readout");
+  assert.equal(requirement.sourceReference.sourceText, "", "only actual PDF parser text may populate sourceReference.sourceText");
   assert.equal(requirement.sourceReference.extractionMethod, "operator-entered");
   assert.equal(requirement.sourceReference.locationPrecision, "approximate");
   assert.deepEqual(requirement.sourceReference.sourceElementIds, []);
