@@ -1022,7 +1022,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         </section>
         {failureDiagnostics && sourceOpen && file && <dialog ref={sourceDrawerRef} className="mvp-source-drawer" aria-label={`PDF page ${page} for rejected suggestion`} onClose={() => setSourceOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) sourceDrawerRef.current?.close(); }}>
           <section className="mvp-evidence-panel"><div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE REVIEW</span><h2>PDF page {page}</h2></div><button type="button" className="mvp-icon-button" aria-label="Close source page" onClick={() => sourceDrawerRef.current?.close()}><X size={18} /></button></div>
-            <PdfEvidenceViewer file={file} pageNumber={page} selectedBox={null} highlightLabel="Inspect this original page; no candidate highlight was verified" />
+            <PdfEvidenceViewer file={file} pageNumber={page} onPageChange={(newPage) => setPage(newPage)} selectedBox={null} highlightLabel="Inspect this original page; no candidate highlight was verified" />
             <p className="mvp-review-note">No response-sheet row was created for the rejected suggestion. Review the page manually to decide whether it contains a requirement.</p>
           </section>
         </dialog>}
@@ -1306,6 +1306,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <PdfEvidenceViewer
               file={file}
               pageNumber={page}
+              onPageChange={(newPage) => setPage(newPage)}
               selectedBox={coverageFocus?.page === page ? coverageFocus.row.bbox : sourcePageRequirement?.bbox ?? null}
               imageRegions={currentPageImageRegions}
               highlightLabel={
