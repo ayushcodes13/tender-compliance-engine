@@ -116,6 +116,25 @@ test("refuses to save analysis bound to a different tender identity", async () =
   assert.equal(storage.record, undefined);
 });
 
+test("refuses to save response rows linked to requirements outside the analyzed tender", async () => {
+  const storage = new MemoryDraftStorage();
+  const original = await fixture();
+  original.responseSheet.rows[0].sourceRequirementIds = ["req-from-another-analysis"];
+  await assert.rejects(
+    saveLocalReviewDraft({ ...original, sheetEdited: true }, storage),
+    /citation outside this analysis/i,
+  );
+  assert.equal(storage.record, undefined);
+});
+
+test("refuses to restore a saved response row whose source requirement was removed or changed", async () => {
+  const storage = new MemoryDraftStorage();
+  const original = await fixture();
+  await saveLocalReviewDraft({ ...original, sheetEdited: true }, storage);
+  storage.record.responseSheet.rows[0].sourceRequirementId = "req-from-another-analysis";
+  await assert.rejects(loadLocalReviewDraft(storage), /missing source requirement/i);
+});
+
 test("rejects local tender files above the 32 MiB storage bound", async () => {
   const storage = new MemoryDraftStorage();
   const file = new File([new Uint8Array(MAX_LOCAL_DRAFT_FILE_BYTES + 1)], "too-large.pdf", { type: "application/pdf" });

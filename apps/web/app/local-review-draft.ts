@@ -102,6 +102,20 @@ function assertSnapshotMatchesDocument(
   }
 
   const requirements = analysis.requirements;
+  const requirementIds = new Set(
+    requirements.flatMap((requirement) => isRecord(requirement) && typeof requirement.id === "string" ? [requirement.id] : []),
+  );
+  const responseRows = (record.responseSheet as Record<string, unknown>).rows as unknown[];
+  for (const row of responseRows) {
+    if (!isRecord(row) || typeof row.sourceRequirementId !== "string" || !requirementIds.has(row.sourceRequirementId)) {
+      throw new Error("A saved response row points to a missing source requirement. The review has not been restored.");
+    }
+    const linkedIds = row.sourceRequirementIds === undefined ? [row.sourceRequirementId] : row.sourceRequirementIds;
+    if (!Array.isArray(linkedIds) || linkedIds.some((id) => typeof id !== "string" || !requirementIds.has(id))) {
+      throw new Error("A saved response row contains a citation outside this analysis. The review has not been restored.");
+    }
+  }
+
   const classificationCandidates = Array.isArray(analysis.classificationReviewCandidates) ? analysis.classificationReviewCandidates : [];
   for (const requirement of [...requirements, ...classificationCandidates]) {
     if (!isRecord(requirement) || !Number.isInteger(requirement.page) || (requirement.page as number) < 1 || (requirement.page as number) > (pageCount as number)) {
