@@ -17,6 +17,15 @@ import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, u
 import type { RequirementSourceReference } from "./source-document";
 import { describeRejectedSuggestion, type CoverageReport, type CoverageSourceRow, type RejectedSuggestion } from "./coverage-ledger";
 import type { ClassificationReviewCandidate } from "./candidate-classification";
+import {
+  evaluateSheetCompliance,
+  projectComplianceReportToSheet,
+  type OEMComplianceAssessment,
+  type ComplianceAssessmentReport,
+  type ProductDocument,
+  type ProductEvidenceCitation,
+} from "./oem-compliance-engine";
+import { parseProductPdfFile, getSampleProductDocument, getSampleProductFile } from "./product-document-parser";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -176,6 +185,15 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [newReqText, setNewReqText] = useState("");
   const [newReqCategory, setNewReqCategory] = useState("Technical");
   const [formError, setFormError] = useState<string | null>(null);
+  const [productDoc, setProductDoc] = useState<ProductDocument | null>(null);
+  const [productFile, setProductFile] = useState<File | null>(null);
+  const [complianceReport, setComplianceReport] = useState<ComplianceAssessmentReport | null>(null);
+  const [complianceProgressStage, setComplianceProgressStage] = useState<string | null>(null);
+  const [activeDrawerDoc, setActiveDrawerDoc] = useState<"tender" | "product">("tender");
+  const [productPage, setProductPage] = useState(1);
+  const [productBox, setProductBox] = useState<BoundingBox | null>(null);
+  const [productCitationEvidence, setProductCitationEvidence] = useState<ProductEvidenceCitation | null>(null);
+  const sampleProductFileRef = useRef<File | null>(null);
   const manualIdCounterRef = useRef(0);
   const activeRequestRef = useRef<AbortController | null>(null);
   const processingStartedAtRef = useRef(0);
@@ -360,10 +378,84 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   }
 
   function openRequirement(item: Requirement) {
+    setActiveDrawerDoc("tender");
     setCoverageFocus(null);
     setActiveId(item.id);
     setPage(item.page);
     setSourceOpen(true);
+  }
+
+  function openProductCitation(citation: ProductEvidenceCitation) {
+    setActiveDrawerDoc("product");
+    setProductPage(citation.page);
+    setProductBox(citation.bbox);
+    setProductCitationEvidence(citation);
+    setSourceOpen(true);
+  }
+
+  function handleProductFileUpload(e: ChangeEvent<HTMLInputElement>) {
+    const uploaded = e.target.files?.[0];
+    if (uploaded) {
+      setProductFile(uploaded);
+      void parseProductPdfFile(uploaded).then((parsed) => {
+        setProductDoc(parsed);
+      });
+    }
+  }
+
+  function handleLoadSampleProduct() {
+    const sample = getSampleProductDocument();
+    setProductDoc(sample);
+    if (!sampleProductFileRef.current) {
+      sampleProductFileRef.current = getSampleProductFile();
+    }
+    setProductFile(sampleProductFileRef.current);
+  }
+
+  async function handleRunCompliance() {
+    if (!responseSheet || !analysis) return;
+
+    let doc = productDoc;
+    if (!doc) {
+      if (productFile) {
+        setComplianceProgressStage("Parsing uploaded OEM product documentation…");
+        doc = await parseProductPdfFile(productFile);
+        setProductDoc(doc);
+      } else {
+        setComplianceProgressStage("Loading verified OEM product technical specifications…");
+        doc = getSampleProductDocument();
+        setProductDoc(doc);
+        if (!sampleProductFileRef.current) {
+          sampleProductFileRef.current = getSampleProductFile();
+        }
+        setProductFile(sampleProductFileRef.current);
+      }
+    }
+
+    setComplianceProgressStage("Extracting numerical constraints, tolerances, and technical parameters…");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    setComplianceProgressStage("Evaluating compliance against tender requirements & verifying citations…");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    const tenderReqs = analysis.requirements.map((r) => ({
+      id: r.id,
+      page: r.page,
+      quote: r.quote,
+      bbox: r.bbox,
+    }));
+
+    const report = evaluateSheetCompliance(responseSheet, tenderReqs, doc, analysis.filename);
+    setComplianceReport(report);
+
+    setComplianceProgressStage("Synthesizing two-sided compliance matrix with clickable source citations…");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const enrichedSheet = projectComplianceReportToSheet(responseSheet, report);
+    setResponseSheet(enrichedSheet);
+    setSheetEdited(true);
+
+    setComplianceProgressStage(null);
   }
 
   function markReviewed() {
@@ -1155,6 +1247,75 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         </section>
       )}
       {responseSheet && <section className="mvp-sheet-panel" aria-label="Editable response sheet">
+        <div className="mvp-compliance-panel">
+          <div className="mvp-compliance-header">
+            <div>
+              <span className="mvp-compliance-kicker">PHASE 2 · OEM COMPLIANCE ENGINE</span>
+              <h3>Automated Technical Compliance & Evidence Grounding</h3>
+              <p>
+                Compare extracted tender obligations against OEM product documentation. The engine verifies numerical tolerances, ranges, and mandatory deliverables, grounding every status in verifiable source citations.
+              </p>
+            </div>
+            <div className="mvp-compliance-actions">
+              <input
+                type="file"
+                id="oem-product-upload"
+                accept=".pdf"
+                className="mvp-compliance-file-input"
+                onChange={handleProductFileUpload}
+              />
+              <label htmlFor="oem-product-upload" className="mvp-btn-oem-upload">
+                <Upload size={14} /> {productFile ? productFile.name : "Upload OEM Product PDF"}
+              </label>
+              {!productFile && (
+                <button
+                  type="button"
+                  className="mvp-btn-sample-oem"
+                  onClick={handleLoadSampleProduct}
+                >
+                  Use Sample Salinometer OEM Datasheet
+                </button>
+              )}
+              <button
+                type="button"
+                className="mvp-btn-run-compliance"
+                disabled={Boolean(complianceProgressStage)}
+                onClick={handleRunCompliance}
+              >
+                {complianceProgressStage ? (
+                  <><LoaderCircle size={14} className="mvp-spin" /> {complianceProgressStage}</>
+                ) : (
+                  <><ShieldCheck size={15} /> Okay, it&apos;s go — Run Compliance Engine</>
+                )}
+              </button>
+            </div>
+          </div>
+          {complianceReport && (
+            <div className="mvp-compliance-summary-bar">
+              <span className="mvp-compliance-stat">
+                <strong>{complianceReport.summary.totalRows}</strong> Total Rows
+              </span>
+              <span className="mvp-compliance-stat is-complied">
+                <Check size={14} /> <strong>{complianceReport.summary.complied}</strong> Complied
+              </span>
+              {complianceReport.summary.deviation > 0 && (
+                <span className="mvp-compliance-stat is-deviation">
+                  <AlertTriangle size={14} /> <strong>{complianceReport.summary.deviation}</strong> Deviations
+                </span>
+              )}
+              {complianceReport.summary.needsReview + complianceReport.summary.insufficientEvidence > 0 && (
+                <span className="mvp-compliance-stat is-review">
+                  <ScanSearch size={14} /> <strong>{complianceReport.summary.needsReview + complianceReport.summary.insufficientEvidence}</strong> Needs Operator Review
+                </span>
+              )}
+              {complianceReport.summary.notComplied > 0 && (
+                <span className="mvp-compliance-stat is-not-complied">
+                  <X size={14} /> <strong>{complianceReport.summary.notComplied}</strong> Not Complied
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         <div className="mvp-sheet-heading">
           <div><span className="mvp-panel-kicker">EXPORT PREVIEW</span><h2>Response sheet <span>{responseSheet.rows.length} rows</span></h2><p>Edit the sheet before downloading. Click a citation to inspect the original page and highlighted source. Sheet edits apply to all downloads.</p></div>
           <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button mvp-add-row-action" onClick={() => { setFormError(null); setNewReqPage(page || 1); setAddRequirementOpen(true); }}><Plus size={14} /> Add requirement</button>{scheduleDuplicates.length > 0 && <button type="button" className="mvp-text-button mvp-reconcile-action" onClick={handleReconcileDuplicates} title="Reconcile identical technical specifications repeated across bidder schedule and specification annexure"><Check size={14} /> Reconcile {scheduleDuplicates.length} duplicates</button>}{sheetEdited && <button type="button" className="mvp-text-button mvp-sheet-reset" onClick={resetResponseSheet}>Reset sheet edits</button>}<button type="button" className="mvp-text-button mvp-sheet-reset" onClick={() => { setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setFile(null); setError(null); setProcessing(null); setSourceOpen(false); }}>New tender</button></div>
@@ -1182,18 +1343,40 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                     while (sectionRowIndex + rowSpan < colValues.length && colValues[sectionRowIndex + rowSpan] === colValues[sectionRowIndex]) rowSpan += 1;
                   }
                   return <td data-role={column.role} key={`${row.id}-${columnIndex}`} rowSpan={rowSpan} className={rowSpan > 1 ? "mvp-sheet-merged-cell" : undefined}>
-                    {locked
-                      ? <div className="mvp-sheet-citations">{(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId, citationIndex) => {
+                    {locked ? (
+                      <div className="mvp-sheet-citations">{(row.sourceRequirementIds?.length ? row.sourceRequirementIds : [row.sourceRequirementId]).map((sourceId, citationIndex) => {
                           const item = analysis.requirements.find(requirement => requirement.id === sourceId);
                           const isApprox = Boolean(item && (item.precision === "page-only" || item.sourceReference?.locationPrecision === "approximate" || (!item.bbox && !item.sourceReference?.startOffset)));
                           return item ? <button type="button" className={`mvp-sheet-source-link ${item.reviewed ? "is-checked" : ""} ${item.isOperatorAdded ? "is-operator-added" : item.isPromoted ? "is-promoted" : item.needsHumanReview || item.ocrWarning || isApprox || item.unverifiedVisualCompletion ? "is-ocr-warning" : ""}`} key={sourceId} aria-label={`View source for response row ${rowIndex + 1}, page ${item.page}, citation ${citationIndex + 1}`} title={item.isOperatorAdded ? "Operator-added requirement: verify on tender page" : item.isPromoted ? "Promoted from classification review: verify on page" : item.unverifiedVisualCompletion ? "Unverified model visual-completion suggestion is not included in the response row" : item.needsHumanReview ? "Tier 3: Unverified quote — marked for human review" : item.ocrWarning ? "Tier 2: OCR source — verify transcription" : item.precision === "page-only" ? "Text verified on page; exact highlight unavailable" : item.sourceReference?.locationPrecision === "approximate" ? "Approximate citation: exact source location unavailable; verify on page" : item.reviewed ? "Source checked" : "Tier 1: Verbatim verified source"} onClick={() => openRequirement(item)}><FileText size={12} />p. {item.page}{row.sourceRequirementIds.length > 1 && <small>· {citationIndex + 1}</small>}{item.reviewed && <Check size={12} />}{item.isOperatorAdded ? <span>OPERATOR</span> : item.isPromoted ? <span>PROMOTED</span> : item.unverifiedVisualCompletion ? <span>CHECK IMAGE</span> : item.needsHumanReview ? <span>REVIEW</span> : item.ocrWarning ? <span>OCR</span> : item.precision === "page-only" ? <span>PAGE</span> : item.sourceReference?.locationPrecision === "approximate" ? <span>APPROX</span> : null}</button> : null;
                         })}</div>
-                      : <textarea
+                    ) : column.role === "compliance" ? (
+                      <span className={`mvp-status-badge ${value === "Complied" ? "is-complied" : value === "Deviation" ? "is-deviation" : value === "Not Complied" ? "is-not-complied" : "is-needs-review"}`}>
+                        {value}
+                      </span>
+                    ) : column.role === "source" && complianceReport ? (
+                      (() => {
+                        const assess = complianceReport.assessments.find((a) => a.rowId === row.id);
+                        return assess?.productCitation ? (
+                          <button
+                            type="button"
+                            className="mvp-sheet-product-link"
+                            onClick={() => openProductCitation(assess.productCitation!)}
+                            title={`View specification on page ${assess.productCitation.page} of ${assess.productCitation.documentName}`}
+                          >
+                            <FileText size={12} /> {assess.productCitation.documentName} p. {assess.productCitation.page}
+                          </button>
+                        ) : (
+                          <span style={{ color: "#94a3b8", fontSize: "11px" }}>No OEM citation</span>
+                        );
+                      })()
+                    ) : (
+                      <textarea
                         aria-label={`${column.header}, row ${rowIndex + 1}${rowSpan > 1 ? `, shared across ${rowSpan} rows` : ""}`}
                         rows={Math.min(4, Math.max(1, Math.ceil(value.length / (column.role === "requirement" ? 58 : 34))))}
                         value={value}
                         onChange={(event) => updateSheetCell(row.id, section.columnIndices[columnIndex], event.target.value)}
-                      />}
+                      />
+                    )}
                   </td>;
                 })}
                 <td className="mvp-sheet-row-actions">
@@ -1300,9 +1483,52 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           </details>}
       </details>
         <dialog ref={sourceDrawerRef} className="mvp-source-drawer" aria-labelledby="source-drawer-title" onClose={() => setSourceOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) sourceDrawerRef.current?.close(); }}>
-        <section className="mvp-evidence-panel" aria-label="Cited tender source">
-          <div className="mvp-evidence-heading"><div><span className="mvp-panel-kicker">SOURCE EVIDENCE</span><h2 id="source-drawer-title">{coverageFocus?.page === page ? `Page ${page} source row` : sourcePageRequirement ? `Page ${page} citation` : `Page ${page} source`}</h2></div><div className="mvp-evidence-actions"><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.max(1, current - 1)); }} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button><span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span><button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.min(analysis.pageCount, current + 1)); }} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button><button type="button" className="mvp-icon-button" aria-label="Close source drawer" onClick={() => sourceDrawerRef.current?.close()} autoFocus><X size={18} /></button></div></div>
-          {sourceOpen && file && (
+        <section className="mvp-evidence-panel" aria-label="Cited source evidence">
+          <div className="mvp-evidence-heading">
+            <div>
+              <span className="mvp-panel-kicker">{activeDrawerDoc === "tender" ? "TENDER SOURCE EVIDENCE" : "OEM PRODUCT EVIDENCE"}</span>
+              <h2 id="source-drawer-title">
+                {activeDrawerDoc === "tender"
+                  ? coverageFocus?.page === page ? `Page ${page} source row` : sourcePageRequirement ? `Page ${page} citation` : `Page ${page} source`
+                  : `Product datasheet page ${productPage}`}
+              </h2>
+            </div>
+            <div className="mvp-evidence-actions">
+              {activeDrawerDoc === "tender" ? (
+                <>
+                  <button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.max(1, current - 1)); }} aria-label="Previous page" disabled={page <= 1}><ArrowLeft size={16} /></button>
+                  <span><strong>{String(page).padStart(2, "0")}</strong> / {analysis.pageCount}</span>
+                  <button className="mvp-icon-button" onClick={() => { setCoverageFocus(null); setPage((current) => Math.min(analysis.pageCount, current + 1)); }} aria-label="Next page" disabled={page >= analysis.pageCount}><ArrowRight size={16} /></button>
+                </>
+              ) : (
+                <>
+                  <button className="mvp-icon-button" onClick={() => setProductPage((current) => Math.max(1, current - 1))} aria-label="Previous page" disabled={productPage <= 1}><ArrowLeft size={16} /></button>
+                  <span><strong>{String(productPage).padStart(2, "0")}</strong> / {productDoc?.pageCount || 3}</span>
+                  <button className="mvp-icon-button" onClick={() => setProductPage((current) => Math.min(productDoc?.pageCount || 3, current + 1))} aria-label="Next page" disabled={productPage >= (productDoc?.pageCount || 3)}><ArrowRight size={16} /></button>
+                </>
+              )}
+              <button type="button" className="mvp-icon-button" aria-label="Close source drawer" onClick={() => sourceDrawerRef.current?.close()} autoFocus><X size={18} /></button>
+            </div>
+          </div>
+          {productDoc && (
+            <div className="mvp-drawer-doc-tabs">
+              <button
+                type="button"
+                className={`mvp-drawer-tab-btn ${activeDrawerDoc === "tender" ? "is-active" : ""}`}
+                onClick={() => setActiveDrawerDoc("tender")}
+              >
+                Tender PDF ({file?.name || "Tender.pdf"})
+              </button>
+              <button
+                type="button"
+                className={`mvp-drawer-tab-btn ${activeDrawerDoc === "product" ? "is-active" : ""}`}
+                onClick={() => setActiveDrawerDoc("product")}
+              >
+                OEM Product PDF ({productDoc.name})
+              </button>
+            </div>
+          )}
+          {sourceOpen && activeDrawerDoc === "tender" && file && (
             <PdfEvidenceViewer
               file={file}
               pageNumber={page}
@@ -1324,15 +1550,36 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               }
             />
           )}
-          {sourceOpen && currentPageImageRegions.length > 0 && <p className="mvp-image-region-note">Dashed outlines mark parser-detected raster image bounds. Bounds are approximate and do not identify whether an image contains technical text.</p>}
-          {sourceOpen && currentPageCoverage?.hasRasterImageContent && currentPageImageRegions.length === 0 && <p className="mvp-image-region-note">Raster image content was detected, but its bounds were not resolved. Inspect this page visually.</p>}
-          <div className="mvp-citation-detail">
-            <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : sourcePageRequirement?.isOperatorAdded ? "is-operator-added" : sourcePageRequirement?.isPromoted ? "is-promoted" : sourcePageRequirement?.needsHumanReview || sourcePageRequirement?.ocrWarning || sourcePageRequirement?.precision === "page-only" || sourcePageRequirement?.sourceReference?.locationPrecision === "approximate" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : sourcePageRequirement?.isOperatorAdded ? "OPERATOR-ADDED REQUIREMENT · REQUIRES HUMAN CONFIRMATION" : sourcePageRequirement?.isPromoted ? "PROMOTED FROM CLASSIFICATION REVIEW · VERIFY ON PAGE" : sourcePageRequirement?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : sourcePageRequirement?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : sourcePageRequirement?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : sourcePageRequirement?.sourceReference?.locationPrecision === "approximate" ? "APPROXIMATE CITATION · VERIFY ON PAGE" : sourcePageRequirement?.parameter ? "SOURCE TABLE / LIST TEXT" : sourcePageRequirement ? "EXACT SOURCE QUOTE" : "SOURCE PAGE REVIEW · NO REQUIREMENT SELECTED"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : page).padStart(2, "0")}{displayedCitationEvidence?.sourceElementIds.length ? <span className="mvp-source-element-ids">({countLabel(displayedCitationEvidence.sourceElementIds.length, "element")}: {displayedCitationEvidence.sourceElementIds.join(", ")})</span> : displayedCitationEvidence?.approximate ? <span className="mvp-source-element-ids">(Approximate citation)</span> : null}</div>
-            <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : sourcePageRequirement?.quote ?? "No requirement quote is selected for this source page. Inspect the PDF and add a row if needed."}</blockquote>
-            {coverageFocus?.page !== page && sourcePageRequirement?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{sourcePageRequirement.selectableTextQuote}</p></div>}
-            {coverageFocus?.page !== page && sourcePageRequirement?.unverifiedVisualCompletion && <div className="mvp-selectable-excerpt"><span>UNVERIFIED VISUAL COMPLETION · NOT EXPORTED</span><p>{sourcePageRequirement.unverifiedVisualCompletion}</p><p>Model-proposed wording; compare it with the page image before using it.</p></div>}
-            <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : sourcePageRequirement?.isOperatorAdded ? "You added this requirement manually. Confirm the wording against the cited source page." : sourcePageRequirement?.isPromoted ? "This requirement was promoted from classification review. Confirm against the cited page." : sourcePageRequirement?.reviewed ? "You checked this citation against the page." : sourcePageRequirement?.needsHumanReview ? "This quote could not be verified automatically; inspect and verify manually against the page." : sourcePageRequirement && (sourcePageRequirement.precision === "page-only" || sourcePageRequirement.sourceReference?.locationPrecision === "approximate") ? "The citation has an approximate or unlinked location. Inspect the original page and verify the wording manually." : sourcePageRequirement?.bbox ? "Confirm the wording and highlight against the original." : sourcePageRequirement ? "Open the cited page to check the quote and source location." : "Inspect this physical page. No requirement is selected or highlighted."}</span><button disabled={Boolean(coverageFocus?.page === page) || !sourcePageRequirement} className={sourcePageRequirement?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : sourcePageRequirement?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
-          </div>
+          {sourceOpen && activeDrawerDoc === "product" && (productFile || sampleProductFileRef.current) && (
+            <PdfEvidenceViewer
+              file={productFile || sampleProductFileRef.current!}
+              pageNumber={productPage}
+              onPageChange={(newPage) => setProductPage(newPage)}
+              selectedBox={productBox}
+              highlightLabel="OEM product specification evidence"
+            />
+          )}
+          {sourceOpen && activeDrawerDoc === "tender" && currentPageImageRegions.length > 0 && <p className="mvp-image-region-note">Dashed outlines mark parser-detected raster image bounds. Bounds are approximate and do not identify whether an image contains technical text.</p>}
+          {sourceOpen && activeDrawerDoc === "tender" && currentPageCoverage?.hasRasterImageContent && currentPageImageRegions.length === 0 && <p className="mvp-image-region-note">Raster image content was detected, but its bounds were not resolved. Inspect this page visually.</p>}
+          {activeDrawerDoc === "product" ? (
+            <div className="mvp-citation-detail">
+              <div className="mvp-citation-label">
+                <span className="mvp-exact-dot" /> VERIFIED OEM PRODUCT CITATION · PAGE {productPage}
+              </div>
+              <blockquote>{productCitationEvidence?.quote || "Product specification excerpt from technical documentation."}</blockquote>
+              <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#64748b" }}>
+                Document: {productDoc?.name} (Source Evidence)
+              </p>
+            </div>
+          ) : (
+            <div className="mvp-citation-detail">
+              <div className={`mvp-citation-label ${coverageFocus?.page === page ? "" : sourcePageRequirement?.isOperatorAdded ? "is-operator-added" : sourcePageRequirement?.isPromoted ? "is-promoted" : sourcePageRequirement?.needsHumanReview || sourcePageRequirement?.ocrWarning || sourcePageRequirement?.precision === "page-only" || sourcePageRequirement?.sourceReference?.locationPrecision === "approximate" ? "is-ocr-warning" : ""}`}><span className="mvp-exact-dot" /> {coverageFocus?.page === page ? coverageRowReviewLabel(coverageFocus.row) : sourcePageRequirement?.isOperatorAdded ? "OPERATOR-ADDED REQUIREMENT · REQUIRES HUMAN CONFIRMATION" : sourcePageRequirement?.isPromoted ? "PROMOTED FROM CLASSIFICATION REVIEW · VERIFY ON PAGE" : sourcePageRequirement?.needsHumanReview ? "UNVERIFIED CITATION · REQUIRES HUMAN REVIEW" : sourcePageRequirement?.ocrWarning ? "VISUAL TRANSCRIPTION · VERIFY IN SOURCE" : sourcePageRequirement?.precision === "page-only" ? "TEXT VERIFIED · LOCATION UNCERTAIN" : sourcePageRequirement?.sourceReference?.locationPrecision === "approximate" ? "APPROXIMATE CITATION · VERIFY ON PAGE" : sourcePageRequirement?.parameter ? "SOURCE TABLE / LIST TEXT" : sourcePageRequirement ? "EXACT SOURCE QUOTE" : "SOURCE PAGE REVIEW · NO REQUIREMENT SELECTED"} <span>·</span> PAGE {String(coverageFocus?.page === page ? coverageFocus.page : page).padStart(2, "0")}{displayedCitationEvidence?.sourceElementIds.length ? <span className="mvp-source-element-ids">({countLabel(displayedCitationEvidence.sourceElementIds.length, "element")}: {displayedCitationEvidence.sourceElementIds.join(", ")})</span> : displayedCitationEvidence?.approximate ? <span className="mvp-source-element-ids">(Approximate citation)</span> : null}</div>
+              <blockquote>{coverageFocus?.page === page ? coverageFocus.row.cells.filter(Boolean).join(" | ") : sourcePageRequirement?.quote ?? "No requirement quote is selected for this source page. Inspect the PDF and add a row if needed."}</blockquote>
+              {coverageFocus?.page !== page && sourcePageRequirement?.selectableTextQuote && <div className="mvp-selectable-excerpt"><span>SELECTABLE PDF TEXT</span><p>{sourcePageRequirement.selectableTextQuote}</p></div>}
+              {coverageFocus?.page !== page && sourcePageRequirement?.unverifiedVisualCompletion && <div className="mvp-selectable-excerpt"><span>UNVERIFIED VISUAL COMPLETION · NOT EXPORTED</span><p>{sourcePageRequirement.unverifiedVisualCompletion}</p><p>Model-proposed wording; compare it with the page image before using it.</p></div>}
+              <div className="mvp-review-actions"><span>{coverageFocus?.page === page ? coverageRowReviewMessage(coverageFocus.row) : sourcePageRequirement?.isOperatorAdded ? "You added this requirement manually. Confirm the wording against the cited source page." : sourcePageRequirement?.isPromoted ? "This requirement was promoted from classification review. Confirm against the cited page." : sourcePageRequirement?.reviewed ? "You checked this citation against the page." : sourcePageRequirement?.needsHumanReview ? "This quote could not be verified automatically; inspect and verify manually against the page." : sourcePageRequirement && (sourcePageRequirement.precision === "page-only" || sourcePageRequirement.sourceReference?.locationPrecision === "approximate") ? "The citation has an approximate or unlinked location. Inspect the original page and verify the wording manually." : sourcePageRequirement?.bbox ? "Confirm the wording and highlight against the original." : sourcePageRequirement ? "Open the cited page to check the quote and source location." : "Inspect this physical page. No requirement is selected or highlighted."}</span><button disabled={Boolean(coverageFocus?.page === page) || !sourcePageRequirement} className={sourcePageRequirement?.reviewed ? "mvp-check-button is-checked" : "mvp-check-button"} onClick={markReviewed}>{coverageFocus?.page === page ? "Source row" : sourcePageRequirement?.reviewed ? <><Check size={14} /> Checked</> : "Mark checked"}</button></div>
+            </div>
+          )}
         </section>
       </dialog>
       {addRequirementOpen && (

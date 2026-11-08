@@ -6,6 +6,7 @@ import {
   findProductEvidence,
   evaluateRowCompliance,
   evaluateSheetCompliance,
+  projectComplianceReportToSheet,
 } from "./oem-compliance-engine.ts";
 
 test("extracts numerical constraints from text correctly", () => {
@@ -139,4 +140,11 @@ test("evaluates full compliance sheet and computes accurate summary", () => {
   assert.equal(report.summary.deviation, 1); // Weight 18kg > 15kg
   assert.equal(report.summary.insufficientEvidence, 1); // Underwater housing not found
   assert.equal(report.assessments.length, 4);
+
+  const projected = projectComplianceReportToSheet(sheet, report);
+  assert.equal(projected.columns.length, 6);
+  assert.equal(projected.rows.length, 4);
+  assert.equal(projected.rows[0].values[2], "Complied");
+  assert.match(projected.rows[0].values[3], /Digital readout unit/);
+  assert.match(projected.rows[0].values[4], /Product-Spec.pdf \(p. 1\)/);
 });
