@@ -682,9 +682,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     }
     const taskPlan = planned.plan.proposal;
     const boundTaskPlan = bindTaskPlanToInventory(sourceDocument, taskPlan);
-    const { pageIdToNumber } = boundTaskPlan;
+    const { sourceIdToNumber } = boundTaskPlan;
     const plannerPageDispositions = boundTaskPlan.pageDispositions;
     const plannerActionPages = new Set(boundTaskPlan.actionPageNumbers);
+    const plannerContextIncompletePages = new Map(taskPlanRequest.pages
+      .filter((page) => page.unrepresentedRegionCount > 0 || page.clippedRegionCount > 0 || page.excerptClipped
+        || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))
+          || page.regions.some((region) => region.kind.startsWith("image_") && region.kind !== "image_text-found"))))
+      .map((page) => [page.physicalPage, { unrepresentedRegionCount: page.unrepresentedRegionCount, clippedRegionCount: page.clippedRegionCount, excerptClipped: page.excerptClipped }]));
     emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
 
     const structuredPages = pages.filter((page) => page.structuredSection);
@@ -740,7 +745,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         requirements,
         rejectedCandidates: 0,
         extractionMode: "structured-table" as const,
-        reviewNote: "Technical table rows and the separate requirements list were grouped from their source layout. Check each source row; this extraction is not a completeness guarantee.",
+        reviewNote: `Technical table rows and the separate requirements list were grouped from their source layout. Check each source row; this extraction is not a completeness guarantee.${plannerContextIncompletePages.size ? ` Planner context was incomplete on PDF page(s) ${formatPageNumbers([...plannerContextIncompletePages.keys()])}; inspect those pages and regions for omissions.` : ""}`,
       } };
     }
 
@@ -771,6 +776,17 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         explicitExclusionReasons.set(pageNumber, disposition.rationale);
       }
     }
+    for (const [pageNumber, incomplete] of plannerContextIncompletePages) {
+      uncertainPages.add(pageNumber);
+      const reasons = [
+        incomplete.unrepresentedRegionCount ? `${incomplete.unrepresentedRegionCount} parser region(s) were outside the bounded region summary` : "",
+        incomplete.clippedRegionCount ? `${incomplete.clippedRegionCount} region excerpt(s) were clipped` : "",
+        incomplete.excerptClipped ? "the page text excerpt was clipped" : "",
+      ].filter(Boolean).join(" and ");
+      const detail = `Planner context is incomplete because ${reasons}; this page remains unresolved.`;
+      pageDispositionReasons.set(pageNumber, `${pageDispositionReasons.get(pageNumber) ?? "Tender plan requires review."} ${detail}`);
+      routingWarnings.push(`PDF page ${pageNumber} has incomplete planner context (${reasons}); inspect it for omissions.`);
+    }
     if (taskPlan.openQuestions.length) routingWarnings.push(`Tender plan open questions: ${taskPlan.openQuestions.map((question) => question.slice(0, 220)).join("; ").slice(0, 1000)}`);
     const unresolvedRasterPages = pages.filter((page) => page.hasRasterImageContent && page.ocrNeeded).map((page) => page.page);
     if (unresolvedRasterPages.length) {
@@ -790,7 +806,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
 
     const routingOutcomes = await mapInConcurrentWaves(routingBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
       const batchPageNumbers = batch.pages.map((page) => page.page);
-      const batchSourceIds = new Set(batchPageNumbers.map((pageNumber) => sourceDocument.pages[pageNumber - 1]?.id).filter((id): id is string => Boolean(id)));
+      const batchPageSet = new Set(batchPageNumbers);
+      const batchSourceIds = new Set([...sourceIdToNumber].filter(([, pageNumber]) => batchPageSet.has(pageNumber)).map(([id]) => id));
       const planHints = {
         task: taskPlan.task,
         sections: taskPlan.sections.filter((section) => section.sourceIds.some((id) => batchSourceIds.has(id))),
@@ -1090,10 +1107,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       .map((section) => `${section.title} (pages ${section.start_page}-${section.end_page}): ${section.reason}`)
       .join("; ");
     const taskPlanDescription = taskPlan.sections.slice(0, 8)
-      .map((section) => `${section.label} (${section.sourceIds.map((id) => pageIdToNumber.get(id)).filter((page): page is number => page !== undefined).map((page) => `p.${page}`).join(", ")})`)
+      .map((section) => `${section.label} (${section.sourceIds.map((id) => sourceIdToNumber.get(id)).filter((page): page is number => page !== undefined).map((page) => `p.${page}`).join(", ")})`)
       .join("; ");
     const plannedActionDescription = taskPlan.actions.slice(0, 12)
-      .map((action) => `${action.mode} on ${action.sourceIds.map((id) => pageIdToNumber.get(id)).filter((page): page is number => page !== undefined).map((page) => `p.${page}`).join(", ")}`)
+      .map((action) => `${action.mode} on ${action.sourceIds.map((id) => sourceIdToNumber.get(id)).filter((page): page is number => page !== undefined).map((page) => `p.${page}`).join(", ")}`)
       .join("; ");
     const routingSummary = `Tender plan: ${taskPlan.task}${taskPlanDescription ? `. Proposed structure: ${taskPlanDescription}` : ""}${plannedActionDescription ? `. Proposed inspections: ${plannedActionDescription}` : ""}. Model routing selected pages ${formatPageNumbers(visualPageNumbers)}${routeDescription ? `. Proposed sections: ${routeDescription}` : ""}. These are proposals, not completeness guarantees.`;
     const schema = {

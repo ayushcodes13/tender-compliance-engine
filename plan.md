@@ -1,156 +1,104 @@
-# Phase 1 v2 — LLM-led, resumable tender analysis
+# Phase 1 v2 — Build the LLM-led processing pipeline
 
-**Status:** Active plan, approved by the user on 2026-11-10. This replaces the previous annotation-first implementation sequence. Runtime architecture work starts now; independent annotation and evaluation proceed alongside it and remain gates for quality claims and model tuning.
+## Compact scenario
 
-## 1. Compact scenario
+The current product already parses tender PDFs, calls an LLM to extract requirements, preserves source references, supports human review, and exports a response matrix. It has also gained run/work-unit contracts and a page-level LLM planner. The planner still feeds the existing page router; execution is synchronous and in memory, so work is not independently checkpointed or resumed after a process restart.
 
-Tender Compliance Engine (TCE) already has a working single-user Phase 1 flow: upload a technical tender PDF, parse pages with PDF.js, use local OCR/visual paths where available, ask a model to route/extract, verify source references, let a person review the result, and export response sheets.
+The goal of Phase 1 v2 is to connect the LLM's document-specific interpretation to a bounded execution controller, then make that work durable and reviewable. A tender should not need a preinstalled format or publisher-specific template. The model proposes what the document means and what should be inspected; application code validates source references, enforces limits, records what happened, and exposes uncertainty. This is an incremental rebuild around one end-to-end path, not a multi-week design exercise or a blank-slate rewrite.
 
-The main gap is that analysis still runs as one synchronous request. Progress, page inventories, and intermediate outputs live in request memory. A timeout or provider failure can discard completed work. The model makes several semantic choices, but TCE does not yet expose a single tender-wide plan that says what should be examined, how, and in what order.
+## Product outcome
 
-Phase 1 v2 makes interpretation open-world and execution durable. For each tender and requested task, the LLM proposes how to understand and inspect that document. TCE validates the proposal, executes bounded work, checkpoints source-linked outputs, resumes incomplete work, and keeps uncertainty visible. There is no list of tender formats to install or maintain.
-
-The promise is reliable processing of unfamiliar **technical tender PDFs within measured limits**, with source-grounded human review. It is not a promise to understand every document or to remove human review.
-
-## 2. Product scope
-
-Keep the product within Phase 1:
+For an unfamiliar technical tender PDF, the system should:
 
 ```text
-Tender upload and version identity
-→ PDF parsing, OCR and visual/layout inventory
-→ LLM-led tender/task plan
-→ bounded, resumable page/region work
-→ source-grounded requirement proposals and normalization
-→ deterministic validation and explicit coverage
-→ human review and correction
-→ response matrix and Excel export
+Upload/version the source
+→ build a source-preserving page and region inventory
+→ ask the LLM to plan scope, structure, and bounded inspection work
+→ validate the plan against parser-owned source IDs
+→ execute planned work and checkpoint source-linked results
+→ resume unfinished work without duplicating completed work
+→ show coverage, uncertainty, and source evidence for human review
+→ export the reviewed response matrix
 ```
 
-In scope:
+The model owns semantic interpretation: relevance, document structure, requirement boundaries, continuation/grouping, and which supported inspection operation is useful. Deterministic code owns safety boundaries and invariants: source identity, schema checks, exact quote/value verification, size/time/cost limits, stable work IDs, ordering, state transitions, persistence, retries, review actions, and export. The model cannot claim an unvisited region is complete or override application instructions.
 
-- Native-text, scanned, hybrid, table, list, annexure, repeated-schedule, and cross-page tender layouts.
-- A stable source/evidence envelope with task-specific semantic structure proposed by the model.
-- Run progress, retries, cancellation, resumption, partial/incomplete states, and auditable review actions.
-- Provider/parser/storage interfaces so components can be compared or replaced without changing domain behavior.
+## Current implementation state
 
-Out of scope:
+- **Done:** provider-independent `AnalysisRun`, `TaskPlan`, and `WorkUnit` contracts with state/idempotency/order tests (PR #433). These contracts alone do not persist or resume work.
+- **Partly done:** page-level LLM planning is integrated into `analyzeTender` and influences routing/review context (PR #434). It is not yet the execution scheduler.
+- **In progress:** bounded page/region summaries, parser-owned region ID validation, parent-page binding, and conservative handling of clipped or omitted context.
+- **Not done:** planner-driven region work execution, durable per-unit checkpoints, restart/resume, per-region terminal coverage, and review UI for run progress/incomplete work.
+- **Quality evidence remains separate:** existing tender examples are development material. Contract fixtures do not prove extraction quality on unfamiliar tenders.
 
-- A hand-authored tender-template catalog or tender-publisher-specific routing rules.
-- OEM ingestion, product evidence retrieval, compliance decisions, contradiction resolution between tender and OEM evidence, clarification generation, and final submission generation (Phase 2).
-- Unattended approval, universal-completeness claims, or silently repairing unreadable/ambiguous source content.
-- Multiple agents, vector databases, or multi-model orchestration without measured need and an explicit decision.
+## Execution plan — build the vertical slice first
 
-## 3. What the LLM decides and what the application enforces
+Each milestone should produce a runnable, reviewable increment. Do not wait for the entire evaluation track before building provider-independent runtime behavior. Do not claim the architecture is complete until the restart/resume slice works end to end.
 
-The LLM is the semantic planner. Given the user task and the parser-owned inventory, it proposes:
+### 1. Finish source-bounded region planning — active
 
-- Which pages and regions are relevant, possibly relevant, unresolved, or explicitly outside the task, with source-backed reasons.
-- How the tender is organized for this task: sections, obligation families, optional items, conditions, and useful response fields.
-- Which bounded inspection action to request next (for example native text interpretation, table interpretation, OCR/visual inspection, continuation review, or coverage audit).
-- Requirement boundaries, grouping/continuation, modality, actors, conditions, raw-value roles, and unresolved ambiguity after inspecting the selected source.
+- Give the planner bounded summaries of parser-owned pages, OCR/image regions, and table/row/cell regions. Keep page-level context and clipping/omission signals explicit.
+- Require a disposition for every physical page. Allow sections and actions to point to supplied page or region IDs only.
+- Validate source IDs, parent-page scope, supported operations, and resource bounds before execution. Clipped or omitted context must remain unresolved, never silently excluded.
+- Keep the existing page router as a temporary compatibility executor; preserve disagreement as selected/uncertain work.
+- Acceptance: adversarial contract tests for unknown IDs, duplicate/missing scope, invalid operations, outside-scope actions, omitted regions, clipping, and parent-page binding; full local checks and scripted pipeline pass.
 
-The model may choose among supported operations, but it does not execute arbitrary tools or set trusted application state. Deterministic application code:
+### 2. Make planned actions drive a shared work-unit executor
 
-- Validates every proposed page, region, table, row, cell, and document-version ID against the source inventory.
-- Enforces batch, page, token, time, retry, concurrency, and cost limits; schedules work; and records state transitions.
-- Verifies literal quotations, source identity, numeric tokens, units, offsets, and geometry. Exact/approximate/unknown location is retained honestly.
-- Owns idempotency, ordering, persistence, cancellation, failure handling, review actions, and export snapshots.
-- Keeps document text untrusted. Prompt-injection text cannot change system instructions, available operations, security policy, or completion state.
+- Convert validated planner actions into stable, bounded `WorkUnit`s with source IDs, operation, deterministic ordering, attempt/state, and output references.
+- Execute at least native text and table inspection through the same executor; connect the existing extraction code rather than duplicating it. Keep OCR/visual and cross-page operations explicit and unresolved until their executor exists.
+- Emit one terminal coverage state per supplied page/region: completed, excluded with reason, unresolved, unreadable, failed, or not attempted. A successful task is not proof of semantic completeness.
+- Acceptance: scripted end-to-end run shows planner action → unit execution → source-linked proposal → coverage record; every output resolves to the original document version and exact/approximate location honestly.
 
-Parser signals can recommend an inspection mode; they do not decide the semantic meaning of a tender passage. Avoid tender-specific regexes or format catalogs as the primary relevance or requirement classifier. Deterministic code remains appropriate for safety limits and source/data invariants.
+### 3. Persist one vertical slice and prove resume
 
-## 4. Target runtime architecture
+- Select a local/private persistence adapter for run metadata, plan version, work state, and source-linked output artifacts. Keep provider interfaces thin; no new cloud service, queue, or worker is required for this first slice.
+- Preserve successful unit outputs on timeout/restart. Resume only eligible unfinished units using source/config-bound stable IDs; do not duplicate, reorder, or overwrite human review decisions.
+- Document storage location, confidentiality, encryption/key handling, retention/deletion, size limits, and failure behavior before enabling persistence by default.
+- Acceptance: integration test forcibly interrupts a run, starts a new process, resumes it, and verifies completed outputs remain single, source-linked, and deterministically ordered.
 
-```text
-Immutable upload + fingerprint
-  → parser adapters build a source inventory
-  → AnalysisRun stores task, source version, config and progress
-  → LLM proposes a tender-wide TaskPlan from inventory summaries
-  → validator checks plan IDs, scope and operation limits
-  → controller schedules bounded WorkUnits from that plan
-  → LLM interprets each unit and proposes source-linked requirements
-  → validators check citations, values, coverage and output schema
-  → unresolved/incomplete items enter human review
-  → reviewed snapshot projects to matrix and Excel export
-```
+### 4. Connect review and export to persisted results
 
-### Source inventory
+- Show run progress, plan rationale, source navigation, unresolved/incomplete work, and recoverable failure states.
+- Preserve the current review workflow; keep human edits auditable and append-only where persisted.
+- Export a reviewed snapshot. Define whether partial results can be exported and label them clearly before exposing partial drafts.
+- Acceptance: a user can review a resumed run, inspect its source evidence, change a result, and export the reviewed snapshot without losing run identity or uncertainty.
 
-Keep original bytes immutable and fingerprint every document version. Preserve physical page number separately from printed labels. Keep native text, OCR transcripts, visual transcripts, tables/cells, offsets, geometry, parser version, confidence, and warnings distinct. Unknown values remain unknown. Inventory validity means the parser output is structurally consistent; it does not certify semantic completeness.
+### 5. Measure, harden, and expand
 
-### TaskPlan and WorkUnits
+- Add OCR/visual, continuation, validation, and coverage-audit executors only after the shared work-unit path is proven.
+- Exercise prompt injection, malformed model output, provider timeout, duplicate requests, cancellation, process restart, storage failure, size limits, and source/version mismatch.
+- Measure latency, memory, tokens/cost, retry rate, review burden, and completion/resume rate on the actual supported setup. Set explicit launch limits from evidence.
+- Roll out behind a reversible feature/config boundary; do not present local/private durability as hosted multi-user durability.
 
-Use a small typed envelope. Tender-specific organization and response fields can vary inside that envelope; no tender-specific schema is preinstalled. A TaskPlan references only source IDs present in the immutable inventory and records why content is selected, excluded, or unresolved. The controller expands it into bounded WorkUnits with stable IDs, source references, attempt counts, timestamps, and artifact references.
+## Parallel quality and anti-overfitting track
 
-A plan may be revised when new evidence is found. Preserve prior plan versions and completed work. Replanning must not silently overwrite reviewer actions, duplicate requirements, or make a failed/unvisited source region look complete.
+Implementation can proceed using scripted providers, synthetic adversarial documents, and existing examples. Do not use a passing scripted fixture as evidence of tender quality, and do not spend on live model calls without explicit authorization.
 
-### Run and work state
+- Independently review/adjudicate whole-tender source labels. The NCESS annotations already in the repository are development material, not independent gold labels.
+- Establish a baseline that separately measures omissions, false inclusions, exclusions, split/merge errors, citation/location correctness, numeric fidelity, coverage, and reviewer effort.
+- Keep related versions, copies, and tender families together in whole-tender splits. Existing/previously used examples remain development data unless provenance establishes otherwise.
+- Lock evaluation documents before tuning. If a locked document informs a fix, move it to development and replace it with a new locked document.
+- Report tested tender families, sample sizes, failures, and limits. Do not claim support for every document type or universal completeness.
 
-Define explicit state machines before persistence. Candidate run states include `created`, `planning`, `executing`, `needs_review`, `incomplete`, `completed`, `cancelled`, and `failed`. Candidate work states include `queued`, `running`, `succeeded`, `retryable_failure`, `permanent_failure`, `skipped_with_reason`, and `cancelled`. Final names and transitions are established in the run-contract checkpoint.
+## Non-negotiable correctness and security rules
 
-A timeout preserves successful checkpoints and marks unfinished work incomplete. Resume reuses source fingerprint, task/config versions, and stable unit IDs; it retries only eligible failed units and returns outputs in deterministic source order. “Operationally completed” and “semantically complete” are separate claims. No response is final merely because a non-empty sheet exists.
+- Never fabricate a requirement, quote, citation, page/clause, source ID, geometry, number/unit, test result, or status.
+- Never silently repair ambiguous OCR; retain the source transcript and uncertainty.
+- Every extracted requirement remains linked to its document version and parser-known location. Unknown location stays unknown.
+- Missing evidence differs from contradictory evidence. Keep technically distinct concepts, values, operators, units, ranges, and qualifiers distinct.
+- Treat uploaded content as untrusted data and possible prompt injection. It cannot alter instructions, tools, security policy, or run completion.
+- A model proposal is not a reviewed requirement. Human review is a normal state.
+- Do not log raw tender bodies, secrets, or full provider responses by default. Apply upload validation and appropriate confidential-document provider settings.
+- Stay in Phase 1: no OEM ingestion, product evidence retrieval, compliance assessment, clarification generation, or submission generation.
+- Do not add templates, agents, vector databases, or multi-model orchestration without measured evidence and an explicit decision.
 
-### Persistence and privacy
+## Decisions intentionally kept open
 
-Keep run, artifact, queue, and model providers behind interfaces. Do not add a paid cloud service by default. Select the first durable adapter for the local/private pilot only after documenting what it stores, encryption/key handling, retention/deletion, restart behavior, and size limits. Do not persist raw tender bodies in routine logs. Hosted multi-user storage, tenant isolation, object storage, queues, and deployment credentials require their own security/operational decision; local durability must not be presented as hosted durability.
+Resolve these only at the milestone that depends on them: local/private deployment and operator; durable adapter and key/retention model; upload/page/concurrency/time/cost limits; partial-export behavior; and whether measured model comparisons justify replacing GPT-6 Luna. Keep the current model behind the provider adapter until evaluation supports a change. The architecture is model-provider agnostic; a more powerful model is an empirical upgrade, not a substitute for source coverage, durable execution, or review.
 
-## 5. Execution sequence — architecture starts now
+## Change and verification workflow
 
-Two tracks proceed in parallel. The runtime track does not wait for benchmark labels to define types, state transitions, or provider-independent execution contracts. The evaluation track remains mandatory before reporting quality, tuning prompts/routing, or claiming generalization.
+For every coherent change, create a descriptive branch from current `main`, make a focused PR authored by `ayushcodes13`, and include scope, provenance/security impact, exact local verification, limitations, and migration notes when needed. Run relevant local tests/typecheck/build/scripted pipeline. A GitHub Actions job explicitly blocked before any step by the known billing restriction may be bypassed after equivalent local checks; accurately report it as not run, never as passing. A test job that starts and fails must be investigated.
 
-### Track A — runtime architecture
-
-1. **Run and plan contracts (start immediately).** Define typed AnalysisRun, TaskPlan, WorkUnit, proposal, coverage, and transition contracts. Add tests for legal/illegal transitions, source-ID binding, deterministic IDs/order, and idempotency keys. This contract-only slice does not claim persistence or resumability.
-2. **LLM-led task planning.** Integrate a model proposal over a tender-wide inventory summary. Validate all references and supported operations before execution. Start with the configured model adapter and scripted provider tests; do not make paid live calls unless separately authorized. The model proposes semantics; the controller owns execution and safety.
-3. **First durable vertical slice.** Persist one bounded, expensive unit type and its source-linked output. Demonstrate a forced timeout/process interruption, retry and resume without duplicate/reordered work. Choose and test the local/private store adapter before claiming this gate; no in-memory fake counts as durable evidence.
-4. **Expand unit coverage.** Add page/region, table, OCR/visual, continuation, validation, and coverage-audit work units. Ensure every supplied page/region ends as processed, explicitly excluded with reason, unresolved, unreadable, failed, or not attempted.
-5. **Human review and export.** Expose plan rationale, source navigation, progress, unresolved/incomplete units, and append-only review actions. Export a reviewed snapshot with honest row state; partial export behavior is decided before exposing partial results to users.
-6. **Hardening and rollout.** Test provider disconnects, process restarts, duplicate requests, cancellation, size limits, retention/deletion, access boundaries, prompt injection, and rollback. Measure latency, memory, tokens/cost, and supported limits on the actual deployment target.
-
-### Track B — evaluation and anti-overfitting
-
-1. **Independent source labels.** Finish V2.2b by independently reviewing whole tender(s), adjudicating disagreements, and verifying quotes/values. The NCESS 20-page annotation merged in PR #431 is a single-assistant development draft (178 labels, 299 anchors), not gold, not independently adjudicated, and not a quality result.
-2. **Current-pipeline baseline.** Compare saved source-linked pipeline output with adjudicated labels. Report omissions, false inclusions, splits/merges, incorrect exclusions, source/page/cell correctness, numeric fidelity, coverage, and review burden separately. Scripted provider tests are contract evidence, not tender-quality evidence.
-3. **Whole-tender splits.** All existing examples and previously used tenders remain development material. Keep related copies, versions, and publisher/layout families together. Establish validation and a locked evaluation set only from independent whole-tender material with clear provenance. If no credible held-out set is available, mark results exploratory.
-4. **Controlled improvement.** Use development data to improve prompts, routing, and model choices. Never tune on locked evaluation data. If a locked tender informs a fix, move it to development and select a new locked set. Do not claim “any tender”; report the tested families, sample size, failures, and limits.
-
-## 6. Acceptance measures
-
-For adjudicated validation tenders, report per-document and aggregate results with the number and source family of tenders:
-
-- Requirement recall and precision; omissions, false inclusions, incorrect exclusions, and split/merge errors separately.
-- Exact source quote, document version, physical page, source element/cell, and exact-vs-approximate location correctness.
-- Numeric/operator/unit/qualifier fidelity and OCR behavior by native, scanned, and hybrid source.
-- Page/region dispositions and processing/audit state, including work not attempted or over budget.
-- Cross-page and annexure links, duplicate occurrence handling, reviewer corrections/time, unresolved items, completion/resume rate, latency, provider failures, and estimated cost.
-
-Acceptance targets for quality, latency, size, concurrency, and cost must be explicit before rollout. No single model confidence, same-model audit, citation test, parser count, scripted fixture, or non-empty matrix proves completeness.
-
-## 7. Decisions and risks
-
-These do not block the run/plan contract, but must be resolved before their dependent feature ships:
-
-- Local/private versus public/hosted deployment, and who owns credentials and operations.
-- Durable storage choice, encryption/key management, retention/deletion, and allowed provider data handling.
-- Maximum file/page size, concurrency, latency and cost budget. Keep existing bounded limits until measured; do not silently raise them.
-- Exact UX/export behavior for incomplete runs and partial drafts.
-- Model comparison and authorization for paid/live evaluation. GPT-6 Luna remains the configured adapter until measured evidence supports a change; architecture interfaces allow later comparison.
-
-Main risks are model omissions/hallucinated structure, planner exclusion errors, hybrid-page gaps, same-model audit blind spots, duplicate processing, persistence of confidential documents, and overfitting to the available examples. Mitigate with source IDs/quotes, explicit uncertainty, per-region coverage, idempotent checkpoints, independent annotations, whole-family splits, and auditable human review.
-
-## 8. Security and non-negotiable rules
-
-- Treat uploads and all embedded text as hostile and potentially confidential; content never overrides application instructions.
-- Never fabricate a specification, quote, page, clause, source ID, geometry, numeric value, test result, or status.
-- Do not silently correct OCR. Preserve source transcript and uncertainty separately.
-- Keep missing evidence distinct from contradictory evidence. Keep accuracy, resolution, units, signs, thresholds, ranges, and qualifiers distinct.
-- A model proposal is never automatically a reviewed/approved requirement.
-- Do not log raw tender content, prompts, credentials, or provider response bodies by default.
-- Stay within Phase 1. No OEM/compliance/submission features.
-
-## 9. Repository workflow
-
-Every coherent change is made on a descriptive branch from latest `main`, with rationale, scope, provenance/security impact, verification, limitations, and migration notes where relevant. Update `docs/checkpoint.md` in the PR that completes a checkpoint. Run local checks relevant to the change.
-
-The user has authorized continuing through the known GitHub Actions billing restriction. If a required job is explicitly blocked before steps start by that restriction, run the equivalent local CI checks where practical and keep the report truthful: a remote check that did not start is not a pass. This exception does not cover a test job that actually runs and fails.
+Update `docs/checkpoint.md` in each PR to keep the canonical execution status aligned with this plan. Mark a milestone done only when its stated acceptance evidence exists. Do not mark the overall Phase 1 v2 goal complete while any required runtime or quality milestone remains open.
