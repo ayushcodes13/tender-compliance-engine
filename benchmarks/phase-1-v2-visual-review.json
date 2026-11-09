@@ -73,7 +73,9 @@
         { "pages": [2, 3], "kind": "numbered-clauses-and-narrative", "evidenceLevel": "visual-candidate" },
         { "pages": [16, 18, 19, 20], "kind": "supplier-and-contract-clauses", "evidenceLevel": "visual-candidate" },
         { "pages": [4, 5, 6, 7], "kind": "multi-page-specification-table-with-nested-numbered-list-and-no-repeated-header", "evidenceLevel": "render-confirmed-single-reviewer" },
-        { "pages": [10, 11, 12, 13, 14, 15], "kind": "technical-compliance-table-parallels-specification-sequence-with-response-columns", "evidenceLevel": "render-confirmed-single-reviewer" }
+        { "pages": [10, 11, 12, 13, 14, 15], "kind": "technical-compliance-table-parallels-specification-sequence-with-response-columns", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [16, 17], "kind": "bidder-declaration-reference-to-annexure-b-start", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [17, 18, 19, 20], "kind": "annexure-b-numbered-prose-clauses-continuing-across-pages", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["region-completeness", "cross-page-continuation", "annexure-linkage", "semantic-role"]
     },
