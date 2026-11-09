@@ -33,6 +33,7 @@ function isMergeableColumn(column: { header: string; role?: string }): boolean {
 function getColumnWeight(column: { header: string; role?: string }): number {
   if (column.role === 'requirement') return 4.0;
   if (column.role === 'page') return 0.8;
+  if (column.role === 'review') return 1.5;
   const h = column.header.toLowerCase();
   if (h.includes('remark') || h.includes('justification') || h.includes('deviation')) return 2.2;
   if (h.includes('comply') || h.includes('compliance')) return 1.4;
@@ -44,6 +45,7 @@ function getColumnWeight(column: { header: string; role?: string }): number {
 function getExcelColumnWidth(column: { header: string; role?: string }): number {
   if (column.role === 'requirement') return 72;
   if (column.role === 'page') return 14;
+  if (column.role === 'review') return 16;
   const h = column.header.toLowerCase();
   if (h.includes('remark') || h.includes('justification') || h.includes('deviation')) return 36;
   if (h.includes('comply') || h.includes('compliance')) return 20;
@@ -93,12 +95,12 @@ export function createSectionedResponseDocument(sheet: ResponseSheet): Document 
       children: section.columns.map((column, colIdx) =>
         new TableCell({
           width: { size: colWidths[colIdx], type: WidthType.DXA },
-          shading: { fill: '1E293B', type: ShadingType.SOLID },
+          shading: { fill: 'EFF3F8', type: ShadingType.SOLID },
           borders: cellBorders,
           margins: { top: 120, bottom: 120, left: 140, right: 140 },
           children: [
             new Paragraph({
-              children: [new TextRun({ text: column.header, bold: true, size: 19, color: 'FFFFFF' })],
+              children: [new TextRun({ text: column.header, bold: true, size: 19, color: '0F172A' })],
             }),
           ],
         }),

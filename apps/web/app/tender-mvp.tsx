@@ -13,7 +13,7 @@ import { createOperatorAddedRequirement, insertRequirementByPhysicalPage, recove
 import { prepareVisualComplianceRows } from "./visual-table";
 import { complianceRowHeightTwips, reflowComplianceText, splitHeadingPrefix, verticalMergeAt } from "./compliance-format";
 import { buildResponseSections } from "./response-sections";
-import { buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates, type ResponseSheet } from "./response-sheet";
+import { addReviewerStatusColumn, buildResponseSheet, responseHeadingMergeKeys, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates, type ResponseSheet } from "./response-sheet";
 import type { RequirementSourceReference } from "./source-document";
 import { describeRejectedSuggestion, type CoverageReport, type CoverageSourceRow, type RejectedSuggestion } from "./coverage-ledger";
 import type { ClassificationReviewCandidate } from "./candidate-classification";
@@ -814,9 +814,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      if (responseSheet.layout === "sectioned" || responseSheet.rows.some(row => row.section)) {
+      const exportSheet = addReviewerStatusColumn(responseSheet, new Map(analysis.requirements.map((item) => [item.id, item.reviewed === true])));
+      if (exportSheet.layout === "sectioned" || exportSheet.rows.some(row => row.section)) {
         const { createSectionedDocxBlob } = await import("./sectioned-exports");
-        downloadBlob(await createSectionedDocxBlob(responseSheet), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
+        downloadBlob(await createSectionedDocxBlob(exportSheet), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
         return;
       }
 
@@ -918,8 +919,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         : analysis.sourceColumns?.length
           ? analysis.sourceColumns
           : [{ header: "Tender specification", role: "specification" as const }];
-      const exportColumns = responseSheet.columns;
-      const responseRows = responseSheet.rows;
+      const exportColumns = exportSheet.columns;
+      const responseRows = exportSheet.rows;
       const headingColumnIndices = exportColumns
         .map((column, index) => (column.role === "heading" ? index : -1))
         .filter((index) => index >= 0);
@@ -1041,9 +1042,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
-      if (responseSheet.layout === "sectioned" || responseSheet.rows.some(row => row.section)) {
+      const exportSheet = addReviewerStatusColumn(responseSheet, new Map(analysis.requirements.map((item) => [item.id, item.reviewed === true])));
+      if (exportSheet.layout === "sectioned" || exportSheet.rows.some(row => row.section)) {
         const { createSectionedWorkbook } = await import("./sectioned-exports");
-        const buffer = await createSectionedWorkbook(responseSheet).xlsx.writeBuffer();
+        const buffer = await createSectionedWorkbook(exportSheet).xlsx.writeBuffer();
         downloadBlob(new Blob([buffer as BlobPart], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.xlsx`);
         return;
       }
@@ -1051,12 +1053,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const ExcelJS = await import("exceljs");
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Technical response", { views: [{ state: "frozen", ySplit: 1 }] });
-      worksheet.columns = responseSheet.columns.map((column) => ({
+      worksheet.columns = exportSheet.columns.map((column) => ({
         header: column.header,
         key: column.header,
         width: column.role === "requirement" ? 58 : column.role === "heading" ? 32 : column.role === "page" ? 16 : 24,
       }));
-      worksheet.addRows(responseSheet.rows.map((row) => row.values));
+      worksheet.addRows(exportSheet.rows.map((row) => row.values));
       worksheet.getRow(1).font = { bold: true, color: { argb: "FF24354D" } };
       worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3F8" } };
       worksheet.eachRow((row) => {
@@ -1064,12 +1066,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         row.font = { ...row.font, name: "Arial", size: 10 };
       });
       worksheet.getRow(1).font = { bold: true, name: "Arial", size: 10, color: { argb: "FF24354D" } };
-      const headingColumns = responseSheet.columns
+      const headingColumns = exportSheet.columns
         .map((column, idx) => (column.role === "heading" ? idx : -1))
         .filter((idx) => idx >= 0);
       for (const headingColumn of headingColumns) {
-        const colValues = responseSheet.rows.map((r) => r.values[headingColumn]);
-        responseSheet.rows.forEach((row, index) => {
+        const colValues = exportSheet.rows.map((r) => r.values[headingColumn]);
+        exportSheet.rows.forEach((row, index) => {
           if (verticalMergeAt(colValues, index) !== "restart") return;
           let end = index;
           while (end + 1 < colValues.length && colValues[end + 1] === colValues[index]) end += 1;
@@ -1090,6 +1092,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setExporting(true);
     setError(null);
     try {
+      const exportSheet = addReviewerStatusColumn(responseSheet, new Map(analysis.requirements.map((item) => [item.id, item.reviewed === true])));
       const [{ createResponsePdf }, fontResponse] = await Promise.all([
         import("./pdf-export"), fetch("/fonts/DejaVuSans.ttf"),
       ]);
@@ -1099,7 +1102,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       for (let offset = 0; offset < fontBytes.length; offset += 8_192) {
         binary += String.fromCharCode(...fontBytes.subarray(offset, offset + 8_192));
       }
-      const pdf = createResponsePdf(responseSheet, analysis.sheetTitle || "Tender Technical Requirements", analysis.filename, btoa(binary));
+      const pdf = createResponsePdf(exportSheet, analysis.sheetTitle || "Tender Technical Requirements", analysis.filename, btoa(binary));
       pdf.save(`${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.pdf`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The PDF could not be created. Please try again.");
