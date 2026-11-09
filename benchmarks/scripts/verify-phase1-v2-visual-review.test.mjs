@@ -12,6 +12,14 @@ test("matches source fingerprints and accounts for every physical page without o
   assert.equal(result.physicalPages, 367);
   assert.equal(result.independentReview, "pending");
   assert.equal(result.reviewLevel, "thumbnail-page-skim");
+  assert.equal(result.renderConfirmedPageCoverage.length, 11);
+  assert.deepEqual(result.renderConfirmedPageCoverage.find((document) => document.documentId === "example-input-3"), {
+    documentId: "example-input-3",
+    physicalPages: 41,
+    uniquePagesReferenced: 28,
+    pageRanges: [[1, 3], [17, 41]],
+  });
+  assert.equal(result.renderConfirmedUniquePageReferences, result.renderConfirmedPageCoverage.reduce((sum, document) => sum + document.uniquePagesReferenced, 0));
 });
 
 test("rejects a missing page range", () => {
