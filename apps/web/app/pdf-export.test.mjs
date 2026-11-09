@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createResponsePdf } from './pdf-export.ts';
-import { addManualRequirementToSheet, promoteCandidateToSheet } from './response-sheet.ts';
+import { addManualRequirementToSheet, addReviewerStatusColumn, promoteCandidateToSheet } from './response-sheet.ts';
 import { DOMMatrix, ImageData, Path2D } from '@napi-rs/canvas';
 Object.assign(globalThis,{DOMMatrix,ImageData,Path2D});
 const font=readFileSync(new URL('../public/fonts/DejaVuSans.ttf',import.meta.url)).toString('base64');
@@ -20,6 +20,26 @@ test('PDF keeps technical wording and omits source citations without changing th
     assert.equal(text.includes('Source page'),false);
     assert.equal(/\bPage \d+\b/.test(text),false);
   }finally{await task.destroy();}
+});
+
+test('PDF exports checked and pending review state while keeping source page details out of print', async () => {
+  const source = { columns: [...sheet.columns], rows: [{ ...sheet.rows[0], values: [...sheet.rows[0].values] }] };
+  const projected = addReviewerStatusColumn(source, new Map([['r1', true]]));
+  const pdf = createResponsePdf(projected, 'Technical requirements', 'synthetic.pdf', font);
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = getDocument({ data: new Uint8Array(pdf.output('arraybuffer')), isEvalSupported: false });
+  try {
+    const doc = await task.promise;
+    const text = (await doc.getPage(1).then(page => page.getTextContent({ disableNormalization: true })))
+      .items.filter(item => 'str' in item).map(item => item.str).join(' ').replace(/\s+/g, ' ');
+    assert.ok(text.includes('Review status'));
+    assert.ok(text.includes('Checked'));
+    assert.equal(text.includes('Source page'), false);
+    assert.equal(text.includes('Page 20'), false);
+    assert.equal(source.columns.some(column => column.role === 'review'), false);
+  } finally {
+    await task.destroy();
+  }
 });
 
 test('unsupported glyphs stop PDF export instead of silently losing source characters',()=>{

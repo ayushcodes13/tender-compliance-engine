@@ -4,7 +4,7 @@ import { Packer } from 'docx';
 import JSZip from 'jszip';
 import { fixture } from './test-fixtures/response-sections.mjs';
 import { createSectionedResponseDocument, createSectionedWorkbook } from './sectioned-exports.ts';
-import { buildResponseSheet, updateResponseSheetCell, addManualRequirementToSheet, promoteCandidateToSheet, removeResponseSheetRow } from './response-sheet.ts';
+import { addReviewerStatusColumn, buildResponseSheet, updateResponseSheetCell, addManualRequirementToSheet, promoteCandidateToSheet, removeResponseSheetRow } from './response-sheet.ts';
 
 test('Word annexures and table headings are paragraphs outside specification tables', async () => {
   const zip = await JSZip.loadAsync(await Packer.toBuffer(createSectionedResponseDocument(fixture())));
@@ -24,7 +24,18 @@ test('Word annexures and table headings are paragraphs outside specification tab
   assert.ok(xml.includes('Technical Specifications for Optical Tables'));
   assert.equal(xml.includes('Source tender:'), false);
   // Confirms boardroom-ready executive header fill
-  assert.ok(xml.includes('1E293B'), 'Header row has 1E293B slate navy shading');
+  assert.ok(xml.includes('EFF3F8'), 'Header row has a light fill that keeps dark text visible in independent Word renderers');
+});
+
+test('Word export preserves reviewer check state for each source requirement', async () => {
+  const sheet = fixture();
+  const exportSheet = addReviewerStatusColumn(sheet, new Map([['a', true]]));
+  const zip = await JSZip.loadAsync(await Packer.toBuffer(createSectionedResponseDocument(exportSheet)));
+  const xml = await zip.file('word/document.xml').async('string');
+  assert.ok(xml.includes('Review status'));
+  assert.ok(xml.includes('Checked'));
+  assert.ok(xml.includes('Needs review'));
+  assert.equal(sheet.columns.some(column => column.role === 'review'), false, 'export projection does not mutate the editable sheet');
 });
 
 test('Word document supports hierarchical vertical merging for heading cells', async () => {
@@ -75,6 +86,16 @@ test('Excel places source headings in standalone merged rows and retains specifi
 
   // Confirms auto-filter is configured
   assert.ok(sheet.autoFilter, 'Excel worksheet has auto-filter defined');
+});
+
+test('Excel export preserves reviewer check state for each source requirement', () => {
+  const exportSheet = addReviewerStatusColumn(fixture(), new Map([['a', true]]));
+  const sheet = createSectionedWorkbook(exportSheet).worksheets[0];
+  const rows = [];
+  sheet.eachRow(row => rows.push(row.values));
+  assert.ok(rows.some(row => row.includes('Review status')));
+  assert.ok(rows.some(row => row.includes('Checked')));
+  assert.ok(rows.some(row => row.includes('Needs review')));
 });
 
 test('Excel merges consecutive rows sharing the same heading', () => {

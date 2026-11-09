@@ -1,7 +1,7 @@
 export type SourceColumnRole = "serial" | "heading" | "specification" | "quantity" | "remark" | "compliance" | "deviation" | "other";
 export type ResponseSheetColumn = {
   header: string;
-  role: "heading" | "requirement" | "source" | "response" | "page" | "compliance" | "deviation";
+  role: "heading" | "requirement" | "source" | "response" | "page" | "compliance" | "deviation" | "review";
   sourceIndex?: number;
 };
 export type ResponseSheetRow = {
@@ -19,6 +19,18 @@ export type ResponseSheetRow = {
   includeParameterColumn?: boolean;
 };
 export type ResponseSheet = { columns: ResponseSheetColumn[]; rows: ResponseSheetRow[]; layout?: "sectioned" };
+
+/** Add reviewer state to an export projection without changing the editable sheet or source wording. */
+export function addReviewerStatusColumn(sheet: ResponseSheet, reviewedByRequirementId: ReadonlyMap<string, boolean>): ResponseSheet {
+  const columns = [...sheet.columns, { header: "Review status", role: "review" as const }];
+  const rows = sheet.rows.map((row) => {
+    if (row.section) return { ...row, values: [...row.values, ""] };
+    const ids = [...new Set([row.sourceRequirementId, ...row.sourceRequirementIds].filter(Boolean))];
+    const checked = ids.length > 0 && ids.every((id) => reviewedByRequirementId.get(id) === true);
+    return { ...row, values: [...row.values, checked ? "Checked" : "Needs review"] };
+  });
+  return { ...sheet, columns, rows };
+}
 export type ResponseRequirement = {
   id: string;
   text: string;

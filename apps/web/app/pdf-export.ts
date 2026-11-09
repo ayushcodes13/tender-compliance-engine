@@ -5,6 +5,7 @@ import { buildResponseSections } from './response-sections.ts';
 
 function getPdfColumnWeight(column: { header: string; role?: string }): number {
   if (column.role === 'requirement') return 4.0;
+  if (column.role === 'review') return 1.5;
   const h = column.header.toLowerCase();
   if (h.includes('remark') || h.includes('justification') || h.includes('deviation')) return 2.2;
   if (h.includes('comply') || h.includes('compliance')) return 1.4;

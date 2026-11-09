@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates, canReconcileScheduleDuplicate } from "./response-sheet.ts";
+import { addReviewerStatusColumn, buildResponseSheet, removeResponseSheetRow, updateResponseSheetCell, splitRequirementSubpoints, addManualRequirementToSheet, promoteCandidateToSheet, reconcileScheduleDuplicates, detectScheduleDuplicates, canReconcileScheduleDuplicate } from "./response-sheet.ts";
 
 const structured = {
   extractionMode: "structured-table",
@@ -9,6 +9,18 @@ const structured = {
     quote: "High performance • auto ranging", specifications: ["High performance", "Auto ranging"], page: 17,
   }],
 };
+
+test("export review projection records checked and pending requirements without changing the sheet", () => {
+  const source = buildResponseSheet({ requirements: [
+    { id: "checked", text: "Checked source", quote: "Checked source", page: 1 },
+    { id: "pending", text: "Pending source", quote: "Pending source", page: 2 },
+  ] });
+  const before = structuredClone(source);
+  const exported = addReviewerStatusColumn(source, new Map([["checked", true], ["pending", false]]));
+  assert.equal(exported.columns.at(-1).header, "Review status");
+  assert.deepEqual(exported.rows.map((row) => row.values.at(-1)), ["Checked", "Needs review"]);
+  assert.deepEqual(source, before, "export projection leaves the editable response sheet unchanged");
+});
 
 test("builds one editable response row per structured subpoint and preserves shared heading", () => {
   const sheet = buildResponseSheet(structured);
