@@ -98,6 +98,9 @@
       "observations": [
         { "pages": [1, 60], "kind": "scan-heavy-tender-pages-with-forms-and-tables", "evidenceLevel": "visual-candidate" },
         { "pages": [61], "kind": "distinct-office-order-or-amendment-layout", "evidenceLevel": "visual-candidate" },
+        { "pages": [4, 5], "kind": "requirements-table-followed-by-separate-bidder-yes-no-checklist", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [10, 11, 12], "kind": "performance-security-prose-nested-clauses-and-table-across-pages", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [52, 53, 54], "kind": "signature-form-to-integrity-pact-annexure-and-prose-continuation", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [33, 34, 35, 36], "kind": "annexure-c-transition-to-contract-agreement-and-prose-continuation", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["cell-boundaries", "region-completeness", "cross-page-continuation", "annexure-linkage"]
@@ -110,6 +113,9 @@
       "observations": [
         { "pages": [1, 60], "kind": "scan-heavy-tender-pages-with-forms-and-tables", "evidenceLevel": "visual-candidate" },
         { "pages": [61], "kind": "distinct-office-order-or-amendment-layout", "evidenceLevel": "visual-candidate" },
+        { "pages": [4, 5], "kind": "requirements-table-followed-by-separate-bidder-yes-no-checklist", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [10, 11, 12], "kind": "performance-security-prose-nested-clauses-and-table-across-pages", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [52, 53, 54], "kind": "signature-form-to-integrity-pact-annexure-and-prose-continuation", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [33, 34, 35, 36], "kind": "annexure-c-transition-to-contract-agreement-and-prose-continuation", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["cell-boundaries", "region-completeness", "cross-page-continuation", "annexure-linkage"]
