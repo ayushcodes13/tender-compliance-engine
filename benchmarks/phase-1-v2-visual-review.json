@@ -161,10 +161,13 @@
       "reviewedPageRanges": [[1, 41]],
       "observations": [
         { "pages": [1, 2, 3], "kind": "bilingual-hybrid-front-matter-and-schedule", "evidenceLevel": "visual-candidate" },
+        { "pages": [1, 2], "kind": "bilingual-notice-pages-with-raster-letterhead-and-selectable-text", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [3], "kind": "bilingual-event-schedule-table-with-separate-remarks-column", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [17, 18, 19, 20], "kind": "multi-page-technical-specification-table", "evidenceLevel": "visual-candidate" },
         { "pages": [17, 18, 19, 20], "kind": "wide-compliance-table-with-row-continuations-and-no-repeated-header", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [20], "kind": "terms-summary-reframes-some-specification-content", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [21], "kind": "figure-containing-chart-page", "evidenceLevel": "visual-candidate" },
+        { "pages": [21], "kind": "chart-page-with-data-table-notes-and-signature-region", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41], "kind": "bid-form-and-integrity-agreement-sequence", "evidenceLevel": "visual-candidate" }
       ],
       "unknowns": ["cell-boundaries", "reading-order", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]

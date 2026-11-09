@@ -78,6 +78,10 @@ Sources for these bounded observations: [independent acceptance audit](../../doc
 
 Physical pages 37–42 were rendered and visually inspected at 90 DPI. Page 37 is a bidder signature letter for an integrity pact; page 38 starts the associated agreement, with its opening sentence continuing from page 37. Pages 38–42 continue as numbered article prose rather than a table. This is a single-reviewer document-sequence observation, not a technical-obligation label, cell-level annotation, or completeness judgment. The manifest records the relationship without retaining source text or page images.
 
+### Selected hybrid-page renders: `input 3.pdf`
+
+Pages 1–3 and 21 were rendered and visually inspected at 100 DPI. Pages 1–2 combine raster letterhead/logo regions with selectable bilingual text; page 3 presents a bilingual event schedule with a separate remarks column. Page 21 contains a chart, a small data table, explanatory notes, and a signature area. These are single-reviewer layout observations; chart values, technical meaning, and completeness were not adjudicated. No page images or extracted text are retained in the manifest.
+
 This directory records a local, source-linked baseline for six real tender PDFs. The PDFs remain outside the repository. `manifest.json` records their SHA-256 fingerprints, page counts, sizes, and local path hints so the owner can reproduce the run without committing source files. `baseline-2026-11-07.json` records parser-shadow counts and actual model-run outcomes at commit `dd0c2c7`.
 
 The follow-up `heldout-manifest-2026-11-07.json` and `heldout-results-2026-11-07.json` add an IIT Guwahati tender acquired directly from the institute's public tender page. It was not part of the original six-document sample. The source PDF is not stored in Git. `heldout-golden-v0.1.json` records three page-11 omissions found by comparing the first completed run with the original page. This is one new sample, not a statistically sufficient holdout set; future work that uses these cases for tuning must not report them as untouched test data.
