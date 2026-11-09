@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     if (error instanceof RequestBodyTooLargeError) {
       return Response.json({ error: "The uploaded request exceeds the configured size limit." }, { status: 413 });
     }
+    if (request.signal.aborted) return new Response(null, { status: 400 });
     return Response.json({ error: "The uploaded form could not be read." }, { status: 400 });
   }
 

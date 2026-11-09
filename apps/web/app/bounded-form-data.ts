@@ -10,20 +10,41 @@ export class RequestBodyTooLargeError extends Error {
 
 /**
  * Parse multipart form data without allowing Request.formData() to buffer an
- * unbounded body first. Content-Length is only an early rejection hint; the
- * streaming counter remains authoritative for missing or incorrect headers.
+ * unbounded body first. Content-Length is an early rejection hint; the
+ * streaming counter remains authoritative when it is absent or incorrect.
  */
 export async function parseBoundedFormData(request: Request, maxBytes: number): Promise<FormData> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new RangeError("The request body limit must be a positive safe integer.");
+  }
+  if (request.signal.aborted) throw request.signal.reason ?? new DOMException("The upload was cancelled.", "AbortError");
+
   const contentLength = request.headers.get("content-length");
   if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > maxBytes) {
+    await request.body?.cancel().catch(() => undefined);
     throw new RequestBodyTooLargeError();
   }
 
-  if (!request.body) throw new TypeError("The request has no form body.");
+  if (!request.body) return new FormData();
   const reader = request.body.getReader();
   let received = 0;
+  let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const abort = () => {
+    const reason = request.signal.reason ?? new DOMException("The upload was cancelled.", "AbortError");
+    void reader.cancel(reason).catch(() => undefined);
+    try { streamController?.error(reason); } catch { /* The stream may already be closed. */ }
+  };
+  request.signal.addEventListener("abort", abort, { once: true });
+
   const boundedBody = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+    },
     async pull(controller) {
+      if (request.signal.aborted) {
+        controller.error(request.signal.reason ?? new DOMException("The upload was cancelled.", "AbortError"));
+        return;
+      }
       try {
         const chunk = await reader.read();
         if (chunk.done) {
@@ -53,5 +74,12 @@ export async function parseBoundedFormData(request: Request, maxBytes: number): 
     signal: request.signal,
     duplex: "half",
   } as RequestInit & { duplex: "half" });
-  return boundedRequest.formData();
+  try {
+    const form = await boundedRequest.formData();
+    if (request.signal.aborted) throw request.signal.reason ?? new DOMException("The upload was cancelled.", "AbortError");
+    return form;
+  } finally {
+    request.signal.removeEventListener("abort", abort);
+    reader.releaseLock();
+  }
 }

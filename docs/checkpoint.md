@@ -16,6 +16,17 @@ Upload a text-based tender PDF
 
 This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory. GPT-6 Luna is the only model provider; the server-side credential is never exposed to the browser.
 
+## User-directed reliability foundation (2026-11-09)
+
+This short sequence supersedes infrastructure-heavy architecture milestones for the current customer-validation push. Keep the existing single-user workflow and OEM behavior intact; do not add workers, queues, multi-tenant accounts, amendments, eligibility analysis, or supplier libraries.
+
+- [ ] **Free hosting for PDFs up to 32 MiB:** prepare a genuinely free preview configuration, enforce bounded uploads, and verify the deployed provider edge limit before claiming hosted acceptance. No paid service creation or deployment is authorized by this checkpoint.
+- [ ] **Safe save/resume:** preserve the current tender identity, source citations, reviewer decisions and sheet edits across reloads in the existing single-user workflow; expose storage limits and recovery state clearly.
+- [ ] **Processing recovery:** represent cancellation and incomplete work accurately, preserve recoverable completed work, and clean up request and temporary resources without adding queues or workers.
+- [ ] **Verification:** deterministic regression tests, typecheck, production build and scripted pipeline pass for the integrated changes. Hosted provider behavior remains a separately disclosed gate.
+
+The first hosting implementation is in progress on a focused PR branch. Its local 32 MiB upload path passes; the free host has not been created, deployed, or edge-tested.
+
 ## Active POC90: two Goal Mode coding agents plus working ChatGPT engineer (2026-11-07)
 
 This is a temporary sprint priority, superseding historical first-unchecked checkpoint order for the work in [the active coordination contract](poc-90-parallel-coordination.md). ChatGPT owns real code and integration, not only review. The coding agents must not edit these shared docs concurrently. The 70% -> conditional 90% readiness estimate is evidence-gated, never a percentage of checkboxes.

@@ -44,6 +44,8 @@ The yellow page highlight is positioned from the matched source text. Selecting 
 
 Open [Tender Review on Vercel](https://tender-compliance-engine.vercel.app/). Upload a readable, text-based PDF (up to 4 MB and 120 pages), choose a candidate, inspect its citation and page highlight, and download the response sheet.
 
+For a no-cost, larger-upload preview configuration, see [Free preview hosting](docs/runbooks/free-preview-hosting.md). It targets Render's Free Node/Docker service and is not deployed by this repository. Render's inbound request cap must be verified on the actual free host before claiming 32 MB hosted acceptance. Vercel's existing function payload limit remains 4.5 MB.
+
 GPT-6 Luna routes tender pages and proposes requirement candidates. Candidate quotes are checked against selectable source text before display; the model key remains server-side.
 
 ## How a citation is produced

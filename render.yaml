@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: tender-compliance-preview
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    autoDeployTrigger: off
+    envVars:
+      - key: APP_ACCESS_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_MODEL
+        value: gpt-6-luna
+      - key: MAX_FILE_BYTES
+        value: "33554432"

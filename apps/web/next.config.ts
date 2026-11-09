@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { LOCAL_MAX_FILE_BYTES, MAX_FILE_BYTES } from "./app/upload-limits";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -10,7 +11,13 @@ const securityHeaders = [
   },
 ];
 
+const isHosted = Boolean(process.env.VERCEL === "1" || process.env.VERCEL_ENV);
+const configuredFileLimit = Number(process.env.MAX_FILE_BYTES);
+const clientMaxFileBytes = isHosted ? MAX_FILE_BYTES
+  : Number.isSafeInteger(configuredFileLimit) && configuredFileLimit > 0 ? configuredFileLimit : LOCAL_MAX_FILE_BYTES;
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_MAX_FILE_BYTES: String(clientMaxFileBytes) },
   reactStrictMode: true,
   // PDF.js resolves its Node fake worker relative to the installed module.
   // Bundling it into a Server Action breaks that dynamic worker import.
@@ -23,6 +30,11 @@ const nextConfig: NextConfig = {
       "./node_modules/pdfjs-dist/cmaps/**/*",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
     ],
+  },
+  experimental: {
+    // Keep the proxy buffer large enough for the bounded multipart upload path.
+    // The route itself enforces the exact file plus multipart-envelope limit.
+    middlewareClientMaxBodySize: "33mb",
   },
   async headers() {
     return [
