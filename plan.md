@@ -29,6 +29,7 @@ The model owns semantic interpretation: relevance, document structure, requireme
 - **Partly done:** page-level LLM planning is integrated into `analyzeTender` and influences routing/review context (PR #434). It is not yet the execution scheduler.
 - **In progress:** bounded page/region summaries, parser-owned region ID validation, parent-page binding, and conservative handling of clipped or omitted context.
 - **In progress:** validated planner actions are now materialized as stable, page/region-specific inspection work-unit proposals with deterministic source ordering and operation-specific idempotency keys; they currently seed legacy routing rather than being independently executed or persisted.
+- **In progress:** existing page-routing model batches now execute through the WorkUnit lifecycle in memory, with source-bound IDs and explicit completed/retryable/cancelled states. Planner-proposed region operations still do not have independent handlers or durable result artifacts.
 - **Not done:** planner-driven region work execution, durable per-unit checkpoints, restart/resume, per-region terminal coverage, and review UI for run progress/incomplete work.
 - **Quality evidence remains separate:** existing tender examples are development material. Contract fixtures do not prove extraction quality on unfamiliar tenders.
 
