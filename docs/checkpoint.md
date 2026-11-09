@@ -16,6 +16,17 @@ Upload a text-based tender PDF
 
 This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory. GPT-6 Luna is the only model provider; the server-side credential is never exposed to the browser.
 
+## User-directed reliability foundation (2026-11-09)
+
+This short sequence supersedes infrastructure-heavy architecture milestones for the current customer-validation push. Keep the existing single-user workflow and OEM behavior intact; do not add workers, queues, multi-tenant accounts, amendments, eligibility analysis, or supplier libraries.
+
+- [ ] **Free hosting for PDFs up to 32 MiB:** prepare a genuinely free preview configuration, enforce bounded uploads, and verify the deployed provider edge limit before claiming hosted acceptance. No paid service creation or deployment is authorized by this checkpoint.
+- [ ] **Safe save/resume:** preserve the current tender identity, source citations, reviewer decisions and sheet edits across reloads in the existing single-user workflow; expose storage limits and recovery state clearly.
+- [ ] **Processing recovery:** represent cancellation and incomplete work accurately, preserve recoverable completed work, and clean up request and temporary resources without adding queues or workers.
+- [ ] **Verification:** deterministic regression tests, typecheck, production build and scripted pipeline pass for the integrated changes. Hosted provider behavior remains a separately disclosed gate.
+
+The first hosting implementation is in progress on a focused PR branch. Its local 32 MiB upload path passes; the free host has not been created, deployed, or edge-tested.
+
 ## Active POC90: two Goal Mode coding agents plus working ChatGPT engineer (2026-11-07)
 
 This is a temporary sprint priority, superseding historical first-unchecked checkpoint order for the work in [the active coordination contract](poc-90-parallel-coordination.md). ChatGPT owns real code and integration, not only review. The coding agents must not edit these shared docs concurrently. The 70% -> conditional 90% readiness estimate is evidence-gated, never a percentage of checkboxes.
@@ -41,6 +52,7 @@ Historical completed IITG tender analysis at `26cc047`: 157.002 s; 137,770 provi
 - **PR #405 (merged `ec74897`):** Reconciles identical technical specifications duplicated across separate schedules/sections (e.g. NIOT p.18 bidder compliance schedule vs p.20 technical specifications annexure), combining page citations (e.g., `"Pages 18 and 20"`) and preserving all source requirement IDs while avoiding false merges on different limits (`200 bar` vs `500 bar`) or distinct parameters (`Number of Isolators` vs `Leveling Valves`). Surfaces operator-actionable duplicate alerts in the UI.
 - **Verification status:** All fixes are verified through 351 unit tests (`npm test`), Next.js production build (`npm run build`), TypeScript typecheck (`npm run typecheck`), and 26/26 end-to-end scripted pipeline contract cases (`npm run test:pipeline`). **Zero new paid model calls were authorized or executed during this integration.** Live model execution on unseen tenders remains unverified on the integrated build.
 - **Export provenance policy:** Source page citations are preserved in DOCX and XLSX exports. By documented policy ("Native source headings sit above specification tables; UI provenance stays in the UI"), page citations are intentionally omitted from printable PDF exports.
+- **PDF export private-use bullet correction (2026-11-09):** The supplied `input 1.pdf` has two page-10 bullet characters that PDF.js exposes as U+F0A7. The embedded export font cannot render that private-use code point, so PDF export previously stopped. The PDF exporter now normalizes U+F0A7 and U+F0B7 to a standard bullet for rendering while preserving the editable UI sheet unchanged; the exact U+F0A7 case is covered by a PDF round-trip regression test. This corrects this observed glyph only and does not imply general support for arbitrary private-use characters.
 
 - [x] **Joint acceptance/integration (completed with FAIL verdict):** all three handoffs, green required GitHub CI, serial PR merges, final scripted contract, update these checkpoint statuses with evidence, decide on at most one separately authorized paid final benchmark and issue P0/P1/P2 and readiness verdict.
 - [ ] **Conditional +20 POC readiness gates:** historical real completion (+6, does not prove post-fix code), precision/source truth (+7), verified review/export (+5), repeatable private pilot (+2). No 90% claim while critical scope/citation errors remain or when only synthetic evidence supports quality.
@@ -340,6 +352,8 @@ Real customer tender documents frequently exceed 4 MB (e.g. 7 MB+ documents with
 - [x] Configured Next.js server actions `bodySizeLimit` in `apps/web/next.config.ts` dynamically (`isHosted ? "4.5mb" : "32mb"`).
 - [x] Updated upload validation in `apps/web/app/actions.ts` and client helper text in `apps/web/app/tender-mvp.tsx`.
 - [x] Added unit tests in `apps/web/app/upload-limits.test.mjs` verifying local, hosted Vercel, and custom `MAX_FILE_BYTES` overrides.
+
+**Route-boundary correction (2026-11-09):** `/api/analyze` is a Route Handler and parses multipart data with `Request.formData()`. The Next.js `serverActions.bodySizeLimit` setting does not bound this route. A streaming byte cap now runs before form parsing and returns HTTP 413 for oversized request bodies (file allowance plus 256 KiB multipart metadata). Vercel still enforces its own 4.5 MB function request cap; this route guard does not enable 32 MB uploads on Vercel. Local 32 MB acceptance still needs a representative PDF and memory/concurrency measurement before any capacity claim.
 
 ### Tiered validation ladder and hierarchical response sheet — 2026-11-05
 

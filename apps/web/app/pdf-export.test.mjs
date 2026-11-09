@@ -27,6 +27,23 @@ test('unsupported glyphs stop PDF export instead of silently losing source chara
   assert.throws(()=>createResponsePdf(unsupported,'Technical requirements','synthetic.pdf',font),/Download DOCX or Excel/);
 });
 
+test('normalizes the source PDF private-use bullet U+F0A7 before export', async () => {
+  const sourceBullet = { ...sheet, rows: [{ ...sheet.rows[0], values: ['\uF0A7 Technical requirement', 'Page 10'] }] };
+  const pdf = createResponsePdf(sourceBullet, 'Technical requirements', 'synthetic.pdf', font);
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const task = getDocument({ data: new Uint8Array(pdf.output('arraybuffer')), isEvalSupported: false });
+  try {
+    const doc = await task.promise;
+    const text = (await doc.getPage(1).then((page) => page.getTextContent({ disableNormalization: true })))
+      .items.filter((item) => 'str' in item).map((item) => item.str).join(' ');
+    assert.ok(text.includes('• Technical requirement'));
+    assert.equal(text.includes('Source page'), false);
+    assert.equal(sourceBullet.rows[0].values[0], '\uF0A7 Technical requirement');
+  } finally {
+    await task.destroy();
+  }
+});
+
 test('keeps a source requirement together when it fits on the next PDF page',async()=>{
   const long='BEGIN REQUIREMENT '+ 'The instrument shall retain all original limits and conditions. '.repeat(18)+'END REQUIREMENT';
   const rows=Array.from({length:40},(_,i)=>({id:String(i),sourceRequirementId:String(i),sourceRequirementIds:[String(i)],values:['Short technical clause '+i,'Page 20']}));

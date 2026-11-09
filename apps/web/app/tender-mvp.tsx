@@ -26,9 +26,13 @@ import {
   type ProductEvidenceCitation,
 } from "./oem-compliance-engine";
 import { parseProductPdfFile, getSampleProductDocument, getSampleProductFile } from "./product-document-parser";
+import { resolveClientMaxFileBytes } from "./upload-limits";
 import { decryptReviewSession, encryptReviewSession, verifyReviewSessionSource, type ReviewSession } from "./review-session";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
+
+const CLIENT_MAX_FILE_BYTES = resolveClientMaxFileBytes();
+const CLIENT_MAX_FILE_MEGABYTES = Math.round(CLIENT_MAX_FILE_BYTES / (1024 * 1024));
 
 type BoundingBox = { x: number; y: number; width: number; height: number };
 type Requirement = {
@@ -303,8 +307,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setCoverageFocus(null);
     setElapsedSeconds(0);
     const selected = event.target.files?.[0] ?? null;
-    if (selected && selected.size > 32 * 1024 * 1024) {
-      setError(`The selected file (${(selected.size / 1024 / 1024).toFixed(1)} MB) exceeds the 32 MB limit. Choose a smaller PDF.`);
+    if (selected && selected.size > CLIENT_MAX_FILE_BYTES) {
+      setError(`The selected file (${(selected.size / 1024 / 1024).toFixed(1)} MB) exceeds the ${CLIENT_MAX_FILE_MEGABYTES} MB limit for this deployment. Choose a smaller PDF.`);
       setFile(null);
       return;
     }
@@ -1145,7 +1149,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <div className="mvp-start-copy">
             <h2>Tender PDF to response sheet.</h2>
             <div className="mvp-step-list">
-              <div><p><strong>Choose a tender PDF</strong><small>Use a text-based PDF up to 4 MB and 120 pages.</small></p></div>
+              <div><p><strong>Choose a tender PDF</strong><small>Use a text-based PDF up to {CLIENT_MAX_FILE_MEGABYTES} MB and 120 pages.</small></p></div>
               <div><p><strong>Verify the citations</strong><small>Open the cited page and check the quote and highlight.</small></p></div>
               <div><p><strong>Mark rows you checked</strong><small>Keep review decisions visible as you work.</small></p></div>
               <div><p><strong>Download your response sheet</strong><small>Get a DOCX with source pages and blank OEM response fields.</small></p></div>
@@ -1178,14 +1182,14 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button" onClick={openResumeSessionDialog}>Resume saved review</button><a className="mvp-upload-back" href="/">Back to overview</a></div>
         </header>
         <section className="mvp-upload-page">
-          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>{pendingResume ? "Restore your saved review." : "Start with the tender document."}</h1><p>{pendingResume ? `Select the exact original PDF for ${pendingResume.filename}. The source is checked before its citations and reviewer changes are restored.` : "Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source."}</p><ul><li>PDF only · maximum 32 MB locally (4 MB hosted)</li><li>Up to 120 pages</li><li>{pendingResume ? "The document fingerprint must match the encrypted session." : "Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable"}</li></ul></div>
+          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>{pendingResume ? "Restore your saved review." : "Start with the tender document."}</h1><p>{pendingResume ? `Select the exact original PDF for ${pendingResume.filename}. The source is checked before its citations and reviewer changes are restored.` : "Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source."}</p><ul><li>PDF only · maximum {CLIENT_MAX_FILE_MEGABYTES} MB</li><li>Up to 120 pages</li><li>{pendingResume ? "The document fingerprint must match the encrypted session." : "Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable"}</li></ul></div>
           <div className="mvp-upload-card">
             <div className="mvp-upload-card-heading"><span className="mvp-upload-step">{pendingResume ? "VERIFY ORIGINAL SOURCE" : "SELECT YOUR TENDER"}</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
                 <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={pendingResume ? resumeSourceFile : selectFile} disabled={busy || sessionBusy} />
                 <span className="mvp-upload-icon"><Upload size={20} /></span>
-                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>{pendingResume ? "Choose the original tender PDF" : "Choose a tender PDF"}</strong><span>{pendingResume ? "It must match the saved SHA-256 fingerprint" : "PDF files up to 32 MB locally (4 MB hosted)"}</span></>}
+                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>{pendingResume ? "Choose the original tender PDF" : "Choose a tender PDF"}</strong><span>{pendingResume ? "It must match the saved SHA-256 fingerprint" : `PDF files up to ${CLIENT_MAX_FILE_MEGABYTES} MB`}</span></>}
                 <span className="mvp-browse-link">{pendingResume ? "Verify PDF" : "Select PDF"} <ArrowUpRight size={14} /></span>
               </label>
               {pendingResume ? <button type="button" className="mvp-text-button" disabled={sessionBusy} onClick={() => { setPendingResume(null); setError(null); }}>Cancel session restore</button> : <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
