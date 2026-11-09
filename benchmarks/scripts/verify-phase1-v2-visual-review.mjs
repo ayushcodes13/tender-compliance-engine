@@ -44,6 +44,17 @@ function expandRanges(ranges, expectedPages, documentId) {
   return pages;
 }
 
+function compressPages(pages) {
+  const sorted = [...new Set(pages)].sort((a, b) => a - b);
+  const ranges = [];
+  for (const page of sorted) {
+    const last = ranges.at(-1);
+    if (last && page === last[1] + 1) last[1] = page;
+    else ranges.push([page, page]);
+  }
+  return ranges;
+}
+
 export function verifyVisualReview(manifest, artifact) {
   assert(artifact?.schemaVersion === 1, "Unsupported visual-review schema version.");
   assert(artifact.corpusId === manifest.corpusId, "Visual-review corpus ID does not match the manifest.");
@@ -59,6 +70,7 @@ export function verifyVisualReview(manifest, artifact) {
   const byId = new Map(artifact.documents.map((document) => [document.id, document]));
   assert(byId.size === artifact.documents.length, "Visual-review record has duplicate document IDs.");
   let pageCount = 0;
+  const renderConfirmedPageCoverage = [];
   for (const expected of manifest.documents) {
     const document = byId.get(expected.id);
     assert(document, `${expected.id}: no visual-review record found.`);
@@ -67,15 +79,29 @@ export function verifyVisualReview(manifest, artifact) {
     pageCount += expandRanges(document.reviewedPageRanges, expected.physicalPages, expected.id).length;
     assert(Array.isArray(document.observations), `${expected.id}: observations must be an array, even when empty.`);
     assert(Array.isArray(document.unknowns) && document.unknowns.length > 0, `${expected.id}: page-level skim must retain unresolved structural questions.`);
+    const renderConfirmedPages = [];
     for (const observation of document.observations) {
       assert(isObject(observation) && Array.isArray(observation.pages) && observation.pages.length > 0, `${expected.id}: observation needs physical page references.`);
       assert(observation.pages.every((page) => Number.isInteger(page) && page >= 1 && page <= expected.physicalPages), `${expected.id}: observation references a page outside the source document.`);
       assert(typeof observation.kind === "string" && /^[a-z0-9-]+$/u.test(observation.kind), `${expected.id}: observation kind must be a source-free controlled label.`);
       assert(["visual-candidate", "render-confirmed-single-reviewer"].includes(observation.evidenceLevel), `${expected.id}: observation evidence level is unsupported or overclaimed.`);
+      if (observation.evidenceLevel === "render-confirmed-single-reviewer") renderConfirmedPages.push(...observation.pages);
     }
+    const deepRenderRanges = compressPages(renderConfirmedPages);
+    renderConfirmedPageCoverage.push({ documentId: expected.id, physicalPages: expected.physicalPages, uniquePagesReferenced: deepRenderRanges.reduce((sum, [start, end]) => sum + end - start + 1, 0), pageRanges: deepRenderRanges });
   }
   assert(artifact.documents.every((document) => byId.has(document.id)), "Visual-review record contains documents outside the manifest.");
-  return { passed: true, corpusId: artifact.corpusId, documents: artifact.documents.length, physicalPages: pageCount, observations: artifact.documents.reduce((sum, document) => sum + document.observations.length, 0), independentReview: artifact.independentReview, reviewLevel: artifact.reviewLevel };
+  return {
+    passed: true,
+    corpusId: artifact.corpusId,
+    documents: artifact.documents.length,
+    physicalPages: pageCount,
+    observations: artifact.documents.reduce((sum, document) => sum + document.observations.length, 0),
+    renderConfirmedUniquePageReferences: renderConfirmedPageCoverage.reduce((sum, document) => sum + document.uniquePagesReferenced, 0),
+    renderConfirmedPageCoverage,
+    independentReview: artifact.independentReview,
+    reviewLevel: artifact.reviewLevel,
+  };
 }
 
 async function main() {
