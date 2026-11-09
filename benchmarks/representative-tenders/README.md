@@ -1,5 +1,11 @@
 # Representative tender baseline and new public sample
 
+## Phase 1 v2 corpus and leakage policy
+
+`../phase-1-v2-corpus.json` fingerprints all 11 PDFs currently under `examples/`. Every repository example is assigned to **development** because this pool has informed prior analysis and engineering. The two PGIMER model-tender files share one family group; their byte hashes differ, so the inventory does not claim they are identical. The previously used Madras and IIT Guwahati tenders are also development data even though an older artifact calls the latter held out. There is currently no independent validation or locked evaluation set.
+
+Recheck the repository inventory with `node benchmarks/scripts/verify-phase1-v2-corpus.mjs`. It verifies file membership, SHA-256, byte counts, physical page counts, and counts pages with selectable text using `pdfinfo` and `pdftotext`. It prints counts only and stores no extracted tender text. A text-bearing page can still contain scanned tables or image-only regions; these counts do not establish native/scanned/hybrid coverage, table detection, obligation recall, or document completeness. The inventory reports 367 physical pages, 234 pages with selectable text, 11 unique byte fingerprints, and 10 family groups. Source/layout classification, complete annotations, and a true locked evaluation set remain open work.
+
 This directory records a local, source-linked baseline for six real tender PDFs. The PDFs remain outside the repository. `manifest.json` records their SHA-256 fingerprints, page counts, sizes, and local path hints so the owner can reproduce the run without committing source files. `baseline-2026-11-07.json` records parser-shadow counts and actual model-run outcomes at commit `dd0c2c7`.
 
 The follow-up `heldout-manifest-2026-11-07.json` and `heldout-results-2026-11-07.json` add an IIT Guwahati tender acquired directly from the institute's public tender page. It was not part of the original six-document sample. The source PDF is not stored in Git. `heldout-golden-v0.1.json` records three page-11 omissions found by comparing the first completed run with the original page. This is one new sample, not a statistically sufficient holdout set; future work that uses these cases for tuning must not report them as untouched test data.

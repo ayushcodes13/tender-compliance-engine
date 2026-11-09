@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "phase-1-v2-initial-examples",
+  "inventoryMethod": {
+    "fingerprint": "SHA-256 of original PDF bytes",
+    "physicalPages": "pdfinfo page count",
+    "textBearingPages": "Count of physical pages with non-empty pdftotext -layout output; not a visual or semantic completeness measure",
+    "sourceContentStored": false
+  },
+  "splitPolicy": {
+    "development": "All repository examples and previously used tenders are development data because prior analysis, fixes, or annotations may have exposed them to the system design.",
+    "validation": [],
+    "lockedEvaluation": [],
+    "reasonNoLockedSet": "The available corpus is small and has prior exposure; partial annotations do not support an independent whole-tender evaluation claim."
+  },
+  "documents": [
+    { "id": "iit-bhilai-microplate", "fileName": "IIT Bhilai - Automated Multimode Microplate Kinetic Analysis System.pdf", "familyGroupId": "iit-bhilai-microplate", "split": "development", "sha256": "3383120166f2c92c19948df7a6a9d3bab9e31a863190d62f57db79e76914ea48", "bytes": 748525, "physicalPages": 29, "textBearingPages": 29 },
+    { "id": "iit-gandhinagar-optical-tables", "fileName": "IIT Gandhinagar - Optical Tables with Vibration Isolation Systems.pdf", "familyGroupId": "iit-gandhinagar-optical-tables", "split": "development", "sha256": "be39fd08ab61011d7281c7f355b61864b28b091001712fbdeecd1c5181e3c491", "bytes": 994795, "physicalPages": 42, "textBearingPages": 42 },
+    { "id": "mgims-agarose-gel-electrophoresis", "fileName": "MGIMS Sevagram - Semi-Automated Agarose Gel Electrophoresis System.pdf", "familyGroupId": "mgims-agarose-gel-electrophoresis", "split": "development", "sha256": "7bd16bf0bb2c8b0773d5fb5f37fe11d183b10b88962c28b37b3f0ad59525361c", "bytes": 898569, "physicalPages": 20, "textBearingPages": 20 },
+    { "id": "ncess-laser-disdrometer", "fileName": "NCESS Thiruvananthapuram - Optical Laser Disdrometer.pdf", "familyGroupId": "ncess-laser-disdrometer", "split": "development", "sha256": "203c3fdb820a774ae5c4a92d216e9fdfa4291201fd9394de63f9eba7e3e0b204", "bytes": 711244, "physicalPages": 20, "textBearingPages": 20 },
+    { "id": "niot-auto-salinometer", "fileName": "NIOT Chennai - Auto Salinometer.pdf", "familyGroupId": "niot-auto-salinometer", "split": "development", "sha256": "29838bdb3001addc4c4c970f279f802d070ffc1bcb253a11504715206ec644a0", "bytes": 1598894, "physicalPages": 25, "textBearingPages": 25 },
+    { "id": "pgimer-model-tender-medical-equipment", "fileName": "PGIMER Chandigarh - Model Tender Document for Medical Equipment.pdf", "familyGroupId": "pgimer-model-tender-medical-equipment", "split": "development", "sha256": "48a12f7acdf654b94ecb52d519dfb9aa13c36e67e654ed582ef79c0b1a7cc0c9", "bytes": 6562300, "physicalPages": 61, "textBearingPages": 1 },
+    { "id": "pgimer-model-tender-medical-equipment-copy", "fileName": "PGIMER Chandigarh - Model Tender Document for Medical Equipment (Copy).pdf", "familyGroupId": "pgimer-model-tender-medical-equipment", "split": "development", "sha256": "8210a829cd61b2f0953d76f82d76aac4a764eaa5512dff8d14fe22608b3c3ea4", "bytes": 6562300, "physicalPages": 61, "textBearingPages": 1 },
+    { "id": "saha-xband-epr", "fileName": "Saha Institute Kolkata - Floor standing X-Band EPR Spectrometer System.pdf", "familyGroupId": "saha-xband-epr", "split": "development", "sha256": "ff72ab64cd94d9507ec1c169ce064315bcc862a5c0e663984aa0a3e69af347b6", "bytes": 8302257, "physicalPages": 13, "textBearingPages": 0 },
+    { "id": "example-input-1", "fileName": "input 1.pdf", "familyGroupId": "example-input-1", "split": "development", "sha256": "7e381ceb3acbc7b08abe1c958cd793972ce89831d94d1586f9a84eab55640d2f", "bytes": 353497, "physicalPages": 18, "textBearingPages": 18 },
+    { "id": "example-input-2", "fileName": "input 2.pdf", "familyGroupId": "example-input-2", "split": "development", "sha256": "e2eac72281a707a8855646f70acbd5a35e5ff680ecb0b25cb48375f990780b7d", "bytes": 824675, "physicalPages": 37, "textBearingPages": 37 },
+    { "id": "example-input-3", "fileName": "input 3.pdf", "familyGroupId": "example-input-3", "split": "development", "sha256": "607966f4e1957c9921216734fce3d69c1dc6ea19d9979a45f217cbd0c2c1777e", "bytes": 2153673, "physicalPages": 41, "textBearingPages": 41 }
+  ],
+  "previouslyUsedExternalTenders": [
+    {
+      "id": "madras-tendernotice-1",
+      "familyGroupId": "madras-tendernotice-1",
+      "split": "development",
+      "repositoryCopy": false,
+      "sha256": "7e8f042fd10d4edd7572c41b2f946b61db9b93853dff81b72579901df1bde7ca",
+      "physicalPages": 32,
+      "inventorySource": "benchmarks/representative-tenders/manifest.json",
+      "reason": "Previously included in the six-document baseline; the local source is not present in examples/."
+    },
+    {
+      "id": "iit-guwahati-utm",
+      "familyGroupId": "iit-guwahati-utm",
+      "split": "development",
+      "repositoryCopy": false,
+      "sha256": "88d912e8d3172a99e8422cef2c185dc90692f6b0b1d70e6646f557a524f65967",
+      "physicalPages": 15,
+      "reason": "Previously used for analysis, annotations, and code iteration; the historical heldout label does not make it an untouched Phase 1 v2 evaluation set."
+    }
+  ]
+}

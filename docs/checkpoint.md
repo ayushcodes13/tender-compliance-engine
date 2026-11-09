@@ -16,6 +16,19 @@ Upload a text-based tender PDF
 
 This is a deliberate simplification requested by the user. The deployed product is one Next.js app. It has no separate API service, worker, database, queue, or Docker setup. Tender bytes and review state stay in browser memory. GPT-6 Luna is the only model provider; the server-side credential is never exposed to the browser.
 
+## Phase 1 v2 execution sequence (2026-11-09)
+
+The approved Phase 1 v2 brief in `plan.md` changes the next engineering objective from the short customer-validation sequence below to an evidence-first architecture redesign. This is an explicit sequence change, not completion of the hosted-upload checkpoint. Keep free-preview 32 MiB edge verification open as a separate release gate; no Render service has been created or deployed, and no tender should be sent to a hosted endpoint for that gate without explicit owner authorization.
+
+Proceed through the v2 gates in `plan.md` order. The first gate is evaluation baseline and anti-leakage protocol. Existing repository examples and prior benchmark tenders are development material because they have informed previous analysis, fixes, or annotations. The initial inventory in `benchmarks/phase-1-v2-corpus.json` assigns them to development and intentionally defines no locked set. Do not claim that this inventory, partial annotations, scripted fixtures, or historical live runs establish quality on unseen tenders.
+
+- [x] **V2.1a — Fingerprint and split inventory:** record SHA-256, bytes, physical page count, and selectable-text-bearing page count without storing extracted source text; keep the two related PGIMER copies in one family; assign all known-used material to development. Reproduction: `node benchmarks/scripts/verify-phase1-v2-corpus.mjs`.
+- [ ] **V2.1b — Characterize source and layout diversity:** inspect publisher/source provenance, native/scanned/hybrid pages, tables, annexures, and known failure coverage without turning document-specific patterns into product rules.
+- [ ] **V2.2 — Define and apply the source-region annotation protocol:** record expected obligations and non-requirements, source anchors, atomicity, values/units/operators, uncertainty, and adjudication; document partial coverage and unresolved disagreements.
+- [ ] **V2.3 — Establish a reproducible current-pipeline baseline:** compare saved source-linked outputs against adjudicated development/validation labels; separate omission, false inclusion, split/merge, citation, fidelity, and coverage results; do not spend on live model calls without user authorization.
+- [ ] **V2.4 — Create validation and locked evaluation splits:** add independent whole-tender material only when its provenance and reuse basis are clear; keep publisher/layout families and all versions together; lock the evaluation set before tuning.
+- [ ] **V2.5 onward — Define domain/run contracts, parser boundaries, durable orchestration, task-led extraction, coverage, review, and export gates:** follow the delivery phases and acceptance criteria in `plan.md`; add no Phase 2 behavior.
+
 ## User-directed reliability foundation (2026-11-09)
 
 This short sequence supersedes infrastructure-heavy architecture milestones for the current customer-validation push. Keep the existing single-user workflow and OEM behavior intact; do not add workers, queues, multi-tenant accounts, amendments, eligibility analysis, or supplier libraries.
