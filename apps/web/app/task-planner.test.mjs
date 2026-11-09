@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bindTaskPlanToInventory, buildTaskPlanRequest, requestTaskPlan, validateTaskPlanEnvelope } from "./task-planner.ts";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, requestTaskPlan, validateTaskPlanEnvelope } from "./task-planner.ts";
 
 const fingerprint = "f".repeat(64);
 const request = {
@@ -173,4 +173,18 @@ test("marks pages with omitted parser regions unresolved and binds region action
     { id: "doc:page:2", physicalPdfPageNumber: 2, imageRegions: [{ id: "doc:page:2:image:1" }], ocrRegions: [], textBlocks: [], tables: [] },
   ] }, valid);
   assert.deepEqual(bound.actionPageNumbers, [1, 2]);
+});
+
+test("materializes validated actions as stable source-ordered work units", () => {
+  const proposal = validPlan().proposal;
+  const sourceIdToNumber = new Map([
+    ["doc:page:1", 1], ["doc:page:1:text:1", 1], ["doc:page:2", 2], ["doc:page:2:image:1", 2],
+  ]);
+  const first = buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber, createdAt: "2026-11-10T10:00:00.000Z" });
+  const second = buildPlannedInspectionWorkUnits({ runId: request.runId, proposal: { ...proposal, actions: [...proposal.actions].reverse() }, sourceIdToNumber, createdAt: "2026-11-10T10:00:00.000Z" });
+  assert.deepEqual(first.map(({ unit }) => unit.idempotencyKey), second.map(({ unit }) => unit.idempotencyKey));
+  assert.deepEqual(first.map(({ physicalPage }) => physicalPage), [1, 2]);
+  assert.deepEqual(first.map(({ mode }) => mode), ["native_text", "visual"]);
+  assert.deepEqual(first.map(({ unit }) => unit.operation), ["native_text", "visual"]);
+  assert.throws(() => buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber: new Map(), createdAt: "2026-11-10T10:00:00.000Z" }), /outside the validated inventory/);
 });

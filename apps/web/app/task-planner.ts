@@ -1,4 +1,4 @@
-import type { ModelProposalEnvelope, TaskPlanProposal } from "./analysis-run.ts";
+import { createWorkUnit, orderWorkUnits, type ModelProposalEnvelope, type TaskPlanProposal, type WorkUnit } from "./analysis-run.ts";
 import type { SourceDocumentModel } from "./source-document.ts";
 
 export type TaskPlanPageInput = {
@@ -44,6 +44,13 @@ export type BoundTaskPlan = {
   pageDispositions: Map<number, TaskPlanProposal["scope"][number]>;
   proposedExcludedPageNumbers: number[];
   actionPageNumbers: number[];
+};
+
+export type PlannedInspectionWorkUnit = {
+  unit: WorkUnit;
+  mode: TaskPlanProposal["actions"][number]["mode"];
+  rationale: string;
+  physicalPage: number;
 };
 
 export const TASK_PLAN_MAX_EXCERPT_PER_PAGE = 600;
@@ -221,6 +228,41 @@ export function bindTaskPlanToInventory(document: SourceDocumentModel, proposal:
     proposedExcludedPageNumbers: [...pageDispositions].filter(([, scope]) => scope.disposition === "outside_task").map(([page]) => page).sort((a, b) => a - b),
     actionPageNumbers: [...actionPageNumbers].sort((a, b) => a - b),
   };
+}
+
+/** Expands validated page/region actions into stable, source-ordered inspection units. */
+export function buildPlannedInspectionWorkUnits(input: {
+  runId: string;
+  proposal: TaskPlanProposal;
+  sourceIdToNumber: ReadonlyMap<string, number>;
+  createdAt: string;
+}): PlannedInspectionWorkUnit[] {
+  const candidates = input.proposal.actions.flatMap((action) => action.sourceIds.map((sourceId) => {
+    const physicalPage = input.sourceIdToNumber.get(sourceId);
+    if (physicalPage === undefined) throw new Error("A planned work unit referenced a source outside the validated inventory.");
+    return { sourceId, physicalPage, mode: action.mode, rationale: action.rationale };
+  })).sort((a, b) => a.physicalPage - b.physicalPage || a.sourceId.localeCompare(b.sourceId) || a.mode.localeCompare(b.mode));
+  const workUnits = candidates.map((candidate, ordinal) => ({
+    ...candidate,
+    unit: createWorkUnit({
+      runId: input.runId,
+      kind: "inspect",
+      sourceIds: [candidate.sourceId],
+      ordinal,
+      createdAt: input.createdAt,
+      operationKey: candidate.mode,
+    }),
+  }));
+  const unique = new Map<string, typeof workUnits[number]>();
+  for (const work of workUnits) {
+    const previous = unique.get(work.unit.idempotencyKey);
+    if (previous) {
+      unique.set(work.unit.idempotencyKey, { ...previous, rationale: previous.rationale === work.rationale ? previous.rationale : `${previous.rationale} ${work.rationale}`.slice(0, 1000) });
+    } else unique.set(work.unit.idempotencyKey, work);
+  }
+  const orderedUnits = orderWorkUnits([...unique.values()].map(({ unit }) => unit));
+  const byId = new Map([...unique.values()].map((work) => [work.unit.idempotencyKey, work]));
+  return orderedUnits.map((unit) => byId.get(unit.idempotencyKey)!);
 }
 
 function taskPlanJsonSchema() {
