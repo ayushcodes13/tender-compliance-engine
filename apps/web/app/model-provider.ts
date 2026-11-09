@@ -3,7 +3,9 @@ export type ModelProviderResult = { ok: true; config: ModelProviderConfig } | { 
 type Environment = Record<string, string | undefined>;
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-export const MODEL_REQUESTS_PER_ANALYSIS = 3;
+// Independent page work can use the process-wide cap. The column-map stage
+// applies a narrower limit because the provider proved less stable under bursts.
+export const MODEL_REQUESTS_PER_ANALYSIS = 6;
 
 export class ModelProviderConnectionError extends Error {
   constructor() {

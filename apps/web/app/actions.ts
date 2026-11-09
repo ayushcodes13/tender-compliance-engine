@@ -1444,7 +1444,12 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       return [];
       };
       sourceColumns = await mapPageColumns(firstPage);
-      const inspectVectorPage = async (page: (typeof visualPages)[number], inheritedColumns: SourceColumn[], auditTurn: Promise<void>) => {
+      const inspectVectorPage = async (
+        page: (typeof visualPages)[number],
+        inheritedColumns: SourceColumn[],
+        auditTurn: Promise<void>,
+        releaseAuditTurn: () => void,
+      ) => {
         const sourceRows = getVectorRows(page);
         const sourceTable = page.sourceModel.tables[0];
         const sourceRowsWithIds = sourceRows.map((row, rowIndex) => {
@@ -1701,23 +1706,33 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           return [{ rowIndex, sourceCells: row.cells, extractedRequirements }];
         });
         const rowAuditState = new Map<number, { status: "no_gap_reported" | "possible_gap" | "ambiguous" | "audit_incomplete"; note?: string }>();
-        // Keep the analysis-wide audit cap deterministic even when independent
-        // pages are being inspected concurrently.
-        await auditTurn;
         const rowAuditBatches = batchSourceRowsForAudit(requirementRows);
+        const recoveredCandidates: Candidate[] = [];
+        const runSourceRowAudits = async () => {
+          // Reserve the bounded audit budget in source order, then release the
+          // next page before waiting on provider latency. This keeps allocation
+          // deterministic without serializing independent audit requests.
+          await auditTurn;
+          const selectedBatches = new Set<number>();
+          for (const [auditBatchIndex, batch] of rowAuditBatches.entries()) {
+            const expectedRowIndices = batch.map((row) => row.rowIndex);
+            if (sourceRowAuditBatchesUsed >= SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS) {
+              coverageCheckIncomplete = true;
+              for (const rowIndex of expectedRowIndices) rowAuditState.set(rowIndex, { status: "audit_incomplete", note: "Analysis semantic audit budget was reached." });
+              continue;
+            }
+            if (!isSourceRowAuditBatchWithinLimits(batch)) {
+              coverageCheckIncomplete = true;
+              for (const rowIndex of expectedRowIndices) rowAuditState.set(rowIndex, { status: "audit_incomplete", note: "Source row exceeded the semantic audit size limit." });
+              continue;
+            }
+            sourceRowAuditBatchesUsed += 1;
+            selectedBatches.add(auditBatchIndex);
+          }
+          releaseAuditTurn();
         for (const [auditBatchIndex, batch] of rowAuditBatches.entries()) {
+          if (!selectedBatches.has(auditBatchIndex)) continue;
           const expectedRowIndices = batch.map((row) => row.rowIndex);
-          if (sourceRowAuditBatchesUsed >= SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS) {
-            coverageCheckIncomplete = true;
-            for (const rowIndex of expectedRowIndices) rowAuditState.set(rowIndex, { status: "audit_incomplete", note: "Analysis semantic audit budget was reached." });
-            continue;
-          }
-          if (!isSourceRowAuditBatchWithinLimits(batch)) {
-            coverageCheckIncomplete = true;
-            for (const rowIndex of expectedRowIndices) rowAuditState.set(rowIndex, { status: "audit_incomplete", note: "Source row exceeded the semantic audit size limit." });
-            continue;
-          }
-          sourceRowAuditBatchesUsed += 1;
           const auditInput = JSON.stringify(batch.map((row) => ({ row_index: row.rowIndex, source_cells: row.sourceCells, extracted_requirements: row.extractedRequirements })));
           const inputCharacters = auditInput.length;
           const requestStartedAt = performance.now();
@@ -1770,7 +1785,8 @@ Product names and model/capacity labels are headings, but serials, page furnitur
               if (row.status !== "possible_gap") continue;
               const auditedRow = batch.find((sourceRow) => sourceRow.rowIndex === row.rowIndex);
               for (const quote of row.missingSourceQuotes) {
-                if (requirements.some((candidate) => candidate.source_row_index === row.rowIndex && candidate.quote === quote)) continue;
+                if (requirements.some((candidate) => candidate.source_row_index === row.rowIndex && candidate.quote === quote)
+                  || recoveredCandidates.some((candidate) => candidate.source_row_index === row.rowIndex && candidate.quote === quote)) continue;
                 const cellIndex = auditedRow?.sourceCells.findIndex((cell) => cell.includes(quote)) ?? -1;
                 if (cellIndex < 0) continue;
                 const sourceBox = locateQuote(quote, page.rawText, page.rawItemMap, page.positioned);
@@ -1784,8 +1800,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
                   traceSourceRowId: sourceRowsWithIds[row.rowIndex]?.sourceRowId,
                   traceSourceCellId: page.sourceModel.tables[0]?.rows[row.rowIndex]?.cells[cellIndex]?.id,
                 };
-                recoveredCandidate.traceCandidateId = registerTraceCandidate(recoveredCandidate, "source_row_recovery", requirements.length, true);
-                requirements.push(recoveredCandidate);
+                recoveredCandidates.push(recoveredCandidate);
               }
             }
           } catch (error) {
@@ -1805,6 +1820,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             coverageCheckIncomplete = true;
           }
         }
+        };
         for (const heading of looseHeadings) {
           if (typeof heading.quote !== "string" || !["section", "optional_heading"].includes(heading.row_type ?? "")) continue;
           const sourceBox = locateQuote(heading.quote, page.rawText, page.rawItemMap, page.positioned);
@@ -1820,6 +1836,10 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           observedColumns: returnedColumns,
           invalidPageColumnMap,
           modelInspectionComplete,
+          runSourceRowAudits,
+          rowAuditState,
+          tableCoverageRows: tableCoverageRows.rows,
+          recoveredCandidates,
           sourceTableRowsDetected: sourceRows.length,
           sourceTableRowsMappedToCandidates: sourceRowsMappedToCandidates.size,
           sourceTableRowsExcludedAsHeaders: sourceRowsExcludedAsHeaders,
@@ -1832,19 +1852,17 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       const inheritedColumns = [...sourceColumns];
       const auditTurns: Promise<void>[] = [];
       const releaseAuditTurns: Array<() => void> = [];
+      const releasedAuditTurns = new Set<number>();
       for (let index = 0; index < vectorPages.length; index += 1) {
         auditTurns.push(index === 0 ? Promise.resolve() : new Promise<void>((resolve) => { releaseAuditTurns[index] = resolve; }));
       }
-      const inspectInSourceOrder = async (page: (typeof visualPages)[number], index: number, columns: SourceColumn[]) => {
-        try {
-          return await inspectVectorPage(page, columns, auditTurns[index]);
-        } finally {
-          // Pages that fail before reaching the audit still advance the ordered
-          // turn, without allowing a later page to consume the budget first.
-          await auditTurns[index];
-          releaseAuditTurns[index + 1]?.();
-        }
+      const releaseAuditTurn = (index: number) => {
+        if (releasedAuditTurns.has(index)) return;
+        releasedAuditTurns.add(index);
+        releaseAuditTurns[index + 1]?.();
       };
+      const inspectInSourceOrder = (page: (typeof visualPages)[number], index: number, columns: SourceColumn[]) =>
+        inspectVectorPage(page, columns, auditTurns[index], () => releaseAuditTurn(index));
       report("matching source text to visible vector table rows", { stage: "extracting", message: "Reading table rows and auditing independent requirements", current: 0, total: vectorPages.length });
       // Map each independently headed table before row classification. Pages
       // without a visible header retain the preceding verified map, which
@@ -1853,9 +1871,9 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       const independentlyMappedPages = vectorPages.slice(1).filter((page) =>
         !getVectorRows(page).some((row) => isRepeatedTableHeader(row.cells, inheritedColumns.map((column) => column.header))),
       );
-      const independentColumnMaps = await mapInConcurrentWaves(
+      const independentColumnMaps = await mapWithConcurrency(
         independentlyMappedPages,
-        MODEL_REQUESTS_PER_ANALYSIS,
+        Math.min(4, MODEL_REQUESTS_PER_ANALYSIS),
         (page) => mapPageColumns(page),
         (completed, total) => onProgress?.({ stage: "mapping", message: "Mapping independent table headers", current: completed, total }),
       );
@@ -1873,18 +1891,40 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         pageColumnsByPage.set(page.page, [...precedingColumns]);
       }
       sourceColumns = [...precedingColumns];
-      const inspectedPages = await mapInConcurrentWaves(
+      const inspectedPages = await mapWithConcurrency(
         vectorPages,
         MODEL_REQUESTS_PER_ANALYSIS,
         (page, index) => inspectInSourceOrder(page, index, pageColumnsByPage.get(page.page) ?? inheritedColumns),
         (completed, total) => onProgress?.({ stage: "extracting", message: "Reading table rows and auditing independent requirements", current: completed, total }),
       );
       const pageResults = [];
+      const auditPromises: Promise<void>[] = [];
       // The wave runner preserves input order. Apply page-local results in source
       // order so continuations, requirement ordering, and column state stay stable.
       for (const [index, result] of inspectedPages.entries()) {
-        if (!result) { otherPages.push(vectorPages[index]); continue; }
+        if (!result) { otherPages.push(vectorPages[index]); releaseAuditTurn(index); continue; }
         pageResults.push(result);
+        // Reserve each page's bounded audit budget in source order. The audit
+        // function releases its turn before provider I/O, so these requests can
+        // overlap without making allocation depend on response timing.
+        auditPromises.push(result.runSourceRowAudits());
+      }
+      await Promise.all(auditPromises);
+      for (const result of pageResults) {
+        for (const candidate of result.recoveredCandidates) {
+          candidate.traceCandidateId = registerTraceCandidate(candidate, "source_row_recovery", result.parsed.requirements.length, true);
+          result.parsed.requirements.push(candidate);
+        }
+        for (const row of result.sourceTableCoverageRows) {
+          const audit = result.rowAuditState.get(row.rowNumber - 1);
+          if (audit) {
+            row.semanticCoverageStatus = audit.status;
+            row.semanticCoverageNote = audit.note;
+          } else if (row.sourceClassification === "requirement") {
+            row.semanticCoverageStatus = "audit_incomplete";
+            coverageCheckIncomplete = true;
+          }
+        }
       }
       // Keep each page's verified map on its own candidates. Distinct tender
       // schedules may legitimately use different columns and are projected as
