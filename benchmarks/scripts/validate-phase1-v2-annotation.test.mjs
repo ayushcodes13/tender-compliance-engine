@@ -8,7 +8,7 @@ const annotationUrl = new URL("../phase-1-v2-annotations/iit-gandhinagar-page-22
 const manifestUrl = new URL("../phase-1-v2-corpus.json", import.meta.url);
 const annotation = JSON.parse(await readFile(annotationUrl, "utf8"));
 const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
-const ncessAnnotationUrl = new URL("../phase-1-v2-annotations/ncess-pages-1-7-draft.json", import.meta.url);
+const ncessAnnotationUrl = new URL("../phase-1-v2-annotations/ncess-pages-1-20-draft.json", import.meta.url);
 const ncessAnnotation = JSON.parse(await readFile(ncessAnnotationUrl, "utf8"));
 const ncessSourcePath = fileURLToPath(new URL("../../examples/NCESS Thiruvananthapuram - Optical Laser Disdrometer.pdf", import.meta.url));
 
@@ -23,16 +23,18 @@ test("accepts the provisional page annotation and preserves review limits", asyn
   assert.equal(annotation.review.independentReviewComplete, false);
 });
 
-test("validates source anchors and explicit partial scope for the NCESS development draft", async () => {
+test("validates whole-document source anchors while preserving the NCESS draft review limits", async () => {
   const result = await validateAnnotation(ncessAnnotation, { sourcePath: ncessSourcePath, manifest });
   assert.equal(result.status, "draft");
   assert.equal(result.corpusSplit, "development");
-  assert.equal(result.pagesReviewed, 7);
+  assert.equal(result.pagesReviewed, 20);
   assert.equal(result.sourceAnchorsVerified, ncessAnnotation.anchors.length);
   assert.equal(result.sourceAnchorsUnverified, 0);
-  assert.deepEqual(ncessAnnotation.scope.physicalPagesReviewed, [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(ncessAnnotation.scope.wholeDocumentReviewed, false);
+  assert.deepEqual(ncessAnnotation.scope.physicalPagesReviewed, Array.from({ length: 20 }, (_, index) => index + 1));
+  assert.equal(ncessAnnotation.scope.wholeDocumentReviewed, true);
   assert.equal(ncessAnnotation.review.independentReviewComplete, false);
+  assert.match(ncessAnnotation.scope.statement, /independent review and adjudication remain incomplete/u);
+  assert.equal(ncessAnnotation.labels.find((label) => label.id === "annex-a-equipment-description-conflict").reviewDisposition, "needs_adjudication");
 });
 
 test("rejects a raw value token that is absent from its cited source anchors", async () => {
