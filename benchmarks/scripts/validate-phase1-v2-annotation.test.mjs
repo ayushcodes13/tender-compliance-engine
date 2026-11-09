@@ -43,6 +43,52 @@ test("rejects adjudicated status without independent reviewers", async () => {
   await assert.rejects(validateAnnotation(changed, { manifest }), /requires at least two reviewers/u);
 });
 
+test("whole-document review requires an explicit reviewed region on every physical page", async () => {
+  const changed = structuredClone(annotation);
+  const pages = Array.from({ length: changed.source.physicalPageCount }, (_, index) => index + 1);
+  changed.scope.physicalPagesReviewed = pages;
+  changed.scope.wholeDocumentReviewed = true;
+  changed.regions = pages.map((physicalPage) => ({
+    id: `page-${physicalPage}-coverage`,
+    physicalPage,
+    kind: "page_region",
+    label: `Page ${physicalPage} visual/source coverage record`,
+    coverage: "complete_in_scope",
+    sourceAnchorIds: [],
+    reviewNote: "Synthetic validator-test coverage record.",
+  }));
+  changed.review.reviewers[0].regionIds = changed.regions.map((region) => region.id);
+
+  const valid = await validateAnnotation(changed, { manifest });
+  assert.equal(valid.pagesReviewed, changed.source.physicalPageCount);
+
+  changed.regions.pop();
+  changed.review.reviewers[0].regionIds = changed.regions.map((region) => region.id);
+  await assert.rejects(validateAnnotation(changed, { manifest }), /explicit page coverage record for physical page 42/u);
+});
+
+test("whole-document review cannot silently contain partial or unreviewed regions", async () => {
+  const changed = structuredClone(annotation);
+  const pages = Array.from({ length: changed.source.physicalPageCount }, (_, index) => index + 1);
+  changed.scope.physicalPagesReviewed = pages;
+  changed.scope.wholeDocumentReviewed = true;
+  changed.regions = pages.map((physicalPage) => ({
+    id: `page-${physicalPage}-coverage`,
+    physicalPage,
+    kind: "page_region",
+    label: `Page ${physicalPage} visual/source coverage record`,
+    coverage: physicalPage === 7 ? "unreviewed" : "complete_in_scope",
+    sourceAnchorIds: [],
+    reviewNote: "Synthetic validator-test coverage record.",
+  }));
+  changed.review.reviewers[0].regionIds = changed.regions.map((region) => region.id);
+
+  await assert.rejects(validateAnnotation(changed, { manifest }), /cannot include partial or unreviewed regions/u);
+
+  changed.regions.find((region) => region.physicalPage === 7).coverage = "partial";
+  await assert.rejects(validateAnnotation(changed, { manifest }), /cannot include partial or unreviewed regions/u);
+});
+
 test("rejects non-requirements that lack an explicit exclusion disposition", async () => {
   const changed = structuredClone(annotation);
   changed.labels.find((label) => label.kind === "explicit_non_requirement").reviewDisposition = "retain";

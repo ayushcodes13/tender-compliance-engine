@@ -92,6 +92,10 @@ export async function validateAnnotation(annotation, { sourcePath = null, manife
   if (annotation.scope.wholeDocumentReviewed) {
     const pages = new Set(annotation.scope.physicalPagesReviewed);
     assert(pages.size === annotation.source.physicalPageCount, "Whole-document review requires every physical page to be listed.");
+    assert(!annotation.regions.some((region) => ["partial", "unreviewed"].includes(region.coverage)), "Whole-document review cannot include partial or unreviewed regions.");
+    for (let page = 1; page <= annotation.source.physicalPageCount; page += 1) {
+      assert(annotation.regions.some((region) => region.physicalPage === page && region.kind === "page_region"), `Whole-document review requires an explicit page coverage record for physical page ${page}.`);
+    }
   }
 
   for (const label of annotation.labels) {

@@ -16,6 +16,7 @@ Annotations distinguish requirement candidates, explicit non-requirements, ambig
 3. Give each region one coverage state: `complete_in_scope`, `partial`, `unreviewed`, `unreadable`, or `not_applicable`. `complete_in_scope` means every visible/selectable content unit in that named region was considered for this task; it does not mean the tender or the parser is complete.
 4. Link any cross-page continuation explicitly. Review the linked page/region before claiming the obligation's complete source context. Otherwise mark the item and coverage partial.
 5. Keep the annotation's document scope explicit: pages reviewed, pages in the document, region scope, and known exclusions. Never infer coverage from a count of parser-detected blocks or table rows alone.
+   When `wholeDocumentReviewed` is true, every physical page must have an explicit page-level coverage record, and no region may remain `partial` or `unreviewed`. A fully inspected but unreadable region may be marked `unreadable`; this is explicit coverage, not evidence that its contents were understood. Page coverage records and region inventory are reviewer attestations, not machine proof of semantic completeness.
 
 ## Labeling obligations and non-requirements
 
