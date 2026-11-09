@@ -33,7 +33,9 @@
         { "pages": [18, 19, 20], "kind": "consecutive-annexure-forms-with-summary-information-table", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [21, 22], "kind": "bank-guarantee-annexure-prose-continuation-across-page-break", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [24, 25, 26], "kind": "prior-order-table-followed-by-separate-bidder-and-oem-turnover-forms", "evidenceLevel": "render-confirmed-single-reviewer" },
-        { "pages": [1], "kind": "hybrid-notice-page-with-raster-logo-and-bid-schedule-table", "evidenceLevel": "render-confirmed-single-reviewer" }
+        { "pages": [1], "kind": "hybrid-notice-page-with-raster-logo-and-bid-schedule-table", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [27, 28], "kind": "distinct-bidder-and-oem-local-content-declaration-tables", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [29], "kind": "bid-submission-document-checklist-table", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["cell-boundaries", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]
     },
@@ -52,6 +54,11 @@
         { "pages": [17, 18, 19], "kind": "technical-document-checklist-followed-by-financial-checklist-and-local-content-affidavit", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [1], "kind": "bilingual-title-page-with-raster-emblem", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [13], "kind": "financial-bid-instructions-prose-with-signoff", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [2, 3], "kind": "contents-page-with-annexure-index-followed-by-bilingual-tender-schedule", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [15], "kind": "bidder-bank-account-refund-form-table", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [26], "kind": "compliance-table-row-continuation-on-following-page", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [28, 29], "kind": "technical-evaluation-and-supporting-document-tables", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [34], "kind": "financial-offer-bill-of-quantities-table", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 32, 35], "kind": "numbered-clauses-and-bid-forms", "evidenceLevel": "visual-candidate" }
       ],
       "unknowns": ["cell-boundaries", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]
@@ -182,7 +189,11 @@
         { "pages": [30, 31, 32, 33, 34, 35, 36, 37], "kind": "annexure-and-bidder-form-sequence", "evidenceLevel": "visual-candidate" },
         { "pages": [24, 25, 28, 29], "kind": "compliance-schedule-continuation-through-other-and-optional-items", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [30, 31, 32, 33], "kind": "distinct-bidder-forms-and-previous-supply-schedules", "evidenceLevel": "render-confirmed-single-reviewer" },
-        { "pages": [17, 18, 19, 20, 21, 22, 23], "kind": "numbered-contract-and-supplier-obligations-in-dense-prose-and-bullets", "evidenceLevel": "render-confirmed-single-reviewer" }
+        { "pages": [17, 18, 19, 20, 21, 22, 23], "kind": "numbered-contract-and-supplier-obligations-in-dense-prose-and-bullets", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [1, 2], "kind": "bilingual-notice-page-and-tabular-tender-schedule", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [14, 15, 16], "kind": "numbered-tender-terms-and-conditions-across-consecutive-pages", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [26, 27], "kind": "technical-specification-table-continues-across-page-break", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [37], "kind": "two-envelope-bid-submission-document-list-table", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["cell-boundaries", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]
     },
@@ -203,6 +214,8 @@
         { "pages": [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41], "kind": "bid-form-and-integrity-agreement-sequence", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [22, 23], "kind": "unpriced-bid-table-followed-by-financial-bid-section", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [10, 11], "kind": "numbered-contract-clauses-continuing-across-pages-with-raster-header-signals", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [5, 6, 7], "kind": "numbered-tender-conditions-and-supplier-terms-across-pages", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [14], "kind": "essential-qualification-document-checklist-table", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [23, 24], "kind": "financial-bid-terms-followed-by-turnover-declaration-form-table", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [25, 26, 27, 28], "kind": "manufacturer-authorization-and-distinct-bidder-declaration-forms", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [29, 30], "kind": "bidder-information-table-and-prior-supply-order-form", "evidenceLevel": "render-confirmed-single-reviewer" },
