@@ -56,7 +56,7 @@ test('bounds in-flight requests and never sends aborted queued work', async () =
     await new Promise(resolve=>releaseRequests.push(resolve));
     active--; return new Response('{}');
   });
-  const requests = Array.from({length:3},()=>client.fetch('ignored'));
+  const requests = Array.from({length:6},()=>client.fetch('ignored'));
   await new Promise(resolve=>setImmediate(resolve));
   const controller = new AbortController();
   const queued = client.fetch('ignored',{signal:controller.signal});
@@ -68,8 +68,8 @@ test('bounds in-flight requests and never sends aborted queued work', async () =
   await new Promise(resolve=>setImmediate(resolve));
   releaseRequests.splice(0).forEach(resolve=>resolve());
   await final;
-  assert.equal(peak,3);
-  assert.equal(sent,4);
+  assert.equal(peak,6);
+  assert.equal(sent,7);
 });
 
 test('starts the execution timeout only after a queued request is admitted', async () => {

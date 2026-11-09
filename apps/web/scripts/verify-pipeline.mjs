@@ -39,12 +39,14 @@ let activeRoutingRequests = 0;
 let maximumRoutingConcurrency = 0;
 const routingBatchEvents = [];
 const vectorAuditPageOrder = [];
+const vectorLabelEvents = [];
 const progressObservations = [];
 const forensicTraceDirectory = path.join(process.cwd(), '.local', 'forensic-traces');
 const existingTraceFiles = new Set(await readdir(forensicTraceDirectory).catch(() => []));
 const provider = http.createServer(async (request, response) => {
   providerRequestCount += 1;
   let trackedVectorLabelRequest = false;
+  let trackedVectorLabelPage = 0;
   let trackedGeneralExtractionRequest = false;
   let trackedGeneralExtractionFirstPage = 0;
   let trackedRoutingRequest = false;
@@ -73,12 +75,15 @@ const provider = http.createServer(async (request, response) => {
       generalExtractionBatchEvents.push({ firstPage, event: 'started', at: Date.now() });
       await new Promise(resolve => setTimeout(resolve, firstPage === 1 ? 40 : firstPage === 4 ? 160 : firstPage === 7 ? 220 : 60));
     }
-    if (scenario === 'vector-page-concurrency' && schema === 'visual_table_row_labels') {
+    if (['vector-page-concurrency', 'vector-page-straggler'].includes(scenario) && schema === 'visual_table_row_labels') {
       trackedVectorLabelRequest = true;
       activeVectorLabelRequests += 1;
       vectorLabelRequestCount += 1;
       maximumVectorLabelConcurrency = Math.max(maximumVectorLabelConcurrency, activeVectorLabelRequests);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      trackedVectorLabelPage = Number([...raw.matchAll(/Rendered PDF page (\d+)/g)].at(-1)?.[1] ?? 0);
+      vectorLabelEvents.push({ page: trackedVectorLabelPage, event: 'started', at: Date.now() });
+      const delay = scenario === 'vector-page-straggler' ? (trackedVectorLabelPage === 2 ? 800 : 40) : 100;
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
     if (scenario === 'vector-page-concurrency' && schema === 'source_row_semantic_coverage') {
       const auditInput = body.messages.at(-1)?.content ?? '';
@@ -100,7 +105,11 @@ const provider = http.createServer(async (request, response) => {
         [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}],
         [],
         [{header:'S. No.',role:'serial'},{header:'Parameter',role:'heading'},{header:'Specification',role:'specification'}],
-      ][page - 1] : null;
+      ][page - 1] : scenario === 'vector-page-straggler'
+        ? page === 1 ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}]
+          : page === 2 ? []
+            : [{header:'S. No.',role:'serial'},{header:'Parameter',role:'heading'},{header:'Specification',role:'specification'}]
+        : null;
       const columns = independentVectorColumns ?? (['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2&&scenario!=='vector-page-concurrency'?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])]);
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>{
@@ -121,6 +130,10 @@ const provider = http.createServer(async (request, response) => {
       result={columns:[],requirements:scenario==='page-batched-fallback'&&text.includes(duplicateQuote)?[{page:1,quote:duplicateQuote,visual_region_index:0,row_type:'requirement',category:'Performance',heading_prefix:'',remark:'',display_lines:[duplicateQuote],continues_previous:false}]:[]};
     } else if (schema === 'source_row_semantic_coverage') {
       const rows = JSON.parse(body.messages.at(-1)?.content ?? '[]');
+      if (scenario === 'vector-page-straggler') {
+        const pageMatch = JSON.stringify(rows).match(/Maximum load on unit (\d+)/);
+        if (pageMatch) vectorAuditPageOrder.push(Number(pageMatch[1]));
+      }
       result = { rows: rows.map(row => row.source_cells.some(cell => cell.includes('Calibration report shall be supplied.'))
         ? { row_index: row.row_index, status: 'possible_gap', note: 'The source row contains a second independently assessable obligation.', missing_source_quotes: ['Calibration report shall be supplied.'] }
         : { row_index: row.row_index, status: 'no_gap_reported', note: '', missing_source_quotes: [] }) };
@@ -157,6 +170,7 @@ const provider = http.createServer(async (request, response) => {
       generalExtractionBatchEvents.push({ firstPage: trackedGeneralExtractionFirstPage, event: 'completed', at: Date.now() });
     }
     if (trackedVectorLabelRequest) activeVectorLabelRequests -= 1;
+    if (trackedVectorLabelRequest) vectorLabelEvents.push({ page: trackedVectorLabelPage, event: 'completed', at: Date.now() });
     if (trackedGeneralExtractionRequest) activeGeneralExtractionRequests -= 1;
   }
 });
@@ -232,7 +246,7 @@ try {
   }
   const batched=await analyze(multiPage);
   assert.equal(batched.ok,true,batched.error);
-  assert.equal(maximumGeneralExtractionConcurrency,3,'Independent general extraction batches run at the existing per-analysis concurrency limit');
+  assert.equal(maximumGeneralExtractionConcurrency,4,'All four independent general extraction batches run concurrently under the process-wide limit of six');
   assert.deepEqual(batched.analysis.requirements.map(row=>row.quote),quotes,'Concurrent extraction preserves deterministic source order and all grounded fixture requirements');
   const batchedProgress=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
   assert.ok(batchedProgress.includes('Received and parsed 4 of 4 technical extraction batches'));
@@ -385,12 +399,36 @@ try {
   assert.equal(vectorPagesResult.ok,true,`${vectorPagesResult.error} (route calls ${routeCalls}; vector labels ${vectorLabelRequestCount}; peak concurrency ${maximumVectorLabelConcurrency})`);
   assert.equal(vectorLabelRequestCount,3,`Each detected vector-table page receives a page-local classification request (${JSON.stringify(vectorPagesResult.analysis.coverage.pages.map(page=>({page:page.page,rows:page.sourceTableRowsDetected,status:page.extractionStatus,routing:page.routingDisposition})))})`);
   assert.equal(maximumVectorLabelConcurrency,3,`Independent vector pages run concurrently up to the model-client limit (classified ${vectorLabelRequestCount}; audit order ${vectorAuditPageOrder.join(',')})`);
-  assert.deepEqual(vectorAuditPageOrder,[1,2,3],'The analysis-wide row-audit budget is consumed in source-page order');
+  assert.deepEqual([...vectorAuditPageOrder].sort((left,right)=>left-right),[1,2,3],'Independent source-row audits retain every classified page');
   assert.deepEqual(vectorPagesResult.analysis.requirements.map(row=>row.page),[1,1,1,2,2,2,2,2,3,3,3],'Returned requirements preserve source page order');
   assert.equal(vectorPagesResult.analysis.requirements.find(row=>row.page===2)?.quote,'Maximum load on unit 2 shall be 10 kN.','A headerless continuation retains its inherited specification column');
   assert.equal(vectorPagesResult.analysis.requirements.find(row=>row.page===2)?.sourceColumnMap?.[0]?.header,'Technical Parameters NIQ','A headerless continuation inherits the prior verified page map');
   assert.equal(vectorPagesResult.analysis.requirements.find(row=>row.page===3)?.sourceColumnMap?.[2]?.header,'Specification');
   assert.ok(vectorPagesResult.analysis.requirements.every(row=>row.sourceReference.sourceCell),'Parallel inspection preserves source-row citations');
+  scenario='vector-page-straggler';
+  vectorLabelEvents.length=0;vectorLabelRequestCount=0;maximumVectorLabelConcurrency=0;vectorAuditPageOrder.length=0;
+  const stragglerPdf=new jsPDF({unit:'pt'});stragglerPdf.setFontSize(8);
+  for(let page=1;page<=17;page++){
+    if(page>1)stragglerPdf.addPage();
+    stragglerPdf.text('TECHNICAL SPECIFICATION',40,40);
+    const rows=page===1
+      ? [['Technical Parameters NIQ','Remark'],['Maximum load on unit 1 shall be 10 kN.',''],['Operating temperature shall be -10 to 50 °C.','']]
+      : page===2
+        ? [['Maximum load on unit 2 shall be 10 kN.',''],['Supply voltage shall be 230 V AC.',''],['Operating temperature shall be -10 to 50 °C.',''],['Crosshead speed shall be 500 mm/min.',''],['Load accuracy shall be within 1%.','']]
+        : [['S. No.','Parameter','Specification'],[String(page),'Load frame',`Maximum load on unit ${page} shall be 10 kN.`],['2','Power','Supply voltage shall be 230 V AC.'],['3','Temperature','Operating temperature shall be -10 to 50 °C.']];
+    const widths=page===1||page===2?[370,130]:[55,140,305];
+    rows.forEach((cells,row)=>{let x=40;cells.forEach((value,column)=>{const width=widths[column];stragglerPdf.rect(x,70+row*38,width,38);if(value)stragglerPdf.text(value,x+3,88+row*38);x+=width;});});
+  }
+  const stragglerResult=await analyze(stragglerPdf);
+  assert.equal(stragglerResult.ok,true,stragglerResult.error);
+  const firstClassificationComplete=vectorLabelEvents.find(event=>event.page===2&&event.event==='completed');
+  const lastPageClassificationStart=vectorLabelEvents.find(event=>event.page===17&&event.event==='started');
+  assert.ok(lastPageClassificationStart&&firstClassificationComplete&&lastPageClassificationStart.at<firstClassificationComplete.at,`A slow early page does not hold later independent table pages behind a wave barrier (${JSON.stringify({vectorLabelRequestCount,firstClassificationComplete,lastPageClassificationStart,firstEvents:vectorLabelEvents.slice(0,8),lastEvents:vectorLabelEvents.slice(-8)})})`);
+  assert.equal(maximumVectorLabelConcurrency,6,'Large vector inspections use the process-wide bounded limit of six provider requests');
+  const requirementPages=stragglerResult.analysis.requirements.map(row=>row.page);
+  assert.deepEqual(requirementPages,[...requirementPages].sort((left,right)=>left-right),'Sliding scheduling still returns requirements in source order');
+  assert.ok(vectorAuditPageOrder.length>0&&vectorAuditPageOrder.length<=16,'The deterministic semantic-audit cap remains in force');
+  assert.deepEqual(vectorAuditPageOrder,[...vectorAuditPageOrder].sort((left,right)=>left-right),'The semantic-audit budget reserves pages in source order');
   scenario='mixed-native-heading';
   const mixedTitle='16. Source shutter assembly',mixedBody='The system shall withstand 300 N.';
   const mixedPdf=new jsPDF({unit:'pt'});mixedPdf.setFontSize(9);mixedPdf.text('TECHNICAL SPECIFICATION',40,45);
@@ -471,7 +509,7 @@ try {
   const tableProgressStart = progressObservations.length;
   const mixed=await analyze(tables);
   assert.equal(mixed.ok,true,mixed.error);
-  assert.deepEqual(progressObservations.slice(tableProgressStart).filter(event=>event.message==='Reading table rows and auditing independent requirements').map(event=>[event.current,event.total]),[[0,2],[2,2]],'Bounded mixed-layout vector processing reports completion after the page wave returns');
+  assert.deepEqual(progressObservations.slice(tableProgressStart).filter(event=>event.message==='Reading table rows and auditing independent requirements').map(event=>[event.current,event.total]),[[0,2],[1,2],[2,2]],'Bounded mixed-layout vector processing reports each independently completed page');
   const textAuditProgress=progressObservations.slice(tableProgressStart).filter(event=>event.message==='Checking routed technical text for omitted requirements');
   assert.ok(textAuditProgress.some(event=>event.stage==='coverage'&&event.current===0&&event.total>0),'Text-page completeness audit announces its active stage before waiting for the model');
   assert.equal(mixed.analysis.normalizedTables,true);
