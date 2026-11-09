@@ -16,7 +16,10 @@ COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci --include=dev
 
 COPY apps/web ./
-RUN npm run build && npm prune --omit=dev
+# Keep the small TypeScript toolchain in the runtime image: Next.js needs it to
+# load next.config.ts on `next start` and otherwise tries an unpinned network
+# install during container startup.
+RUN npm run build
 
 EXPOSE 10000
 CMD ["sh", "-c", "npm run start -- --hostname 0.0.0.0 --port ${PORT:-10000}"]
