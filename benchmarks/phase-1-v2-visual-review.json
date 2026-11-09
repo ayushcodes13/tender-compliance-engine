@@ -180,7 +180,10 @@
         { "pages": [20], "kind": "terms-summary-reframes-some-specification-content", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [21], "kind": "figure-containing-chart-page", "evidenceLevel": "visual-candidate" },
         { "pages": [21], "kind": "chart-page-with-data-table-notes-and-signature-region", "evidenceLevel": "render-confirmed-single-reviewer" },
-        { "pages": [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41], "kind": "bid-form-and-integrity-agreement-sequence", "evidenceLevel": "visual-candidate" }
+        { "pages": [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41], "kind": "bid-form-and-integrity-agreement-sequence", "evidenceLevel": "visual-candidate" },
+        { "pages": [22, 23], "kind": "unpriced-bid-table-followed-by-financial-bid-section", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [23, 24], "kind": "financial-bid-terms-followed-by-turnover-declaration-form-table", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [39, 40, 41], "kind": "integrity-pact-prose-articles-ending-in-separate-signature-blocks", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["cell-boundaries", "reading-order", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]
     }
