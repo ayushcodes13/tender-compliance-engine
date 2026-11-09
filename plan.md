@@ -31,8 +31,8 @@ The model owns semantic interpretation: relevance, document structure, requireme
 - **In progress:** bounded page/region summaries, parser-owned region ID validation, parent-page binding, and conservative handling of clipped or omitted context.
 - **In progress:** validated planner actions are now materialized as stable, page/region-specific inspection work-unit proposals with deterministic source ordering and operation-specific idempotency keys; they currently seed legacy routing rather than being independently executed or persisted.
 - **In progress:** existing page-routing and visual table-extraction model batches now execute through the WorkUnit lifecycle in memory, with source-bound IDs and explicit completed/retryable/cancelled states. Extraction-unit state must agree with its result before the matrix continues. Planner-proposed region operations still do not have independent handlers or durable per-region artifacts.
-- **In progress:** an encrypted local SQLite snapshot adapter now stores run/plan/work-unit/result envelopes using AES-256-GCM and a local environment key; a fresh-process test proves snapshot recovery and rejects wrong keys/tampered ciphertext. The request handler does not yet save into this adapter, and run resumption is not yet exposed. The store is opt-in and refuses to run as durable storage on Vercel/serverless.
-- **Not done:** planner-driven region work execution, durable per-unit checkpoints, restart/resume, per-region terminal coverage, and review UI for run progress/incomplete work.
+- **In progress:** the current branch connects the encrypted SQLite adapter to analysis runs, revalidates saved plans against the reconstructed parser inventory, checkpoints page-routing and visual-extraction batches, and stores completed analysis output before returning it. The browser stores only a PDF-fingerprint-keyed opaque run handle. A scripted-provider integration test interrupts after routing, restarts the Next.js process, and proves the plan/routing outputs are reused. Real-browser reload/resume and mismatch rejection still need proof. The store remains local/private, opt-in, and unavailable as durable storage on Vercel/serverless.
+- **Not done:** fault-injected end-to-end resume proof, recoverable UI status after reload, the 42-page failure diagnosis/fix, full review/export acceptance on a resumed run, planner-driven independent region handlers, and per-region terminal coverage.
 - **Quality evidence remains separate:** existing tender examples are development material. Contract fixtures do not prove extraction quality on unfamiliar tenders.
 
 ## Product acceptance gates — required alongside the architecture
@@ -46,45 +46,44 @@ The architecture work exists to fix the product, not to defer known product fail
 
 Report each gate independently as passed, failed, blocked, or not run. A successful build or scripted provider fixture is not an end-to-end acceptance result.
 
-## Execution plan — build the vertical slice first
+## Execution plan — prove the working path before expanding it
 
-Each milestone should produce a runnable, reviewable increment. Do not wait for the entire evaluation track before building provider-independent runtime behavior. Do not claim the architecture is complete until the restart/resume slice works end to end.
+Architecture agreement is complete enough to build. Do not schedule a separate architecture-redesign phase or block the first end-to-end proof on advanced region scheduling. Each step must yield a runnable increment. The LLM adapts semantic interpretation to the tender; application code enforces source identity, exact evidence, bounded execution, durable state, and honest uncertainty.
 
-### 1. Finish source-bounded region planning — active
+### 1. Finish the resumable run path — active
 
-- Give the planner bounded summaries of parser-owned pages, OCR/image regions, and table/row/cell regions. Keep page-level context and clipping/omission signals explicit.
-- Require a disposition for every physical page. Allow sections and actions to point to supplied page or region IDs only.
-- Validate source IDs, parent-page scope, supported operations, and resource bounds before execution. Clipped or omitted context must remain unresolved, never silently excluded.
-- Keep the existing page router as a temporary compatibility executor; preserve disagreement as selected/uncertain work.
-- Acceptance: adversarial contract tests for unknown IDs, duplicate/missing scope, invalid operations, outside-scope actions, omitted regions, clipping, and parent-page binding; full local checks and scripted pipeline pass.
+- Connect the encrypted local SQLite adapter to `analyzeTender`: persist a source/config-bound run, the validated task plan, work-unit state and completed outputs; save the final result before reporting success.
+- Resume only when the reselected PDF fingerprint and pipeline/model configuration match. Revalidate a saved plan against the current parser inventory. Reuse only completed units with authenticated result artifacts; return running units to retryable and rerun them. Keep source verification and downstream validation in the resume path.
+- Propagate the opaque run ID in progress and let the browser remember only that ID keyed by the exact PDF SHA-256. Never store tender text or model output in browser local storage. Require the user to reselect the PDF after reload.
+- Keep the store opt-in, encrypted, local/private and unavailable on ephemeral serverless filesystems. Document key handling, location, deletion, size and failure behavior. A persistence error must not be presented as a resumable run.
+- Acceptance: fault-injected interruption, fresh process, same PDF/config, exactly-once reuse of completed artifacts, retry of unfinished work, wrong-source/config rejection, and a real browser reload/resume through review.
 
-### 2. Make planned actions drive a shared work-unit executor
+### 2. Reproduce and fix the 42-page failure through that path
 
-- Convert validated planner actions into stable, bounded `WorkUnit`s with source IDs, operation, deterministic ordering, attempt/state, and output references.
-- Execute at least native text and table inspection through the same executor; connect the existing extraction code rather than duplicating it. Keep OCR/visual and cross-page operations explicit and unresolved until their executor exists.
-- Emit one terminal coverage state per supplied page/region: completed, excluded with reason, unresolved, unreadable, failed, or not attempted. A successful task is not proof of semantic completeness.
-- Acceptance: scripted end-to-end run shows planner action → unit execution → source-linked proposal → coverage record; every output resolves to the original document version and exact/approximate location honestly.
+- Start with the saved trace and provider/model timings for the 42-page run: 5/5 routing groups and 13/13 header mappings completed, but only 4/9 extraction batches parsed before 290.02 seconds and no response sheet was returned.
+- Use durable checkpoints to isolate the failing stage and preserve successful batches. Inspect batch sizing, malformed/schema output, provider timeouts, retry behavior, concurrency, terminal SSE state and partial-result handling.
+- Fix the general cause; do not add a tender-specific classifier or merely raise a timeout. Any partial result must retain explicit incomplete coverage and must not be exported as complete.
+- Acceptance: repeatable reproduction or trace replay identifies the failure; a corrected run completes or ends in an honest resumable/incomplete state; report latency, batches, retries, coverage, model/tokens and cost. A single run is not a quality score.
 
-### 3. Persist one vertical slice and prove resume
+### 3. Complete browser review and export acceptance
 
-- Integrate the opt-in encrypted local SQLite adapter for run metadata, plan version, work state, and source-linked output artifacts. Keep provider interfaces thin; no new cloud service, queue, or worker is required for this first slice.
-- Preserve successful unit outputs on timeout/restart. Resume only eligible unfinished units using source/config-bound stable IDs; do not duplicate, reorder, or overwrite human review decisions.
-- Document storage location, confidentiality, encryption/key handling, retention/deletion, size limits, and failure behavior before enabling persistence by default.
-- Acceptance: integration test forcibly interrupts a run, starts a new process, resumes it, and verifies completed outputs remain single, source-linked, and deterministically ordered.
+- Verify upload, live progress, completed result, source navigation and exact/approximate highlighting, correction/addition/removal/review, encrypted save/resume after reload, and DOCX/XLSX/PDF output.
+- Open generated files independently and inspect wording, citations, edits/deletions, numbers/units, special characters, and layout. Ensure an interrupted or incomplete run is visible as such and cannot masquerade as a complete matrix.
+- Acceptance: record browser steps and artifacts for a fresh run and a resumed run; test exports from the reviewed snapshot.
 
-### 4. Connect review and export to persisted results
+### 4. Broaden evidence and operational hardening
 
-- Show run progress, plan rationale, source navigation, unresolved/incomplete work, and recoverable failure states.
-- Preserve the current review workflow; keep human edits auditable and append-only where persisted.
-- Export a reviewed snapshot. Define whether partial results can be exported and label them clearly before exposing partial drafts.
-- Acceptance: a user can review a resumed run, inspect its source evidence, change a result, and export the reviewed snapshot without losing run identity or uncertainty.
+- Run controlled live evaluations within the approved maximum of six analyses and $30 cumulative additional inference spend. Track provider/model, token usage, cost, document family, commit, duration, retries and outcome; stop at either cap.
+- Use existing `examples/` as development material, not held-out evaluation. Keep related tenders together in whole-tender splits; independently adjudicate labels; report omissions, false inclusions, exclusions, split/merge errors, citation/location correctness, numeric fidelity, coverage, and reviewer effort with sample sizes and limitations.
+- Verify the current free/private deployment and synthetic 32 MiB ingress only after checking authentication, secrets, memory/time, native dependencies and storage constraints. Do not create paid infrastructure or expose an unauthenticated service.
+- Acceptance: report each quality, deployment, security and cost gate separately as passed, failed, blocked or not run. No universal-document claim without independent evidence.
 
-### 5. Measure, harden, and expand
+### 5. Expand planner-driven execution from evidence
 
-- Add OCR/visual, continuation, validation, and coverage-audit executors only after the shared work-unit path is proven.
-- Exercise prompt injection, malformed model output, provider timeout, duplicate requests, cancellation, process restart, storage failure, size limits, and source/version mismatch.
-- Measure latency, memory, tokens/cost, retry rate, review burden, and completion/resume rate on the actual supported setup. Set explicit launch limits from evidence.
-- Roll out behind a reversible feature/config boundary; do not present local/private durability as hosted multi-user durability.
+- After the resumable path and failure diagnosis, promote validated planner actions from routing hints into independent bounded work units for native text and tables; add OCR/visual and cross-page operations as explicit handlers with per-region coverage.
+- Preserve page/region inventory IDs, parent-page binding, clipping/omission signals, deterministic ordering, retries and source verification. Unsupported or unrepresented regions stay unresolved; the model cannot declare unvisited content complete.
+- Add operation types only when they close an observed coverage or reliability gap. Keep provider interfaces thin; do not add templates, agents, vector databases, queues or multi-model orchestration without measured need.
+- Acceptance: planner action → bounded execution → source-linked result → per-source coverage → resumable review/export, with adversarial tests for forged IDs, prompt injection, malformed output, retries, duplicate requests and incomplete context.
 
 ## Parallel quality and anti-overfitting track
 
