@@ -16,6 +16,7 @@ export type PersistedRunSnapshot = {
   plan: ModelProposalEnvelope<TaskPlanProposal> | null;
   workUnits: WorkUnit[];
   artifacts: RunArtifact[];
+  finalResult?: unknown;
 };
 
 export type AnalysisRunStore = {
@@ -24,16 +25,52 @@ export type AnalysisRunStore = {
   close(): void;
 };
 
+export function updateRunPlan(snapshot: PersistedRunSnapshot, plan: ModelProposalEnvelope<TaskPlanProposal>): PersistedRunSnapshot {
+  const updated = { ...snapshot, plan };
+  validateSnapshot(updated);
+  return updated;
+}
+
+export function updateRunState(snapshot: PersistedRunSnapshot, run: AnalysisRun): PersistedRunSnapshot {
+  const updated = { ...snapshot, run };
+  validateSnapshot(updated);
+  return updated;
+}
+
+export function updateRunFinalResult(snapshot: PersistedRunSnapshot, run: AnalysisRun, finalResult: unknown): PersistedRunSnapshot {
+  const updated = { ...snapshot, run, finalResult };
+  validateSnapshot(updated);
+  return updated;
+}
+
+export function updateRunWorkUnit(snapshot: PersistedRunSnapshot, unit: WorkUnit, artifactValue?: unknown): PersistedRunSnapshot {
+  const workUnits = [...snapshot.workUnits];
+  const existingIndex = workUnits.findIndex((candidate) => candidate.id === unit.id);
+  if (existingIndex >= 0) workUnits[existingIndex] = unit;
+  else workUnits.push(unit);
+  let artifacts = snapshot.artifacts.filter((artifact) => artifact.workUnitId !== unit.id);
+  if (unit.status === "completed" && artifactValue !== undefined) artifacts.push({ workUnitId: unit.id, value: artifactValue });
+  const updated = { ...snapshot, workUnits, artifacts };
+  validateSnapshot(updated);
+  return updated;
+}
+
 function validateSnapshot(snapshot: PersistedRunSnapshot): void {
   if (!snapshot || typeof snapshot !== "object" || snapshot.schemaVersion !== STORE_VERSION
     || !snapshot.run || typeof snapshot.run !== "object" || !/^run_[a-f0-9]{32}$/i.test(snapshot.run.id)
     || !/^[a-f0-9]{64}$/i.test(snapshot.run.sourceFingerprint)
+    || !/^[a-f0-9]{64}$/i.test(snapshot.run.configFingerprint)
     || !["queued", "running", "paused", "failed", "completed", "cancelled"].includes(snapshot.run.status)
     || !Number.isSafeInteger(snapshot.run.revision) || snapshot.run.revision < 0
     || !Number.isFinite(Date.parse(snapshot.run.createdAt)) || !Number.isFinite(Date.parse(snapshot.run.updatedAt))
     || !Array.isArray(snapshot.workUnits) || !Array.isArray(snapshot.artifacts)
     || (snapshot.plan !== null && (snapshot.plan?.schemaVersion !== 1 || snapshot.plan.runId !== snapshot.run.id
       || snapshot.plan.sourceFingerprint !== snapshot.run.sourceFingerprint))) throw new Error("The run snapshot is malformed.");
+  if (snapshot.finalResult !== undefined) {
+    const finalResult = snapshot.finalResult as { document?: { documentFingerprint?: unknown }; requirements?: unknown } | null;
+    if (!finalResult || finalResult.document?.documentFingerprint !== snapshot.run.sourceFingerprint
+      || !Array.isArray(finalResult.requirements)) throw new Error("The run snapshot contains an invalid final result.");
+  }
   const unitIds = new Set<string>();
   for (const unit of snapshot.workUnits) {
     if (!unit || unit.runId !== snapshot.run.id || typeof unit.idempotencyKey !== "string"
@@ -52,6 +89,14 @@ function validateSnapshot(snapshot: PersistedRunSnapshot): void {
       throw new Error("The run snapshot contains an unbound or duplicate result artifact.");
     }
     artifactIds.add(artifact.workUnitId);
+  }
+  for (const unit of snapshot.workUnits) {
+    if (unit.status === "completed" && ["page_routing", "visual_table_extraction"].includes(unit.operation) && !artifactIds.has(unit.id)) {
+      throw new Error("A completed model work unit must have a persisted result artifact.");
+    }
+  }
+  if (snapshot.finalResult !== undefined && snapshot.run.status !== "completed") {
+    throw new Error("A final analysis result requires a completed run state.");
   }
   let encoded: string;
   try { encoded = JSON.stringify(snapshot); } catch { throw new Error("The run snapshot contains a value that cannot be serialized."); }
@@ -142,9 +187,9 @@ export function createEncryptedSQLiteRunStore(input: { databasePath: string; key
 
 /** Hosted/serverless filesystems are ephemeral; refuse to call them durable. */
 export function createLocalRunStoreFromEnvironment(env: NodeJS.ProcessEnv = process.env): AnalysisRunStore | null {
-  if (env.VERCEL === "1") throw new Error("The local SQLite run store is not durable on Vercel. Configure a hosted persistence adapter before enabling hosted resume.");
   const keyHex = env.TCE_RUN_STORE_KEY?.trim();
   if (!keyHex) return null;
+  if (env.VERCEL === "1" || env.VERCEL_ENV) throw new Error("The local SQLite run store is not durable on Vercel. Configure a hosted persistence adapter before enabling hosted resume.");
   const databasePath = env.TCE_RUN_STORE_PATH?.trim() || resolve(process.cwd(), ".local", "analysis-runs.sqlite");
   return createEncryptedSQLiteRunStore({ databasePath, keyHex });
 }

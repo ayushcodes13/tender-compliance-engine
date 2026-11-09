@@ -27,12 +27,31 @@ import {
 } from "./oem-compliance-engine";
 import { parseProductPdfFile, getSampleProductDocument, getSampleProductFile } from "./product-document-parser";
 import { resolveClientMaxFileBytes } from "./upload-limits";
-import { decryptReviewSession, encryptReviewSession, verifyReviewSessionSource, type ReviewSession } from "./review-session";
+import { decryptReviewSession, encryptReviewSession, fingerprintReviewSource, verifyReviewSessionSource, type ReviewSession } from "./review-session";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 const CLIENT_MAX_FILE_BYTES = resolveClientMaxFileBytes();
 const CLIENT_MAX_FILE_MEGABYTES = Math.round(CLIENT_MAX_FILE_BYTES / (1024 * 1024));
+const RUN_RESUME_STORAGE_KEY = "tce-analysis-run-handles-v1";
+
+function readLocalRunHandle(fingerprint: string): string | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RUN_RESUME_STORAGE_KEY) || "{}") as Record<string, unknown>;
+    const runId = parsed[fingerprint];
+    return typeof runId === "string" && /^run_[a-f0-9]{32}$/i.test(runId) ? runId : null;
+  } catch { return null; }
+}
+
+function writeLocalRunHandle(fingerprint: string, runId: string | null): void {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RUN_RESUME_STORAGE_KEY) || "{}") as Record<string, unknown>;
+    if (runId) parsed[fingerprint] = runId;
+    else delete parsed[fingerprint];
+    const entries = Object.entries(parsed).filter(([key, value]) => /^[a-f0-9]{64}$/.test(key) && typeof value === "string").slice(-20);
+    localStorage.setItem(RUN_RESUME_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch { /* Resume remains optional; storage errors never block analysis. */ }
+}
 
 type BoundingBox = { x: number; y: number; width: number; height: number };
 type Requirement = {
@@ -452,10 +471,16 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     body.set("file", file);
     let keepTerminalState = false;
     try {
+      const sourceFingerprint = await fingerprintReviewSource(file);
+      const savedRunId = readLocalRunHandle(sourceFingerprint);
+      if (savedRunId) body.set("resumeRunId", savedRunId);
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
       const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; classificationReviewCandidates?: ClassificationReviewCandidate[]; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
         signal: requestController.signal,
         onProgress: (progress) => {
+          if (progress.runId && progress.sourceFingerprint === sourceFingerprint && progress.resumable === true) {
+            writeLocalRunHandle(sourceFingerprint, progress.runId);
+          }
           if (activeRequestRef.current === requestController) setProcessing(progress);
         },
       });
@@ -486,6 +511,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       setSheetEdited(false);
       setActiveId(payload.requirements[0]?.id ?? null);
       setPage(payload.requirements[0]?.page ?? 1);
+      writeLocalRunHandle(sourceFingerprint, null);
       const elapsed = Math.floor((Date.now() - processingStartedAtRef.current) / 1000);
       setElapsedSeconds(elapsed);
       setProcessing({ stage: "complete", message: `Ready for review after ${formatElapsedSeconds(elapsed)}.` });

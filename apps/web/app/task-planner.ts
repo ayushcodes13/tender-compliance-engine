@@ -332,12 +332,17 @@ export async function requestTaskPlan(input: {
   if (typeof content !== "string") return { ok: false, error: "invalid_model_response" };
   let parsed: unknown;
   try { parsed = JSON.parse(content); } catch { return { ok: false, error: "invalid_model_response" }; }
-  const regionPageIds = new Map(input.request.pages.flatMap((page) => page.regions.map((region) => [region.sourceId, page.sourceId] as const)));
+  return validateTaskPlanForRequest(parsed, input.request);
+}
+
+/** Revalidates a stored or provider-supplied plan against the current parser inventory. */
+export function validateTaskPlanForRequest(value: unknown, request: TaskPlanRequest): TaskPlanValidation {
+  const regionPageIds = new Map(request.pages.flatMap((page) => page.regions.map((region) => [region.sourceId, page.sourceId] as const)));
   const regionIds = [...regionPageIds.keys()];
-  const pagesThatMustNotBeExcluded = new Set(input.request.pages
+  const pagesThatMustNotBeExcluded = new Set(request.pages
     .filter((page) => page.unrepresentedRegionCount > 0 || page.clippedRegionCount > 0 || page.excerptClipped
       || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))
         || page.regions.some((region) => region.kind.startsWith("image_") && region.kind !== "image_text-found"))))
     .map((page) => page.sourceId));
-  return validateTaskPlanEnvelope(parsed, input.request, input.request.pages.map((page) => page.sourceId), regionIds, regionPageIds, pagesThatMustNotBeExcluded);
+  return validateTaskPlanEnvelope(value, request, request.pages.map((page) => page.sourceId), regionIds, regionPageIds, pagesThatMustNotBeExcluded);
 }

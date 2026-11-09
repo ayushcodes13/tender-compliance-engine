@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { buildResponseSheet } from "./response-sheet";
 import { runTieredValidation, matchesOcrQuote, locateOcrQuoteTolerant } from "./tiered-validation";
 import { locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment";
@@ -41,8 +41,9 @@ import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page
 import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, type CandidateOrigin } from "./candidate-trace";
 import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGroup, classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
 import { groupSourceObligationCandidates, orderCandidatesBySourceObligationGroups, type SourceObligationGroupReference } from "./source-obligation-grouping";
-import { createAnalysisRun, createWorkUnit, executeWorkUnit } from "./analysis-run";
-import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, requestTaskPlan } from "./task-planner";
+import { ANALYSIS_PIPELINE_VERSION, createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun, transitionWorkUnit, type AnalysisRun, type ModelProposalEnvelope, type TaskPlanProposal, type WorkUnit } from "./analysis-run";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, requestTaskPlan, validateTaskPlanForRequest } from "./task-planner";
+import { createLocalRunStoreFromEnvironment, updateRunFinalResult, updateRunPlan, updateRunState, updateRunWorkUnit, type PersistedRunSnapshot, type RunArtifact } from "./run-store";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
@@ -276,6 +277,9 @@ function parseJson(content: string): unknown {
 
 export async function analyzeTender(form: FormData, onProgress?: ProgressCallback, signal?: AbortSignal) {
   let stage = "file validation";
+  let activeRun: AnalysisRun | null = null;
+  let runStore: ReturnType<typeof createLocalRunStoreFromEnvironment> = null;
+  let runSnapshot: PersistedRunSnapshot | null = null;
   let cleanupOcrRenderer: (() => Promise<void>) | undefined;
   let detachPdfAbort: (() => void) | undefined;
   let destroyPdf: (() => Promise<void>) | undefined;
@@ -283,11 +287,19 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
   const report = (stageName: string, progress: ProcessingProgress) => {
     signal?.throwIfAborted();
     stage = stageName;
-    onProgress?.(progress);
+    onProgress?.({
+      ...progress,
+      ...(activeRun ? { runId: activeRun.id, sourceFingerprint: activeRun.sourceFingerprint, resumable: progress.resumable ?? Boolean(runStore) } : {}),
+    });
   };
   try {
     signal?.throwIfAborted();
     report("file validation", { stage: "uploading", message: "Checking the uploaded PDF" });
+    const resumeRunValue = form.get("resumeRunId");
+    if (resumeRunValue !== null && (typeof resumeRunValue !== "string" || !/^run_[a-f0-9]{32}$/i.test(resumeRunValue))) {
+      return { ok: false as const, error: "The saved analysis run ID is malformed. Start a new analysis or select a valid saved run." };
+    }
+    const requestedResumeRunId = typeof resumeRunValue === "string" ? resumeRunValue : null;
     const file = form.get("file");
     if (!(file instanceof File)) return { ok: false as const, error: "Choose a tender PDF to upload." };
     const maxFileBytes = resolveMaxFileBytes();
@@ -644,22 +656,97 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const model = provider.model;
     const baseUrl = provider.baseUrl;
     const modelClient = createModelCompletionClient(provider);
-    const analysisRun = createAnalysisRun({
-      sourceFingerprint: sourceDocument.fingerprint,
-      createdAt: new Date().toISOString(),
-      runKey: randomUUID(),
-    });
+    const taskText = "Prepare a technical response matrix from this tender.";
+    const configFingerprint = createHash("sha256").update(JSON.stringify({
+      pipelineVersion: ANALYSIS_PIPELINE_VERSION,
+      model,
+      endpoint: baseUrl,
+      task: taskText,
+    })).digest("hex");
+    try {
+      runStore = createLocalRunStoreFromEnvironment();
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error && error.message.includes("Vercel")
+        ? "Durable resume is unavailable on this hosted runtime. Start a new analysis or use a supported private local runtime."
+        : "The configured encrypted run store could not be opened. Check TCE_RUN_STORE_KEY and TCE_RUN_STORE_PATH." };
+    }
+    if (requestedResumeRunId && !runStore) {
+      return { ok: false as const, error: "This runtime has no encrypted local run store configured, so the saved analysis cannot be resumed." };
+    }
+
+    if (requestedResumeRunId && runStore) {
+      try { runSnapshot = runStore.load(requestedResumeRunId); } catch {
+        return { ok: false as const, error: "The saved run could not be authenticated or read. Check the local run-store key and data file." };
+      }
+      if (!runSnapshot) return { ok: false as const, error: "The saved analysis run was not found on this local server." };
+      if (runSnapshot.run.sourceFingerprint !== sourceDocument.fingerprint) {
+        return { ok: false as const, error: "This PDF does not match the saved analysis run. Choose the original PDF or start a new analysis." };
+      }
+      if (runSnapshot.run.configFingerprint !== configFingerprint) {
+        return { ok: false as const, error: "The saved run was created with a different model or pipeline version. Start a new analysis to avoid reusing stale model output." };
+      }
+      if (runSnapshot.run.status === "completed" && runSnapshot.finalResult) {
+        activeRun = runSnapshot.run;
+        report("completed saved analysis", { stage: "complete", message: "Restored the completed source-verified analysis.", resumable: false });
+        return { ok: true as const, analysis: runSnapshot.finalResult as never };
+      }
+      if (runSnapshot.run.status === "completed" || runSnapshot.run.status === "cancelled") {
+        return { ok: false as const, error: "This saved run has no resumable output. Start a new analysis." };
+      }
+      const resumedAt = new Date().toISOString();
+      activeRun = runSnapshot.run.status === "running" ? runSnapshot.run : transitionRun(runSnapshot.run, "running", resumedAt);
+      runSnapshot = updateRunState(runSnapshot, activeRun);
+      runSnapshot = {
+        ...runSnapshot,
+        workUnits: runSnapshot.workUnits.map((unit) => unit.status === "running" ? transitionWorkUnit(unit, "retryable", resumedAt) : unit),
+      };
+      runStore.save(runSnapshot);
+    } else {
+      activeRun = createAnalysisRun({
+        sourceFingerprint: sourceDocument.fingerprint,
+        configFingerprint,
+        createdAt: new Date().toISOString(),
+        runKey: randomUUID(),
+      });
+      runSnapshot = { schemaVersion: 1, run: activeRun, plan: null, workUnits: [], artifacts: [] };
+      if (runStore) runStore.save(runSnapshot);
+      activeRun = transitionRun(activeRun, "running", new Date().toISOString());
+      runSnapshot = updateRunState(runSnapshot, activeRun);
+      if (runStore) runStore.save(runSnapshot);
+    }
+    const analysisRun = activeRun;
+    const persistUnitState = (unit: WorkUnit) => {
+      if (!runStore || !runSnapshot) return;
+      runSnapshot = updateRunWorkUnit(runSnapshot, unit);
+      runStore.save(runSnapshot);
+    };
+    const persistUnitResult = (unit: WorkUnit, result: unknown) => {
+      if (!runStore || !runSnapshot) return;
+      runSnapshot = updateRunWorkUnit(runSnapshot, unit, result);
+      runStore.save(runSnapshot);
+    };
+    const completeAnalysis = (analysis: unknown) => {
+      if (runStore && runSnapshot) {
+        const completedRun = transitionRun(runSnapshot.run, "completed", new Date().toISOString());
+        runSnapshot = updateRunFinalResult(runSnapshot, completedRun, analysis);
+        runStore.save(runSnapshot);
+        activeRun = completedRun;
+      }
+      return { ok: true as const, analysis };
+    };
     const taskPlanRequest = buildTaskPlanRequest({
       document: sourceDocument,
       pageText: new Map(pages.map((page) => [page.page, page.text])),
       runId: analysisRun.id,
     });
-    report("planning tender analysis", { stage: "locating", message: "Planning what to inspect across the tender", current: 0, total: 1 });
+    report("planning tender analysis", { stage: "locating", message: runSnapshot?.plan ? "Revalidating the saved tender plan" : "Planning what to inspect across the tender", current: 0, total: 1 });
     const taskPlanStartedAt = performance.now();
     const taskPlanInputCharacters = JSON.stringify(taskPlanRequest).length;
-    emitModelTiming({ phase: "request_started", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters });
     let planned: Awaited<ReturnType<typeof requestTaskPlan>>;
-    try {
+    if (runSnapshot?.plan) {
+      planned = validateTaskPlanForRequest(runSnapshot.plan, taskPlanRequest);
+    } else try {
+      emitModelTiming({ phase: "request_started", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters });
       planned = await requestTaskPlan({
         request: taskPlanRequest,
         model,
@@ -669,16 +756,20 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       });
     } catch (error) {
       signal?.throwIfAborted();
-      emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: modelTimingFailureKind(error, signal) });
+      if (!runSnapshot?.plan) emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: modelTimingFailureKind(error, signal) });
       await pdf.destroy();
       return { ok: false as const, error: "The configured model could not create a source-bound tender plan. No extraction was started." };
     }
     if (!planned.ok) {
-      emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: "other" });
+      if (!runSnapshot?.plan) emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: "other" });
       await pdf.destroy();
       return { ok: false as const, error: planned.error === "provider_failure"
         ? "The configured model could not create a source-bound tender plan. No extraction was started."
         : "The configured model returned a plan with missing, unsupported, or unverifiable source references. No extraction was started." };
+    }
+    if (!runSnapshot?.plan && runStore && runSnapshot) {
+      runSnapshot = updateRunPlan(runSnapshot, planned.plan);
+      runStore.save(runSnapshot);
     }
     const taskPlan = planned.plan.proposal;
     const boundTaskPlan = bindTaskPlanToInventory(sourceDocument, taskPlan);
@@ -696,7 +787,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))
           || page.regions.some((region) => region.kind.startsWith("image_") && region.kind !== "image_text-found"))))
       .map((page) => [page.physicalPage, { unrepresentedRegionCount: page.unrepresentedRegionCount, clippedRegionCount: page.clippedRegionCount, excerptClipped: page.excerptClipped }]));
-    emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
+    if (!runSnapshot?.plan) emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
 
     const structuredPages = pages.filter((page) => page.structuredSection);
     if (shouldUseStructuredTableExtraction({
@@ -741,7 +832,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       report("structured table coverage needs review", { stage: "coverage", message: "Structured rows were found; compare the full source table to check for omissions" });
       report("verifying structured source quotations", { stage: "verifying", message: "Verifying each extracted quote against its source page", current: requirements.length, total: requirements.length });
       report("structured source verification complete", { stage: "verifying", message: `Verified ${requirements.length} structured source-linked rows` });
-      return { ok: true as const, analysis: {
+      return completeAnalysis({
         filename: file.name,
         pageCount: pdf.numPages,
         textPages: pages.length,
@@ -752,7 +843,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         rejectedCandidates: 0,
         extractionMode: "structured-table" as const,
         reviewNote: `Technical table rows and the separate requirements list were grouped from their source layout. Check each source row; this extraction is not a completeness guarantee.${plannerContextIncompletePages.size ? ` Planner context was incomplete on PDF page(s) ${formatPageNumbers([...plannerContextIncompletePages.keys()])}; inspect those pages and regions for omissions.` : ""}`,
-      } };
+      });
     }
 
     // Let the page-local router inspect every text-bearing page too. If it
@@ -948,20 +1039,28 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         possible_source_conflicts: unknown[];
       } };
     };
-    const routingWorkUnits = routingBatches.map((batch, ordinal) => createWorkUnit({
+    const routingWorkUnits = routingBatches.map((batch, ordinal) => {
+      const candidate = createWorkUnit({
       runId: analysisRun.id,
       kind: "inspect",
       sourceIds: batch.pages.map((page) => sourceDocument.pages[page.page - 1]?.id).filter((id): id is string => Boolean(id)),
       ordinal,
       createdAt: analysisRun.createdAt,
       operationKey: "page_routing",
-    }));
+      });
+      return runSnapshot?.workUnits.find((unit) => unit.id === candidate.id) ?? candidate;
+    });
     const routingOutcomes = await mapInConcurrentWaves(routingBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
+      const unit = routingWorkUnits[batchIndex];
+      const savedArtifact = runSnapshot?.artifacts.find((artifact) => artifact.workUnitId === unit.id);
+      if (unit.status === "completed" && savedArtifact) return savedArtifact.value as Awaited<ReturnType<typeof executeRoutingBatch>>;
       const execution = await executeWorkUnit({
-        unit: routingWorkUnits[batchIndex],
+        unit,
         execute: () => executeRoutingBatch(batch, batchIndex),
         isSuccessful: (result) => result.ok,
         signal,
+        onState: persistUnitState,
+        onResult: persistUnitResult,
       });
       routingWorkUnits[batchIndex] = execution.unit;
       return execution.result ?? { ok: false as const, error: `The routing work unit failed: ${execution.error instanceof Error ? execution.error.message : "unknown execution error"}.` };
@@ -2177,20 +2276,47 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           };
         });
       };
-      const visualExtractionWorkUnits = visualPageBatches.map((batchPages, ordinal) => createWorkUnit({
-        runId: analysisRun.id,
-        kind: "extract",
-        sourceIds: batchPages.map((page) => sourceDocument.pages[page.page - 1]?.id).filter((id): id is string => Boolean(id)),
-        ordinal,
-        createdAt: analysisRun.createdAt,
-        operationKey: "visual_table_extraction",
-      }));
+      const visualExtractionWorkUnits = visualPageBatches.map((batchPages, ordinal) => {
+        const candidate = createWorkUnit({
+          runId: analysisRun.id,
+          kind: "extract",
+          sourceIds: batchPages.map((page) => sourceDocument.pages[page.page - 1]?.id).filter((id): id is string => Boolean(id)),
+          ordinal,
+          createdAt: analysisRun.createdAt,
+          operationKey: "visual_table_extraction",
+        });
+        return runSnapshot?.workUnits.find((unit) => unit.id === candidate.id) ?? candidate;
+      });
       const pageBatchCalls = await mapInConcurrentWaves(visualPageBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batchPages, batchIndex) => {
+        const unit = visualExtractionWorkUnits[batchIndex];
+        const savedArtifact = runSnapshot?.artifacts.find((artifact) => artifact.workUnitId === unit.id);
+        const pageInputs = batchPages.map((page) => ({
+          page,
+          segments: pageSegments.filter((item) => item.page.page === page.page).map((item) => item.segment),
+          precedingPage: pages.find((candidatePage) => candidatePage.page === page.page - 1 && candidatePage.visualImage),
+        }));
+        if (unit.status === "completed" && savedArtifact) {
+          const saved = savedArtifact.value as Array<{ ok: true; page: number; parsed: { columns: SourceColumn[]; requirements: Candidate[] } }>;
+          return saved.map((result) => ({
+            ...result,
+            parsed: { ...result.parsed, requirements: result.parsed.requirements.map((candidate, index) => ({
+              ...candidate,
+              traceCandidateId: registerTraceCandidate(candidate, "initial_extraction", batchIndex * 100_000 + index),
+            })) },
+            segments: pageInputs.find((item) => item.page.page === result.page)?.segments ?? [],
+          }));
+        }
         const execution = await executeWorkUnit({
-          unit: visualExtractionWorkUnits[batchIndex],
+          unit,
           execute: () => executeVisualPageBatch(batchPages, batchIndex),
           isSuccessful: (results) => results.every((result) => result.ok),
           signal,
+          onState: persistUnitState,
+          onResult: (completedUnit, results) => persistUnitResult(completedUnit, results.map((result) => {
+            if (!result.ok) return result;
+            const requirements = result.parsed.requirements.map(({ traceCandidateId: _traceCandidateId, ...candidate }) => candidate);
+            return { ok: true as const, page: result.page, parsed: { ...result.parsed, requirements } };
+          })),
         });
         visualExtractionWorkUnits[batchIndex] = execution.unit;
         return execution.result ?? batchPages.map((page) => ({ ok: false as const, status: 200, page: page.page, segments: [] }));
@@ -3111,7 +3237,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         selectedPages: visualPageNumbers,
       } };
     }
-    return { ok: true as const, analysis };
+    return completeAnalysis(analysis);
   } catch (error) {
     const errorName = error instanceof Error ? error.name : "UnknownError";
     const errorMessage = error instanceof Error ? error.message : "";
@@ -3163,5 +3289,6 @@ Product names and model/capacity labels are headings, but serials, page furnitur
     } catch {
       // Do not allow temporary OCR cleanup errors to hide the processing result.
     }
+    runStore?.close();
   }
 }

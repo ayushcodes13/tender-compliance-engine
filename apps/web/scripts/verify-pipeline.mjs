@@ -5,7 +5,8 @@ import { createHash } from 'node:crypto';
 import http from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
-import { readdir, readFile, unlink } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { jsPDF } from 'jspdf';
 import { buildResponseSections } from '../app/response-sections.ts';
@@ -25,6 +26,7 @@ let scenario = "prose";
 let extractionCalls = 0;
 let routeCalls = 0;
 let providerRequestCount = 0;
+const providerSchemaCounts = new Map();
 let initialExtractionReturnedRecovery = false;
 let omissionAuditReturnedRecovery = false;
 let corruptedNumericClaimProposed = false;
@@ -56,6 +58,7 @@ const provider = http.createServer(async (request, response) => {
     for await (const chunk of request) raw += chunk;
     const body = JSON.parse(raw);
     const schema = body.response_format?.json_schema?.name;
+    providerSchemaCounts.set(schema, (providerSchemaCounts.get(schema) ?? 0) + 1);
     if (scenario === 'route-batch-concurrency' && schema === 'technical_section_route') {
       trackedRoutingRequest = true;
       activeRoutingRequests += 1;
@@ -203,13 +206,20 @@ const provider = http.createServer(async (request, response) => {
   }
 });
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
+const runStoreDirectory = await mkdtemp(path.join(tmpdir(), 'tce-pipeline-run-store-'));
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
-const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],{
-  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1'},stdio:['ignore','pipe','pipe'],
-});
-let logs='';child.stdout.on('data',chunk=>{logs+=chunk;});child.stderr.on('data',chunk=>{logs+=chunk;});
-try {
-  const base=`http://127.0.0.1:${appPort}`;
+const base=`http://127.0.0.1:${appPort}`;
+const appOptions={
+  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1',TCE_RUN_STORE_KEY:'ab'.repeat(32),TCE_RUN_STORE_PATH:path.join(runStoreDirectory,'runs.sqlite')},stdio:['ignore','pipe','pipe'],
+};
+let logs='';
+let child;
+function launchApp() {
+  child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],appOptions);
+  child.stdout.on('data',chunk=>{logs+=chunk;});
+  child.stderr.on('data',chunk=>{logs+=chunk;});
+}
+async function waitForApp() {
   let ready=false;
   let lastReadinessResponse='no response received';
   for(let attempt=0;attempt<100;attempt++) {
@@ -222,6 +232,17 @@ try {
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   assert.ok(ready,`Test app ready (${lastReadinessResponse}): ${logs.slice(-1500)}`);
+}
+async function restartApp() {
+  child.kill('SIGTERM');
+  if(child.exitCode===null) await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
+  if(child.exitCode===null) { child.kill('SIGKILL'); await once(child,'exit'); }
+  launchApp();
+  await waitForApp();
+}
+launchApp();
+try {
+  await waitForApp();
   const unauthenticatedPage = await fetch(base);
   assert.equal(unauthenticatedPage.status, 401, 'The application UI rejects anonymous requests');
   const unauthenticated = await fetch(`${base}/api/analyze`, { method: 'POST', body: new FormData() });
@@ -243,11 +264,17 @@ try {
   assert.equal(oversized.status, 413, 'Multipart bodies larger than the configured request cap receive HTTP 413');
   assert.deepEqual(await oversized.json(), { error: 'The uploaded request exceeds the configured size limit.' });
   assert.equal(providerRequestCount, providerCountBeforeMalformed, 'Oversized bodies initiate no model requests');
-  async function analyze(pdf) {
+  async function analyze(pdf, options = {}) {
     const body=new FormData();body.set('file',new File([pdf.output('arraybuffer')],'synthetic-tender.pdf',{type:'application/pdf'}));
-    const response = await fetch(base+'/api/analyze',{method:'POST',body,headers:{authorization:authHeader}});
+    if (options.resumeRunId) body.set('resumeRunId', options.resumeRunId);
+    const controller = new AbortController();
+    const response = await fetch(base+'/api/analyze',{method:'POST',body,headers:{authorization:authHeader},signal:controller.signal});
     assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
-    return consumeAnalysisStream(response,{onProgress:(progress)=>progressObservations.push({scenario, ...progress})});
+    return consumeAnalysisStream(response,{signal:controller.signal,onProgress:(progress)=>{
+      progressObservations.push({scenario, ...progress});
+      options.onProgress?.(progress);
+      if (options.stopAt?.(progress)) controller.abort('scripted interruption after checkpoint');
+    }});
   }
   const short=new jsPDF();short.text(quotes[0],20,30);
   const one=await analyze(short);
@@ -257,6 +284,25 @@ try {
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
   assert.ok(providerRequestCount > providerCountBeforeMalformed, 'A valid upload continues into the scripted model analysis path');
+  scenario='resume-path';
+  let interruptedRunId = null;
+  const plannerCallsBeforeInterrupt = providerSchemaCounts.get('tender_task_plan') ?? 0;
+  const routeCallsBeforeInterrupt = providerSchemaCounts.get('technical_section_route') ?? 0;
+  await assert.rejects(analyze(short, {
+    stopAt: progress => progress.message === 'Requesting technical extraction batches 1–1 of 1',
+    onProgress: progress => { if (progress.resumable && progress.runId) interruptedRunId = progress.runId; },
+  }), /scripted interruption|cancelled|aborted/i);
+  assert.match(interruptedRunId ?? '', /^run_[a-f0-9]{32}$/i, 'The stream exposes a resumable run handle only after it has been checkpointed');
+  const plannerCallsAfterInterrupt = providerSchemaCounts.get('tender_task_plan') ?? 0;
+  const routeCallsAfterInterrupt = providerSchemaCounts.get('technical_section_route') ?? 0;
+  assert.equal(plannerCallsAfterInterrupt, plannerCallsBeforeInterrupt + 1);
+  assert.equal(routeCallsAfterInterrupt, routeCallsBeforeInterrupt + 1);
+  await restartApp();
+  const resumed = await analyze(short, { resumeRunId: interruptedRunId });
+  assert.equal(resumed.ok, true, resumed.error);
+  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0, plannerCallsAfterInterrupt, 'Resume reuses the source-validated saved task plan');
+  assert.equal(providerSchemaCounts.get('technical_section_route') ?? 0, routeCallsAfterInterrupt, 'Resume reuses the completed routing artifact instead of repeating the model call');
+  assert.ok(resumed.analysis.requirements.some(row => row.quote === quotes[0]));
   scenario='planner-exclusion-conflict';
   const reopenedByRouter=await analyze(short);
   assert.equal(reopenedByRouter.ok,true,reopenedByRouter.error);
@@ -619,7 +665,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
@@ -627,4 +673,5 @@ try {
   const newTraceFiles=(await readdir(forensicTraceDirectory).catch(()=>[])).filter(file=>!existingTraceFiles.has(file));
   await Promise.all(newTraceFiles.map(file=>unlink(path.join(forensicTraceDirectory,file)).catch(()=>undefined)));
   provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));
+  await rm(runStoreDirectory,{recursive:true,force:true});
 }

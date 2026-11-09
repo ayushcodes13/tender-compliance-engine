@@ -1,5 +1,14 @@
 export type ProcessingStage = "uploading" | "reading" | "locating" | "mapping" | "extracting" | "coverage" | "verifying" | "preparing" | "complete" | "error" | "cancelled";
-export type ProcessingProgress = { stage: ProcessingStage; message: string; current?: number; total?: number };
+export type ProcessingProgress = {
+  stage: ProcessingStage;
+  message: string;
+  current?: number;
+  total?: number;
+  /** Opaque local run handle, safe to store client-side; it reveals no document contents. */
+  runId?: string;
+  sourceFingerprint?: string;
+  resumable?: boolean;
+};
 
 export const PROCESSING_STEPS: Array<{ id: Exclude<ProcessingStage, "error" | "cancelled">; label: string }> = [
   { id: "uploading", label: "Upload and validate the PDF" },

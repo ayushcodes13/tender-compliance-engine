@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { createAnalysisRun, createWorkUnit } from "./analysis-run.ts";
-import { createEncryptedSQLiteRunStore, createLocalRunStoreFromEnvironment } from "./run-store.ts";
+import { createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun } from "./analysis-run.ts";
+import { createEncryptedSQLiteRunStore, createLocalRunStoreFromEnvironment, updateRunFinalResult, updateRunState, updateRunWorkUnit } from "./run-store.ts";
 
 const fingerprint = "c".repeat(64);
 const keyHex = "ab".repeat(32);
@@ -77,6 +77,41 @@ test("authenticated encryption rejects a wrong key and tampered ciphertext", asy
     const tamperedStore = createEncryptedSQLiteRunStore({ databasePath, keyHex });
     assert.throws(() => tamperedStore.load(snapshot.run.id), /could not be authenticated/);
     tamperedStore.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("completed model work and final analysis are checkpointed as one resumable snapshot", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tce-run-store-checkpoint-"));
+  const databasePath = join(directory, "runs.sqlite");
+  try {
+    const run = createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "checkpoint-test" });
+    let snapshot = { schemaVersion: 1, run: transitionRun(run, "running", createdAt), plan: null, workUnits: [], artifacts: [] };
+    const store = createEncryptedSQLiteRunStore({ databasePath, keyHex });
+    store.save(snapshot);
+    const unit = createWorkUnit({ runId: run.id, kind: "inspect", sourceIds: ["doc:page:1"], ordinal: 0, createdAt, operationKey: "page_routing" });
+    const execution = await executeWorkUnit({
+      unit,
+      execute: async () => ({ sections: [{ title: "Technical requirements", pages: [1] }] }),
+      isSuccessful: (result) => Array.isArray(result.sections),
+      now: () => createdAt,
+      onState: (current) => { snapshot = updateRunWorkUnit(snapshot, current); store.save(snapshot); },
+      onResult: (current, result) => { snapshot = updateRunWorkUnit(snapshot, current, result); store.save(snapshot); },
+    });
+    assert.equal(execution.unit.status, "completed");
+    assert.deepEqual(store.load(run.id).artifacts[0].value, { sections: [{ title: "Technical requirements", pages: [1] }] });
+    const analysis = { document: { documentFingerprint: fingerprint }, requirements: [] };
+    snapshot = updateRunFinalResult(snapshot, transitionRun(snapshot.run, "completed", createdAt), analysis);
+    store.save(snapshot);
+    store.close();
+
+    const reopened = createEncryptedSQLiteRunStore({ databasePath, keyHex });
+    const restored = reopened.load(run.id);
+    assert.equal(restored.run.status, "completed");
+    assert.equal(restored.workUnits[0].status, "completed");
+    assert.deepEqual(restored.finalResult, analysis);
+    reopened.close();
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

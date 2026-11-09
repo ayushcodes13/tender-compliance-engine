@@ -214,10 +214,13 @@ export async function decryptReviewSession(file: File, passphrase: string): Prom
   }
 }
 
-export async function verifyReviewSessionSource(file: Blob, expectedFingerprint: string): Promise<boolean> {
-  if (!/^[a-f0-9]{64}$/.test(expectedFingerprint)) return false;
+export async function fingerprintReviewSource(file: Blob): Promise<string> {
   const cryptoProvider = assertCryptoAvailable();
   const digest = new Uint8Array(await cryptoProvider.subtle.digest("SHA-256", await file.arrayBuffer()));
-  const fingerprint = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return fingerprint === expectedFingerprint;
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function verifyReviewSessionSource(file: Blob, expectedFingerprint: string): Promise<boolean> {
+  if (!/^[a-f0-9]{64}$/.test(expectedFingerprint)) return false;
+  return await fingerprintReviewSource(file) === expectedFingerprint;
 }
