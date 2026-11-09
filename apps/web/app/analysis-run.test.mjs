@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAnalysisRun, createWorkUnit, orderWorkUnits, transitionRun, transitionWorkUnit } from "./analysis-run.ts";
+import { createAnalysisRun, createWorkUnit, executeWorkUnit, orderWorkUnits, transitionRun, transitionWorkUnit } from "./analysis-run.ts";
 
 const fingerprint = "a".repeat(64);
 const at = "2026-11-10T10:00:00.000Z";
@@ -52,6 +52,27 @@ test("work transitions count attempts only when execution starts", () => {
   assert.equal(retry.attempt, 2);
   assert.equal(transitionWorkUnit(retry, "completed", "2026-11-10T10:04:00.000Z").status, "completed");
   assert.throws(() => transitionWorkUnit(retry, "pending", "2026-11-10T10:04:00.000Z"), /Illegal work-unit transition/);
+});
+
+test("work-unit executor records success, retryable outcomes, resumed attempts, and cancellation", async () => {
+  let tick = 0;
+  const now = () => new Date(Date.parse(at) + (++tick * 1000)).toISOString();
+  const pending = createWorkUnit({ runId: "run-1", kind: "inspect", sourceIds: ["page:1"], ordinal: 0, createdAt: at, operationKey: "route" });
+  const success = await executeWorkUnit({ unit: pending, execute: async () => "routed", isSuccessful: (result) => result === "routed", now });
+  assert.equal(success.unit.status, "completed");
+  assert.equal(success.unit.attempt, 1);
+  assert.equal(success.result, "routed");
+
+  const failure = await executeWorkUnit({ unit: pending, execute: async () => "invalid", isSuccessful: () => false, now });
+  assert.equal(failure.unit.status, "retryable");
+  const retry = await executeWorkUnit({ unit: failure.unit, execute: async () => "routed", isSuccessful: (result) => result === "routed", now });
+  assert.equal(retry.unit.status, "completed");
+  assert.equal(retry.unit.attempt, 2);
+
+  const controller = new AbortController();
+  const cancelled = await executeWorkUnit({ unit: pending, execute: async () => { controller.abort(); throw new Error("cancelled"); }, isSuccessful: () => true, now, signal: controller.signal });
+  assert.equal(cancelled.unit.status, "cancelled");
+  assert.ok(cancelled.error instanceof Error);
 });
 
 test("run and work-unit constructors reject invalid source identity and timestamps", () => {

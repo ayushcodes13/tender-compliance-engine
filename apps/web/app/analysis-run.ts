@@ -135,6 +135,31 @@ export function transitionWorkUnit(unit: WorkUnit, status: WorkUnitStatus, at: s
   return { ...unit, status, updatedAt: at, attempt: unit.attempt + (status === "running" ? 1 : 0) };
 }
 
+/** Executes one in-memory unit and returns its state with the handler result.
+ * A storage adapter can later persist each returned transition without changing the handler contract.
+ */
+export async function executeWorkUnit<T>(input: {
+  unit: WorkUnit;
+  execute: () => Promise<T>;
+  isSuccessful: (result: T) => boolean;
+  now?: () => string;
+  signal?: AbortSignal;
+}): Promise<{ unit: WorkUnit; result?: T; error?: unknown }> {
+  const now = input.now ?? (() => new Date().toISOString());
+  if (input.unit.status !== "pending" && input.unit.status !== "retryable" && input.unit.status !== "blocked") {
+    throw new Error(`Work unit ${input.unit.id} is not eligible to execute from ${input.unit.status}.`);
+  }
+  let unit = transitionWorkUnit(input.unit, "running", now());
+  try {
+    const result = await input.execute();
+    unit = transitionWorkUnit(unit, input.isSuccessful(result) ? "completed" : "retryable", now());
+    return { unit, result };
+  } catch (error) {
+    unit = transitionWorkUnit(unit, input.signal?.aborted ? "cancelled" : "retryable", now());
+    return { unit, error };
+  }
+}
+
 /** Stable execution order regardless of provider completion order or input permutation. */
 export function orderWorkUnits(units: readonly WorkUnit[]): WorkUnit[] {
   const seen = new Set<string>();

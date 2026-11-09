@@ -41,7 +41,7 @@ import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page
 import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, type CandidateOrigin } from "./candidate-trace";
 import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGroup, classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
 import { groupSourceObligationCandidates, orderCandidatesBySourceObligationGroups, type SourceObligationGroupReference } from "./source-obligation-grouping";
-import { createAnalysisRun } from "./analysis-run";
+import { createAnalysisRun, createWorkUnit, executeWorkUnit } from "./analysis-run";
 import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, requestTaskPlan } from "./task-planner";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
@@ -810,7 +810,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     if (omittedFromRouting.length) routingWarnings.push(`PDF pages ${formatPageNumbers(omittedFromRouting)} had no selectable text and were not considered by the router.`);
     if (clippedFromRouting.length) routingWarnings.push(`The router used bounded excerpts; source text beyond the excerpts on PDF pages ${formatPageNumbers(clippedFromRouting)} was not in the routing context. Inspect these pages for omissions.`);
 
-    const routingOutcomes = await mapInConcurrentWaves(routingBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
+    const executeRoutingBatch = async (batch: typeof routingBatches[number], batchIndex: number) => {
       const batchPageNumbers = batch.pages.map((page) => page.page);
       const batchPageSet = new Set(batchPageNumbers);
       const batchSourceIds = new Set([...sourceIdToNumber].filter(([, pageNumber]) => batchPageSet.has(pageNumber)).map(([id]) => id));
@@ -947,6 +947,24 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         routing_warnings: unknown[];
         possible_source_conflicts: unknown[];
       } };
+    };
+    const routingWorkUnits = routingBatches.map((batch, ordinal) => createWorkUnit({
+      runId: analysisRun.id,
+      kind: "inspect",
+      sourceIds: batch.pages.map((page) => sourceDocument.pages[page.page - 1]?.id).filter((id): id is string => Boolean(id)),
+      ordinal,
+      createdAt: analysisRun.createdAt,
+      operationKey: "page_routing",
+    }));
+    const routingOutcomes = await mapInConcurrentWaves(routingBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batch, batchIndex) => {
+      const execution = await executeWorkUnit({
+        unit: routingWorkUnits[batchIndex],
+        execute: () => executeRoutingBatch(batch, batchIndex),
+        isSuccessful: (result) => result.ok,
+        signal,
+      });
+      routingWorkUnits[batchIndex] = execution.unit;
+      return execution.result ?? { ok: false as const, error: `The routing work unit failed: ${execution.error instanceof Error ? execution.error.message : "unknown execution error"}.` };
     });
 
     for (let batchIndex = 0; batchIndex < routingBatches.length; batchIndex += 1) {
@@ -957,6 +975,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       if (!routingOutcome.ok) {
         await pdf.destroy();
         return routingOutcome;
+      }
+      if (routingWorkUnits[batchIndex]?.status !== "completed") {
+        await pdf.destroy();
+        return { ok: false as const, error: `The page-routing work unit for PDF page group ${batchIndex + 1} did not reach a completed state. No extraction was attempted.` };
       }
       const selected = routingOutcome.selected;
       for (const rawSection of selected.sections) {
