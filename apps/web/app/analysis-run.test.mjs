@@ -30,8 +30,16 @@ test("work-unit identity and ordering ignore source-array and input completion o
   const b = make(["page:3"], 0);
   assert.equal(a.idempotencyKey, same.idempotencyKey);
   assert.deepEqual(a.sourceIds, ["page:1", "page:2"]);
+  assert.equal(a.operation, "inspect");
   assert.deepEqual(orderWorkUnits([a, b]).map(({ id }) => id), [b.id, a.id]);
   assert.throws(() => orderWorkUnits([a, same]), /Duplicate work-unit/);
+});
+
+test("operation is part of work identity so different inspections do not collide", () => {
+  const nativeText = createWorkUnit({ runId: "run-1", kind: "inspect", sourceIds: ["page:1:cell:1"], ordinal: 0, createdAt: at, operationKey: "native_text" });
+  const table = createWorkUnit({ runId: "run-1", kind: "inspect", sourceIds: ["page:1:cell:1"], ordinal: 1, createdAt: at, operationKey: "table" });
+  assert.equal(nativeText.operation, "native_text");
+  assert.notEqual(nativeText.idempotencyKey, table.idempotencyKey);
 });
 
 test("work transitions count attempts only when execution starts", () => {

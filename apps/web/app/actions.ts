@@ -42,7 +42,7 @@ import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, t
 import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGroup, classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
 import { groupSourceObligationCandidates, orderCandidatesBySourceObligationGroups, type SourceObligationGroupReference } from "./source-obligation-grouping";
 import { createAnalysisRun } from "./analysis-run";
-import { bindTaskPlanToInventory, buildTaskPlanRequest, requestTaskPlan } from "./task-planner";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, requestTaskPlan } from "./task-planner";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
@@ -684,7 +684,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const boundTaskPlan = bindTaskPlanToInventory(sourceDocument, taskPlan);
     const { sourceIdToNumber } = boundTaskPlan;
     const plannerPageDispositions = boundTaskPlan.pageDispositions;
-    const plannerActionPages = new Set(boundTaskPlan.actionPageNumbers);
+    const plannedInspectionWorkUnits = buildPlannedInspectionWorkUnits({
+      runId: analysisRun.id,
+      proposal: taskPlan,
+      sourceIdToNumber,
+      createdAt: analysisRun.createdAt,
+    });
+    const plannerActionPages = new Set(plannedInspectionWorkUnits.map((work) => work.physicalPage));
     const plannerContextIncompletePages = new Map(taskPlanRequest.pages
       .filter((page) => page.unrepresentedRegionCount > 0 || page.clippedRegionCount > 0 || page.excerptClipped
         || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))

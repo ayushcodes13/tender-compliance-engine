@@ -20,6 +20,8 @@ export type WorkUnit = {
   runId: string;
   kind: WorkKind;
   sourceIds: string[];
+  /** Requested bounded operation, or the work kind when not operation-specific. */
+  operation: string;
   ordinal: number;
   status: WorkUnitStatus;
   attempt: number;
@@ -109,7 +111,8 @@ export function createWorkUnit(input: {
   if (sourceIds.length === 0 || sourceIds.length !== input.sourceIds.length) throw new Error("A work unit requires unique, non-empty source IDs.");
   if (!Number.isSafeInteger(input.ordinal) || input.ordinal < 0) throw new Error("A work unit requires a non-negative integer ordinal.");
   if (!validTimestamp(input.createdAt)) throw new Error("A work unit requires a valid creation timestamp.");
-  const identity = [input.runId, input.kind, sourceIds, input.operationKey ?? "default"];
+  const operation = input.operationKey ?? input.kind;
+  const identity = [input.runId, input.kind, sourceIds, operation];
   const idempotencyKey = `work_${digest(identity)}`;
   return {
     id: idempotencyKey,
@@ -117,6 +120,7 @@ export function createWorkUnit(input: {
     runId: input.runId,
     kind: input.kind,
     sourceIds,
+    operation,
     ordinal: input.ordinal,
     status: "pending",
     attempt: 0,
