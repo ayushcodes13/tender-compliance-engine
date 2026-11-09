@@ -1298,10 +1298,24 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       });
       if (failedBatches.length) {
         const firstFailure = failedBatches[0].error;
-        if (firstFailure instanceof ModelProviderTimeoutError) return { ok: false as const, error: firstFailure.message };
         if (signal?.aborted) signal.throwIfAborted();
-        if (firstFailure instanceof ModelProviderConnectionError || firstFailure instanceof ModelProviderBusyError) throw firstFailure;
-        return { ok: false as const, error: "One or more technical extraction batches failed. Completed batches were retained for forensic tracing; no complete response sheet was produced." };
+        const completedSourceWork = parsedResponses.some((response) => response.origin === "initial_extraction") || requirements.length > 0;
+        if (!completedSourceWork) {
+          if (firstFailure instanceof ModelProviderTimeoutError) return { ok: false as const, error: firstFailure.message };
+          if (firstFailure instanceof ModelProviderConnectionError || firstFailure instanceof ModelProviderBusyError) throw firstFailure;
+          return { ok: false as const, error: "Every technical extraction batch failed before producing usable source-grounded work." };
+        }
+        // Keep independently completed, source-verifiable work available to the
+        // reviewer. Pages belonging to failed batches were already marked
+        // incomplete above; the coverage ledger and review note prevent this
+        // partial sheet from being presented as a complete extraction.
+        coverageCheckIncomplete = true;
+        report("completed extraction batch", {
+          stage: "extracting",
+          message: `Continuing with ${parsedBatchCount} of ${extractionBatches.length} parsed batches; failed pages remain incomplete`,
+          current: extractionBatches.length,
+          total: extractionBatches.length,
+        });
       }
       return null;
     };
