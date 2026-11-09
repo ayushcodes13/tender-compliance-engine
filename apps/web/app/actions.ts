@@ -2125,7 +2125,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
       };
       const visualPageBatches = groupVisualPages(visualPages, 2);
       report("extracting rows from selected page images", { stage: "extracting", message: "Extracting rows from the selected pages", current: 0, total: visualPages.length });
-      const pageBatchCalls = await mapInConcurrentWaves(visualPageBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batchPages, batchIndex) => {
+      const executeVisualPageBatch = async (batchPages: typeof visualPageBatches[number], batchIndex: number) => {
         const pageInputs = batchPages.map((page) => ({
           page,
           segments: pageSegments.filter((item) => item.page.page === page.page).map((item) => item.segment),
@@ -2176,10 +2176,33 @@ Product names and model/capacity labels are headings, but serials, page furnitur
             segments: pageInputs.find((item) => item.page.page === entry.page)!.segments,
           };
         });
+      };
+      const visualExtractionWorkUnits = visualPageBatches.map((batchPages, ordinal) => createWorkUnit({
+        runId: analysisRun.id,
+        kind: "extract",
+        sourceIds: batchPages.map((page) => sourceDocument.pages[page.page - 1]?.id).filter((id): id is string => Boolean(id)),
+        ordinal,
+        createdAt: analysisRun.createdAt,
+        operationKey: "visual_table_extraction",
+      }));
+      const pageBatchCalls = await mapInConcurrentWaves(visualPageBatches, MODEL_REQUESTS_PER_ANALYSIS, async (batchPages, batchIndex) => {
+        const execution = await executeWorkUnit({
+          unit: visualExtractionWorkUnits[batchIndex],
+          execute: () => executeVisualPageBatch(batchPages, batchIndex),
+          isSuccessful: (results) => results.every((result) => result.ok),
+          signal,
+        });
+        visualExtractionWorkUnits[batchIndex] = execution.unit;
+        return execution.result ?? batchPages.map((page) => ({ ok: false as const, status: 200, page: page.page, segments: [] }));
       }, (completedBatches) => {
         const completedPages = visualPageBatches.slice(0, completedBatches).reduce((total, batch) => total + batch.length, 0);
         report("extracting rows from selected page images", { stage: "extracting", message: "Extracting rows from the selected pages", current: completedPages, total: visualPages.length });
       });
+      const inconsistentExtractionBatch = pageBatchCalls.findIndex((results, batchIndex) =>
+        (visualExtractionWorkUnits[batchIndex]?.status === "completed") !== results.every((result) => result.ok));
+      if (inconsistentExtractionBatch >= 0) {
+        return { ok: false as const, error: `The visual extraction work unit for PDF page group ${inconsistentExtractionBatch + 1} has inconsistent execution state and output. No matrix was produced.` };
+      }
       const pageCalls = pageBatchCalls.flat();
       const pageResults = pageCalls.flatMap((result) => result.segments.map((segment) => result.ok
         ? { ok: true as const, page: result.page, segment, parsed: {
