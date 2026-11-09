@@ -23,6 +23,16 @@ Across 367 pages, the current pass reports: 222 pages not recommended for OCR; 1
 
 These are execution and parser diagnostics. “Text found” does not mean OCR is correct, confidence is not accuracy, and a valid source inventory does not establish that every meaningful region/table/obligation was detected. No human visual confirmation of all 367 pages or table continuations has been completed. The V2.1b2 checkpoint therefore remains open for hybrid-region review, table/cell verification, cross-page continuation, and annexure linkage.
 
+### Visual triage addendum (2026-11-10)
+
+Local contact-sheet review has now included the parser/OCR-selected pages for the development pool. This is a coarse page-layout survey, not region-level adjudication: thumbnails can expose page families, visibly repeated tables, and likely continuation links, but do not confirm every cell boundary, reading order, or obligation. The image sheets and rendered page files remain local under `/tmp/tce-phase1-v2-layout-review`; this repository records no page image or tender quotation.
+
+For `input 2.pdf`, the reviewed sheets cover physical pages 1–3 and 7–37. Pages 4–6 were not present in the signal-selected sheets and remain visually unreviewed. The visible sequence includes a technical parameter table beginning on p.8 and continuing through p.13, followed by terms/conditions and later a separate compliance-sheet presentation that visibly repeats technical content with response columns. Annexure/form pages begin after that, with distinct blank bidder forms and a bid-submission document list. These relationships are visual candidates for explicit linking, not verified cell mappings or proof that duplicate-looking entries are semantically identical. The source/layout record for p.4–6 is unknown.
+
+For `input 3.pdf`, contact sheets covered p.1–36 and individual local renders were reviewed for p.37–41, covering all 41 physical pages at page-thumbnail scale. The tender mixes bilingual front matter and schedules, narrative sections, a multi-page technical specification/compliance table (p.17–20), a chart page (p.21), technical and financial bid material, and later bidder forms and an integrity-agreement attachment. Hybrid image signals occur on pages with logos or chart content as well as text; an image signal alone does not establish that the page's text is image-only or that OCR is needed for every region. No cell-level validation or obligation annotation was done in this pass.
+
+The broader V2.1b2 gate remains open: the contact sheets are parser-signal-selected, three pages of `input 2.pdf` were not included, and observations are not independently reviewed. Keep these findings as development-layout evidence only; do not use them as gold labels, accuracy evidence, or a claim of complete source-region coverage.
+
 ### Phase 1 v2 annotation protocol and pilot
 
 `phase-1-v2-annotations/PROTOCOL.md` defines region coverage states, obligation/non-requirement labels, source anchors, atomicity, raw values and units, modality, conditions, uncertainty, and adjudication rules. Its versioned JSON schema is `phase-1-v2-annotations/annotation.schema.json`. Validate a record and, optionally, its source PDF with:
