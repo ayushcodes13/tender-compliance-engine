@@ -119,7 +119,7 @@ export function summarizePageInventory(documents) {
   };
 }
 
-async function inspectDocument(document, examplesDirectory) {
+export async function inspectDocument(document, examplesDirectory, inspectPage = null) {
   const path = join(examplesDirectory, document.fileName);
   const bytes = await readFile(path);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -139,12 +139,14 @@ async function inspectDocument(document, examplesDirectory) {
       for (const item of content.items) {
         if (!("str" in item) || typeof item.str !== "string" || !item.str) continue;
         if (rawText && !rawText.endsWith("\n")) rawText += " ";
+        const start = rawText.length;
         rawText += item.str;
+        const end = rawText.length;
         if (item.hasEOL) rawText += "\n";
         const box = pageItemBox(item, viewport);
         const [, , , , x, y] = item.transform;
         sourceItems.push({ str: item.str, x, y, box });
-        if (box) positionedItems.push({ text: item.str, box });
+        if (box) positionedItems.push({ start, end, text: item.str, box });
       }
       const normalizedNativeText = rawText.replace(/\s+/gu, " ").trim();
       const nativeTextChars = normalizedNativeText.length;
@@ -213,6 +215,22 @@ async function inspectDocument(document, examplesDirectory) {
         currentRouterOcrTargetRegionCount,
         ocrExecuted: false,
       };
+      const extraPageData = inspectPage
+        ? await inspectPage({
+          page,
+          pageNumber,
+          pageCount: pdf.numPages,
+          viewport,
+          rawText,
+          sourceItems,
+          positionedItems,
+          imageRegions,
+          hasRasterImageContent,
+          ocrRecommended: currentRouterWouldRecommendOcr,
+          vectorRows,
+        })
+        : null;
+      if (extraPageData && typeof extraPageData === "object") Object.assign(pageRecord, extraPageData);
       pages.push(pageRecord);
       page.cleanup();
     }
