@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 1,
+  "annotationId": "iit-gandhinagar-optical-tables-page-22-v1",
+  "status": "draft",
+  "corpusSplit": "development",
+  "source": {
+    "documentId": "iit-gandhinagar-optical-tables",
+    "fileName": "IIT Gandhinagar - Optical Tables with Vibration Isolation Systems.pdf",
+    "sha256": "be39fd08ab61011d7281c7f355b61864b28b091001712fbdeecd1c5181e3c491",
+    "physicalPageCount": 42
+  },
+  "scope": {
+    "task": "Prepare a source-grounded technical response matrix, retaining supplier service and documentation obligations.",
+    "physicalPagesReviewed": [22],
+    "printedPageLabels": [{ "physicalPage": 22, "printedLabel": "22 of 42" }],
+    "wholeDocumentReviewed": false,
+    "statement": "First-pass annotation of the full visible content of physical PDF page 22 only. This does not establish whole-tender coverage; pages 1-21 and 23-42 are outside this annotation. Page 22 continues a larger annexure and is repeated in part by Annexure-II on later pages, which is not evaluated here."
+  },
+  "review": {
+    "method": "Assistant-first-pass using Poppler selectable-text extraction and a 130-DPI rendered page image; quoted wording checked against both representations. No production PDF.js source-element IDs, offsets, or cell geometry were assigned.",
+    "reviewers": [
+      {
+        "role": "assistant-first-pass; independent human review required",
+        "date": "2026-11-10",
+        "regionIds": ["p22-header", "p22-training-row", "p22-service-row", "p22-warranty-row", "p22-compliance-note", "p22-page-furniture"]
+      }
+    ],
+    "independentReviewComplete": false,
+    "adjudicationNotes": "No second reviewer has checked these labels. Potentially ambiguous scope in the cost-recovery sentence and the grouping of service-response statements are flagged below; they are not adjudicated."
+  },
+  "anchors": [
+    {
+      "id": "a-header",
+      "physicalPage": 22,
+      "quote": "INDIAN INSTITUTE OF TECHNOLOGY GANDHINAGAR Materials Management Section",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "page_only",
+      "locationNote": "Rendered page header; not a bidder obligation and no parser box was measured."
+    },
+    {
+      "id": "a-training",
+      "physicalPage": 22,
+      "quote": "Vendor should provide general and specific training on operation and application at IIT Gandhinagar, at the time of installation of the equipment or within 1 week from the date of installation.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "Visible description cell for table item 6, Training; parser cell identity and geometry not measured."
+    },
+    {
+      "id": "a-service-assistance",
+      "physicalPage": 22,
+      "quote": "Online or offline service assistance within 48 hours must be provided by the Manufacturer Authorization.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "First bullet in table item 7, Service; exact cell geometry not measured. The actor wording is preserved as printed."
+    },
+    {
+      "id": "a-service-response",
+      "physicalPage": 22,
+      "quote": "In case of breakdown or any malfunction of the instrument, service response will be provided by the vendor within 48 hours of the reporting time.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "Second bullet in table item 7, Service; exact cell geometry not measured."
+    },
+    {
+      "id": "a-warranty-extension",
+      "physicalPage": 22,
+      "quote": "If the system is down for more than two weeks due to unavailability of service person or spares, the warranty will be extended accordingly.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "Third bullet in table item 7, Service; exact cell geometry not measured."
+    },
+    {
+      "id": "a-warranty-term",
+      "physicalPage": 22,
+      "quote": "Three (03) years warranty (including third party supplies if any) from the date of successful installation of item/equipment against any manufacturing defects.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "First bullet in table item 8, Warranty; exact cell geometry not measured."
+    },
+    {
+      "id": "a-warranty-remedy",
+      "physicalPage": 22,
+      "quote": "The defects, if any, during the guarantee/warranty period are to be rectified free of charge by arranging free replacement wherever necessary.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "Second bullet in table item 8, Warranty; exact cell geometry not measured."
+    },
+    {
+      "id": "a-warranty-costs",
+      "physicalPage": 22,
+      "quote": "The associated cost of the item, insurance, freight, custom duty, local taxes etc. (if any) all should be borne by the supplier or their agent for both ways. No cost will be borne by IIT Gandhinagar (If applicable).",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "Remainder of the second bullet in table item 8, Warranty. The attachment and scope of the final '(If applicable)' are unclear; exact cell geometry not measured."
+    },
+    {
+      "id": "a-compliance-report",
+      "physicalPage": 22,
+      "quote": "Quote must have a technical compliance report as prescribed in Annexure-II.",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "approximate",
+      "locationNote": "Standalone note directly below the table; exact page coordinates not measured."
+    },
+    {
+      "id": "a-page-marker",
+      "physicalPage": 22,
+      "quote": "Page 22 of 42",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "page_only",
+      "locationNote": "Printed page marker in the footer; navigational furniture only."
+    },
+    {
+      "id": "a-row-labels",
+      "physicalPage": 22,
+      "quote": "6 Training 7 Service 8 Warranty",
+      "quoteVerification": "unverified",
+      "locationPrecision": "approximate",
+      "locationNote": "Visual table labels and row numbers. This combined label anchor is not used to support any requirement; verify against the source if label-level evaluation is needed."
+    }
+  ],
+  "regions": [
+    { "id": "p22-header", "physicalPage": 22, "kind": "header_footer", "label": "Institution and section header", "coverage": "complete_in_scope", "sourceAnchorIds": ["a-header"], "reviewNote": "Reviewed as page context; not an obligation." },
+    { "id": "p22-training-row", "physicalPage": 22, "kind": "table_row", "label": "Annexure-I table item 6, Training", "coverage": "complete_in_scope", "sourceAnchorIds": ["a-training"], "reviewNote": "The visible row and timing alternative were reviewed; no continuation is indicated on this page." },
+    { "id": "p22-service-row", "physicalPage": 22, "kind": "table_row", "label": "Annexure-I table item 7, Service", "coverage": "complete_in_scope", "sourceAnchorIds": ["a-service-assistance", "a-service-response", "a-warranty-extension"], "reviewNote": "All three visible bullets were reviewed separately. Whether first and second bullets describe distinct response commitments needs independent review." },
+    { "id": "p22-warranty-row", "physicalPage": 22, "kind": "table_row", "label": "Annexure-I table item 8, Warranty", "coverage": "complete_in_scope", "sourceAnchorIds": ["a-warranty-term", "a-warranty-remedy", "a-warranty-costs"], "reviewNote": "Both visible bullets were reviewed. The remedy/alternative and cost clauses may need an adjudicator to confirm preferred grouping." },
+    { "id": "p22-compliance-note", "physicalPage": 22, "kind": "paragraph", "label": "Technical compliance report note", "coverage": "complete_in_scope", "sourceAnchorIds": ["a-compliance-report"], "reviewNote": "Retained as a documentary deliverable, not silently discarded as administrative text." },
+    { "id": "p22-page-furniture", "physicalPage": 22, "kind": "header_footer", "label": "Page number and table row labels", "coverage": "complete_in_scope", "sourceAnchorIds": ["a-page-marker", "a-row-labels"], "reviewNote": "Navigational/table labels are recorded as non-requirements; the combined row-label anchor is visual-only and unverified by the text verifier." }
+  ],
+  "labels": [
+    {
+      "id": "p22-l1-training",
+      "kind": "service_fulfilment",
+      "interpretation": "Provide general and specific training on equipment operation and application at IIT Gandhinagar, either at installation or within one week after installation.",
+      "sourceAnchorIds": ["a-training"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "Training can be answered independently; the source gives alternative timing for the same deliverable." },
+      "modality": ["should provide"],
+      "values": [{ "raw": "within 1 week", "role": "latest alternative timing after installation" }],
+      "conditions": ["At installation or within one week from the date of installation."],
+      "uncertainty": [],
+      "reviewDisposition": "retain"
+    },
+    {
+      "id": "p22-l2-service-assistance",
+      "kind": "service_fulfilment",
+      "interpretation": "Provide online or offline service assistance within 48 hours; the source attributes this to the Manufacturer Authorization.",
+      "sourceAnchorIds": ["a-service-assistance"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "A separately answerable support-availability commitment in its own bullet." },
+      "modality": ["must be provided"],
+      "values": [{ "raw": "within 48 hours", "role": "service assistance timing" }],
+      "conditions": [],
+      "uncertainty": ["The source's actor phrase 'by the Manufacturer Authorization' is preserved but its intended relationship is unclear."],
+      "reviewDisposition": "needs_adjudication"
+    },
+    {
+      "id": "p22-l3-service-response",
+      "kind": "service_fulfilment",
+      "interpretation": "For instrument breakdown or malfunction, the vendor provides a service response within 48 hours after the reporting time.",
+      "sourceAnchorIds": ["a-service-response"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "A separate breakdown-triggered response commitment in its own bullet; keep distinct from general assistance pending adjudication." },
+      "modality": ["will be provided"],
+      "values": [{ "raw": "within 48 hours", "role": "response time after reporting" }],
+      "conditions": ["Instrument breakdown or malfunction", "Clock starts at the reporting time."],
+      "uncertainty": ["Possible operational overlap with the preceding service-assistance bullet; no merger is assumed."],
+      "reviewDisposition": "needs_adjudication"
+    },
+    {
+      "id": "p22-l4-warranty-extension",
+      "kind": "service_fulfilment",
+      "interpretation": "Extend the warranty when the system is down for more than two weeks because a service person or spares are unavailable.",
+      "sourceAnchorIds": ["a-warranty-extension"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "A distinct conditional remedy can be assessed separately from the warranty term and repair obligations." },
+      "modality": ["will be extended"],
+      "values": [{ "raw": "more than two weeks", "role": "downtime threshold" }],
+      "conditions": ["System down due to unavailability of service person or spares."],
+      "uncertainty": [],
+      "reviewDisposition": "retain"
+    },
+    {
+      "id": "p22-l5-warranty-term",
+      "kind": "service_fulfilment",
+      "interpretation": "Provide a three-year warranty, including third-party supplies if any, against manufacturing defects, starting from successful installation.",
+      "sourceAnchorIds": ["a-warranty-term"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "Term, covered supplies, defect scope, and start date form one warranty commitment answered as a unit." },
+      "modality": ["warranty"],
+      "values": [{ "raw": "Three (03) years", "role": "warranty duration" }],
+      "conditions": ["Starts on successful installation.", "Includes third-party supplies if any.", "Against manufacturing defects."],
+      "uncertainty": [],
+      "reviewDisposition": "retain"
+    },
+    {
+      "id": "p22-l6-warranty-remedy",
+      "kind": "service_fulfilment",
+      "interpretation": "Rectify defects during the guarantee/warranty period free of charge, arranging free replacement wherever necessary.",
+      "sourceAnchorIds": ["a-warranty-remedy"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "One remedial commitment with replacement as the stated alternative when necessary." },
+      "modality": ["are to be rectified"],
+      "values": [],
+      "conditions": ["Defect occurs during the guarantee/warranty period.", "Replacement is arranged wherever necessary."],
+      "uncertainty": [],
+      "reviewDisposition": "retain"
+    },
+    {
+      "id": "p22-l7-warranty-costs",
+      "kind": "service_fulfilment",
+      "interpretation": "The supplier or its agent bears the listed associated costs for both directions; the final applicability qualifier has unclear scope.",
+      "sourceAnchorIds": ["a-warranty-costs"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "Cost allocation can be answered separately from the repair remedy, while remaining linked to it." },
+      "modality": ["should be borne", "No cost will be borne by IIT Gandhinagar"],
+      "values": [],
+      "conditions": ["Associated costs include item, insurance, freight, customs duty, and local taxes if any.", "The source says 'for both ways'."],
+      "uncertainty": ["Placement of '(If applicable)' and its scope are unclear; retain source wording for adjudication."],
+      "reviewDisposition": "needs_adjudication"
+    },
+    {
+      "id": "p22-l8-compliance-report",
+      "kind": "documentation_deliverable",
+      "interpretation": "Include the technical compliance report prescribed in Annexure-II with the quote.",
+      "sourceAnchorIds": ["a-compliance-report"],
+      "atomicity": { "status": "independent", "groupId": null, "rationale": "A separately verifiable tender-response document deliverable." },
+      "modality": ["must have"],
+      "values": [],
+      "conditions": ["Report format/content is prescribed in Annexure-II."],
+      "uncertainty": [],
+      "reviewDisposition": "retain"
+    },
+    {
+      "id": "p22-l9-header-not-obligation",
+      "kind": "explicit_non_requirement",
+      "interpretation": "The institution/section header identifies the issuing organization and is not a supplier obligation for the response matrix.",
+      "sourceAnchorIds": ["a-header"],
+      "atomicity": { "status": "not_applicable", "groupId": null, "rationale": "Document identity text, not an obligation." },
+      "modality": [],
+      "values": [],
+      "conditions": [],
+      "uncertainty": [],
+      "reviewDisposition": "exclude_with_reason"
+    },
+    {
+      "id": "p22-l10-furniture-not-obligation",
+      "kind": "explicit_non_requirement",
+      "interpretation": "The printed page number and table row labels provide navigation/classification context; they are not standalone supplier obligations.",
+      "sourceAnchorIds": ["a-page-marker", "a-row-labels"],
+      "atomicity": { "status": "not_applicable", "groupId": null, "rationale": "Page furniture and table labels do not impose an independently assessable action." },
+      "modality": [],
+      "values": [],
+      "conditions": [],
+      "uncertainty": ["The combined visual row-label quote is not independently text-verified."],
+      "reviewDisposition": "exclude_with_reason"
+    }
+  ],
+  "disagreements": [],
+  "limitations": [
+    "This is a single-assistant provisional development annotation, not independent human adjudication or gold data.",
+    "Only physical page 22 was reviewed; this does not establish whole-tender or cross-page completeness.",
+    "The exact quotations were visually checked and whitespace-normalized against Poppler text; page-level/table-row location is approximate, with no production parser IDs, offsets, or bounding boxes.",
+    "The wording about Manufacturer Authorization, overlap between service bullets, and '(If applicable)' cost scope remains unresolved.",
+    "A repeated compliance report appears in Annexure-II on later pages; duplicate handling and whole-document source relationships were not reviewed."
+  ]
+}
