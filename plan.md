@@ -1,6 +1,6 @@
 # Phase 1 v2 — Evidence-first tender intelligence plan
 
-**Status:** Design proposal for user review. This document plans the next phase; implementation has not started.
+**Status:** Approved for incremental implementation as of 2026-11-10. Follow the canonical checkpoint order. This approval confirms Phase 1 scope, PDF-first acceptance, model-led interpretation without a template catalog, and the development-only treatment of the existing examples. It does not claim universal completeness or settle the partial-result UI/export contract or operational targets.
 
 ## Compact scenario
 
@@ -202,16 +202,16 @@ Each implementation step should be a focused branch/PR with relevant behavior te
 | Example-driven fixes overfit publisher/layout patterns. | Whole-tender holdouts, blind annotation, publisher/format stratification, locked sets, and explicit small-sample limitations. |
 | Long tender costs/timeouts remain high. | Durable bounded work, stage telemetry, model routing experiments, retry budgets, token/cost controls, and user-visible progress. |
 
-## 9. Decisions to confirm before implementation
+## 9. Confirmed defaults and open decisions
 
-Recommended defaults are shown; these are design decisions, not implementation authorization.
+The product owner has approved the plan direction and the following defaults are reflected in the active Phase 1 v2 task:
 
-1. **Product scope:** keep Phase 1 focused on technical tender intake through reviewed response matrix/export. Recommended: yes.
-2. **Input coverage:** make PDF (including native, scanned, hybrid, tables, and annexures) the first acceptance surface; add office formats through adapters only when corpus evidence and an explicit product decision justify them. Recommended: yes.
-3. **Output structure:** keep stable source/review/export fields and allow the model to propose task-specific categories and contextual attributes within them. Recommended: yes.
-4. **Partial results:** permit a clearly labeled partial draft from completed work while failed/unreviewed regions stay visible; never present it as complete. Recommended: yes, subject to explicit UI/export behavior.
-5. **Operational target:** agree acceptable maximum tender size, completion-time/cost envelope, and supported deployment/storage constraints after the baseline phase. No target should be invented before measurement.
-6. **Evaluation corpus:** use `examples/` as the starting pool, protect whole-tender locked evaluation documents, and treat any already-used tender as development data. Recommended: yes.
+1. **Confirmed — product scope:** keep Phase 1 focused on technical tender intake through reviewed response matrix and export. OEM compliance and other Phase 2 behavior remain out of scope.
+2. **Confirmed — input coverage:** PDF (native, scanned, hybrid, tables, and annexures) is the first acceptance surface. Add office formats only when evidence and an explicit product decision justify an adapter.
+3. **Confirmed — interpretation and output:** do not use a catalog of tender templates. Let the model propose task-specific structure and categories inside stable source, review, and export contracts; use deterministic code for invariants and provenance.
+4. **Open — partial-result contract:** incomplete work and uncertainty must remain visible for human review. Decide the exact partial-draft UI/export behavior before implementing that workflow; a partial result must never be represented as complete.
+5. **Open — operational target:** after the baseline, agree maximum tender size, completion-time/cost envelope, and supported deployment/storage constraints. Do not invent these targets before measurement.
+6. **Confirmed — evaluation corpus:** treat `examples/` and previously used tenders as development material. Keep related copies/versions in one family and do not claim a locked evaluation until independent whole-tender material is available and protected from tuning.
 
 ## 10. Source documents informing this plan
 
