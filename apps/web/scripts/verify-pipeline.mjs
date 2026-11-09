@@ -147,6 +147,11 @@ const provider = http.createServer(async (request, response) => {
     } else if (schema === 'tender_requirements') {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
+      if (['partial-general-batch', 'all-general-batches-fail'].includes(scenario)
+        && (scenario === 'all-general-batches-fail' || pages[0] === 10)) {
+        response.destroy();
+        return;
+      }
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,...(scenario==='prose'&&pages.includes(2)?[{page:2,quote:'Vacuum shall remain below 999999 mbar.',row_type:'requirement',category:'Other',heading_prefix:''}]:[]),{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
       if(scenario==='prose'&&result.requirements.some(item=>item.quote==='Vacuum shall remain below 999999 mbar.'))corruptedNumericClaimProposed=true;
@@ -236,6 +241,10 @@ try {
   const requestProgressIndex=slowExtractionProgress.findIndex(message=>message==='Requesting technical extraction batches 1–1 of 1');
   const completedProgressIndex=slowExtractionProgress.findIndex(message=>message==='Received and parsed 1 of 1 technical extraction batches');
   assert.ok(requestProgressIndex>=0&&completedProgressIndex>requestProgressIndex,`Extraction progress reports the active request before reporting its parsed completion: ${JSON.stringify(slowExtractionProgress)}`);
+  scenario='all-general-batches-fail';
+  const noCompletedBatch=await analyze(short);
+  assert.equal(noCompletedBatch.ok,false,'A response sheet is not produced when no extraction batch or other source-grounded stage completed');
+  assert.equal('analysis' in noCompletedBatch,false,'An all-failed run does not emit an empty or partial response sheet');
   scenario='general-batch-concurrency';
   const multiPage=new jsPDF();
   for(let page=1;page<=12;page++) {
@@ -253,6 +262,20 @@ try {
   const batchThreeCompletedAt=generalExtractionBatchEvents.find(event=>event.firstPage===7&&event.event==='completed')?.at;
   const batchFourStartedAt=generalExtractionBatchEvents.find(event=>event.firstPage===10&&event.event==='started')?.at;
   assert.ok(Number.isFinite(batchThreeCompletedAt)&&Number.isFinite(batchFourStartedAt)&&batchFourStartedAt<batchThreeCompletedAt,'The fourth extraction batch starts when the first of the three active requests finishes, before the slow third request completes');
+  scenario='partial-general-batch';
+  const partialBatchPdf=new jsPDF();
+  for(let page=1;page<=12;page++) {
+    if(page>1)partialBatchPdf.addPage();
+    partialBatchPdf.setFontSize(8);
+    partialBatchPdf.text([quotes[page-1]??`Technical equipment page ${page} contains a specified test procedure.`,...Array.from({length:60},(_,line)=>`Technical context ${page}-${line} describes the equipment and its operating conditions.`)],20,30,{lineHeightFactor:1});
+  }
+  const partialBatch=await analyze(partialBatchPdf);
+  assert.equal(partialBatch.ok,true,partialBatch.error);
+  assert.deepEqual(partialBatch.analysis.requirements.map(row=>row.quote),quotes,'Successful extraction batches retain their grounded requirements in source order when another batch loses its provider connection');
+  const incompleteBatchPages=partialBatch.analysis.coverage.pages.filter(page=>page.extractionStatus==='incomplete').map(page=>page.page);
+  assert.deepEqual(incompleteBatchPages,[10,11,12],'Every page in the failed extraction batch stays explicitly incomplete');
+  assert.ok(partialBatch.analysis.coverage.pages.filter(page=>page.page<=9).every(page=>page.extractionStatus==='complete'),'Successfully completed pages remain distinct from the incomplete batch');
+  assert.match(partialBatch.analysis.reviewNote,/model-based extraction or page coverage calls could not complete/,'The partial response warns reviewers that coverage is incomplete');
   scenario='route-batch-concurrency';
   const routingPdf=new jsPDF();
   for(let page=1;page<=30;page++) {
@@ -568,7 +591,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
