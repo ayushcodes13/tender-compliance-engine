@@ -16,8 +16,8 @@ test("matches source fingerprints and accounts for every physical page without o
   assert.deepEqual(result.renderConfirmedPageCoverage.find((document) => document.documentId === "example-input-3"), {
     documentId: "example-input-3",
     physicalPages: 41,
-    uniquePagesReferenced: 28,
-    pageRanges: [[1, 3], [17, 41]],
+    uniquePagesReferenced: 30,
+    pageRanges: [[1, 3], [10, 11], [17, 41]],
   });
   assert.equal(result.renderConfirmedUniquePageReferences, result.renderConfirmedPageCoverage.reduce((sum, document) => sum + document.uniquePagesReferenced, 0));
 });
