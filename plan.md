@@ -25,13 +25,26 @@ The model owns semantic interpretation: relevance, document structure, requireme
 
 ## Current implementation state
 
+- **Existing product integration:** PRs #411, #412, #414, #415, #416, and #417 are merged. PR #413 was closed in favor of #415's encrypted portable review session. This integration work is complete; do not reopen it without new evidence.
 - **Done:** provider-independent `AnalysisRun`, `TaskPlan`, and `WorkUnit` contracts with state/idempotency/order tests (PR #433). These contracts alone do not persist or resume work.
 - **Partly done:** page-level LLM planning is integrated into `analyzeTender` and influences routing/review context (PR #434). It is not yet the execution scheduler.
 - **In progress:** bounded page/region summaries, parser-owned region ID validation, parent-page binding, and conservative handling of clipped or omitted context.
 - **In progress:** validated planner actions are now materialized as stable, page/region-specific inspection work-unit proposals with deterministic source ordering and operation-specific idempotency keys; they currently seed legacy routing rather than being independently executed or persisted.
 - **In progress:** existing page-routing and visual table-extraction model batches now execute through the WorkUnit lifecycle in memory, with source-bound IDs and explicit completed/retryable/cancelled states. Extraction-unit state must agree with its result before the matrix continues. Planner-proposed region operations still do not have independent handlers or durable per-region artifacts.
+- **In progress:** an encrypted local SQLite snapshot adapter now stores run/plan/work-unit/result envelopes using AES-256-GCM and a local environment key; a fresh-process test proves snapshot recovery and rejects wrong keys/tampered ciphertext. The request handler does not yet save into this adapter, and run resumption is not yet exposed. The store is opt-in and refuses to run as durable storage on Vercel/serverless.
 - **Not done:** planner-driven region work execution, durable per-unit checkpoints, restart/resume, per-region terminal coverage, and review UI for run progress/incomplete work.
 - **Quality evidence remains separate:** existing tender examples are development material. Contract fixtures do not prove extraction quality on unfamiliar tenders.
+
+## Product acceptance gates — required alongside the architecture
+
+The architecture work exists to fix the product, not to defer known product failures. After the smallest resumable slice is integrated, return to these acceptance gates before calling Phase 1 usable:
+
+1. **Reproduce and resolve the 42-page failure.** The recorded run read all 42 pages and completed 5/5 routing groups and 13/13 header mappings, but only 4/9 technical extraction batches parsed; the stream ended without a usable response sheet after 290.02 seconds. Start with saved traces and provider/model timing. Inspect batch sizing, output/schema failures, timeouts, retry behavior, SSE terminal state, concurrency, and partial-result handling. Fix the demonstrated general cause; do not add a tender-specific classifier or merely raise the timeout.
+2. **Run controlled live evaluations within the approved cap.** The referenced sprint brief authorizes up to six paid live analyses and $30 cumulative additional inference spend. Track provider/model, token usage, estimated/billed cost, document family, commit, duration, and outcome. Stop before either cap. Use existing `examples/` as development material; do not describe it as held-out evaluation.
+3. **Complete the operator workflow in a real browser.** Verify upload, progress, completed result, source navigation and exact/approximate highlighting, correction/addition/removal/review, encrypted save/resume after reload, and DOCX/XLSX/PDF output. Open generated files independently and inspect text, citations, edits, deleted rows, numbers/units, special characters, and layout. Unit tests alone do not pass this gate.
+4. **Verify a free private deployment or document why local is required.** Check current hosting limits, target architecture/native dependencies, authentication, credentials, request memory/time, and ingress with a synthetic 32 MiB PDF. Upload acceptance is not successful processing. Do not expose a public unauthenticated app or upgrade to paid hosting. Vercel/serverless must not use the local SQLite adapter as durable storage.
+
+Report each gate independently as passed, failed, blocked, or not run. A successful build or scripted provider fixture is not an end-to-end acceptance result.
 
 ## Execution plan — build the vertical slice first
 
@@ -54,7 +67,7 @@ Each milestone should produce a runnable, reviewable increment. Do not wait for 
 
 ### 3. Persist one vertical slice and prove resume
 
-- Select a local/private persistence adapter for run metadata, plan version, work state, and source-linked output artifacts. Keep provider interfaces thin; no new cloud service, queue, or worker is required for this first slice.
+- Integrate the opt-in encrypted local SQLite adapter for run metadata, plan version, work state, and source-linked output artifacts. Keep provider interfaces thin; no new cloud service, queue, or worker is required for this first slice.
 - Preserve successful unit outputs on timeout/restart. Resume only eligible unfinished units using source/config-bound stable IDs; do not duplicate, reorder, or overwrite human review decisions.
 - Document storage location, confidentiality, encryption/key handling, retention/deletion, size limits, and failure behavior before enabling persistence by default.
 - Acceptance: integration test forcibly interrupts a run, starts a new process, resumes it, and verifies completed outputs remain single, source-linked, and deterministically ordered.
@@ -75,7 +88,7 @@ Each milestone should produce a runnable, reviewable increment. Do not wait for 
 
 ## Parallel quality and anti-overfitting track
 
-Implementation can proceed using scripted providers, synthetic adversarial documents, and existing examples. Do not use a passing scripted fixture as evidence of tender quality, and do not spend on live model calls without explicit authorization.
+Implementation can proceed using scripted providers, synthetic adversarial documents, and existing examples. Do not use a passing scripted fixture as evidence of tender quality. Paid live calls are authorized only under the explicit six-run / $30 cap above; the cap does not authorize paid subscriptions or infrastructure.
 
 - Independently review/adjudicate whole-tender source labels. The NCESS annotations already in the repository are development material, not independent gold labels.
 - Establish a baseline that separately measures omissions, false inclusions, exclusions, split/merge errors, citation/location correctness, numeric fidelity, coverage, and reviewer effort.
