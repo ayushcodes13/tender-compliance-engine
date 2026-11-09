@@ -15,7 +15,13 @@ test("parses a multipart request containing the full 32 MB tender allowance", as
   assert.equal(parsed.get("file").size, 32 * 1024 * 1024);
 });
 
-test("rejects an oversized Content-Length before parsing multipart data", async () => {
+test("parses multipart form data within the configured request byte limit", async () => {
+  const request = multipartRequest({ file: new Blob(["%PDF-1.7 test"]) });
+  const parsed = await parseBoundedFormData(request, 1024);
+  assert.equal(await parsed.get("file").text(), "%PDF-1.7 test");
+});
+
+test("rejects an oversized Content-Length before consuming the body", async () => {
   const request = new Request("http://localhost/api/analyze", {
     method: "POST",
     headers: { "content-type": "multipart/form-data; boundary=x", "content-length": "100" },
@@ -56,4 +62,8 @@ test("propagates caller cancellation and releases the source reader", async () =
 
 test("rejects invalid byte limits instead of silently disabling the bound", async () => {
   await assert.rejects(parseBoundedFormData(new Request("http://localhost"), 0), RangeError);
+});
+
+test("multipart envelope allowance is explicit and bounded", () => {
+  assert.equal(MAX_MULTIPART_OVERHEAD_BYTES, 256 * 1024);
 });

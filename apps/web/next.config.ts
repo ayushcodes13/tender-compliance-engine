@@ -35,7 +35,6 @@ const nextConfig: NextConfig = {
     // Keep the proxy buffer large enough for the bounded multipart upload path.
     // The route itself enforces the exact file plus multipart-envelope limit.
     middlewareClientMaxBodySize: "33mb",
-    serverActions: { bodySizeLimit: isHosted ? "4.5mb" : "32mb" },
   },
   async headers() {
     return [

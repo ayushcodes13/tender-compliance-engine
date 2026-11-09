@@ -74,7 +74,6 @@ export async function parseBoundedFormData(request: Request, maxBytes: number): 
     signal: request.signal,
     duplex: "half",
   } as RequestInit & { duplex: "half" });
-
   try {
     const form = await boundedRequest.formData();
     if (request.signal.aborted) throw request.signal.reason ?? new DOMException("The upload was cancelled.", "AbortError");
