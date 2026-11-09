@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { normalizeWhitespace, quoteMatchesPage, validateAnnotation } from "./validate-phase1-v2-annotation.mjs";
 
 const annotationUrl = new URL("../phase-1-v2-annotations/iit-gandhinagar-page-22.json", import.meta.url);
 const manifestUrl = new URL("../phase-1-v2-corpus.json", import.meta.url);
 const annotation = JSON.parse(await readFile(annotationUrl, "utf8"));
 const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
+const ncessAnnotationUrl = new URL("../phase-1-v2-annotations/ncess-pages-1-7-draft.json", import.meta.url);
+const ncessAnnotation = JSON.parse(await readFile(ncessAnnotationUrl, "utf8"));
+const ncessSourcePath = fileURLToPath(new URL("../../examples/NCESS Thiruvananthapuram - Optical Laser Disdrometer.pdf", import.meta.url));
 
 test("accepts the provisional page annotation and preserves review limits", async () => {
   const result = await validateAnnotation(annotation, { manifest });
@@ -17,6 +21,31 @@ test("accepts the provisional page annotation and preserves review limits", asyn
   assert.equal(result.sourceAnchorsUnverified, 0);
   assert.equal(annotation.scope.wholeDocumentReviewed, false);
   assert.equal(annotation.review.independentReviewComplete, false);
+});
+
+test("validates source anchors and explicit partial scope for the NCESS development draft", async () => {
+  const result = await validateAnnotation(ncessAnnotation, { sourcePath: ncessSourcePath, manifest });
+  assert.equal(result.status, "draft");
+  assert.equal(result.corpusSplit, "development");
+  assert.equal(result.pagesReviewed, 7);
+  assert.equal(result.sourceAnchorsVerified, ncessAnnotation.anchors.length);
+  assert.equal(result.sourceAnchorsUnverified, 0);
+  assert.deepEqual(ncessAnnotation.scope.physicalPagesReviewed, [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(ncessAnnotation.scope.wholeDocumentReviewed, false);
+  assert.equal(ncessAnnotation.review.independentReviewComplete, false);
+});
+
+test("rejects a raw value token that is absent from its cited source anchors", async () => {
+  const changed = structuredClone(ncessAnnotation);
+  changed.labels.find((label) => label.id === "row-02").values.push({
+    raw: "999 nm",
+    role: "deliberately fabricated test token",
+    normalized: null,
+  });
+  await assert.rejects(
+    validateAnnotation(changed, { sourcePath: ncessSourcePath, manifest }),
+    /not present in its cited source anchors/u,
+  );
 });
 
 test("matches only source quotes after whitespace normalization", () => {

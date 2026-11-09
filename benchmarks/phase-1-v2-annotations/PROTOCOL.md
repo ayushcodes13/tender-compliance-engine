@@ -37,6 +37,7 @@ For content that is not an obligation for this task, record the source region an
 
 - Store the source file SHA-256, physical PDF page, and printed page label separately when present.
 - Store source quotes exactly as seen in the source. If a verifier uses whitespace-normalized matching, record that method; do not change token spelling, digits, units, operators, or word order.
+- When raw numeric/value tokens are recorded, each token must be found inside one of that label's cited literal source anchors; normalization must never replace the raw token. The validator checks this relationship when the source PDF is available.
 - Record parser element IDs, offsets, and bounding boxes only when obtained from the named parser/version and verified against the page. Include offset unit/scope and coordinate system. Unknown is `null`/omitted, never a guessed value.
 - Separate quote fidelity from location precision. A literal quote may be verified on a page even when its exact table cell or geometry is unknown; label that location `page_only` or `approximate`, not `exact`.
 - For OCR/visual transcription, preserve the transcript and method separately from the visual source. Keep confidence and unresolved glyphs; never silently correct OCR.

@@ -71,6 +71,10 @@ node benchmarks/scripts/validate-phase1-v2-annotation.mjs \
 
 The current pilot covers the visible content of physical page 22 only: training, three separate service bullets, two warranty bullets, a technical-compliance-report note, and page furniture/non-requirements. The source hash matches the development manifest and 10 of 11 anchors were whitespace-normalized and verified on that PDF page; the combined row-label anchor is explicitly unverified. The page was rendered and visually inspected. No production source-element IDs, offsets, or cell bounds were assigned, so row-level locations remain approximate/page-only. The labels are a single-assistant draft awaiting independent human review; service wording, bullet grouping, and the scope of the final cost qualifier remain unresolved. The annotation is development material, not gold, not an exhaustive tender annotation, and not evidence of pipeline accuracy. Whole-tender annotation and adjudication remain open under V2.2b.
 
+### NCESS whole-tender annotation in progress — 2026-11-10
+
+`phase-1-v2-annotations/ncess-pages-1-7-draft.json` is now an explicitly partial first pass for the NCESS development PDF. It covers physical pages 1-7, with 141 source-region labels and 161 anchors; all 93 numbered technical specification rows on pp.4-7 are represented. The source-aware validator checks every anchor against the exact PDF page and checks each recorded raw value token against its cited quote. Pages 8-20 remain unreviewed, including the duplicated-looking technical compliance schedule and contract annexures. Compound technical rows, several commercial-term interpretations, OCR/text-layer differences, and independent review remain unresolved. This draft is neither gold nor a quality result; V2.2b remains open.
+
 Earlier benchmark annotations retain their original schemas and statuses; they have not been implicitly migrated to this protocol or promoted to adjudicated gold. In particular, assistant-reviewed page dispositions and partial source-anchor lists remain partial evidence.
 
 ### Provenance and layout evidence currently available

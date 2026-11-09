@@ -154,6 +154,17 @@ export async function validateAnnotation(annotation, { sourcePath = null, manife
       assert(quoteMatchesPage(anchor, pageTextCache.get(anchor.physicalPage)), `Anchor ${anchor.id} was not found on physical page ${anchor.physicalPage}.`);
       sourceAnchorsVerified += 1;
     }
+    const anchorsById = new Map(annotation.anchors.map((anchor) => [anchor.id, anchor]));
+    for (const label of annotation.labels) {
+      for (const value of label.values) {
+        assert(typeof value.raw === "string" && value.raw.trim(), `Label ${label.id} has an empty raw value token.`);
+        const normalizedValue = normalizeWhitespace(value.raw);
+        const foundInCitedQuote = label.sourceAnchorIds
+          .map((anchorId) => anchorsById.get(anchorId))
+          .some((anchor) => anchor && normalizeWhitespace(anchor.quote).includes(normalizedValue));
+        assert(foundInCitedQuote, `Raw value ${JSON.stringify(value.raw)} in label ${label.id} is not present in its cited source anchors.`);
+      }
+    }
   }
   return { annotationId: annotation.annotationId, status: annotation.status, corpusSplit: annotation.corpusSplit, pagesReviewed: annotation.scope.physicalPagesReviewed.length, regions: annotation.regions.length, labels: annotation.labels.length, sourceAnchorsVerified, sourceAnchorsUnverified };
 }
