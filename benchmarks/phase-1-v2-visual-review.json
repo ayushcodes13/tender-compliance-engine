@@ -29,7 +29,9 @@
         { "pages": [14, 15, 16, 17, 18], "kind": "technical-table-region", "evidenceLevel": "visual-candidate" },
         { "pages": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17, 23], "kind": "numbered-clauses-and-bid-forms", "evidenceLevel": "visual-candidate" },
         { "pages": [14, 15], "kind": "technical-table-continuation-with-split-row-label-and-no-repeated-header", "evidenceLevel": "render-confirmed-single-reviewer" },
-        { "pages": [15, 16], "kind": "post-schedule-numbered-terms-continue-as-prose", "evidenceLevel": "render-confirmed-single-reviewer" }
+        { "pages": [15, 16], "kind": "post-schedule-numbered-terms-continue-as-prose", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [18, 19, 20], "kind": "consecutive-annexure-forms-with-summary-information-table", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [21, 22], "kind": "bank-guarantee-annexure-prose-continuation-across-page-break", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["cell-boundaries", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]
     },
