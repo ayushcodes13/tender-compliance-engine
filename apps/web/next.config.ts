@@ -10,8 +10,6 @@ const securityHeaders = [
   },
 ];
 
-const isHosted = Boolean(process.env.VERCEL === "1" || process.env.VERCEL_ENV);
-
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // PDF.js resolves its Node fake worker relative to the installed module.
@@ -26,7 +24,6 @@ const nextConfig: NextConfig = {
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
     ],
   },
-  experimental: { serverActions: { bodySizeLimit: isHosted ? "4.5mb" : "32mb" } },
   async headers() {
     return [
       {

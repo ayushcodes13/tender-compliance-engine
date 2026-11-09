@@ -24,6 +24,7 @@ const outsideTable = 'Service support shall remain available for 10 years.';
 let scenario = "prose";
 let extractionCalls = 0;
 let routeCalls = 0;
+let providerRequestCount = 0;
 let initialExtractionReturnedRecovery = false;
 let omissionAuditReturnedRecovery = false;
 let corruptedNumericClaimProposed = false;
@@ -42,6 +43,7 @@ const progressObservations = [];
 const forensicTraceDirectory = path.join(process.cwd(), '.local', 'forensic-traces');
 const existingTraceFiles = new Set(await readdir(forensicTraceDirectory).catch(() => []));
 const provider = http.createServer(async (request, response) => {
+  providerRequestCount += 1;
   let trackedVectorLabelRequest = false;
   let trackedGeneralExtractionRequest = false;
   let trackedGeneralExtractionFirstPage = 0;
@@ -161,7 +163,7 @@ const provider = http.createServer(async (request, response) => {
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
 const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],{
-  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',TCE_FORENSIC_TRACE:'1'},stdio:['ignore','pipe','pipe'],
+  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1'},stdio:['ignore','pipe','pipe'],
 });
 let logs='';child.stdout.on('data',chunk=>{logs+=chunk;});child.stderr.on('data',chunk=>{logs+=chunk;});
 try {
@@ -183,9 +185,25 @@ try {
   const unauthenticated = await fetch(`${base}/api/analyze`, { method: 'POST', body: new FormData() });
   assert.equal(unauthenticated.status, 401, 'The upload endpoint rejects anonymous requests before parsing or analysis');
   assert.match(unauthenticated.headers.get('www-authenticate') ?? '', /^Basic /);
+  const authHeader = `Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`;
+  const providerCountBeforeMalformed = providerRequestCount;
+  const malformed = await fetch(`${base}/api/analyze`, {
+    method: 'POST',
+    headers: { authorization: authHeader, 'content-type': 'text/plain' },
+    body: 'not a multipart form',
+  });
+  assert.equal(malformed.status, 400, 'Malformed form bodies are rejected before analysis starts');
+  assert.deepEqual(await malformed.json(), { error: 'The uploaded form could not be read.' });
+  assert.equal(providerRequestCount, providerCountBeforeMalformed, 'Malformed forms initiate no model requests');
+  const oversizedForm = new FormData();
+  oversizedForm.set('file', new File([new Uint8Array(2 * 1024 * 1024)], 'oversized.pdf', { type: 'application/pdf' }));
+  const oversized = await fetch(`${base}/api/analyze`, { method: 'POST', headers: { authorization: authHeader }, body: oversizedForm });
+  assert.equal(oversized.status, 413, 'Multipart bodies larger than the configured request cap receive HTTP 413');
+  assert.deepEqual(await oversized.json(), { error: 'The uploaded request exceeds the configured size limit.' });
+  assert.equal(providerRequestCount, providerCountBeforeMalformed, 'Oversized bodies initiate no model requests');
   async function analyze(pdf) {
     const body=new FormData();body.set('file',new File([pdf.output('arraybuffer')],'synthetic-tender.pdf',{type:'application/pdf'}));
-    const response = await fetch(base+'/api/analyze',{method:'POST',body,headers:{authorization:`Basic ${Buffer.from('tender:fixture-only-password').toString('base64')}`}});
+    const response = await fetch(base+'/api/analyze',{method:'POST',body,headers:{authorization:authHeader}});
     assert.match(response.headers.get('cache-control') ?? '', /private, no-store/);
     return consumeAnalysisStream(response,{onProgress:(progress)=>progressObservations.push({scenario, ...progress})});
   }
@@ -196,6 +214,7 @@ try {
   assert.equal(one.analysis.document.inventoryIntegrity,'structurally-verified');
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
+  assert.ok(providerRequestCount > providerCountBeforeMalformed, 'A valid upload continues into the scripted model analysis path');
   scenario='slow-general-extraction';
   const slowGeneral=await analyze(short);
   assert.equal(slowGeneral.ok,true,slowGeneral.error);
