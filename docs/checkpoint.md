@@ -22,7 +22,7 @@ The user's latest direction supersedes the previous annotation-first implementat
 
 ### Track A — runtime architecture (active)
 
-- [ ] **R1 — Run/TaskPlan/WorkUnit contracts:** define typed run and model-proposal envelopes, stable source-bound work units, state transitions, idempotency, and deterministic ordering; add unit tests. Contract completion is not persistence/resumability.
+- [x] **R1 — Run/TaskPlan/WorkUnit contracts:** `apps/web/app/analysis-run.ts` defines typed run/proposal/work-unit envelopes, explicit legal state transitions, SHA-256-bound run identity, source-bound idempotency keys, retry attempts, and deterministic execution ordering. `apps/web/app/analysis-run.test.mjs` covers identity, transition legality, monotonic timestamps, retry counting, ordering, duplicate work, and invalid source inputs. This is a provider-independent domain contract only: it is not connected to analysis execution and does not provide persistence or resumability. PR #433.
 - [ ] **R2 — LLM-led task planner:** let the model propose tender scope, structure, relevant/unresolved regions, inspection modes, and requirement organization from the parser inventory; validate source IDs and supported operations before the controller executes a bounded plan. No template catalog.
 - [ ] **R3 — Durable resumable vertical slice:** persist one bounded work-unit type and source-linked result; fault-inject timeout/restart; prove retry/resume without duplicated or reordered results. Select and test the local/private persistence adapter and security behavior before claiming durability.
 - [ ] **R4 — Expand parsing/extraction work units:** native text, vector/table, OCR/visual, continuation, validation, and coverage audit with explicit state for every supplied region.
