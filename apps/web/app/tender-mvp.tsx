@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, LoaderCircle, Plus, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Check, FileCheck2, FileSpreadsheet, FileText, FolderOpen, LoaderCircle, Plus, Save, ScanSearch, ShieldCheck, Upload, X } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -27,6 +27,7 @@ import {
 } from "./oem-compliance-engine";
 import { parseProductPdfFile, getSampleProductDocument, getSampleProductFile } from "./product-document-parser";
 import { resolveClientMaxFileBytes } from "./upload-limits";
+import { decryptReviewSession, encryptReviewSession, verifyReviewSessionSource, type ReviewSession } from "./review-session";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -197,6 +198,16 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const [productPage, setProductPage] = useState(1);
   const [productBox, setProductBox] = useState<BoundingBox | null>(null);
   const [productCitationEvidence, setProductCitationEvidence] = useState<ProductEvidenceCitation | null>(null);
+  const [pendingResume, setPendingResume] = useState<ReviewSession | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [savePassphrase, setSavePassphrase] = useState("");
+  const [confirmSavePassphrase, setConfirmSavePassphrase] = useState("");
+  const [resumePassphrase, setResumePassphrase] = useState("");
+  const [resumeSessionFile, setResumeSessionFile] = useState<File | null>(null);
+  const sessionSaveDialogRef = useRef<HTMLDialogElement>(null);
+  const sessionResumeDialogRef = useRef<HTMLDialogElement>(null);
+  const sessionResumeInputRef = useRef<HTMLInputElement>(null);
   const sampleProductFileRef = useRef<File | null>(null);
   const manualIdCounterRef = useRef(0);
   const activeRequestRef = useRef<AbortController | null>(null);
@@ -281,6 +292,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const displayedCitationEvidence = visibleCitationEvidence(active, page, coverageFocus?.page);
 
   function selectFile(event: ChangeEvent<HTMLInputElement>) {
+    setPendingResume(null);
     const previousRequest = activeRequestRef.current;
     activeRequestRef.current = null;
     previousRequest?.abort("a different tender was selected");
@@ -302,6 +314,128 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     }
     setFile(selected);
   }
+
+  async function resumeSourceFile(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0] ?? null;
+    if (!selected || !pendingResume) return;
+    event.target.value = "";
+    if (selected.size > 32 * 1024 * 1024 || !selected.name.toLowerCase().endsWith(".pdf")) {
+      setError("Choose the original PDF used for this review session.");
+      return;
+    }
+    try {
+      setSessionBusy(true);
+      if (!await verifyReviewSessionSource(selected, pendingResume.documentFingerprint)) {
+        setError("This PDF does not match the saved session. Choose the exact original file; citations were not restored.");
+        return;
+      }
+      setFile(selected);
+      const restoredRequirements = pendingResume.analysis.requirements as unknown as Requirement[];
+      setAnalysis(pendingResume.analysis as unknown as Analysis);
+      setResponseSheet(pendingResume.responseSheet as ResponseSheet);
+      setSheetEdited(pendingResume.sheetEdited);
+      setActiveId(restoredRequirements[0]?.id ?? null);
+      setPage(restoredRequirements[0]?.page ?? 1);
+      setPendingResume(null);
+      setError(null);
+      setProcessing({ stage: "complete", message: "Saved review restored. Source PDF fingerprint verified." });
+    } catch {
+      setError("The selected PDF could not be verified. Choose the original file and try again.");
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  async function saveReviewSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!analysis || !responseSheet) return;
+    if (savePassphrase !== confirmSavePassphrase) {
+      setSessionError("The passphrases do not match.");
+      return;
+    }
+    try {
+      setSessionBusy(true);
+      setSessionError(null);
+      const blob = await encryptReviewSession({ analysis, responseSheet, sheetEdited }, savePassphrase, {
+        documentFingerprint: analysis.document.documentFingerprint,
+        filename: analysis.filename,
+      });
+      downloadBlob(blob, `${analysis.filename.replace(/\.pdf$/i, "")}-review.tce-review`);
+      sessionSaveDialogRef.current?.close();
+      setSavePassphrase("");
+      setConfirmSavePassphrase("");
+    } catch (cause) {
+      setSessionError(cause instanceof Error ? cause.message : "The review session could not be saved.");
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  async function restoreReviewSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!resumeSessionFile) {
+      setSessionError("Choose a Tender Review session file first.");
+      return;
+    }
+    try {
+      setSessionBusy(true);
+      setSessionError(null);
+      const restored = await decryptReviewSession(resumeSessionFile, resumePassphrase);
+      setPendingResume(restored);
+      setFile(null);
+      setAnalysis(null);
+      setResponseSheet(null);
+      setSheetEdited(false);
+      setError(null);
+      setProcessing(null);
+      sessionResumeDialogRef.current?.close();
+      setResumePassphrase("");
+      setResumeSessionFile(null);
+    } catch (cause) {
+      setSessionError(cause instanceof Error ? cause.message : "The review session could not be restored.");
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  function openSaveSessionDialog() {
+    setSessionError(null);
+    sessionSaveDialogRef.current?.showModal();
+  }
+
+  function openResumeSessionDialog() {
+    setSessionError(null);
+    sessionResumeDialogRef.current?.showModal();
+  }
+
+  const reviewSessionDialogs = <>
+    <dialog ref={sessionSaveDialogRef} className="mvp-modal-dialog" aria-label="Save encrypted review session" onClose={() => { setSavePassphrase(""); setConfirmSavePassphrase(""); setSessionError(null); }}>
+      <div className="mvp-modal-backdrop" onClick={() => sessionSaveDialogRef.current?.close()} />
+      <div className="mvp-modal-content">
+        <div className="mvp-modal-header"><div><span className="mvp-panel-kicker">PRIVATE SESSION FILE</span><h2>Save this review</h2></div><button type="button" className="mvp-icon-button" aria-label="Close save session dialog" onClick={() => sessionSaveDialogRef.current?.close()}><X size={18} /></button></div>
+        <p className="mvp-modal-desc">The review data is encrypted in your browser and downloaded to your device. Choose a long, unique passphrase. The PDF is not included; keep the original PDF and passphrase because both are required to resume with working citations.</p>
+        <form className="mvp-modal-form" onSubmit={saveReviewSession}>
+          <label>Passphrase<input type="password" autoComplete="new-password" minLength={12} maxLength={512} value={savePassphrase} onChange={(event) => setSavePassphrase(event.target.value)} required /></label>
+          <label>Confirm passphrase<input type="password" autoComplete="new-password" minLength={12} maxLength={512} value={confirmSavePassphrase} onChange={(event) => setConfirmSavePassphrase(event.target.value)} required /></label>
+          {sessionError && <p className="mvp-error" role="alert">{sessionError}</p>}
+          <div className="mvp-modal-actions"><button type="button" className="mvp-text-button" onClick={() => sessionSaveDialogRef.current?.close()}>Cancel</button><button type="submit" className="mvp-primary" disabled={sessionBusy}>{sessionBusy ? <><LoaderCircle className="mvp-spin" size={16} /> Encrypting…</> : <><Save size={16} /> Download encrypted file</>}</button></div>
+        </form>
+      </div>
+    </dialog>
+    <dialog ref={sessionResumeDialogRef} className="mvp-modal-dialog" aria-label="Resume encrypted review session" onClose={() => { setResumePassphrase(""); setResumeSessionFile(null); setSessionError(null); if (sessionResumeInputRef.current) sessionResumeInputRef.current.value = ""; }}>
+      <div className="mvp-modal-backdrop" onClick={() => sessionResumeDialogRef.current?.close()} />
+      <div className="mvp-modal-content">
+        <div className="mvp-modal-header"><div><span className="mvp-panel-kicker">PRIVATE SESSION FILE</span><h2>Resume a saved review</h2></div><button type="button" className="mvp-icon-button" aria-label="Close resume session dialog" onClick={() => sessionResumeDialogRef.current?.close()}><X size={18} /></button></div>
+        <p className="mvp-modal-desc">Choose your encrypted .tce-review file and enter its passphrase. Next, select the original PDF; its SHA-256 fingerprint must match before citations and review edits are restored.</p>
+        <form className="mvp-modal-form" onSubmit={restoreReviewSession}>
+          <label>Encrypted review file<input ref={sessionResumeInputRef} type="file" accept=".tce-review,application/vnd.tender-review-session+json" onChange={(event) => setResumeSessionFile(event.target.files?.[0] ?? null)} required /></label>
+          <label>Passphrase<input type="password" autoComplete="current-password" minLength={12} maxLength={512} value={resumePassphrase} onChange={(event) => setResumePassphrase(event.target.value)} required /></label>
+          {sessionError && <p className="mvp-error" role="alert">{sessionError}</p>}
+          <div className="mvp-modal-actions"><button type="button" className="mvp-text-button" onClick={() => sessionResumeDialogRef.current?.close()}>Cancel</button><button type="submit" className="mvp-primary" disabled={sessionBusy}>{sessionBusy ? <><LoaderCircle className="mvp-spin" size={16} /> Unlocking…</> : <><FolderOpen size={16} /> Continue</>}</button></div>
+        </form>
+      </div>
+    </dialog>
+  </>;
 
   async function analyze(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -974,12 +1108,12 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     }
   }
 
-  if (!analysis && !startAtUpload) {
+  if (!analysis && !startAtUpload && !pendingResume) {
     return (
       <main ref={motionRoot} className={`tender-mvp-root mvp-landing ${startAtUpload ? "mvp-new-page" : ""}`}>
         <header className="mvp-topbar mvp-landing-topbar">
           <a className="mvp-brand" href="#top" aria-label="Tender Review home"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Technical response workspace</small></span></a>
-          <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="#product">The product</a><a href="#how-it-works">How it works</a><a href="#limits">What to expect</a></nav>
+          <nav className="mvp-landing-nav" aria-label="Main navigation"><a href="#product">The product</a><a href="#how-it-works">How it works</a><a href="#limits">What to expect</a><button type="button" className="mvp-text-button" onClick={openResumeSessionDialog}>Resume saved review</button></nav>
           <a className="mvp-topbar-cta" href="/new">Start a review <ArrowUpRight size={15} /></a>
         </header>
         <section className="mvp-landing-hero mvp-motion-section" id="top">
@@ -1034,7 +1168,8 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           <p>It processes text-based PDFs in this browser session. The local app can OCR scanned pages when Tesseract 5 and the selected language data are installed; the hosted preview does not include OCR tools. OCR-derived wording needs visual review. Extracted rows are a review starting point, not a guarantee that every tender requirement was found. Always check the tender source before relying on the response sheet.</p>
         </section>
         <section className="mvp-bottom-cta mvp-motion-section"><div><h2>Start with your tender PDF.</h2></div><a className="mvp-primary" href="/new">Start a review <ArrowRight size={17} /></a></section>
-        <footer className="mvp-landing-footer"><span>Tender Review</span><span>Your document and review marks stay in this browser session and are not saved as project history.</span></footer>
+        <footer className="mvp-landing-footer"><span>Tender Review</span><span>Your document and review marks stay in this browser session unless you download an encrypted review file.</span></footer>
+        {reviewSessionDialogs}
       </main>
     );
   }
@@ -1044,23 +1179,23 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       <main ref={motionRoot} className="tender-mvp-root mvp-upload-screen">
         <header className="mvp-topbar mvp-review-topbar">
           <a className="mvp-brand" href="/" aria-label="Return to Tender Review home"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Start a review</small></span></a>
-          <a className="mvp-upload-back" href="/">Back to overview</a>
+          <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button" onClick={openResumeSessionDialog}>Resume saved review</button><a className="mvp-upload-back" href="/">Back to overview</a></div>
         </header>
         <section className="mvp-upload-page">
-          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>Start with the tender document.</h1><p>Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source.</p><ul><li>PDF only · maximum {CLIENT_MAX_FILE_MEGABYTES} MB</li><li>Up to 120 pages</li><li>Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable</li></ul></div>
+          <div className="mvp-upload-intro"><div className="mvp-eyebrow"><span className="mvp-eyebrow-mark" /> STEP 1 OF 3</div><h1>{pendingResume ? "Restore your saved review." : "Start with the tender document."}</h1><p>{pendingResume ? `Select the exact original PDF for ${pendingResume.filename}. The source is checked before its citations and reviewer changes are restored.` : "Choose a PDF. Tender Review will find requirement quotes, check them against the cited page, and show you the matching source."}</p><ul><li>PDF only · maximum {CLIENT_MAX_FILE_MEGABYTES} MB</li><li>Up to 120 pages</li><li>{pendingResume ? "The document fingerprint must match the encrypted session." : "Local OCR needs Tesseract 5 and its language data; hosted OCR is unavailable"}</li></ul></div>
           <div className="mvp-upload-card">
-            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">SELECT YOUR TENDER</span></div>
+            <div className="mvp-upload-card-heading"><span className="mvp-upload-step">{pendingResume ? "VERIFY ORIGINAL SOURCE" : "SELECT YOUR TENDER"}</span></div>
             <form onSubmit={analyze}>
               <label className={`mvp-dropzone ${file ? "is-ready" : ""}`} htmlFor="tender-file">
-                <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={selectFile} disabled={busy} />
+                <input id="tender-file" type="file" accept="application/pdf,.pdf" onChange={pendingResume ? resumeSourceFile : selectFile} disabled={busy || sessionBusy} />
                 <span className="mvp-upload-icon"><Upload size={20} /></span>
-                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>Choose a tender PDF</strong><span>PDF files up to {CLIENT_MAX_FILE_MEGABYTES} MB</span></>}
-                <span className="mvp-browse-link">Select PDF <ArrowUpRight size={14} /></span>
+                {file ? <><strong>{file.name}</strong><span>{(file.size / 1024 / 1024).toFixed(2)} MB · ready to review</span></> : <><strong>{pendingResume ? "Choose the original tender PDF" : "Choose a tender PDF"}</strong><span>{pendingResume ? "It must match the saved SHA-256 fingerprint" : `PDF files up to ${CLIENT_MAX_FILE_MEGABYTES} MB`}</span></>}
+                <span className="mvp-browse-link">{pendingResume ? "Verify PDF" : "Select PDF"} <ArrowUpRight size={14} /></span>
               </label>
-              <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
+              {pendingResume ? <button type="button" className="mvp-text-button" disabled={sessionBusy} onClick={() => { setPendingResume(null); setError(null); }}>Cancel session restore</button> : <button className="mvp-primary mvp-submit" type="submit" disabled={!file || busy}>
                 {busy ? <><LoaderCircle className="mvp-spin" size={17} /> Processing tender…</> : <>{error || processing?.stage === "cancelled" ? "Try again" : "Find requirements"} <ArrowRight size={17} />
                 </>}
-              </button>
+              </button>}
               {busy && processing && <section className="mvp-processing" role="region" aria-label="Tender processing progress">
                 <div className="mvp-processing-heading"><LoaderCircle className="mvp-spin" size={17} /><div><strong role="status" aria-live="polite">{processing.message}</strong><span>Long tenders can take several minutes. Keep this page open; progress updates as each step finishes.</span><span>{formatElapsedSeconds(elapsedSeconds)} elapsed{processing.current !== undefined && processing.total !== undefined ? ` · ${processing.current} of ${processing.total}` : ""}</span></div></div>
                 <ol className="mvp-processing-steps">
@@ -1123,6 +1258,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           </section>
         </dialog>}
         <footer className="mvp-landing-footer"><span>Tender Review</span><span>Review the cited source before relying on any extracted requirement.</span></footer>
+        {reviewSessionDialogs}
       </main>
     );
   }
@@ -1164,6 +1300,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     <main ref={motionRoot} className="tender-mvp-root mvp-review-screen">
       <header className="mvp-topbar mvp-review-topbar">
         <a className="mvp-brand" href="/" aria-label="Start a new tender"><span className="mvp-brand-mark"><TenderReviewMark /></span><span className="mvp-brand-copy"><strong>Tender Review</strong><small>Review workspace</small></span></a>
+        <div className="mvp-sheet-heading-actions"><button type="button" className="mvp-text-button" onClick={openSaveSessionDialog} disabled={Boolean(productFile || productDoc || complianceReport)} title={productFile || productDoc || complianceReport ? "Portable sessions currently support the Phase 1 tender review only." : "Download an encrypted review file"}><Save size={15} /> Save review</button><button type="button" className="mvp-text-button" onClick={openResumeSessionDialog}><FolderOpen size={15} /> Resume saved</button></div>
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span></div>
       </header>
       <section className="mvp-review-summarybar">
@@ -1657,6 +1794,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
           </div>
         </dialog>
       )}
+      {reviewSessionDialogs}
     </main>
   );
 }

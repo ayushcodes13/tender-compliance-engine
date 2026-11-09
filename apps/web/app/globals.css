@@ -746,12 +746,16 @@ a { color: inherit; }
 
 /* Modal dialog for operator addition */
 .mvp-modal-dialog { position: fixed; inset: 0; width: 100vw; height: 100vh; padding: 0; margin: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.mvp-modal-dialog:not([open]) { display: none; }
 .mvp-modal-backdrop { position: fixed; inset: 0; background: rgba(23, 35, 54, 0.45); backdrop-filter: blur(2px); }
 .mvp-modal-content { position: relative; width: min(600px, calc(100vw - 32px)); max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 6px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); z-index: 1001; padding: 24px; }
 .mvp-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .mvp-modal-header h2 { margin: 3px 0 0; font-size: 18px; font-weight: 700; color: #24354d; }
 .mvp-modal-desc { margin: 0 0 16px; font-size: 12px; color: #586678; line-height: 1.5; }
 .mvp-modal-form { display: grid; gap: 14px; }
+.mvp-modal-form > label { display: grid; gap: 5px; color: #34445b; font-size: 11px; font-weight: 650; }
+.mvp-modal-form > label input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 4px; color: #24354d; font: inherit; font-weight: 450; }
+.mvp-modal-form > label input:focus { outline: 2px solid rgba(36,79,187,.24); border-color: #315e9c; }
 .mvp-form-group-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .mvp-form-group { display: grid; gap: 5px; }
 .mvp-form-group label { font-size: 11px; font-weight: 650; color: #34445b; }
