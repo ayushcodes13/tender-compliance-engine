@@ -56,7 +56,8 @@
       "observations": [
         { "pages": [8, 9], "kind": "technical-specification-list-without-vector-table-signal", "evidenceLevel": "visual-candidate" },
         { "pages": [14, 15, 16, 17, 18, 19, 20], "kind": "multi-page-integrity-agreement", "evidenceLevel": "visual-candidate" },
-        { "pages": [3, 4, 5, 6, 11, 12], "kind": "numbered-instructions-and-bid-forms", "evidenceLevel": "visual-candidate" }
+        { "pages": [3, 4, 5, 6, 11, 12], "kind": "numbered-instructions-and-bid-forms", "evidenceLevel": "visual-candidate" },
+        { "pages": [8, 9], "kind": "numbered-technical-list-continues-across-page-without-table", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["region-completeness", "reading-order", "semantic-role", "independent-review"]
     },
@@ -67,7 +68,9 @@
       "reviewedPageRanges": [[1, 20]],
       "observations": [
         { "pages": [2, 3], "kind": "numbered-clauses-and-narrative", "evidenceLevel": "visual-candidate" },
-        { "pages": [16, 18, 19, 20], "kind": "supplier-and-contract-clauses", "evidenceLevel": "visual-candidate" }
+        { "pages": [16, 18, 19, 20], "kind": "supplier-and-contract-clauses", "evidenceLevel": "visual-candidate" },
+        { "pages": [4, 5, 6, 7], "kind": "multi-page-specification-table-with-nested-numbered-list-and-no-repeated-header", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [10, 11, 12, 13, 14, 15], "kind": "technical-compliance-table-parallels-specification-sequence-with-response-columns", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["region-completeness", "cross-page-continuation", "annexure-linkage", "semantic-role"]
     },
@@ -130,7 +133,8 @@
       "reviewedPageRanges": [[1, 18]],
       "observations": [
         { "pages": [10], "kind": "technical-list-and-bullets", "evidenceLevel": "visual-candidate" },
-        { "pages": [1, 18], "kind": "mixed-narrative-and-form-layouts", "evidenceLevel": "visual-candidate" }
+        { "pages": [1, 18], "kind": "mixed-narrative-and-form-layouts", "evidenceLevel": "visual-candidate" },
+        { "pages": [10], "kind": "parameter-table-with-bulleted-cells-followed-by-separate-requirements-list", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["region-completeness", "cross-page-continuation", "annexure-linkage", "semantic-role"]
     },
