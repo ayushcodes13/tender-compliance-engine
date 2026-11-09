@@ -44,6 +44,7 @@
         { "pages": [22, 23], "kind": "annexure-reference-to-compliance-form", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [23, 24, 25], "kind": "related-compliance-table-extra-columns-and-visible-content-differences", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [37, 38, 39, 40, 41, 42], "kind": "multi-page-integrity-agreement", "evidenceLevel": "visual-candidate" },
+        { "pages": [37, 38, 39, 40, 41, 42], "kind": "integrity-pact-signature-letter-to-prose-agreement-sequence-with-sentence-continuation", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 32, 35], "kind": "numbered-clauses-and-bid-forms", "evidenceLevel": "visual-candidate" }
       ],
       "unknowns": ["cell-boundaries", "cross-page-table-continuity", "annexure-linkage", "semantic-role"]
