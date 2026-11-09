@@ -95,7 +95,30 @@ const provider = http.createServer(async (request, response) => {
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
-    if (schema === 'technical_section_route') {
+    if (schema === 'tender_task_plan') {
+      const planInput = JSON.parse(body.messages.at(-1)?.content ?? '{}');
+      const sourceIds = planInput.pages.map(page => page.sourceId);
+      const planScope = sourceIds.map(sourceId => {
+        const page = planInput.pages.find(item => item.sourceId === sourceId);
+        const proposedExclusion = scenario === 'planner-exclusion-conflict' && page.physicalPage === 1;
+        return { sourceIds: [sourceId], disposition: proposedExclusion ? 'outside_task' : 'relevant', rationale: proposedExclusion ? 'Fixture proposes that this page is outside the task.' : 'Scripted fixture routes this source page for technical review.' };
+      });
+      const inScopeIds = planScope.filter(scope => scope.disposition !== 'outside_task').flatMap(scope => scope.sourceIds);
+      result = {
+        schemaVersion: 1,
+        runId: planInput.runId,
+        sourceFingerprint: planInput.sourceFingerprint,
+        proposal: {
+          task: planInput.task,
+          scope: planScope,
+          sections: inScopeIds.length ? [{ label: 'Technical source', sourceIds: inScopeIds }] : [],
+          actions: Array.from({ length: Math.ceil(inScopeIds.length / 12) }, (_, index) => ({
+            mode: 'native_text', sourceIds: inScopeIds.slice(index * 12, (index + 1) * 12), rationale: 'Inspect the supplied source text.'
+          })),
+          openQuestions: [],
+        },
+      };
+    } else if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
       result = {sections:['page-disposition-only','possibly-relevant-page','unrouted-page'].includes(scenario)?[]:pages.map(page=>({title:'Technical source',start_page:page,end_page:page,section_type:scenario==='unlocated-remark'||scenario==='page-batched-fallback'||page===2?'compliance_schedule':'technical_requirements',reason:'Fixture source'})),uncertain_pages:scenario==='possibly-relevant-page'?pages:[],page_dispositions:scenario==='unrouted-page'?[]:pages.map(page=>({page,classification:scenario==='possibly-relevant-page'?'possibly_relevant':'relevant',reason:scenario==='possibly-relevant-page'?'The page excerpt is ambiguous and may contain technical obligations.':'Fixture source contains a technical test case.'})),routing_warnings:[],possible_source_conflicts:scenario==='cross-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'Advanced Spectrofluorometer',reason:'The two supplied sections identify different equipment subjects.'}]:scenario==='unsupported-section-conflict'?[{page_a:1,quote_a:'X-Band EPR spectrometer system',page_b:2,quote_b:'EPR spectrometer',reason:'The two supplied sections identify different equipment subjects.'}]:[]};
@@ -234,6 +257,11 @@ try {
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
   assert.ok(providerRequestCount > providerCountBeforeMalformed, 'A valid upload continues into the scripted model analysis path');
+  scenario='planner-exclusion-conflict';
+  const reopenedByRouter=await analyze(short);
+  assert.equal(reopenedByRouter.ok,true,reopenedByRouter.error);
+  assert.ok(reopenedByRouter.analysis.requirements.some(row=>row.quote===quotes[0]),'The page-local router can restore a task-planner exclusion when its source-grounded decision disagrees');
+  assert.equal(reopenedByRouter.analysis.coverage.pages[0].routingDisposition,'uncertain','A planner/router disagreement keeps the page in review instead of silently excluding it');
   scenario='slow-general-extraction';
   const slowGeneral=await analyze(short);
   assert.equal(slowGeneral.ok,true,slowGeneral.error);
