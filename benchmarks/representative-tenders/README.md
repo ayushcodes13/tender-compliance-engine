@@ -88,6 +88,10 @@ In one PGIMER copy, physical pages 4–5 show a requirements table followed by a
 
 This directory records a local, source-linked baseline for six real tender PDFs. The PDFs remain outside the repository. `manifest.json` records their SHA-256 fingerprints, page counts, sizes, and local path hints so the owner can reproduce the run without committing source files. `baseline-2026-11-07.json` records parser-shadow counts and actual model-run outcomes at commit `dd0c2c7`.
 
+### Selected renders: `input 1.pdf`
+
+Physical pages 1–2 and 12–14 were rendered and visually inspected at 130 DPI. Pages 1–2 combine raster branding/letterhead with selectable text, a section index, and a multi-column bid schedule. Pages 12–14 move from an unruled bidder-details list and declaration prose to a bordered declaration table. This adds another development-only structural example; it does not define an extraction rule, requirement label, or unseen-tender performance claim.
+
 ### Selected annexure renders: IIT Bhilai
 
 Physical pages 18–20 were rendered and visually inspected at 130 DPI. They transition through separate annexure forms, with a summary-information sheet laid out as a numbered table. Pages 21–22 start a bank-guarantee form and continue its prose across the page break. These single-reviewer observations do not label obligations or establish the structure of the remaining annexures; the manifest stores no source text or images for this review.

@@ -143,7 +143,9 @@
       "observations": [
         { "pages": [10], "kind": "technical-list-and-bullets", "evidenceLevel": "visual-candidate" },
         { "pages": [1, 18], "kind": "mixed-narrative-and-form-layouts", "evidenceLevel": "visual-candidate" },
-        { "pages": [10], "kind": "parameter-table-with-bulleted-cells-followed-by-separate-requirements-list", "evidenceLevel": "render-confirmed-single-reviewer" }
+        { "pages": [10], "kind": "parameter-table-with-bulleted-cells-followed-by-separate-requirements-list", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [1, 2], "kind": "hybrid-letterhead-and-section-index-with-bid-schedule-table", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [12, 13, 14], "kind": "annexure-list-prose-and-declaration-table-layout-transition", "evidenceLevel": "render-confirmed-single-reviewer" }
       ],
       "unknowns": ["region-completeness", "cross-page-continuation", "annexure-linkage", "semantic-role"]
     },
