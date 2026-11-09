@@ -1726,7 +1726,7 @@
     {
       "id": "annex-a-spec-38",
       "physicalPage": 11,
-      "quote": "Communication Protocols: Support Modbus",
+      "quote": "Communication Protocols: Support Modbus, SDI-\n12, and internet protocols like IPv4, IPv6, UDP,\nTCP, DNS, DHCP, HTTP(S), FTP(S), SMTP/TLS\nfor connecting 3G/4G modem.",
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified on the repeated Annexure A schedule. Visual row association inspected; cell geometry remains unknown."
@@ -1782,7 +1782,7 @@
     {
       "id": "annex-a-spec-45",
       "physicalPage": 12,
-      "quote": "timestamped raw data from the disdrometer",
+      "quote": "The data logger should store the timestamped raw\ndata from the disdrometer in a CSV file at one-\nminute intervals. Each minute dataset should be\nseparated with a blank line. Each minute dataset\nshould include the following parameters: date, time,\nprecipitation intensity, accumulated precipitation,\nparticle number concentration, and velocity for all\ndrop size classes.",
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified on the repeated Annexure A schedule. Visual row association inspected; cell geometry remains unknown."
@@ -1974,7 +1974,7 @@
     {
       "id": "annex-a-spec-69",
       "physicalPage": 13,
-      "quote": "The vendor should provide a power budget calculation for the system.",
+      "quote": "The vendor should provide a power budget\ncalculation for the system. It should include details\nabout the power consumption of the disdrometer\nwith heater ON, data logger, cellular modem in\nactive conditions, required Amp-hours per day, and\nbattery bank calculation with a depth of discharge up\nto 70% only.",
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified on the repeated Annexure A schedule. Visual row association inspected; cell geometry remains unknown."
@@ -2014,7 +2014,7 @@
     {
       "id": "annex-a-spec-74",
       "physicalPage": 13,
-      "quote": "high-grade enclosure.",
+      "quote": "The data logger and cellular modem should be\nenclosed in a proper high-grade enclosure.",
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified on the repeated Annexure A schedule. Visual row association inspected; cell geometry remains unknown."
@@ -2030,7 +2030,7 @@
     {
       "id": "annex-a-spec-76",
       "physicalPage": 14,
-      "quote": "Temperature: -40 to 70°C",
+      "quote": "Working environmental conditions:\n                    ▪ Temperature: -40 to 70°C\n                    ▪ Relative Humidity: 40 - 100%",
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified on the repeated Annexure A schedule. Visual row association inspected; cell geometry remains unknown."
@@ -2150,7 +2150,7 @@
     {
       "id": "annex-a-spec-91-p14",
       "physicalPage": 14,
-      "quote": "KERALA: Peermadu, Pala, Moolamattom, ACARR/Kochi,",
+      "quote": "KERALA: Peermadu, Pala, Moolamattom,\nACARR/Kochi, Neriamangalam, Mangulam,\nHACPO Rajamallay, Chenduvarai, Vattavada,\nThrissur, Perinthalmana, Nilambur, Attapadi,",
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified on the repeated Annexure A schedule. Visual row association inspected; cell geometry remains unknown."
@@ -2522,6 +2522,14 @@
       "quoteVerification": "whitespace_normalized",
       "locationPrecision": "page_only",
       "locationNote": "Verified against the PDF text on the cited physical page; visual table/form region inspected, but no production parser cell, offset, or bounding box was assigned."
+    },
+    {
+      "id": "annex-a-spec-76-rh",
+      "physicalPage": 14,
+      "quote": "Relative Humidity: 40 - 100%",
+      "quoteVerification": "whitespace_normalized",
+      "locationPrecision": "page_only",
+      "locationNote": "Second literal condition in the repeated Annexure A row 76; verified on physical page 14. Exact cell geometry is unknown."
     }
   ],
   "regions": [
@@ -2930,7 +2938,8 @@
         "annex-a-spec-89",
         "annex-a-spec-90",
         "annex-a-spec-91-p14",
-        "annex-a-head-general"
+        "annex-a-head-general",
+        "annex-a-spec-76-rh"
       ],
       "reviewNote": "Visually inspected and compared with pdftotext -layout. Visible form, schedule, or contract content considered for the stated task. Page-only anchors; no independent semantic completeness claim."
     },
@@ -3167,7 +3176,8 @@
         "annex-a-spec-89",
         "annex-a-spec-90",
         "annex-a-spec-91-p14",
-        "annex-a-head-general"
+        "annex-a-head-general",
+        "annex-a-spec-76-rh"
       ],
       "reviewNote": "All visible numbered rows on this physical page were visually reviewed. Repeated rows link to existing draft labels, not new requirement counts. Response columns are blank; exact table cells are not identified."
     },
@@ -6261,7 +6271,8 @@
       "interpretation": "General conditions: Working environmental conditions is a tender-listed condition for the proposed system; preserve the cited wording, range, and qualifiers when assessing it.",
       "sourceAnchorIds": [
         "spec-76",
-        "annex-a-spec-76"
+        "annex-a-spec-76",
+        "annex-a-spec-76-rh"
       ],
       "atomicity": {
         "status": "undetermined",
