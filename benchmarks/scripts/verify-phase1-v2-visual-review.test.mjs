@@ -5,11 +5,14 @@ import { verifyVisualReview } from "./verify-phase1-v2-visual-review.mjs";
 
 const manifest = JSON.parse(await readFile(new URL("../phase-1-v2-corpus.json", import.meta.url), "utf8"));
 const artifact = JSON.parse(await readFile(new URL("../phase-1-v2-visual-review.json", import.meta.url), "utf8"));
+const pageInventory = JSON.parse(await readFile(new URL("../phase-1-v2-page-inventory.json", import.meta.url), "utf8"));
 
 test("matches source fingerprints and accounts for every physical page without overclaiming", () => {
   const result = verifyVisualReview(manifest, artifact);
   assert.equal(result.documents, 11);
   assert.equal(result.physicalPages, 367);
+  assert.equal(result.observations, 121);
+  assert.equal(result.renderConfirmedUniquePageReferences, 212);
   assert.equal(result.independentReview, "pending");
   assert.equal(result.reviewLevel, "thumbnail-page-skim");
   assert.equal(result.renderConfirmedPageCoverage.length, 11);
@@ -20,6 +23,33 @@ test("matches source fingerprints and accounts for every physical page without o
     pageRanges: [[1, 8], [10, 41]],
   });
   assert.equal(result.renderConfirmedUniquePageReferences, result.renderConfirmedPageCoverage.reduce((sum, document) => sum + document.uniquePagesReferenced, 0));
+});
+
+test("render-confirmed observations reference every page selected by hybrid and table geometry signals", () => {
+  const visualById = new Map(artifact.documents.map((document) => [document.id, document]));
+  const signalGroups = [
+    { name: "hybrid", expectedPages: 31, matches: (page) => page.hasNativeTextAndRasterImageSignals },
+    { name: "vector row", expectedPages: 73, matches: (page) => page.vectorRowCandidateCount > 0 },
+    { name: "vector table geometry", expectedPages: 126, matches: (page) => page.vectorTableGeometryCandidate },
+  ];
+
+  for (const group of signalGroups) {
+    let pageCount = 0;
+    const missing = [];
+    for (const document of pageInventory.documents) {
+      const visual = visualById.get(document.id);
+      const renderConfirmedPages = new Set(visual.observations
+        .filter((observation) => observation.evidenceLevel === "render-confirmed-single-reviewer")
+        .flatMap((observation) => observation.pages));
+      for (const page of document.pages) {
+        if (!group.matches(page)) continue;
+        pageCount += 1;
+        if (!renderConfirmedPages.has(page.physicalPage)) missing.push(`${document.id}:${page.physicalPage}`);
+      }
+    }
+    assert.equal(pageCount, group.expectedPages, `${group.name}: signal-page denominator changed; review the coverage baseline.`);
+    assert.deepEqual(missing, [], `${group.name}: parser-signal pages lack render-confirmed observation references.`);
+  }
 });
 
 test("rejects a missing page range", () => {
