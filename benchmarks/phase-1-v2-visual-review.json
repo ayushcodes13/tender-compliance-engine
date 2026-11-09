@@ -38,6 +38,9 @@
       "reviewedPageRanges": [[1, 42]],
       "observations": [
         { "pages": [20, 21, 22, 23, 24, 25], "kind": "multi-page-table-continuation-candidate", "evidenceLevel": "visual-candidate" },
+        { "pages": [20, 21, 22], "kind": "multi-page-specification-table-no-repeated-header", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [22, 23], "kind": "annexure-reference-to-compliance-form", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [23, 24, 25], "kind": "related-compliance-table-extra-columns-and-visible-content-differences", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [37, 38, 39, 40, 41, 42], "kind": "multi-page-integrity-agreement", "evidenceLevel": "visual-candidate" },
         { "pages": [4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 32, 35], "kind": "numbered-clauses-and-bid-forms", "evidenceLevel": "visual-candidate" }
       ],
@@ -130,6 +133,7 @@
       "reviewedPageRanges": [[1, 37]],
       "observations": [
         { "pages": [8, 9, 10, 11, 12, 13], "kind": "multi-page-technical-table-candidate", "evidenceLevel": "visual-candidate" },
+        { "pages": [8, 9, 10, 11, 12, 13], "kind": "two-column-technical-table-no-repeated-page-header", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [24, 25, 26, 27, 28, 29], "kind": "repeated-compliance-table-presentation", "evidenceLevel": "visual-candidate" },
         { "pages": [30, 31, 32, 33, 34, 35, 36, 37], "kind": "annexure-and-bidder-form-sequence", "evidenceLevel": "visual-candidate" }
       ],
@@ -143,6 +147,8 @@
       "observations": [
         { "pages": [1, 2, 3], "kind": "bilingual-hybrid-front-matter-and-schedule", "evidenceLevel": "visual-candidate" },
         { "pages": [17, 18, 19, 20], "kind": "multi-page-technical-specification-table", "evidenceLevel": "visual-candidate" },
+        { "pages": [17, 18, 19, 20], "kind": "wide-compliance-table-with-row-continuations-and-no-repeated-header", "evidenceLevel": "render-confirmed-single-reviewer" },
+        { "pages": [20], "kind": "terms-summary-reframes-some-specification-content", "evidenceLevel": "render-confirmed-single-reviewer" },
         { "pages": [21], "kind": "figure-containing-chart-page", "evidenceLevel": "visual-candidate" },
         { "pages": [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41], "kind": "bid-form-and-integrity-agreement-sequence", "evidenceLevel": "visual-candidate" }
       ],

@@ -71,7 +71,7 @@ export function verifyVisualReview(manifest, artifact) {
       assert(isObject(observation) && Array.isArray(observation.pages) && observation.pages.length > 0, `${expected.id}: observation needs physical page references.`);
       assert(observation.pages.every((page) => Number.isInteger(page) && page >= 1 && page <= expected.physicalPages), `${expected.id}: observation references a page outside the source document.`);
       assert(typeof observation.kind === "string" && /^[a-z0-9-]+$/u.test(observation.kind), `${expected.id}: observation kind must be a source-free controlled label.`);
-      assert(observation.evidenceLevel === "visual-candidate", `${expected.id}: observations must remain explicitly provisional.`);
+      assert(["visual-candidate", "render-confirmed-single-reviewer"].includes(observation.evidenceLevel), `${expected.id}: observation evidence level is unsupported or overclaimed.`);
     }
   }
   assert(artifact.documents.every((document) => byId.has(document.id)), "Visual-review record contains documents outside the manifest.");

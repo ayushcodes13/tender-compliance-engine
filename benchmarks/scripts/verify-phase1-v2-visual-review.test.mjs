@@ -49,3 +49,9 @@ test("requires unresolved structural questions to remain visible", () => {
   changed.documents[0].unknowns = [];
   assert.throws(() => verifyVisualReview(manifest, changed), /retain unresolved structural questions/u);
 });
+
+test("does not allow a single-reviewer observation to claim adjudication", () => {
+  const changed = structuredClone(artifact);
+  changed.documents[1].observations[1].evidenceLevel = "adjudicated";
+  assert.throws(() => verifyVisualReview(manifest, changed), /evidence level is unsupported/u);
+});
