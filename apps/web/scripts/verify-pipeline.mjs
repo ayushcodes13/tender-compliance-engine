@@ -34,6 +34,7 @@ let failAdaptiveSecondWaveOnce = true;
 let plannerTableClassificationCalls = 0;
 let plannerOcrExtractionAttempts = 0;
 let plannerVisualExtractionAttempts = 0;
+let adaptiveVisualExtractionAttempts = 0;
 let extractionCalls = 0;
 let resumeGeneralRequestStarts = 0;
 let routeCalls = 0;
@@ -41,6 +42,8 @@ let providerRequestCount = 0;
 const providerSchemaCounts = new Map();
 const plannerNativeRequestInputs = [];
 const adaptivePlanInputs = [];
+const adaptiveOcrExtractionInputs = [];
+const adaptiveVisualRequestInputs = [];
 const plannerOcrRequestInputs = [];
 const plannerVisualRequestInputs = [];
 let initialExtractionReturnedRecovery = false;
@@ -118,14 +121,16 @@ const provider = http.createServer(async (request, response) => {
     }
     const contents = body.messages.flatMap(message => typeof message.content === 'string' ? [{type:'text',text:message.content}] : message.content);
     const text = contents.filter(item=>item.type==='text').map(item=>item.text).join('\n');
-    if (schema === 'tender_requirements' && scenario === 'planner-visual-region' && /Parser image region ID:/i.test(text)) {
-      plannerVisualExtractionAttempts += 1;
+    if (schema === 'tender_requirements' && ['planner-visual-region','adaptive-visual-after-ocr'].includes(scenario) && /Parser image region ID:/i.test(text)) {
+      if (scenario === 'planner-visual-region') plannerVisualExtractionAttempts += 1;
+      else adaptiveVisualExtractionAttempts += 1;
       const images = contents.filter(item => item.type === 'image_url');
       const sizes = await Promise.all(images.map(async item => {
         const image = await loadImage(Buffer.from(item.image_url.url.split(',')[1], 'base64'));
         return { width: image.width, height: image.height };
       }));
-      plannerVisualRequestInputs.push({ text, imageCount: images.length, sizes });
+      if (scenario === 'planner-visual-region') plannerVisualRequestInputs.push({ text, imageCount: images.length, sizes });
+      else adaptiveVisualRequestInputs.push({ text, imageCount: images.length, sizes });
     }
     if (['planner-native-text','planner-native-empty','planner-native-resume','adaptive-two-rounds'].includes(scenario) && schema === 'tender_requirements') plannerNativeRequestInputs.push({ scenario, text, imageCount: contents.filter(item=>item.type==='image_url').length });
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
@@ -160,17 +165,24 @@ const provider = http.createServer(async (request, response) => {
       const firstOcrId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind.startsWith('ocr_')).map(region => region.sourceId))[0];
       const firstImageId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind.startsWith('image_')).map(region => region.sourceId))[0];
       const nativeTextIds = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'native_text_block').map(region => region.sourceId));
-      const plannerNativeScenario = ['planner-native-text','planner-native-empty','planner-native-resume','adaptive-two-rounds'].includes(scenario);
+      const plannerNativeScenario = ['planner-native-text','planner-native-empty','planner-native-resume','adaptive-two-rounds','adaptive-ocr-followup'].includes(scenario);
+      const adaptiveScenario = ['adaptive-two-rounds','adaptive-ocr-followup','adaptive-visual-after-ocr'].includes(scenario);
       const plannerTableScenario = scenario === 'planner-table-resume';
       const plannerOcrScenario = scenario === 'planner-ocr-resume';
       const plannerVisualScenario = scenario === 'planner-visual-region';
-      const actions = scenario !== 'adaptive-two-rounds' && planInput.planningRound > 0
+      const actions = !adaptiveScenario && planInput.planningRound > 0
         ? []
-        : scenario === 'adaptive-two-rounds'
-        ? planInput.planningRound === 0
-          ? (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first native text block.' }] : [])
-          : planInput.planningRound === 1
-            ? (() => { const completed = new Set(planInput.priorOutcomes.filter(item => item.status === 'executed').flatMap(item => item.sourceIds)); const nextId = nativeTextIds.find(id => !completed.has(id)); return nextId ? [{ mode: 'native_text', sourceIds: [nextId], rationale: `Inspect this different parser block after reviewing: ${planInput.priorOutcomes.map(item => item.summary).join(' | ')}` }] : []; })()
+        : adaptiveScenario
+            ? planInput.planningRound === 0
+            ? scenario === 'adaptive-visual-after-ocr'
+              ? (firstOcrId ? [{ mode: 'ocr', sourceIds: [firstOcrId], rationale: 'Inspect the parser-owned OCR transcript.' }] : [])
+              : (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first native text block.' }] : [])
+            : planInput.planningRound === 1
+            ? scenario === 'adaptive-ocr-followup'
+              ? (firstOcrId && !planInput.priorOutcomes.some(item => item.mode === 'ocr' && item.sourceIds.includes(firstOcrId) && item.status === 'executed') ? [{ mode: 'ocr', sourceIds: [firstOcrId], rationale: `Inspect this OCR transcript after the native-text outcome: ${planInput.priorOutcomes.map(item => item.summary).join(' | ')}` }] : [])
+              : scenario === 'adaptive-visual-after-ocr'
+                ? (firstImageId && !planInput.priorOutcomes.some(item => item.mode === 'visual' && item.sourceIds.includes(firstImageId) && item.status === 'executed') ? [{ mode: 'visual', sourceIds: [firstImageId], rationale: `Inspect this image crop after the OCR outcome: ${planInput.priorOutcomes.map(item => item.summary).join(' | ')}` }] : [])
+                : (() => { const completed = new Set(planInput.priorOutcomes.filter(item => item.status === 'executed').flatMap(item => item.sourceIds)); const nextId = nativeTextIds.find(id => !completed.has(id)); return nextId ? [{ mode: 'native_text', sourceIds: [nextId], rationale: `Inspect this different parser block after reviewing: ${planInput.priorOutcomes.map(item => item.summary).join(' | ')}` }] : []; })()
             : []
         : plannerTableScenario
         ? (firstTableId ? [{ mode: 'table', sourceIds: [firstTableId], rationale: 'Inspect the parser-owned vector table.' }] : [])
@@ -199,7 +211,7 @@ const provider = http.createServer(async (request, response) => {
           openQuestions: [],
         },
       };
-      if (scenario === 'adaptive-two-rounds') adaptivePlanInputs.push(planInput);
+      if (adaptiveScenario) adaptivePlanInputs.push(planInput);
     } else if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
@@ -254,6 +266,7 @@ const provider = http.createServer(async (request, response) => {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
       if (scenario === 'planner-ocr-resume') plannerOcrRequestInputs.push(text);
+      if (scenario === 'adaptive-ocr-followup') adaptiveOcrExtractionInputs.push(text);
       if (scenario === 'adaptive-two-rounds' && text.includes(quotes[1]) && failAdaptiveSecondWaveOnce) {
         failAdaptiveSecondWaveOnce = false;
         response.destroy();
@@ -274,15 +287,15 @@ const provider = http.createServer(async (request, response) => {
       }
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,...(scenario==='prose'&&pages.includes(2)?[{page:2,quote:'Vacuum shall remain below 999999 mbar.',row_type:'requirement',category:'Other',heading_prefix:''}]:[]),{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
-      if (scenario === 'adaptive-two-rounds') {
-        const quote = quotes.find(candidate => text.includes(candidate));
-        result = { columns: [], requirements: quote ? [{ page: 1, quote, category: 'Performance', row_type: 'requirement', heading_prefix: '' }] : [] };
+      if (['adaptive-two-rounds', 'adaptive-ocr-followup', 'adaptive-visual-after-ocr'].includes(scenario)) {
+        const quote = [...quotes, 'Pressure shall remain below 2 Pa.'].find(candidate => text.includes(candidate));
+        result = { columns: [], requirements: quote ? [{ page: pages[0] ?? 1, quote, category: 'Performance', row_type: 'requirement', heading_prefix: '' }] : [] };
       }
       if (scenario === 'planner-ocr-resume') {
         const quote = text.match(/PDF PAGE 1\n([^\n]+)/)?.[1]?.trim() ?? '';
         result = { columns: [], requirements: quote ? [{ page: 1, quote, category: 'Performance', row_type: 'requirement', heading_prefix: '' }] : [] };
       }
-      if (scenario === 'planner-visual-region') {
+      if (['planner-visual-region','adaptive-visual-after-ocr'].includes(scenario)) {
         result = { columns: [], requirements: [{ page: 1, quote: 'Pressure shall remain below 2 Pa.', category: 'Performance', row_type: 'requirement', heading_prefix: '' }] };
       }
       if (scenario === 'planner-native-empty' && plannerNativeRequestInputs.filter(item => item.scenario === scenario).length === 1) result={columns:[],requirements:[]};
@@ -778,6 +791,39 @@ try {
     const selectedOcrRequirement = plannerOcrResult.analysis.requirements.find(row => /pressure shall remain below 2 pa/i.test(row.quote));
     assert.ok(selectedOcrRequirement, 'The selected OCR transcript produces a source-verified review row');
     assert.ok(selectedOcrRequirement.sourceReference.sourceElementIds.includes(selectedOcr.sourceId), 'The requirement citation names the selected parser OCR region');
+    scenario = 'adaptive-ocr-followup';
+    const adaptiveScannedPdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    adaptiveScannedPdf.addImage(`data:image/jpeg;base64,${scanCanvas.toBuffer('image/jpeg', 72).toString('base64')}`, 'JPEG', 0, 0, 595, 842);
+    adaptiveScannedPdf.setFontSize(7);
+    adaptiveScannedPdf.text(quotes[2], 20, 30);
+    const adaptiveOcrPlanStart = adaptivePlanInputs.length;
+    const adaptiveOcrResult = await analyze(adaptiveScannedPdf);
+    assert.equal(adaptiveOcrResult.ok, true, adaptiveOcrResult.error);
+    const adaptiveOcrPlans = adaptivePlanInputs.slice(adaptiveOcrPlanStart);
+    assert.equal(adaptiveOcrPlans.length, 3, 'The native result is followed by an adaptive OCR choice and a stop decision');
+    assert.ok(adaptiveOcrPlans[1].supportedModes.includes('ocr'));
+    assert.ok(adaptiveOcrPlans[1].priorOutcomes.some(item => item.summary.includes(quotes[2])), 'The OCR decision receives the validated native-text result');
+    assert.ok(adaptiveOcrExtractionInputs.some(text => text.includes('Pressure shall remain below 2 Pa.') && !text.includes(quotes[2])), 'Adaptive OCR sends the selected OCR transcript without repeating the native-text block');
+    const adaptiveSelectedOcr = adaptiveOcrResult.analysis.coverage.plannedInspections.find(item => item.mode === 'ocr');
+    assert.equal(adaptiveSelectedOcr?.state, 'executed', 'A later adaptive OCR choice reaches the OCR handler');
+    const adaptiveOcrRequirement = adaptiveOcrResult.analysis.requirements.find(row => row.quote === 'Pressure shall remain below 2 Pa.');
+    assert.ok(adaptiveOcrRequirement?.sourceReference.sourceElementIds.some(id => id.includes(':ocr:')), 'The pressure requirement retains a parser-owned OCR citation even when equivalent overlapping OCR regions are deduplicated');
+    scenario = 'adaptive-visual-after-ocr';
+    const adaptiveVisualPlanStart = adaptivePlanInputs.length;
+    const adaptiveVisualResult = await analyze(scannedPdf);
+    assert.equal(adaptiveVisualResult.ok, true, adaptiveVisualResult.error);
+    const adaptiveVisualPlans = adaptivePlanInputs.slice(adaptiveVisualPlanStart);
+    assert.equal(adaptiveVisualPlans.length, 3, 'The OCR result is followed by an adaptive crop choice and a stop decision');
+    assert.ok(adaptiveVisualPlans[1].supportedModes.includes('visual'));
+    assert.ok(adaptiveVisualPlans[1].priorOutcomes.some(item => item.summary.includes('Pressure shall remain below 2 Pa.')), 'The visual decision receives the validated OCR result');
+    assert.equal(adaptiveVisualExtractionAttempts, 1);
+    assert.equal(adaptiveVisualRequestInputs[0].imageCount, 1, 'Adaptive visual work sends only its selected crop');
+    assert.ok(adaptiveVisualRequestInputs[0].sizes[0].width > 0 && adaptiveVisualRequestInputs[0].sizes[0].height > 0, 'The parser-selected image region is rendered as a bounded JPEG input');
+    assert.ok(!adaptiveVisualRequestInputs[0].text.includes('Pressure shall remain below 2 Pa.'), 'The adaptive VLM input does not contain a hidden OCR transcript');
+    const adaptiveSelectedVisual = adaptiveVisualResult.analysis.coverage.plannedInspections.find(item => item.mode === 'visual');
+    assert.equal(adaptiveSelectedVisual?.state, 'executed');
+    const adaptiveVisualRequirement = adaptiveVisualResult.analysis.requirements.find(row => row.quote === 'Pressure shall remain below 2 Pa.');
+    assert.ok(adaptiveVisualRequirement?.sourceReference.sourceElementIds.includes(adaptiveSelectedVisual.sourceId));
     assert.equal(selectedOcrRequirement.sourceReference.extractionMethod, 'tesseract-ocr');
     assert.equal(selectedOcrRequirement.reviewed, false, 'OCR-derived output remains unreviewed for visual confirmation');
   } else {
@@ -1034,7 +1080,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','planner-selected native-text unit retries after process restart and reuses its saved plan','planner-selected OCR region is source-grounded, checkpointed and retried after process restart','planner-selected image crop stays image-cited when identical OCR text exists and retries after process restart','partial provider failure pauses the run and restart retries only the failed extraction batch','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','planner-selected native-text unit retries after process restart and reuses its saved plan','planner-selected OCR region is source-grounded, checkpointed and retried after process restart','planner-selected image crop stays image-cited when identical OCR text exists and retries after process restart','adaptive planner chooses OCR after validated native-text output','adaptive planner chooses a visual crop after validated OCR output','partial provider failure pauses the run and restart retries only the failed extraction batch','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

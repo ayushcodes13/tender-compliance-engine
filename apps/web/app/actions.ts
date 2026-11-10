@@ -1949,7 +1949,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         pageText: new Map(pages.map((page) => [page.page, page.text])),
         runId: analysisRun.id,
         planningRound,
-        supportedModes: ["native_text"],
+        supportedModes: ["native_text", "ocr", "visual"],
         priorOutcomes: adaptiveOutcomes,
       });
       const nextPlanInputFingerprint = createHash("sha256").update(JSON.stringify(nextPlanRequest)).digest("hex");
@@ -2025,11 +2025,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       });
       plannedInspectionWorkUnits = [...plannedInspectionWorkUnits, ...nextWorkUnits];
       for (const work of nextWorkUnits) {
-        const blockId = work.unit.sourceIds[0];
-        const block = nextBoundPlan.textBlocks.get(blockId);
-        const page = otherPages.find((candidate) => candidate.page === work.physicalPage);
+        const sourceId = work.unit.sourceIds[0];
+        const block = nextBoundPlan.textBlocks.get(sourceId);
+        const sourcePage = sourceDocument.pages.find((candidate) => candidate.physicalPdfPageNumber === work.physicalPage);
+        const ocrRegion = sourcePage?.ocrRegions.find((candidate) => candidate.id === sourceId);
+        const imageRegion = sourcePage?.imageRegions.find((candidate) => candidate.id === sourceId);
+        const page = visualPages.find((candidate) => candidate.page === work.physicalPage);
         const coverage: PlannedInspectionCoverage = {
-          sourceId: blockId,
+          sourceId,
           page: work.physicalPage,
           mode: work.mode,
           state: "deferred_to_legacy",
@@ -2037,35 +2040,104 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         };
         plannerInspectionCoverage.push(coverage);
         plannerCoverageByWorkUnitId.set(work.unit.id, coverage);
-        if (work.mode !== "native_text" || !block || !page || visualSheetType === "compliance-sheet"
-          || block.text.length > PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS || !block.text.trim()
-          || plannedNativeTextCalls >= MAX_PLANNED_NATIVE_TEXT_CALLS) {
-          coverage.state = "unsupported";
-          coverage.reason = "The later planning round selected a source outside the currently executable native-text handler bounds; it remains unresolved.";
-          coverageCheckIncomplete = true;
+        if (work.mode === "native_text") {
+          const nativePage = otherPages.find((candidate) => candidate.page === work.physicalPage);
+          if (!block || !nativePage || visualSheetType === "compliance-sheet" || !block.text.trim()
+            || block.text.length > PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS || plannedNativeTextCalls >= MAX_PLANNED_NATIVE_TEXT_CALLS) {
+            coverage.state = "unsupported";
+            coverage.reason = "The later planning round selected a native-text source outside the currently executable handler bounds; it remains unresolved.";
+            coverageCheckIncomplete = true;
+            continue;
+          }
+          plannedNativeTextCalls += 1;
+          const failure = await extractGeneralPages([{ ...nativePage, text: block.text, visualImage: undefined }], {
+            sourceIdsByPage: new Map([[nativePage.page, [sourceId]]]),
+            operationKey: work.unit.operation,
+            requestKind: "planned_native_text_extraction",
+            includeVisualImages: false,
+            allowedSourceElementIds: [sourceId],
+          });
+          if (failure) return failure;
+          const groundedQuote = parsedResponses.some((response) => response.allowedSourceElementIds?.includes(sourceId)
+            && response.parsed.requirements?.some((candidate) => candidate.page === work.physicalPage
+              && typeof candidate.quote === "string" && Boolean(findUniqueSourceText(block.text, candidate.quote))));
+          if (groundedQuote) {
+            successfullyExecutedNativeTextIds.add(sourceId);
+            coverage.state = "executed";
+            coverage.reason = `Adaptive planning round ${planningRound + 1} selected this parser block from prior outcomes; the returned quote matched the block and remains unreviewed.`;
+          } else {
+            coverage.state = "deferred_to_legacy";
+            coverage.reason = "The adaptive native-text handler returned no literal quote from this source; it remains unresolved and eligible for fallback.";
+            coverageCheckIncomplete = true;
+          }
           continue;
         }
-        plannedNativeTextCalls += 1;
-        const failure = await extractGeneralPages([{ ...page, text: block.text, visualImage: undefined }], {
-          sourceIdsByPage: new Map([[page.page, [blockId]]]),
-          operationKey: work.unit.operation,
-          requestKind: "planned_native_text_extraction",
-          includeVisualImages: false,
-          allowedSourceElementIds: [blockId],
-        });
-        if (failure) return failure;
-        const groundedQuote = parsedResponses.some((response) => response.allowedSourceElementIds?.includes(blockId)
-          && response.parsed.requirements?.some((candidate) => candidate.page === work.physicalPage
-            && typeof candidate.quote === "string" && Boolean(findUniqueSourceText(block.text, candidate.quote))));
-        if (groundedQuote) {
-          successfullyExecutedNativeTextIds.add(blockId);
-          coverage.state = "executed";
-          coverage.reason = `Adaptive planning round ${planningRound + 1} selected this parser block from prior outcomes; the returned quote matched the block and remains unreviewed.`;
-        } else {
-          coverage.state = "deferred_to_legacy";
-          coverage.reason = "The adaptive handler returned no literal quote from this source; it remains unresolved and eligible for fallback.";
-          coverageCheckIncomplete = true;
+        if (work.mode === "ocr") {
+          if (!ocrRegion || !page || !ocrRegion.text.trim() || ocrRegion.text.length > PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS) {
+            coverage.state = "unsupported";
+            coverage.reason = "The later planning round selected an OCR source outside the available transcript/page bounds; it remains unresolved.";
+            coverageCheckIncomplete = true;
+            continue;
+          }
+          const failure = await extractGeneralPages([{ ...page, text: ocrRegion.text, visualImage: undefined }], {
+            sourceIdsByPage: new Map([[page.page, [sourceId]]]),
+            operationKey: work.unit.operation,
+            requestKind: "planned_ocr_extraction",
+            includeVisualImages: false,
+            allowedSourceElementIds: [sourceId],
+          });
+          if (failure) return failure;
+          const groundedQuote = parsedResponses.some((response) => response.allowedSourceElementIds?.includes(sourceId)
+            && response.parsed.requirements?.some((candidate) => candidate.page === work.physicalPage
+              && typeof candidate.quote === "string" && Boolean(findUniqueSourceText(ocrRegion.text, candidate.quote))));
+          if (groundedQuote) {
+            successfullyExecutedOcrRegionIds.add(sourceId);
+            coverage.state = "executed";
+            coverage.reason = `Adaptive planning round ${planningRound + 1} selected this OCR transcript and returned a literal source match that still requires visual review.`;
+          } else {
+            coverage.state = "deferred_to_legacy";
+            coverage.reason = "The adaptive OCR handler returned no literal quote from this transcript; the source remains unresolved and eligible for fallback.";
+            coverageCheckIncomplete = true;
+          }
+          continue;
         }
+        if (work.mode === "visual") {
+          if (!imageRegion || !page || plannedVisualRegionCalls >= MAX_PLANNED_VISUAL_REGION_CALLS) {
+            coverage.state = "unsupported";
+            coverage.reason = "The later planning round selected an image source outside the available crop/request bounds; it remains unresolved.";
+            coverageCheckIncomplete = true;
+            continue;
+          }
+          const crop = await cropParserImageRegion(page, imageRegion.bbox);
+          if (!crop) {
+            coverage.state = "deferred_to_legacy";
+            coverage.reason = "The selected adaptive image bounds could not be mapped to a non-empty crop; the source remains unresolved.";
+            coverageCheckIncomplete = true;
+            continue;
+          }
+          plannedVisualRegionCalls += 1;
+          const cropPage = { ...page, text: `PDF PAGE ${page.page}\n[Parser-selected image region ${sourceId}; no text transcript supplied.]`, visualImage: crop };
+          const failure = await extractGeneralPages([cropPage], {
+            sourceIdsByPage: new Map([[page.page, [sourceId]]]),
+            operationKey: work.unit.operation,
+            requestKind: "planned_visual_region_extraction",
+            includeVisualImages: true,
+            allowedSourceElementIds: [sourceId],
+            selectedVisualRegion: { id: sourceId, page: page.page, bbox: imageRegion.bbox },
+          });
+          if (failure) return failure;
+          const candidateCount = parsedResponses.filter((response) => response.selectedVisualRegion?.id === sourceId)
+            .flatMap((response) => response.parsed.requirements ?? []).length;
+          successfullyExecutedImageRegionIds.add(sourceId);
+          coverage.state = "executed";
+          coverage.reason = candidateCount
+            ? `Adaptive planning round ${planningRound + 1} inspected the selected approximate crop; visual transcription remains unverified and requires human review.`
+            : "The adaptive visual handler inspected the selected crop and returned no proposal; this does not prove page or tender completeness.";
+          continue;
+        }
+        coverage.state = "unsupported";
+        coverage.reason = `No adaptive ${work.mode} handler is available in this execution slice; the source remains unresolved.`;
+        coverageCheckIncomplete = true;
       }
       latestAdaptiveOutcomes = collectPlannerOutcomes(nextWorkUnits);
       adaptiveOutcomes = [...adaptiveOutcomes, ...latestAdaptiveOutcomes].slice(-120);
