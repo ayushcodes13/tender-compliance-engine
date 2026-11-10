@@ -44,7 +44,7 @@ import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGr
 import { groupSourceObligationCandidates, orderCandidatesBySourceObligationGroups, type SourceObligationGroupReference } from "./source-obligation-grouping";
 import { ANALYSIS_PIPELINE_VERSION, createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun, transitionWorkUnit, type AnalysisRun, type ModelProposalEnvelope, type TaskPlanProposal, type WorkUnit } from "./analysis-run";
 import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedOcrRegions, maskExecutedTextBlockSpans, PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS, requestTaskPlan, validateTaskPlanForRequest } from "./task-planner";
-import { createLocalRunStoreFromEnvironment, updateRunFinalResult, updateRunPlan, updateRunState, updateRunWorkUnit, type PersistedRunSnapshot, type RunArtifact } from "./run-store";
+import { appendPlanningRound, createLocalRunStoreFromEnvironment, MAX_PLANNING_ROUNDS, updateRunFinalResult, updateRunPlan, updateRunState, updateRunWorkUnit, type PersistedRunSnapshot, type RunArtifact } from "./run-store";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
   if (error instanceof ModelProviderBusyError) return "provider_busy";
@@ -782,12 +782,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       pageText: new Map(pages.map((page) => [page.page, page.text])),
       runId: analysisRun.id,
     });
-    report("planning tender analysis", { stage: "locating", message: runSnapshot?.plan ? "Revalidating the saved tender plan" : "Planning what to inspect across the tender", current: 0, total: 1 });
+    const firstPlanningRound = runSnapshot?.planningRounds?.find((round) => round.roundIndex === 0);
+    const savedFirstPlan = firstPlanningRound?.plan ?? (runSnapshot?.planningRounds?.length ? null : runSnapshot?.plan);
+    report("planning tender analysis", { stage: "locating", message: savedFirstPlan ? "Revalidating the saved tender plan" : "Planning what to inspect across the tender", current: 0, total: 1 });
     const taskPlanStartedAt = performance.now();
     const taskPlanInputCharacters = JSON.stringify(taskPlanRequest).length;
     let planned: Awaited<ReturnType<typeof requestTaskPlan>>;
-    if (runSnapshot?.plan) {
-      planned = validateTaskPlanForRequest(runSnapshot.plan, taskPlanRequest);
+    if (savedFirstPlan) {
+      planned = validateTaskPlanForRequest(savedFirstPlan, taskPlanRequest);
     } else try {
       emitModelTiming({ phase: "request_started", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters });
       planned = await requestTaskPlan({
@@ -799,26 +801,26 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       });
     } catch (error) {
       signal?.throwIfAborted();
-      if (!runSnapshot?.plan) emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: modelTimingFailureKind(error, signal) });
+      if (!savedFirstPlan) emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: modelTimingFailureKind(error, signal) });
       await pdf.destroy();
       return { ok: false as const, error: "The configured model could not create a source-bound tender plan. No extraction was started." };
     }
     if (!planned.ok) {
-      if (!runSnapshot?.plan) emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: "other" });
+      if (!savedFirstPlan) emitModelTiming({ phase: "request_failed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt), failureKind: "other" });
       await pdf.destroy();
       return { ok: false as const, error: planned.error === "provider_failure"
         ? "The configured model could not create a source-bound tender plan. No extraction was started."
         : "The configured model returned a plan with missing, unsupported, or unverifiable source references. No extraction was started." };
     }
-    if (!runSnapshot?.plan && runStore && runSnapshot) {
+    if (!savedFirstPlan && runSnapshot) {
       runSnapshot = updateRunPlan(runSnapshot, planned.plan, createHash("sha256").update(JSON.stringify(taskPlanRequest)).digest("hex"));
-      runStore.save(runSnapshot);
+      if (runStore) runStore.save(runSnapshot);
     }
-    const taskPlan = planned.plan.proposal;
+    let taskPlan = planned.plan.proposal;
     const boundTaskPlan = bindTaskPlanToInventory(sourceDocument, taskPlan);
     const { sourceIdToNumber } = boundTaskPlan;
     const plannerPageDispositions = boundTaskPlan.pageDispositions;
-    const plannedInspectionWorkUnits = buildPlannedInspectionWorkUnits({
+    let plannedInspectionWorkUnits = buildPlannedInspectionWorkUnits({
       runId: analysisRun.id,
       proposal: taskPlan,
       sourceIdToNumber,
@@ -831,7 +833,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))
           || page.regions.some((region) => region.kind.startsWith("image_") && region.kind !== "image_text-found"))))
       .map((page) => [page.physicalPage, { unrepresentedRegionCount: page.unrepresentedRegionCount, clippedRegionCount: page.clippedRegionCount, excerptClipped: page.excerptClipped }]));
-    if (!runSnapshot?.plan) emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
+    if (!savedFirstPlan) emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
 
     const structuredPages = pages.filter((page) => page.structuredSection);
     const plannerSelectedStructuredSource = plannedInspectionWorkUnits.some((work) =>
@@ -1497,6 +1499,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             : work.mode === "native_text" ? "The page-level native-text proposal remains on the legacy page route." : `No executable ${work.mode} region handler is available in this slice.`,
       };
     });
+    const plannerCoverageByWorkUnitId = new Map(plannedInspectionWorkUnits.map((work, index) => [work.unit.id, plannerInspectionCoverage[index]]));
     const plannedTableWorkBySourceId = new Map(plannedInspectionWorkUnits
       .filter((work) => work.mode === "table" && boundTaskPlan.sourceKinds.get(work.unit.sourceIds[0]) === "table")
       .map((work) => [work.unit.sourceIds[0], work]));
@@ -1913,6 +1916,168 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       coverage.reason = candidateCount
         ? `The selected approximate image crop was inspected; ${candidateCount} visual transcription proposal(s) remain unverified and require human review.`
         : "The selected approximate image crop was inspected and yielded no requirement proposal; this is not proof that the page or tender is complete.";
+    }
+    const collectPlannerOutcomes = (works: typeof plannedInspectionWorkUnits) => works.flatMap((work) => {
+      if (!["native_text", "ocr", "visual"].includes(work.mode)) return [];
+      const outcomeCoverage = plannerCoverageByWorkUnitId.get(work.unit.id);
+      const sourceId = work.unit.sourceIds[0];
+      const sourceText = boundTaskPlan.textBlocks.get(sourceId)?.text
+        ?? sourceDocument.pages.find((page) => page.physicalPdfPageNumber === work.physicalPage)?.ocrRegions.find((region) => region.id === sourceId)?.text;
+      const verifiedQuotes = work.mode === "visual" ? [] : parsedResponses
+        .filter((response) => response.allowedSourceElementIds?.includes(sourceId))
+        .flatMap((response) => response.parsed.requirements ?? [])
+        .filter((candidate) => candidate.page === work.physicalPage && typeof candidate.quote === "string"
+          && sourceText && Boolean(findUniqueSourceText(sourceText, candidate.quote)))
+        .map((candidate) => candidate.quote!.trim()).slice(0, 2);
+      const status = outcomeCoverage?.state === "executed" ? "executed" as const
+        : outcomeCoverage?.state === "retryable" ? "failed" as const : "unresolved" as const;
+      const summary = status === "executed"
+        ? work.mode === "visual"
+          ? "The selected image crop was inspected; any visual transcription remains unverified and requires human review."
+          : `The selected source returned literal quote(s) verified against its parser transcript: ${verifiedQuotes.join(" | ")}`.slice(0, 300)
+        : (outcomeCoverage?.reason ?? "The requested operation did not produce a validated result.").slice(0, 300);
+      return [{ mode: work.mode as "native_text" | "ocr" | "visual", sourceIds: [sourceId], status, summary }];
+    }).slice(0, 120);
+    let adaptiveOutcomes = collectPlannerOutcomes(plannedInspectionWorkUnits);
+    let latestAdaptiveOutcomes = adaptiveOutcomes;
+    let adaptiveDecision = taskPlan.decision;
+    const MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS = Math.min(3, MAX_PLANNING_ROUNDS);
+    for (let planningRound = 1; planningRound < MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS
+      && adaptiveDecision === "continue" && latestAdaptiveOutcomes.some((outcome) => outcome.status === "executed"); planningRound += 1) {
+      const nextPlanRequest = buildTaskPlanRequest({
+        document: sourceDocument,
+        pageText: new Map(pages.map((page) => [page.page, page.text])),
+        runId: analysisRun.id,
+        planningRound,
+        supportedModes: ["native_text"],
+        priorOutcomes: adaptiveOutcomes,
+      });
+      const nextPlanInputFingerprint = createHash("sha256").update(JSON.stringify(nextPlanRequest)).digest("hex");
+      const savedRound = runSnapshot?.planningRounds?.find((round) => round.roundIndex === planningRound);
+      let nextPlanResult: Awaited<ReturnType<typeof requestTaskPlan>> | null = null;
+      if (savedRound) {
+        if (savedRound.inputFingerprint !== nextPlanInputFingerprint) {
+          coverageCheckIncomplete = true;
+          routingWarnings.push(`Saved adaptive planning round ${planningRound + 1} does not match the current validated outcomes; start a new analysis instead of reusing a stale decision.`);
+          break;
+        }
+        nextPlanResult = validateTaskPlanForRequest(savedRound.plan, nextPlanRequest);
+      } else {
+        const candidateUnit = createWorkUnit({
+          runId: analysisRun.id,
+          kind: "plan",
+          sourceIds: sourceDocument.pages.map((page) => page.id),
+          ordinal: planningRound,
+          createdAt: analysisRun.createdAt,
+          operationKey: `adaptive_task_planning_round:${planningRound}`,
+        });
+        const roundUnit = runSnapshot?.workUnits.find((unit) => unit.id === candidateUnit.id) ?? candidateUnit;
+        const savedPlanArtifact = runSnapshot?.artifacts.find((artifact) => artifact.workUnitId === roundUnit.id);
+        if (roundUnit.status === "completed" && savedPlanArtifact) {
+          nextPlanResult = validateTaskPlanForRequest(savedPlanArtifact.value, nextPlanRequest);
+        } else {
+          report("replanning from inspected sources", { stage: "locating", message: `Planning round ${planningRound + 1}: using validated outcomes to choose the next source block`, current: planningRound + 1, total: MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS });
+          const execution = await executeWorkUnit({
+            unit: roundUnit,
+            execute: async () => requestTaskPlan({ request: nextPlanRequest, model, endpoint: `${baseUrl}/chat/completions`, fetcher: modelClient.fetch, signal }),
+            isSuccessful: (result) => result.ok,
+            signal,
+            onState: persistUnitState,
+            onResult: persistUnitResult,
+          });
+          if (execution.result) nextPlanResult = execution.result;
+        }
+      }
+      if (!nextPlanResult?.ok) {
+        coverageCheckIncomplete = true;
+        routingWarnings.push("The adaptive planner could not produce a valid next-step decision; this draft remains incomplete and requires review or resume.");
+        break;
+      }
+      if (!savedRound && runSnapshot) {
+        runSnapshot = appendPlanningRound(runSnapshot, {
+          inputFingerprint: nextPlanInputFingerprint,
+          plan: nextPlanResult.plan,
+          outcomes: adaptiveOutcomes.map((outcome) => ({
+            sourceId: outcome.sourceIds[0], mode: outcome.mode, status: outcome.status === "executed" ? "executed" as const
+              : outcome.status === "failed" ? "failed" as const : "unresolved" as const, summary: outcome.summary.slice(0, 300),
+          })),
+          createdAt: new Date().toISOString(),
+        });
+        if (runStore) runStore.save(runSnapshot);
+      }
+      const nextPlan = nextPlanResult.plan.proposal;
+      adaptiveDecision = nextPlan.decision;
+      taskPlan = { ...taskPlan, sections: nextPlan.sections, actions: [...taskPlan.actions, ...nextPlan.actions], openQuestions: [...taskPlan.openQuestions, ...nextPlan.openQuestions] };
+      if (nextPlan.decision === "needs_review") {
+        coverageCheckIncomplete = true;
+        routingWarnings.push(`The adaptive planner requested human review: ${nextPlan.decisionRationale}`);
+        break;
+      }
+      if (nextPlan.decision === "stop") break;
+      const nextBoundPlan = bindTaskPlanToInventory(sourceDocument, nextPlan);
+      const nextWorkUnits = buildPlannedInspectionWorkUnits({
+        runId: analysisRun.id,
+        proposal: nextPlan,
+        sourceIdToNumber: nextBoundPlan.sourceIdToNumber,
+        sourceKinds: nextBoundPlan.sourceKinds,
+        createdAt: analysisRun.createdAt,
+        roundIndex: planningRound,
+      });
+      plannedInspectionWorkUnits = [...plannedInspectionWorkUnits, ...nextWorkUnits];
+      for (const work of nextWorkUnits) {
+        const blockId = work.unit.sourceIds[0];
+        const block = nextBoundPlan.textBlocks.get(blockId);
+        const page = otherPages.find((candidate) => candidate.page === work.physicalPage);
+        const coverage: PlannedInspectionCoverage = {
+          sourceId: blockId,
+          page: work.physicalPage,
+          mode: work.mode,
+          state: "deferred_to_legacy",
+          reason: `Adaptive planning round ${planningRound + 1} selected this source; execution is pending.`,
+        };
+        plannerInspectionCoverage.push(coverage);
+        plannerCoverageByWorkUnitId.set(work.unit.id, coverage);
+        if (work.mode !== "native_text" || !block || !page || visualSheetType === "compliance-sheet"
+          || block.text.length > PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS || !block.text.trim()
+          || plannedNativeTextCalls >= MAX_PLANNED_NATIVE_TEXT_CALLS) {
+          coverage.state = "unsupported";
+          coverage.reason = "The later planning round selected a source outside the currently executable native-text handler bounds; it remains unresolved.";
+          coverageCheckIncomplete = true;
+          continue;
+        }
+        plannedNativeTextCalls += 1;
+        const failure = await extractGeneralPages([{ ...page, text: block.text, visualImage: undefined }], {
+          sourceIdsByPage: new Map([[page.page, [blockId]]]),
+          operationKey: work.unit.operation,
+          requestKind: "planned_native_text_extraction",
+          includeVisualImages: false,
+          allowedSourceElementIds: [blockId],
+        });
+        if (failure) return failure;
+        const groundedQuote = parsedResponses.some((response) => response.allowedSourceElementIds?.includes(blockId)
+          && response.parsed.requirements?.some((candidate) => candidate.page === work.physicalPage
+            && typeof candidate.quote === "string" && Boolean(findUniqueSourceText(block.text, candidate.quote))));
+        if (groundedQuote) {
+          successfullyExecutedNativeTextIds.add(blockId);
+          coverage.state = "executed";
+          coverage.reason = `Adaptive planning round ${planningRound + 1} selected this parser block from prior outcomes; the returned quote matched the block and remains unreviewed.`;
+        } else {
+          coverage.state = "deferred_to_legacy";
+          coverage.reason = "The adaptive handler returned no literal quote from this source; it remains unresolved and eligible for fallback.";
+          coverageCheckIncomplete = true;
+        }
+      }
+      latestAdaptiveOutcomes = collectPlannerOutcomes(nextWorkUnits);
+      adaptiveOutcomes = [...adaptiveOutcomes, ...latestAdaptiveOutcomes].slice(-120);
+      if (!latestAdaptiveOutcomes.some((outcome) => outcome.status === "executed")) {
+        coverageCheckIncomplete = true;
+        routingWarnings.push("The adaptive planner selected no additional source-grounded native-text work; unresolved inventory remains for human review.");
+        break;
+      }
+    }
+    if (adaptiveDecision === "continue" && plannedInspectionWorkUnits.length && (runSnapshot?.planningRounds?.length ?? 0) >= MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS) {
+      coverageCheckIncomplete = true;
+      routingWarnings.push(`Adaptive planning stopped at the ${MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS}-round request budget; remaining inventory requires review.`);
     }
     for (const page of visualPages) {
       const sourcePage = sourceDocument.pages.find((candidate) => candidate.physicalPdfPageNumber === page.page);

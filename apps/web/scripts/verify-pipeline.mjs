@@ -30,6 +30,7 @@ let failSixthBatchOnce = true;
 let failPlannerTableOnce = true;
 let failPlannerOcrOnce = true;
 let failPlannerVisualOnce = true;
+let failAdaptiveSecondWaveOnce = true;
 let plannerTableClassificationCalls = 0;
 let plannerOcrExtractionAttempts = 0;
 let plannerVisualExtractionAttempts = 0;
@@ -39,6 +40,7 @@ let routeCalls = 0;
 let providerRequestCount = 0;
 const providerSchemaCounts = new Map();
 const plannerNativeRequestInputs = [];
+const adaptivePlanInputs = [];
 const plannerOcrRequestInputs = [];
 const plannerVisualRequestInputs = [];
 let initialExtractionReturnedRecovery = false;
@@ -125,7 +127,7 @@ const provider = http.createServer(async (request, response) => {
       }));
       plannerVisualRequestInputs.push({ text, imageCount: images.length, sizes });
     }
-    if (['planner-native-text','planner-native-empty','planner-native-resume'].includes(scenario) && schema === 'tender_requirements') plannerNativeRequestInputs.push({ scenario, text, imageCount: contents.filter(item=>item.type==='image_url').length });
+    if (['planner-native-text','planner-native-empty','planner-native-resume','adaptive-two-rounds'].includes(scenario) && schema === 'tender_requirements') plannerNativeRequestInputs.push({ scenario, text, imageCount: contents.filter(item=>item.type==='image_url').length });
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
@@ -157,11 +159,20 @@ const provider = http.createServer(async (request, response) => {
       const firstTableId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'table').map(region => region.sourceId))[0];
       const firstOcrId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind.startsWith('ocr_')).map(region => region.sourceId))[0];
       const firstImageId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind.startsWith('image_')).map(region => region.sourceId))[0];
-      const plannerNativeScenario = ['planner-native-text','planner-native-empty','planner-native-resume'].includes(scenario);
+      const nativeTextIds = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'native_text_block').map(region => region.sourceId));
+      const plannerNativeScenario = ['planner-native-text','planner-native-empty','planner-native-resume','adaptive-two-rounds'].includes(scenario);
       const plannerTableScenario = scenario === 'planner-table-resume';
       const plannerOcrScenario = scenario === 'planner-ocr-resume';
       const plannerVisualScenario = scenario === 'planner-visual-region';
-      const actions = plannerTableScenario
+      const actions = scenario !== 'adaptive-two-rounds' && planInput.planningRound > 0
+        ? []
+        : scenario === 'adaptive-two-rounds'
+        ? planInput.planningRound === 0
+          ? (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first native text block.' }] : [])
+          : planInput.planningRound === 1
+            ? (() => { const completed = new Set(planInput.priorOutcomes.filter(item => item.status === 'executed').flatMap(item => item.sourceIds)); const nextId = nativeTextIds.find(id => !completed.has(id)); return nextId ? [{ mode: 'native_text', sourceIds: [nextId], rationale: `Inspect this different parser block after reviewing: ${planInput.priorOutcomes.map(item => item.summary).join(' | ')}` }] : []; })()
+            : []
+        : plannerTableScenario
         ? (firstTableId ? [{ mode: 'table', sourceIds: [firstTableId], rationale: 'Inspect the parser-owned vector table.' }] : [])
         : plannerOcrScenario
         ? (firstOcrId ? [{ mode: 'ocr', sourceIds: [firstOcrId], rationale: 'Extract the selected parser-owned OCR transcript.' }] : [])
@@ -188,6 +199,7 @@ const provider = http.createServer(async (request, response) => {
           openQuestions: [],
         },
       };
+      if (scenario === 'adaptive-two-rounds') adaptivePlanInputs.push(planInput);
     } else if (schema === 'technical_section_route') {
       routeCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
@@ -242,6 +254,11 @@ const provider = http.createServer(async (request, response) => {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
       if (scenario === 'planner-ocr-resume') plannerOcrRequestInputs.push(text);
+      if (scenario === 'adaptive-two-rounds' && text.includes(quotes[1]) && failAdaptiveSecondWaveOnce) {
+        failAdaptiveSecondWaveOnce = false;
+        response.destroy();
+        return;
+      }
       if (scenario === 'planner-native-resume' && plannerNativeRequestInputs.filter(item => item.scenario === scenario).length === 1) {
         response.destroy();
         return;
@@ -257,6 +274,10 @@ const provider = http.createServer(async (request, response) => {
       }
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,...(scenario==='prose'&&pages.includes(2)?[{page:2,quote:'Vacuum shall remain below 999999 mbar.',row_type:'requirement',category:'Other',heading_prefix:''}]:[]),{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
+      if (scenario === 'adaptive-two-rounds') {
+        const quote = quotes.find(candidate => text.includes(candidate));
+        result = { columns: [], requirements: quote ? [{ page: 1, quote, category: 'Performance', row_type: 'requirement', heading_prefix: '' }] : [] };
+      }
       if (scenario === 'planner-ocr-resume') {
         const quote = text.match(/PDF PAGE 1\n([^\n]+)/)?.[1]?.trim() ?? '';
         result = { columns: [], requirements: quote ? [{ page: 1, quote, category: 'Performance', row_type: 'requirement', heading_prefix: '' }] : [] };
@@ -391,6 +412,43 @@ try {
   assert.equal(plannerNativeRequestInputs[0].imageCount,0,'The native-text handler does not receive page images');
   assert.ok(plannerNativeRequestInputs[1].text.includes(outsideTable));
   assert.ok(!plannerNativeRequestInputs[1].text.includes(quotes[0]),'The fallback does not re-send successfully executed source text');
+  scenario='adaptive-two-rounds';
+  const adaptivePdf = new jsPDF();
+  adaptivePdf.setFontSize(6);
+  adaptivePdf.text(quotes[0],20,30);
+  adaptivePdf.text(quotes[1],20,50);
+  adaptivePdf.text(outsideTable,20,70);
+  const plannerCallCountBeforeAdaptive = providerSchemaCounts.get('tender_task_plan') ?? 0;
+  let adaptiveRunId = null;
+  const interruptedAdaptiveResult = await analyze(adaptivePdf,{onProgress:progress=>{if(progress.resumable&&progress.runId)adaptiveRunId=progress.runId;}});
+  assert.equal(interruptedAdaptiveResult.ok,true,interruptedAdaptiveResult.error);
+  assert.equal(interruptedAdaptiveResult.resumable,true,'A provider interruption during the second adaptive work wave pauses the partial run for resume');
+  assert.match(adaptiveRunId??'',/^run_[a-f0-9]{32}$/i);
+  assert.equal(adaptivePlanInputs.length,2,'The first result is fed to the second planner decision before the second work wave starts');
+  assert.ok(adaptivePlanInputs[1].priorOutcomes.some(item=>item.summary.includes(quotes[0])));
+  await restartApp();
+  const adaptiveResult = await analyze(adaptivePdf,{resumeRunId:adaptiveRunId});
+  assert.equal(adaptiveResult.ok,true,adaptiveResult.error);
+  assert.equal(adaptivePlanInputs.length,3);
+  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0,plannerCallCountBeforeAdaptive + 3,'Resume reuses both saved decisions, then plans a final stop after the recovered second wave');
+  assert.equal(failAdaptiveSecondWaveOnce,false,'The synthetic interruption happened during the newly selected second work wave');
+  assert.equal(adaptivePlanInputs[0].planningRound,0);
+  assert.equal(adaptivePlanInputs[1].planningRound,1);
+  assert.ok(adaptivePlanInputs[1].priorOutcomes.some(item => item.summary.includes(quotes[0])),'The second decision receives the first wave\'s literal source-validated outcome');
+  const firstAdaptiveSource = adaptivePlanInputs[0].pages.flatMap(page => page.regions).find(region => region.kind === 'native_text_block')?.sourceId;
+  const secondAdaptiveSource = adaptivePlanInputs[1].pages.flatMap(page => page.regions).find(region => region.kind === 'native_text_block' && !adaptivePlanInputs[1].priorOutcomes.some(item => item.sourceIds.includes(region.sourceId)))?.sourceId;
+  assert.notEqual(secondAdaptiveSource,firstAdaptiveSource,'The adaptive plan selects a different parser-owned block after seeing the first outcome');
+  assert.ok(adaptivePlanInputs[2].planningRound === 2 && adaptivePlanInputs[2].priorOutcomes.some(item => item.summary.includes(quotes[0])) && adaptivePlanInputs[2].priorOutcomes.some(item => item.summary.includes(quotes[1])),'The third decision sees cumulative grounded outcomes from both waves and returns stop');
+  assert.ok(adaptiveResult.analysis.requirements.some(row => row.quote === quotes[0]));
+  assert.ok(adaptiveResult.analysis.requirements.some(row => row.quote === quotes[1]));
+  const adaptiveCoverage = adaptiveResult.analysis.coverage.plannedInspections.filter(item => item.mode === 'native_text');
+  assert.ok(adaptiveCoverage.length >= 2 && adaptiveCoverage.every(item => item.state === 'executed'));
+  const adaptiveNativeInputs = plannerNativeRequestInputs.filter(item=>item.scenario==='adaptive-two-rounds');
+  assert.equal(adaptiveNativeInputs.length,4,'Resume retries only the unfinished second block, then fallback sees only the remaining block');
+  assert.ok(adaptiveNativeInputs[0].text.includes(quotes[0]));
+  assert.ok(adaptiveNativeInputs[1].text.includes(quotes[1])&&adaptiveNativeInputs[2].text.includes(quotes[1]));
+  assert.ok(adaptiveNativeInputs[2].text.includes(outsideTable)&&adaptiveNativeInputs[2].text.includes(quotes[1])&&!adaptiveNativeInputs[2].text.includes(quotes[0]),'Fallback may inspect the failed block but must not repeat the already completed first block');
+  assert.ok(adaptiveNativeInputs[3].text.includes(quotes[1])&&!adaptiveNativeInputs[3].text.includes(quotes[0]),'Resume retries the unfinished second block without repeating the completed first block');
   scenario='planner-native-empty';
   const emptyPlannerSlice = new jsPDF();
   emptyPlannerSlice.text(quotes[0],20,30);
@@ -417,7 +475,7 @@ try {
   await restartApp();
   const resumedPlannerRun = await analyze(plannerResumePdf,{resumeRunId:plannerResumeRunId});
   assert.equal(resumedPlannerRun.ok,true,resumedPlannerRun.error);
-  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0,plannerCallsBeforeResumeFailure + 1,'Planner resume reuses the source-validated saved plan');
+  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0,plannerCallsBeforeResumeFailure + 2,'Resume reuses the first plan, then requests a bounded decision after the recovered source result');
   assert.equal(providerSchemaCounts.get('technical_section_route') ?? 0,routeCallsBeforeResumeFailure + 1,'Planner resume reuses the completed page-routing artifact');
   const plannerResumeInputs = plannerNativeRequestInputs.filter(item => item.scenario === scenario);
   assert.equal(plannerResumeInputs.length,3,'Resume retries the failed planner unit, then runs the unselected legacy fallback once');
@@ -710,7 +768,7 @@ try {
     const plannerOcrResult = await analyze(scannedPdf, { resumeRunId: plannerOcrRunId });
     assert.equal(plannerOcrResult.ok, true, `${plannerOcrResult.error}: ${JSON.stringify(plannerOcrResult).slice(0, 2200)}`);
     assert.equal(failPlannerOcrOnce, false, 'The scripted provider interruption was reached and consumed');
-    assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0, plannerCallsBeforeOcrRun + 1, 'OCR resume reuses the validated saved plan instead of replanning');
+    assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0, plannerCallsBeforeOcrRun + 2, 'OCR resume reuses the first plan, then requests a bounded decision after OCR succeeds');
     assert.equal(plannerOcrExtractionAttempts, 2, 'The failed OCR call is retried exactly once');
     assert.equal(plannerOcrRequestInputs.length, 1, 'The selected OCR operation produces one successful extraction response after retry');
     assert.ok(plannerOcrRequestInputs.every(text => /Pressure shall remain below 2 Pa\./i.test(text)), 'The successful retry sends only the selected OCR transcript as extraction input');
@@ -746,7 +804,7 @@ try {
   assert.equal(plannerVisualResult.resumable, false, 'The visual run completes after the selected crop is retried');
   assert.equal(failPlannerVisualOnce, false, 'The scripted visual provider interruption was reached');
   assert.equal(plannerVisualExtractionAttempts, 2, 'The selected visual region is retried exactly once');
-  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0, plannerCallsBeforeVisualRun + 1, 'Restart reuses the validated task plan instead of replanning');
+  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0, plannerCallsBeforeVisualRun + 2, 'Restart reuses the first visual plan, then requests a bounded decision after crop inspection');
   assert.equal(plannerVisualRequestInputs.length, 2, 'Both the interrupted call and its retry send a visual request');
   assert.ok(plannerVisualRequestInputs.every(item => item.imageCount === 1), 'Each planned visual call sends exactly one image');
   assert.ok(plannerVisualRequestInputs.every(item => !/Pressure shall remain below 2 Pa\./i.test(item.text)), 'The visual request contains no hidden full-page text transcript of the crop');
