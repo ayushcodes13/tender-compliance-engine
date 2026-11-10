@@ -48,7 +48,9 @@ Report each gate independently as passed, failed, blocked, or not run. A success
 
 ## Execution plan — prove the working path before expanding it
 
-Architecture agreement is complete enough to build. Do not schedule a separate architecture-redesign phase or block the first end-to-end proof on advanced region scheduling. Each step must yield a runnable increment. The LLM adapts semantic interpretation to the tender; application code enforces source identity, exact evidence, bounded execution, durable state, and honest uncertainty.
+Architecture agreement is complete enough to build. Do not schedule another architecture-redesign phase. The agreed design is an LLM-directed, application-controlled pipeline: the LLM interprets each tender's structure and proposes what to inspect; the application binds proposals to parser-owned sources, runs bounded supported handlers, verifies evidence, persists outcomes, and keeps unresolved work visible. There is no publisher-template catalog and no claim that an LLM alone can guarantee correctness.
+
+Build and integrate a working vertical slice now, then expand the operation handlers. Do not spend weeks redesigning before shipping. Keep each milestone runnable and reviewable; use local deterministic/scripted providers for fault injection and reserve paid live evaluation for the explicitly authorized cap. Existing examples are development material, not independent held-out evidence.
 
 ### 1. Resumable local run path — complete
 
@@ -59,19 +61,25 @@ Architecture agreement is complete enough to build. Do not schedule a separate a
 - Acceptance passed: the encrypted store persists a validated plan, page routing, visual extraction, native-text extraction results, and final output; the scripted pipeline interrupts during extraction, restarts the process, reuses the completed artifact, reruns only unfinished units, and retains deterministic requirement order. Wrong-PDF and changed-endpoint resumes are rejected before provider calls. The local browser also completed cancel/reload/resume through review and export.
 - Limits: this proves local adapter behavior and the exercised synthetic paths. It does not provide hosted durability, broad failure-mode coverage, or real-tender quality evidence.
 
-### 2. Reproduce and fix the 42-page failure — active next implementation task
+### 2. First planner-driven source execution — active implementation task
+
+Make the planner select actual parser-owned content for a real handler. Start with `native_text` text blocks because they have stable IDs, exact page offsets, and an existing extraction/source-verification path; this is the first vertical slice, not a fixed format for tenders. The model still decides which supported content and structure matter for each tender.
+
+- Include bounded, explicitly clipped native text-block candidates in the planner inventory. Bind every candidate to its parser ID, owning page, text, and known offsets. Validate that each proposed operation is compatible with the source kind; reject forged, ambiguous, duplicate, or incompatible references.
+- Materialize stable, bounded work units from validated `native_text` actions and preserve their action/source relationships. The handler may send only selected block text, in source order, under the existing extraction schema. Returned quotes must pass the existing literal source/page checks; do not concatenate non-contiguous blocks into fabricated continuous evidence.
+- Persist accepted results as authenticated artifacts and reconstruct ephemeral trace IDs when resuming. Reuse completed units only when source, configuration, and artifact validation match. Retry unfinished work without duplicating accepted results.
+- Track handled, incomplete, unsupported, and fallback source coverage. Do not call unsupported OCR, visual, table, or cross-page actions complete. Use the legacy path only for uncovered content where safe, and record that fallback so coverage cannot be overstated. Avoid duplicate extraction for source blocks already successfully handled by the planner.
+- Preserve prompt-injection boundaries, page/source identity, clipping and omission signals, ordering, cancellation, retries, request budgets, and the current human-review/export contract.
+- Acceptance: scripted tests prove real planner input includes parser text-block IDs; wrong source kinds are rejected; only selected content reaches the handler; grounded outputs keep page/source links; completed units survive restart; remaining units retry; overlapping/unsupported/uncovered work stays explicit; the integrated result can be reviewed and exported without claiming unvisited content is complete.
+
+Keep vector-table extraction's current header-continuation behavior intact until it can be wrapped in its own source-bound handler and coverage contract. Add OCR, visual, table, and cross-page handlers incrementally based on inventory needs, with the same action → validated source → bounded WorkUnit → persisted result → coverage contract. Never represent an unimplemented mode as completed work.
+
+### 3. Reproduce and fix the 42-page failure
 
 - Start with both retained observations in `.local/client-review/current-main-audit-2026-11-09.json` and `.local/client-review/42page-throughput-four-2026-11-09.log`. The later log has five parsed general-extraction responses plus a page-17 provider connection failure; its final analysis error and subsequent dev-server error need separate causal attribution.
 - Use durable checkpoints to isolate the failing stage. A deterministic six-batch regression now covers five accepted responses followed by a provider connection failure and confirms partial results plus explicit page incompleteness. Opt-in telemetry now distinguishes parseable JSON from schema-valid extraction responses. Compare the historical live-run evidence against these signals; inspect checkpoint writes, terminal SSE behavior, and dev-server compilation/runtime state before changing failure policy.
 - Fix the general cause; do not add a tender-specific classifier or merely raise a timeout. Any partial result must retain explicit incomplete coverage and must not be exported as complete.
 - Acceptance: repeatable reproduction or trace replay identifies the failure; a corrected run completes or ends in an honest resumable/incomplete state; report latency, batches, retries, coverage, model/tokens and cost. A single run is not a quality score.
-
-### 3. Make planner actions drive bounded source-region work
-
-- Promote validated planner actions from routing hints into independently persisted WorkUnits for native text and tables. Add OCR/visual and cross-page operations as explicit handlers only where source inventory and evidence require them.
-- The model chooses semantic scope, structure, requirement boundaries, continuation/grouping, and the supported inspection operation. Application code validates IDs/operations, bounds calls, checkpoints execution, verifies returned quotes and values, and records unresolved coverage. Do not fall back to a publisher template catalog.
-- Preserve parent-page binding, clipping/omission signals, deterministic output ordering, retries, and source verification. Unrepresented regions stay unresolved; a planner cannot declare unvisited content complete.
-- Acceptance: planner proposal → validated bounded WorkUnit → source-linked result → per-source coverage → interruption/resume → reviewable matrix. Add adversarial cases for forged IDs, prompt injection, malformed output, retry, duplicate requests, clipped context, and incomplete coverage.
 
 ### 4. Complete browser review and export acceptance
 
