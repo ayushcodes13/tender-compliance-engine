@@ -1,6 +1,6 @@
 # TCE v1 finish line — Phase 1 only
 
-**Status: IN PROGRESS.** Gate 0 passed as the docs-only change in PR #459. Gate 1 is next and has not started. This document is the frozen v1 acceptance plan; do not expand or redesign it while executing the gates below.
+**Status: IN PROGRESS.** Gate 0 passed as the docs-only change in PR #459. Gate 1 passed locally on branch `fix/truthful-run-state`; Gate 2 is next but has not started. This document is the frozen v1 acceptance plan; do not expand or redesign it while executing the gates below.
 
 ## Compact scenario and intended outcome
 
@@ -60,6 +60,8 @@ Rewrote this plan to this acceptance contract, fixed design, gate sequence, and 
 Derive a machine-readable `complete | partial` value from per-page terminal states and unresolved work. `completeAnalysis` must persist paused/partial and remain resumable when any page is `uncertain`, `failed`, or `unvisited`, any planner/handler action is unsupported or deferred, or a round budget is exhausted. UI and exports read this field.
 
 **Done when (tests):** one unsupported action prevents `completed` and can be resumed; all pages terminal with nothing pending can be `completed`; the payload field agrees with the state in every listed case.
+
+**Status: passed locally.** `apps/web/app/analysis-completion.test.mjs` covers complete, partial, excluded-without-reason, unresolved page inventory, unsupported/deferred work, pending work, incomplete audits, and budget exhaustion. The scripted pipeline verifies both complete and unsupported-action persistence, restarts and resumes the paused unsupported run, and confirms uncertain pages remain partial after extraction retries. Analysis-completion and run-store tests passed 18/18; the full scripted pipeline passed all reported cases. Typecheck, production build, and `git diff --check` passed. This is workflow evidence only, not a tender extraction-quality result. Gate 2 has not started.
 
 ### Gate 2 — Label every page
 

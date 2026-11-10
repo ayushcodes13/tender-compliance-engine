@@ -9,7 +9,7 @@ Phase 1 v1 copies the tender-designated technical-specification section into a s
 Only the first unfinished gate may be worked in a session. This checkpoint and [`plan.md`](../plan.md) must remain aligned.
 
 - [x] **Gate 0 — Plan documents (passed in PR #459):** docs-only PR aligns the plan and checkpoint to the frozen v1 design, records PR #458 as merged, removes any active-unmerged page-scope claim, states in-progress status, records the local `feat/adaptive-scope-revisions` branch as abandoned/not pushed/not merged (its dirty worktree is preserved for reference), and creates an empty `later.md` list. Historical ADR, audit, and benchmark evidence stays unchanged. Done only when the PR contains these docs changes and no implementation.
-- [ ] **Gate 1 — Truthful run state:** derive `complete | partial` from page terminal states and unresolved work; unsupported/deferred actions, uncertain/failed/unvisited pages, or exhausted budgets remain paused/partial and resumable. Tests cover unsupported-action resume, fully terminal completion, and payload/state agreement.
+- [x] **Gate 1 — Truthful run state (passed locally on `fix/truthful-run-state`):** derive `complete | partial` from page terminal states and unresolved work; unsupported/deferred actions, uncertain/failed/unvisited pages, or exhausted budgets remain paused/partial and resumable. Tests cover unsupported-action resume, fully terminal completion, and persisted payload/state agreement. Analysis-completion and run-store tests passed 18/18; the scripted pipeline passed all reported cases; typecheck, production build, and `git diff --check` passed. Synthetic workflow evidence only; no extraction-quality claim. Gate 2 has not started.
 - [ ] **Gate 2 — Exhaustive page labels:** every page gets exactly one of `technical_spec`, `admin`, `commercial`, `form`, `unsure`; missing/invalid labels become `unsure`. Bounded batches resume without repeating completed batches; dropped, repeated, invented, and invalid IDs are tested.
 - [ ] **Gate 3 — Verbatim copy and leftover check:** code copies source spans by source structure; AI resolves ambiguous structure only with verbatim source spans. Test bordered/borderless tables, nested bullets, lettered lists, headerless continuation, scientific notation, altered numbers, and leftover text.
 - [ ] **Gate 4 — Evaluation harness:** compare `input 1-3` with `output 1-3`; output counts only (matched, partial, missing, extra, changed-number), no source text in logs. Document dev/validation/locked splits; examples are development data. Test changed-number and omitted-row detection.
@@ -27,7 +27,7 @@ The existing parser, OCR/visual, planner, source-validation, local-resume, revie
 
 ## Status
 
-**IN PROGRESS — Gate 0 passed in PR #459; Gate 1 is next and has not started.** The owner-set numeric values and client confirmations called out above must be supplied before dependent implementation begins. Do not claim v1 readiness until Gate 7 passes.
+**IN PROGRESS — Gate 0 passed in PR #459; Gate 1 passed locally on `fix/truthful-run-state`; Gate 2 is next and has not started.** The owner-set numeric values and client confirmations called out above must be supplied before dependent implementation begins. Do not claim v1 readiness until Gate 7 passes.
 
 ## Historical POC90 and customer-validation records
 

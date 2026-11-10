@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 export type AnalysisRunStatus = "queued" | "running" | "paused" | "failed" | "completed" | "cancelled";
 export type WorkUnitStatus = "pending" | "running" | "retryable" | "blocked" | "completed" | "cancelled";
 export type WorkKind = "plan" | "inspect" | "extract" | "validate" | "coverage";
-export const ANALYSIS_PIPELINE_VERSION = "phase1-v2-runtime-3";
+export const ANALYSIS_PIPELINE_VERSION = "phase1-v2-runtime-4";
 
 export type AnalysisRun = {
   id: string;
