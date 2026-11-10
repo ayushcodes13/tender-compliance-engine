@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedTextBlockSpans, requestTaskPlan, selectTaskPlanRegions, validateTaskPlanEnvelope } from "./task-planner.ts";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedOcrRegions, maskExecutedTextBlockSpans, requestTaskPlan, selectTaskPlanRegions, validateTaskPlanEnvelope } from "./task-planner.ts";
 
 const fingerprint = "f".repeat(64);
 const request = {
@@ -171,6 +171,21 @@ test("removes only executed parser spans from the legacy fallback and preserves 
   assert.throws(() => maskExecutedTextBlockSpans(source, [{ startOffset: -1, endOffset: 3 }]), /invalid source span/);
 });
 
+test("masks only planner-executed OCR regions while preserving transcript offsets", () => {
+  const regions = [
+    { id: "ocr:1", text: "First OCR obligation" },
+    { id: "ocr:2", text: "Selected OCR obligation" },
+    { id: "ocr:3", text: "Third OCR obligation" },
+  ];
+  const transcript = regions.map((region) => region.text).join("\n");
+  const start = transcript.indexOf(regions[1].text);
+  const masked = maskExecutedOcrRegions(transcript, regions, new Set(["ocr:2"]));
+  assert.equal(masked.length, transcript.length);
+  assert.equal(masked.slice(start, start + regions[1].text.length), " ".repeat(regions[1].text.length));
+  assert.ok(masked.includes(regions[0].text));
+  assert.ok(masked.includes(regions[2].text));
+});
+
 test("binds scope and inspection actions to parser-owned physical pages", () => {
   const document = { pages: [
       { id: "doc:page:1", physicalPdfPageNumber: 1, imageRegions: [], ocrRegions: [], textBlocks: [{ id: "doc:page:1:text:1", text: "selected block", startOffset: 10, endOffset: 24 }], tables: [] },
@@ -239,4 +254,19 @@ test("materializes validated actions as stable source-ordered work units", () =>
   assert.match(first[0].unit.operation, /^planned_native_text_extraction:/);
   assert.equal(first[1].unit.operation, "visual");
   assert.throws(() => buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber: new Map(), sourceKinds, createdAt: "2026-11-10T10:00:00.000Z" }), /outside the validated inventory/);
+});
+
+test("materializes selected OCR regions as persisted extraction work", () => {
+  const proposal = { ...validPlan().proposal, actions: [{ mode: "ocr", sourceIds: ["doc:page:2:ocr:1"], rationale: "Inspect this OCR transcript." }] };
+  const work = buildPlannedInspectionWorkUnits({
+    runId: request.runId,
+    proposal,
+    sourceIdToNumber: new Map([["doc:page:2:ocr:1", 2]]),
+    sourceKinds: new Map([["doc:page:2:ocr:1", "ocr_high"]]),
+    createdAt: "2026-11-10T10:00:00.000Z",
+  });
+  assert.equal(work.length, 1);
+  assert.equal(work[0].unit.kind, "extract");
+  assert.match(work[0].unit.operation, /^planned_ocr_extraction:/);
+  assert.deepEqual(work[0].unit.sourceIds, ["doc:page:2:ocr:1"]);
 });

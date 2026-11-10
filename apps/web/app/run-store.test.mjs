@@ -144,6 +144,19 @@ test("completed planner table work cannot be stored without its classification a
   assert.deepEqual(persisted.artifacts[0], { workUnitId: completed.id, value: classification });
 });
 
+test("completed planner OCR extraction work cannot be stored without its result artifact", () => {
+  const run = transitionRun(createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "planner-ocr-artifact" }), "running", createdAt);
+  const snapshot = { schemaVersion: 1, run, plan: null, workUnits: [], artifacts: [] };
+  const pending = createWorkUnit({ runId: run.id, kind: "extract", sourceIds: ["doc:page:2:ocr:1"], ordinal: 0, createdAt, operationKey: "planned_ocr_extraction:action" });
+  const running = transitionWorkUnit(pending, "running", createdAt);
+  const completed = transitionWorkUnit(running, "completed", createdAt);
+
+  assert.throws(() => updateRunWorkUnit(snapshot, completed), /must have a persisted result artifact/);
+  const result = { ok: true, parsed: { requirements: [{ page: 2, quote: "Pressure shall remain below 2 Pa." }] }, allowedPages: [2] };
+  const persisted = updateRunWorkUnit(snapshot, completed, result);
+  assert.deepEqual(persisted.artifacts[0], { workUnitId: completed.id, value: result });
+});
+
 test("local store configuration refuses ephemeral hosted filesystems and stays off without a key", () => {
   assert.equal(createLocalRunStoreFromEnvironment({}), null);
   assert.throws(() => createLocalRunStoreFromEnvironment({ VERCEL: "1", TCE_RUN_STORE_KEY: keyHex }), /not durable on Vercel/);

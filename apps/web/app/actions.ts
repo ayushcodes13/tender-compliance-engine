@@ -42,7 +42,7 @@ import { CandidateTraceLedger, resolveForensicTraceConfig, writeForensicTrace, t
 import { applyValidatedSourceObligationGroup, canJoinValidatedSourceObligationGroup, classifyCandidateScope, type CandidateClassificationDecision, type ClassificationReviewCandidate } from "./candidate-classification";
 import { groupSourceObligationCandidates, orderCandidatesBySourceObligationGroups, type SourceObligationGroupReference } from "./source-obligation-grouping";
 import { ANALYSIS_PIPELINE_VERSION, createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun, transitionWorkUnit, type AnalysisRun, type ModelProposalEnvelope, type TaskPlanProposal, type WorkUnit } from "./analysis-run";
-import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedTextBlockSpans, PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS, requestTaskPlan, validateTaskPlanForRequest } from "./task-planner";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedOcrRegions, maskExecutedTextBlockSpans, PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS, requestTaskPlan, validateTaskPlanForRequest } from "./task-planner";
 import { createLocalRunStoreFromEnvironment, updateRunFinalResult, updateRunPlan, updateRunState, updateRunWorkUnit, type PersistedRunSnapshot, type RunArtifact } from "./run-store";
 
 function modelTimingFailureKind(error: unknown, signal?: AbortSignal): "provider_busy" | "provider_connection" | "provider_timeout" | "request_aborted" | "other" {
@@ -798,13 +798,14 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     if (!runSnapshot?.plan) emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
 
     const structuredPages = pages.filter((page) => page.structuredSection);
-    const plannerSelectedStructuredTable = plannedInspectionWorkUnits.some((work) => work.mode === "table"
-      && structuredPages.some((page) => page.sourceModel.tables.some((table) => table.id === work.unit.sourceIds[0])));
+    const plannerSelectedStructuredSource = plannedInspectionWorkUnits.some((work) =>
+      (work.mode === "table" && structuredPages.some((page) => page.sourceModel.tables.some((table) => table.id === work.unit.sourceIds[0])))
+      || (work.mode === "ocr" && structuredPages.some((page) => page.sourceModel.ocrRegions.some((region) => region.id === work.unit.sourceIds[0]))));
     if (shouldUseStructuredTableExtraction({
       hasStructuredPages: structuredPages.length > 0,
       hasVisualPages: pages.some((page) => Boolean(page.visualImage)),
       hasConfiguredModel: true,
-    }) && !plannerSelectedStructuredTable) {
+    }) && !plannerSelectedStructuredSource) {
       report("using detected technical table", { stage: "locating", message: "Using the technical section detected in the PDF layout" });
       report("mapping detected source columns", { stage: "mapping", message: "Reading the columns from the detected table structure" });
       report("extracting structured technical rows", { stage: "extracting", message: "Extracting rows from the detected technical table" });
@@ -1347,7 +1348,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       },
     };
 
-    type Candidate = { page?: number; quote?: string; visual_region_index?: number; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean; traceOrigin?: CandidateOrigin; traceSourceElementIds?: string[]; traceSourceRowId?: string; traceSourceCellId?: string; traceCandidateId?: string; classificationDecision?: CandidateClassificationDecision; classificationReviewReason?: string; classificationReviewOnly?: boolean; originalClassification?: string; allowedPages?: number[]; allowedSourceElementIds?: string[]; selectedSourceSpan?: { sourceText: string; startOffset: number; endOffset: number; sourceElementIds: string[] }; ordinal?: number; sourceObligationGroup?: SourceObligationGroupReference };
+    type Candidate = { page?: number; quote?: string; visual_region_index?: number; selectableTextQuote?: string; unverifiedVisualCompletion?: string; visualOcr?: boolean; visualOcrConfidence?: VisualOcrConfidence; ocrWarning?: boolean; category?: string; row_type?: string; remark?: string; display_lines?: string[]; heading_prefix?: string; nativeHeadingPrefix?: string; merge_with_next?: boolean; continues_previous?: boolean; sourceBox?: Box; remarkBox?: Box; sourceRowHeight?: number; sourceTextHeight?: number; exportGroupId?: string; source_cells?: string[]; source_cells_exact?: boolean; source_row_index?: number; source_column_index?: number; source_column_map?: SourceColumn[]; specification_column_index?: number; specification_blank?: boolean; traceOrigin?: CandidateOrigin; traceSourceElementIds?: string[]; traceSourceRowId?: string; traceSourceCellId?: string; traceCandidateId?: string; classificationDecision?: CandidateClassificationDecision; classificationReviewReason?: string; classificationReviewOnly?: boolean; originalClassification?: string; allowedPages?: number[]; allowedSourceElementIds?: string[]; selectedSourceSpan?: { sourceText: string; startOffset: number; endOffset: number; sourceElementIds: string[] }; selectedOcrRegionIds?: string[]; ordinal?: number; sourceObligationGroup?: SourceObligationGroupReference };
     type ParsedExtraction = { requirements?: Candidate[]; columns?: SourceColumn[] };
     const registeredTraceCandidateIds = new Set<string>();
     const registerTraceCandidate = (candidate: Candidate, origin: CandidateOrigin, candidateOrdinal?: number, trustedSourceMetadata = false): string | undefined => {
@@ -1369,6 +1370,18 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         if (tableRow) sourceIds.push(tableRow.id, ...tableRow.cells.map((item) => item.id));
       }
       if (page && sourceQuote === null && modelQuote) {
+        const selectedOcrRegions = candidate.allowedSourceElementIds?.length
+          ? page.sourceModel.ocrRegions.filter((region) => candidate.allowedSourceElementIds?.includes(region.id))
+          : [];
+        const selectedOcrMatch = selectedOcrRegions.flatMap((region) => {
+          const match = findUniqueTokenBoundedMatch(region.text, modelQuote);
+          return match ? [{ region, match }] : [];
+        })[0];
+        if (selectedOcrMatch) {
+          sourceQuote = selectedOcrMatch.match.sourceText;
+          sourceIds.push(selectedOcrMatch.region.id);
+        }
+        if (sourceQuote === null && selectedOcrRegions.length === 0) {
         const selectedBlocks = candidate.allowedSourceElementIds?.length
           ? page.sourceModel.textBlocks.filter((block) => candidate.allowedSourceElementIds?.includes(block.id))
           : [];
@@ -1393,6 +1406,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
               offset = end + 1;
             }
           }
+        }
         }
       }
       const candidateId = forensicTrace.register({
@@ -1432,13 +1446,15 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const plannerInspectionCoverage: PlannedInspectionCoverage[] = plannedInspectionWorkUnits.map((work) => {
       const executableNativeText = work.mode === "native_text" && boundTaskPlan.textBlocks.has(work.unit.sourceIds[0]);
       const executableVectorTable = work.mode === "table" && boundTaskPlan.sourceKinds.get(work.unit.sourceIds[0]) === "table";
+      const executableOcrRegion = work.mode === "ocr" && boundTaskPlan.sourceKinds.get(work.unit.sourceIds[0])?.startsWith("ocr_") === true;
       return {
         sourceId: work.unit.sourceIds[0],
         page: work.physicalPage,
         mode: work.mode,
-        state: work.mode === "native_text" || executableVectorTable ? "deferred_to_legacy" : "unsupported",
+        state: work.mode === "native_text" || executableVectorTable || executableOcrRegion ? "deferred_to_legacy" : "unsupported",
         reason: executableNativeText ? "The native-text region has not yet been executed by a planner-selected handler."
           : executableVectorTable ? "The parser-owned vector table is available to the bounded table-row handler but has not yet been processed."
+            : executableOcrRegion ? "The parser-owned OCR region is available to the bounded OCR extraction handler but has not yet been processed."
             : work.mode === "native_text" ? "The page-level native-text proposal remains on the legacy page route." : `No executable ${work.mode} region handler is available in this slice.`,
       };
     });
@@ -1446,12 +1462,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       .filter((work) => work.mode === "table" && boundTaskPlan.sourceKinds.get(work.unit.sourceIds[0]) === "table")
       .map((work) => [work.unit.sourceIds[0], work]));
     const successfullyExecutedNativeTextIds = new Set<string>();
+    const successfullyExecutedOcrRegionIds = new Set<string>();
     let plannedNativeTextCalls = 0;
     const MAX_PLANNED_NATIVE_TEXT_CALLS = 12;
     const extractGeneralPages = async (generalPages: typeof visualPages, options: {
       sourceIdsByPage?: ReadonlyMap<number, string[]>;
       operationKey?: string;
-      requestKind?: "general_requirement_extraction" | "planned_native_text_extraction";
+      requestKind?: "general_requirement_extraction" | "planned_native_text_extraction" | "planned_ocr_extraction";
       includeVisualImages?: boolean;
       allowedSourceElementIds?: string[];
     } = {}) => {
@@ -1755,17 +1772,57 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         coverageCheckIncomplete = true;
       }
     }
+    for (const work of plannedInspectionWorkUnits.filter((item) => item.mode === "ocr"
+      && boundTaskPlan.sourceKinds.get(item.unit.sourceIds[0])?.startsWith("ocr_") === true)) {
+      const regionId = work.unit.sourceIds[0];
+      const region = sourceDocument.pages.find((sourcePage) => sourcePage.physicalPdfPageNumber === work.physicalPage)
+        ?.ocrRegions.find((candidate) => candidate.id === regionId);
+      const page = visualPages.find((candidate) => candidate.page === work.physicalPage);
+      const coverage = plannerInspectionCoverage.find((item) => item.sourceId === regionId && item.mode === work.mode)!;
+      if (!region || !page || !region.text.trim() || region.text.length > PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS) {
+        coverage.state = "deferred_to_legacy";
+        coverage.reason = !region ? "The selected OCR source is no longer in the parser inventory."
+          : !page ? "The selected OCR source is outside the supported page route and remains unresolved."
+            : region.text.length > PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS ? `The OCR region exceeds the ${PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS}-character handler bound and remains in fallback.`
+              : "The selected OCR region is empty and remains unresolved.";
+        coverageCheckIncomplete = true;
+        continue;
+      }
+      const plannerPage = { ...page, text: region.text, visualImage: undefined };
+      const failure = await extractGeneralPages([plannerPage], {
+        sourceIdsByPage: new Map([[page.page, [regionId]]]),
+        operationKey: work.unit.operation,
+        requestKind: "planned_ocr_extraction",
+        includeVisualImages: false,
+        allowedSourceElementIds: [regionId],
+      });
+      if (failure) return failure;
+      const hasGroundedOcrQuote = parsedResponses.some((response) => response.allowedSourceElementIds?.includes(regionId)
+        && response.parsed.requirements?.some((candidate) => candidate.page === work.physicalPage
+          && typeof candidate.quote === "string" && Boolean(findUniqueSourceText(region.text, candidate.quote))));
+      if (hasGroundedOcrQuote) {
+        successfullyExecutedOcrRegionIds.add(regionId);
+        coverage.state = "executed";
+        coverage.reason = "The selected OCR region was sent to the bounded extraction handler; its literal transcript quote remains OCR-derived and requires visual human review.";
+      } else {
+        coverage.state = "deferred_to_legacy";
+        coverage.reason = "The selected OCR handler returned no literal quote from that region; the source remains in fallback and is not counted as inspected.";
+        coverageCheckIncomplete = true;
+      }
+    }
     for (const inspection of plannerInspectionCoverage) {
       if (inspection.state !== "executed") coverageCheckIncomplete = true;
     }
     const unresolvedPlannerInspections = plannerInspectionCoverage.filter((inspection) => inspection.state !== "executed");
     if (unresolvedPlannerInspections.length) routingWarnings.push(`${unresolvedPlannerInspections.length} planner-requested source operation(s) remain deferred, unsupported, or retryable; inspect the planner coverage ledger before treating the draft as complete.`);
     const fallbackPages = (vectorPages.length ? otherPages : visualPages).map((page) => {
-      const selectedBlocks = sourceDocument.pages.find((sourcePage) => sourcePage.physicalPdfPageNumber === page.page)?.textBlocks
-        .filter((block) => successfullyExecutedNativeTextIds.has(block.id)) ?? [];
-      if (!selectedBlocks.length) return page;
+      const sourcePage = sourceDocument.pages.find((candidate) => candidate.physicalPdfPageNumber === page.page);
+      const selectedBlocks = sourcePage?.textBlocks.filter((block) => successfullyExecutedNativeTextIds.has(block.id)) ?? [];
+      const selectedOcrRegions = sourcePage?.ocrRegions.filter((region) => successfullyExecutedOcrRegionIds.has(region.id)) ?? [];
+      if (!selectedBlocks.length && !selectedOcrRegions.length) return page;
       const fallbackNativeText = maskExecutedTextBlockSpans(page.rawText, selectedBlocks);
-      return { ...page, text: combinePageTranscripts(fallbackNativeText, page.ocrText) };
+      const remainingOcrText = maskExecutedOcrRegions(page.ocrText, selectedOcrRegions, successfullyExecutedOcrRegionIds);
+      return { ...page, text: combinePageTranscripts(fallbackNativeText, remainingOcrText) };
     });
     if (vectorPages.length > 0) {
       normalizedTables = true;
@@ -3144,24 +3201,31 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         continue;
       }
       if (candidate.allowedSourceElementIds?.length) {
-        const selectedBlockMatch = candidate.allowedSourceElementIds.flatMap((sourceId) => {
+        const selectedTextMatch = candidate.allowedSourceElementIds.flatMap((sourceId) => {
           const block = sourcePage.sourceModel.textBlocks.find((item) => item.id === sourceId);
           const match = block ? findUniqueSourceText(block.text, quote) : null;
           return block && match ? [{ block, match }] : [];
         })[0];
-        if (!selectedBlockMatch) {
+        const selectedOcrMatch = candidate.allowedSourceElementIds.flatMap((sourceId) => {
+          const region = sourcePage.sourceModel.ocrRegions.find((item) => item.id === sourceId);
+          const match = region ? findUniqueSourceText(region.text, quote) : null;
+          return region && match ? [{ region, match }] : [];
+        })[0];
+        if (!selectedTextMatch && !selectedOcrMatch) {
           rejected += 1;
           addRejection(pageNumber, "quote_outside_selected_source", quote);
           if (candidate.traceCandidateId) forensicTrace?.terminate(candidate.traceCandidateId, { disposition: "rejected", responsibleStage: "source_evidence_validation", rejectionCategory: "quote_outside_selected_source" });
           continue;
         }
-        const startOffset = selectedBlockMatch.block.startOffset + selectedBlockMatch.match.startOffset;
-        candidate.selectedSourceSpan = {
-          sourceText: sourcePage.rawText.slice(startOffset, startOffset + selectedBlockMatch.match.sourceText.length),
-          startOffset,
-          endOffset: startOffset + selectedBlockMatch.match.sourceText.length,
-          sourceElementIds: [selectedBlockMatch.block.id],
-        };
+        if (selectedTextMatch) {
+          const startOffset = selectedTextMatch.block.startOffset + selectedTextMatch.match.startOffset;
+          candidate.selectedSourceSpan = {
+            sourceText: sourcePage.rawText.slice(startOffset, startOffset + selectedTextMatch.match.sourceText.length),
+            startOffset,
+            endOffset: startOffset + selectedTextMatch.match.sourceText.length,
+            sourceElementIds: [selectedTextMatch.block.id],
+          };
+        } else if (selectedOcrMatch) candidate.selectedOcrRegionIds = [selectedOcrMatch.region.id];
       }
       const classificationDecision = candidate.classificationDecision ?? classifyCandidateScope(candidate.row_type, quote);
       candidate.classificationDecision = classificationDecision;
@@ -3195,10 +3259,14 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         continue;
       }
       seen.set(key, candidate.traceCandidateId ?? "");
-      const nativeTextMatch = Boolean(candidate.selectedSourceSpan || findUniqueTokenBoundedMatch(sourcePage.rawText, quote));
-      const ocrTextMatch = !nativeTextMatch && matchesOcrQuote(quote, sourcePage.ocrText);
+      const selectedOcrRegion = candidate.selectedOcrRegionIds?.map((id) => sourcePage.sourceModel.ocrRegions.find((region) => region.id === id))
+        .find((region) => region && findUniqueSourceText(region.text, quote));
+      const nativeTextMatch = !selectedOcrRegion && Boolean(candidate.selectedSourceSpan || findUniqueTokenBoundedMatch(sourcePage.rawText, quote));
+      const ocrTextMatch = Boolean(selectedOcrRegion) || !nativeTextMatch && matchesOcrQuote(quote, sourcePage.ocrText);
       const visualOcr = candidate.visualOcr === true && (visualSheetType === "compliance-sheet" || normalizedTables);
-      const pageEvidence = locatePageQuote(quote, sourcePage);
+      const pageEvidence = selectedOcrRegion
+        ? { bbox: selectedOcrRegion.bbox, method: "tesseract-ocr" as const, ocrConfidence: selectedOcrRegion.confidenceLevel }
+        : locatePageQuote(quote, sourcePage);
       const bbox = candidate.sourceBox ?? pageEvidence?.bbox ?? null;
       const evidencePrecision = classifyCandidateEvidence({
         nativeTextMatch, ocrTextMatch: ocrTextMatch || Boolean(pageEvidence), visualTranscription: visualOcr, hasLocation: Boolean(bbox),
@@ -3256,6 +3324,7 @@ Product names and model/capacity labels are headings, but serials, page furnitur
         selectableTextContext: candidate.selectableTextQuote,
         sourceCellLocation,
         selectedSourceSpan: candidate.selectedSourceSpan,
+        selectedOcrRegionIds: candidate.selectedOcrRegionIds,
       });
       if (classificationDecision.outcome === "retained_for_review" && classificationDecision.effectiveRowType === "ambiguous") {
         classificationReviewCandidates.push({

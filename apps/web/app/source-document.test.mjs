@@ -200,6 +200,41 @@ test("visual transcriptions keep OCR text separate from native context and omit 
   assert.equal("endOffset" in reference, false);
 });
 
+test("planner-selected OCR citations retain only the validated parser OCR region ID", () => {
+  const document = createSourceDocumentModel(new Uint8Array([44]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 3,
+    width: 300,
+    height: 400,
+    sourceText: "Native cover text",
+    positionedItems: [{ start: 0, end: 18, text: "Native cover text", box: { x: 5, y: 5, width: 100, height: 10 } }],
+    ocrRegions: [
+      { text: "Pressure shall remain below 2 Pa.", bbox: { x: 20, y: 100, width: 120, height: 14 }, confidence: 91, confidenceLevel: "high" },
+      { text: "Service warranty shall cover ten years.", bbox: { x: 20, y: 130, width: 140, height: 14 }, confidence: 88, confidenceLevel: "medium" },
+    ],
+  });
+  const selectedRegion = page.ocrRegions[0];
+  const reference = buildRequirementSourceReference({
+    document,
+    page,
+    quote: selectedRegion.text,
+    bbox: selectedRegion.bbox,
+    visualTranscription: selectedRegion.text,
+    transcriptionMethod: "tesseract-ocr",
+    ocrConfidence: selectedRegion.confidenceLevel,
+    selectedOcrRegionIds: [selectedRegion.id],
+  });
+
+  assert.equal(reference.extractionMethod, "tesseract-ocr");
+  assert.equal(reference.locationPrecision, "approximate");
+  assert.equal(reference.sourceText, "", "OCR transcription stays separate from selectable source text");
+  assert.deepEqual(reference.sourceElementIds, [selectedRegion.id]);
+  assert.equal(reference.transcribedText, selectedRegion.text);
+  assert.equal(reference.ocrConfidence, "high");
+  assert.equal(reference.startOffset, undefined);
+});
+
 test("stores local OCR regions separately from native text with approximate citations", () => {
   const document = createSourceDocumentModel(new Uint8Array([6]), 1);
   const page = buildSourcePageModel({

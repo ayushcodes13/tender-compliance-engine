@@ -104,6 +104,22 @@ export function maskExecutedTextBlockSpans(sourceText: string, blocks: readonly 
   return characters.join("");
 }
 
+/** Masks OCR regions already handled by a planner unit while preserving transcript offsets. */
+export function maskExecutedOcrRegions(
+  sourceText: string,
+  regions: readonly { id: string; text: string }[],
+  executedRegionIds: ReadonlySet<string>,
+): string {
+  const spans: Array<{ startOffset: number; endOffset: number }> = [];
+  let offset = 0;
+  for (const region of regions) {
+    const endOffset = offset + region.text.length;
+    if (executedRegionIds.has(region.id)) spans.push({ startOffset: offset, endOffset });
+    offset = endOffset + 1;
+  }
+  return maskExecutedTextBlockSpans(sourceText, spans);
+}
+
 export function buildTaskPlanRequest(input: {
   document: SourceDocumentModel;
   pageText: ReadonlyMap<number, string>;
@@ -322,13 +338,16 @@ export function buildPlannedInspectionWorkUnits(input: {
     ...candidate,
     unit: createWorkUnit({
       runId: input.runId,
-      kind: candidate.mode === "native_text" && input.sourceKinds?.get(candidate.sourceId) === "native_text_block" ? "extract" : "inspect",
+      kind: (candidate.mode === "native_text" && input.sourceKinds?.get(candidate.sourceId) === "native_text_block")
+        || (candidate.mode === "ocr" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("ocr_") === true) ? "extract" : "inspect",
       sourceIds: [candidate.sourceId],
       ordinal: sourceOrdinals.get(candidate.sourceId) ?? ordinal,
       createdAt: input.createdAt,
       operationKey: candidate.mode === "native_text" && input.sourceKinds?.get(candidate.sourceId) === "native_text_block"
         ? `planned_native_text_extraction:${candidate.actionKey}`
-        : candidate.mode,
+        : candidate.mode === "ocr" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("ocr_") === true
+          ? `planned_ocr_extraction:${candidate.actionKey}`
+          : candidate.mode,
     }),
   }));
   const unique = new Map<string, typeof workUnits[number]>();
