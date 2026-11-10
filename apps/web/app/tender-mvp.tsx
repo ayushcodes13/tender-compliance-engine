@@ -189,6 +189,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const motionRoot = useRef<HTMLElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [resumeAvailable, setResumeAvailable] = useState(false);
   const [responseSheet, setResponseSheet] = useState<ResponseSheet | null>(null);
   const [sheetEdited, setSheetEdited] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -320,6 +321,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
     setFailureDiagnostics(null);
     setProcessing(null);
     setAnalysis(null);
+    setResumeAvailable(false);
     setResponseSheet(null);
     setSheetEdited(false);
     setActiveId(null);
@@ -475,7 +477,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const savedRunId = readLocalRunHandle(sourceFingerprint);
       if (savedRunId) body.set("resumeRunId", savedRunId);
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
-      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; classificationReviewCandidates?: ClassificationReviewCandidate[]; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
+      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; resumable?: boolean; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; classificationReviewCandidates?: ClassificationReviewCandidate[]; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
         signal: requestController.signal,
         onProgress: (progress) => {
           if (progress.runId && progress.sourceFingerprint === sourceFingerprint && progress.resumable === true) {
@@ -507,14 +509,17 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       requestController.signal.throwIfAborted();
       const preparedSheet = buildResponseSheet(payload);
       setAnalysis(payload);
+      setResumeAvailable(result.resumable === true);
       setResponseSheet(preparedSheet);
       setSheetEdited(false);
       setActiveId(payload.requirements[0]?.id ?? null);
       setPage(payload.requirements[0]?.page ?? 1);
-      writeLocalRunHandle(sourceFingerprint, null);
+      if (result.resumable !== true) writeLocalRunHandle(sourceFingerprint, null);
       const elapsed = Math.floor((Date.now() - processingStartedAtRef.current) / 1000);
       setElapsedSeconds(elapsed);
-      setProcessing({ stage: "complete", message: `Ready for review after ${formatElapsedSeconds(elapsed)}.` });
+      setProcessing({ stage: "complete", message: result.resumable === true
+        ? `Partial draft ready after ${formatElapsedSeconds(elapsed)}. Some work could not finish; resume it to complete processing.`
+        : `Ready for review after ${formatElapsedSeconds(elapsed)}.` });
       keepTerminalState = true;
     } catch (cause) {
       if (activeRequestRef.current !== requestController) return;
@@ -1336,7 +1341,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span></div>
       </header>
       <section className="mvp-review-summarybar">
-        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}</div>
+        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}{resumeAvailable && file && <button type="button" className="mvp-primary" onClick={() => { if (!window.confirm("Resume unfinished analysis? This replaces the current draft and any unsaved review edits.")) return; setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setProcessing(null); setError(null); }}>Resume unfinished analysis</button>}</div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
           <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{reviewableRequirements.length}</strong><small>Source requirements</small></span></div>
           {analysis.validationSummary && (

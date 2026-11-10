@@ -727,12 +727,19 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     };
     const completeAnalysis = (analysis: unknown) => {
       if (runStore && runSnapshot) {
+        if (runSnapshot.workUnits.some((unit) => unit.status === "retryable")) {
+          const pausedRun = transitionRun(runSnapshot.run, "paused", new Date().toISOString());
+          runSnapshot = updateRunState(runSnapshot, pausedRun);
+          runStore.save(runSnapshot);
+          activeRun = pausedRun;
+          return { ok: true as const, analysis, resumable: true as const };
+        }
         const completedRun = transitionRun(runSnapshot.run, "completed", new Date().toISOString());
         runSnapshot = updateRunFinalResult(runSnapshot, completedRun, analysis);
         runStore.save(runSnapshot);
         activeRun = completedRun;
       }
-      return { ok: true as const, analysis };
+      return { ok: true as const, analysis, resumable: false as const };
     };
     const taskPlanRequest = buildTaskPlanRequest({
       document: sourceDocument,
