@@ -13,11 +13,11 @@ Only the first unfinished gate may be worked in a session. This checkpoint and [
 - [ ] **Gate 2 — Exhaustive page labels:** every page gets exactly one of `technical_spec`, `admin`, `commercial`, `form`, `unsure`; missing/invalid labels become `unsure`. Bounded batches resume without repeating completed batches; dropped, repeated, invented, and invalid IDs are tested.
 - [ ] **Gate 3 — Verbatim copy and leftover check:** code copies source spans by source structure; AI resolves ambiguous structure only with verbatim source spans. Test bordered/borderless tables, nested bullets, lettered lists, headerless continuation, scientific notation, altered numbers, and leftover text.
 - [ ] **Gate 4 — Evaluation harness:** compare `input 1-3` with `output 1-3`; output counts only (matched, partial, missing, extra, changed-number), no source text in logs. Document dev/validation/locked splits; examples are development data. Test changed-number and omitted-row detection.
-- [ ] **Gate 5 — Bake-off:** same model and budget for the exhaustive design and current planner on the same development set; report recall, extra rows, changed numbers, page coverage, latency, and cost. Owner-set live-call/spend cap required before paid calls. Keep the better measured design; remove or freeze the other.
+- [ ] **Gate 5 — Bake-off:** same model and budget for the exhaustive design and current planner on the same development set; report recall, extra rows, changed numbers, page coverage, latency, and cost. The paid live-call/spend cap is 6 analyses / $30 cumulative additional inference spend; stop when either cap is reached. Keep the better measured design; remove or freeze the other.
 - [ ] **Gate 6 — Browser review/export:** verify citations/page highlights, visible incomplete state, edit persistence across refresh/resume, and opened/inspected Excel and Word outputs. Fix non-Latin PDF export or surface the limitation before edits. Partial runs cannot appear complete in exports.
 - [ ] **Gate 7 — Locked evaluation and ship decision:** human-adjudicated locked labels, one run, no tuning afterward; replace any locked document that informs a fix. Report by family/sample size. Ship only if the frozen acceptance contract is met; otherwise report misses and stop without a ship claim.
 
-Acceptance values still marked `[SET]` in `plan.md` and client assumptions marked `[CONFIRM]` remain unresolved; the owner must set the numbers before implementation begins, and the client must confirm the assumptions before dependent copy/output behavior is implemented. Never tune on locked tenders or add per-tender/publisher templates. AI labels are drafts until human adjudication. Scripted fixtures prove mechanics, not extraction quality or generalization.
+Acceptance thresholds are frozen in `plan.md`: at least 85% expected-row recall, at most 10% extra non-technical rows, and a paid live-evaluation cap of 6 analyses / $30 cumulative additional inference spend (stop when either cap is reached). Client assumptions marked `[CONFIRM]` remain unresolved; obtain those answers before dependent copy/output behavior is implemented. Never tune on locked tenders or add per-tender/publisher templates. AI labels are drafts until human adjudication. Scripted fixtures prove mechanics, not extraction quality or generalization.
 
 ### Current repository evidence relevant to the gates
 
@@ -27,7 +27,7 @@ The existing parser, OCR/visual, planner, source-validation, local-resume, revie
 
 ## Status
 
-**IN PROGRESS — Gate 0 passed in PR #459; Gate 1 passed locally on `fix/truthful-run-state`; Gate 2 is next and has not started.** The owner-set numeric values and client confirmations called out above must be supplied before dependent implementation begins. Do not claim v1 readiness until Gate 7 passes.
+**IN PROGRESS — Gate 0 passed in PR #459; Gate 1 passed locally on `fix/truthful-run-state`; Gate 2 is next and has not started.** Numeric acceptance thresholds are set; client confirmations called out above remain pending before dependent copy/output behavior. Do not claim v1 readiness until Gate 7 passes.
 
 ## Historical POC90 and customer-validation records
 
