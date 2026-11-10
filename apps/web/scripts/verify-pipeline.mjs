@@ -24,6 +24,7 @@ const recovery = 'Surface flatness shall be within 0.1 mm over 1 m square.';
 const outsideTable = 'Service support shall remain available for 10 years.';
 let scenario = "prose";
 let extractionCalls = 0;
+let resumeGeneralRequestStarts = 0;
 let routeCalls = 0;
 let providerRequestCount = 0;
 const providerSchemaCounts = new Map();
@@ -68,6 +69,11 @@ const provider = http.createServer(async (request, response) => {
       await new Promise(resolve => setTimeout(resolve, trackedRoutingGroup === 1 ? 220 : 50));
     }
     if (scenario === 'slow-general-extraction' && schema === 'tender_requirements') await new Promise(resolve => setTimeout(resolve, 150));
+    if (scenario === 'resume-general-extraction' && schema === 'tender_requirements') {
+      resumeGeneralRequestStarts += 1;
+      const batchPages = [...new Set([...raw.matchAll(/PDF PAGE (\d+)/g)].map(match => Number(match[1])))];
+      await new Promise(resolve => setTimeout(resolve, batchPages[0] === 1 ? 60 : 400));
+    }
     if (scenario === 'general-batch-concurrency' && schema === 'tender_requirements') {
       trackedGeneralExtractionRequest = true;
       activeGeneralExtractionRequests += 1;
@@ -339,6 +345,36 @@ try {
   const batchThreeCompletedAt=generalExtractionBatchEvents.find(event=>event.firstPage===7&&event.event==='completed')?.at;
   const batchFourStartedAt=generalExtractionBatchEvents.find(event=>event.firstPage===10&&event.event==='started')?.at;
   assert.ok(Number.isFinite(batchThreeCompletedAt)&&Number.isFinite(batchFourStartedAt)&&batchFourStartedAt<batchThreeCompletedAt,'The fourth extraction batch starts when the first of the three active requests finishes, before the slow third request completes');
+  scenario='resume-general-extraction';
+  let interruptedExtractionRunId=null;
+  const interruptedExtractionFingerprint=createHash('sha256').update(Buffer.from(multiPage.output('arraybuffer'))).digest('hex');
+  const extractionCallsBeforeInterrupt=extractionCalls;
+  const resumeRequestsBeforeInterrupt=resumeGeneralRequestStarts;
+  await assert.rejects(analyze(multiPage, {
+    stopAt: progress => progress.message === 'Received and parsed 1 of 4 technical extraction batches',
+    onProgress: progress => { if (progress.resumable && progress.runId) interruptedExtractionRunId=progress.runId; },
+  }), /scripted interruption|cancelled|aborted/i);
+  assert.match(interruptedExtractionRunId ?? '', /^run_[a-f0-9]{32}$/i, 'The run handle is exposed after the first extraction unit has been checkpointed');
+  assert.equal(resumeGeneralRequestStarts-resumeRequestsBeforeInterrupt,4,'All four bounded extraction requests reached the scripted provider before interruption');
+  await restartApp();
+  const resumedGeneral=await analyze(multiPage,{resumeRunId:interruptedExtractionRunId});
+  assert.equal(resumedGeneral.ok,true,resumedGeneral.error);
+  assert.deepEqual(resumedGeneral.analysis.requirements.map(row=>row.quote),quotes,'Resumed general extraction rehydrates the completed first batch and returns source-grounded rows');
+  assert.equal(resumeGeneralRequestStarts-resumeRequestsBeforeInterrupt,7,'Resume reuses the completed extraction artifact and dispatches only the three unfinished batches');
+  assert.ok(extractionCalls>extractionCallsBeforeInterrupt,'The resumed extraction executes the unfinished batches after the process restart');
+  const modelCallsBeforeMismatch=providerRequestCount;
+  const wrongSourceResume=await analyze(short,{resumeRunId:interruptedExtractionRunId});
+  assert.equal(wrongSourceResume.ok,false,'A saved run cannot be resumed with another PDF');
+  assert.match(wrongSourceResume.error,/does not match the saved analysis run/);
+  const originalEndpoint=appOptions.env.OPENAI_BASE_URL;
+  appOptions.env.OPENAI_BASE_URL=`${originalEndpoint}/different-config`;
+  await restartApp();
+  const wrongConfigResume=await analyze(multiPage,{resumeRunId:interruptedExtractionRunId});
+  assert.equal(wrongConfigResume.ok,false,'A saved run cannot be resumed with a different model configuration');
+  assert.match(wrongConfigResume.error,/different model or pipeline version/);
+  assert.equal(providerRequestCount,modelCallsBeforeMismatch,'Source and configuration mismatches are rejected before any model call');
+  appOptions.env.OPENAI_BASE_URL=originalEndpoint;
+  await restartApp();
   scenario='partial-general-batch';
   const partialBatchPdf=new jsPDF();
   for(let page=1;page<=12;page++) {
@@ -676,10 +712,15 @@ try {
     const counts=rows.reduce((total,row)=>{total[row.disposition]=(total[row.disposition]??0)+1;return total;},{accepted:0,rejected:0,duplicate:0,merged:0,discarded:0,incomplete:0});
     assert.equal(rows.length,trace.summary.total,'Every generated candidate is represented in the trace');
     assert.equal(counts.accepted+counts.rejected+counts.duplicate+counts.merged+counts.discarded+counts.incomplete,trace.summary.total,'Accepted, rejected, duplicate, merged, discarded, and incomplete records reconcile');
-    assert.equal(counts.incomplete,0,'Every scripted fixture candidate reaches a terminal disposition');
+    if(trace.documentFingerprint===interruptedExtractionFingerprint&&counts.incomplete>0) {
+      assert.ok(counts.incomplete>0,'Candidates from the deliberately interrupted run remain explicitly incomplete rather than silently accepted');
+    } else {
+      assert.equal(counts.incomplete,0,'Every non-interrupted scripted fixture candidate reaches a terminal disposition');
+    }
     assert.equal(new Set(rows.map(row=>row.candidateId)).size,rows.length,'Candidate IDs remain unique within each run');
     assert.ok(rows.every(row=>row.documentFingerprint===trace.documentFingerprint));
   }
+  assert.equal(traces.filter(trace=>trace.documentFingerprint===interruptedExtractionFingerprint&&trace.candidates.some(row=>row.disposition==='incomplete')).length,1,'The deliberate interruption produces exactly one trace with explicit incomplete candidates');
   const proseTrace=traces.find(trace=>trace.candidates.some(row=>row.modelQuote===recovery));
   assert.ok(proseTrace,'The deliberate omission-audit recovery has a trace record');
   const recoveredTrace=proseTrace.candidates.find(row=>row.modelQuote===recovery);
