@@ -380,6 +380,38 @@ test("repeated native passages preserve literal page evidence but never fabricat
   assert.equal("sourceCell" in reference, false);
 });
 
+test("a planner-selected parser block can disambiguate a repeated literal quote without inventing a span", () => {
+  const document = createSourceDocumentModel(new Uint8Array([45]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 8,
+    width: 300,
+    height: 400,
+    sourceText: "Speed 300 ± 10 mm/min\nOther clause\nSpeed 300 ± 10 mm/min",
+    positionedItems: [
+      { start: 0, end: 21, text: "Speed 300 ± 10 mm/min", box: { x: 10, y: 30, width: 140, height: 10 } },
+      { start: 35, end: 56, text: "Speed 300 ± 10 mm/min", box: { x: 10, y: 90, width: 140, height: 10 } },
+    ],
+  });
+  const selectedBlock = page.textBlocks[1];
+  const reference = buildRequirementSourceReference({
+    document,
+    page,
+    quote: "Speed 300 ± 10 mm/min",
+    bbox: null,
+    selectedSourceSpan: {
+      sourceText: selectedBlock.text,
+      startOffset: selectedBlock.startOffset,
+      endOffset: selectedBlock.endOffset,
+      sourceElementIds: [selectedBlock.id],
+    },
+  });
+  assert.equal(reference.startOffset, 35);
+  assert.equal(reference.endOffset, 56);
+  assert.deepEqual(reference.sourceElementIds, [selectedBlock.id]);
+  assert.equal(reference.locationPrecision, "approximate", "a known text span is not an invented visual box");
+});
+
 test("a different engineering sign or unit cannot be used to fill missing source evidence", () => {
   const document = createSourceDocumentModel(new Uint8Array([43]), 1);
   const page = buildSourcePageModel({

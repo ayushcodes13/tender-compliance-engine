@@ -3,6 +3,14 @@ import type { SourceBox, SourcePageOcrSkipReason, SourcePageOcrStatus } from "./
 export type CoverageAuditStatus = "not_run" | "incomplete" | "no_gaps_reported" | "possible_gaps_reported";
 export type ExtractionStatus = "not_selected" | "complete" | "incomplete";
 export type RoutingDisposition = "selected" | "uncertain" | "excluded" | "unrouted" | "no_text";
+export type PlannedInspectionState = "executed" | "deferred_to_legacy" | "unsupported" | "retryable";
+export type PlannedInspectionCoverage = {
+  sourceId: string;
+  page: number;
+  mode: string;
+  state: PlannedInspectionState;
+  reason: string;
+};
 
 export function resolveRoutingDisposition(input: {
   hasRoutingText: boolean;
@@ -255,6 +263,7 @@ export function linkSourceRowsToRequirements(
 
 export type CoverageReport = {
   pages: PageCoverageRecord[];
+  plannedInspections: PlannedInspectionCoverage[];
   summary: {
     documentPages: number;
     routingPages: number;
@@ -296,6 +305,7 @@ export type CoverageReport = {
 export function buildCoverageReport(
   pages: PageCoverageRecord[],
   unattributed = { candidateSuggestions: 0, rejectedSuggestions: 0 },
+  plannedInspections: PlannedInspectionCoverage[] = [],
 ): CoverageReport {
   const orderedPages = [...pages].sort((left, right) => left.page - right.page);
   const sum = (value: (page: PageCoverageRecord) => number) => orderedPages.reduce((total, page) => total + value(page), 0);
@@ -303,6 +313,7 @@ export function buildCoverageReport(
 
   return {
     pages: orderedPages,
+    plannedInspections: [...plannedInspections].sort((left, right) => left.page - right.page || left.sourceId.localeCompare(right.sourceId) || left.mode.localeCompare(right.mode)),
     summary: {
       documentPages: orderedPages.length,
       routingPages: count((page) => page.routingInputIncluded),

@@ -801,6 +801,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       coverage: {
         summary: failureDiagnostics.coverageSummary,
         pages: [],
+        plannedInspections: [],
       },
       reviewNote: "Operator-recovered from a partial analysis. Original source identity is retained, but document inventory integrity and extraction completeness have not been verified. Inspect the tender before using this sheet.",
     };
@@ -1303,8 +1304,10 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
   const uncertainRoutingCount = analysis.coverage?.summary.routingPagesUncertain ?? 0;
   const unmappedTableRowsCount = analysis.coverage?.summary.tableRowsUnmapped ?? 0;
   const clippedRoutingCount = analysis.coverage?.summary.clippedRoutingPages ?? 0;
+  const unresolvedPlannerInspectionCount = analysis.coverage?.plannedInspections.filter((item) => item.state !== "executed").length ?? 0;
+  const executedPlannerInspectionCount = analysis.coverage?.plannedInspections.filter((item) => item.state === "executed").length ?? 0;
   const scheduleDuplicates = responseSheet ? detectScheduleDuplicates(responseSheet) : [];
-  const hasUnresolvedIssues = unresolvedAuditCount > 0 || possibleGapsCount > 0 || uncertainRoutingCount > 0 || unmappedTableRowsCount > 0 || clippedRoutingCount > 0 || heldCandidatesCount > 0 || scheduleDuplicates.length > 0;
+  const hasUnresolvedIssues = unresolvedAuditCount > 0 || possibleGapsCount > 0 || uncertainRoutingCount > 0 || unmappedTableRowsCount > 0 || clippedRoutingCount > 0 || unresolvedPlannerInspectionCount > 0 || heldCandidatesCount > 0 || scheduleDuplicates.length > 0;
 
   const coveragePagesToShow = analysis.coverage?.pages.filter((item) => item.selectedForExtraction
     || item.routingDisposition !== "selected"
@@ -1353,7 +1356,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             <span className="mvp-banner-icon"><AlertTriangle size={20} /></span>
             <div>
               <strong>Incomplete AI Draft — Unresolved Coverage & Audits Require Review</strong>
-              <p>This draft is not guaranteed complete. The parser/router reported unresolved pages, incomplete audits, or unclassified candidate obligations that require human inspection.</p>
+              <p>This draft is not guaranteed complete. The parser/router or planner reported unresolved operations, pages, incomplete audits, or unclassified candidate obligations that require human inspection.</p>
             </div>
           </div>
           <div className="mvp-unresolved-banner-pills">
@@ -1385,6 +1388,16 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
             {clippedRoutingCount > 0 && (
               <span className="mvp-banner-pill">
                 <strong>{clippedRoutingCount}</strong> clipped router page{clippedRoutingCount === 1 ? "" : "s"}
+              </span>
+            )}
+            {unresolvedPlannerInspectionCount > 0 && (
+              <span className="mvp-banner-pill is-warning">
+                <strong>{unresolvedPlannerInspectionCount}</strong> planner operation{unresolvedPlannerInspectionCount === 1 ? "" : "s"} unresolved or deferred
+              </span>
+            )}
+            {executedPlannerInspectionCount > 0 && (
+              <span className="mvp-banner-pill">
+                <strong>{executedPlannerInspectionCount}</strong> planner operation{executedPlannerInspectionCount === 1 ? "" : "s"} executed; evidence still needs review
               </span>
             )}
             {scheduleDuplicates.length > 0 && (
@@ -1594,6 +1607,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
               <div><dt>Source table rows</dt><dd>{countLabel(analysis.coverage.summary.tableRowsDetected, "row")} detected · {countLabel(analysis.coverage.summary.tableRowsMappedToCandidates, "row")} mapped · {countLabel(analysis.coverage.summary.tableRowsExcludedAsHeaders, "header")} · {countLabel(analysis.coverage.summary.tableRowsEmpty, "empty row")} · {countLabel(analysis.coverage.summary.tableRowsUnmapped, "nonempty row")} unmapped, across {countLabel(analysis.coverage.summary.tablePagesWithKnownRowCount, "page")} with detected row geometry</dd></div>
               <div><dt>Suggestions and review</dt><dd>{countLabel(analysis.coverage.summary.candidateSuggestions, "model suggestion")} · {countLabel(analysis.coverage.summary.sourceMatchedRows, "source matched row")} including headings · {countLabel(analysis.coverage.summary.sourceMatchedRequirements, "source matched requirement row")} · {countLabel(currentNeedsReviewCount, "row")} awaiting your review</dd></div>
               <div><dt>Page audits</dt><dd>{analysis.coverage.summary.auditPagesWithNoGapsReported} reported no gaps · {analysis.coverage.summary.auditPagesWithPossibleGaps} flagged possible gaps · {analysis.coverage.summary.auditPagesIncomplete} incomplete · {analysis.coverage.summary.auditPagesNotRun} not run</dd></div>
+              {analysis.coverage.plannedInspections.length > 0 && <div><dt>Planner operations</dt><dd>{countLabel(executedPlannerInspectionCount, "operation")} executed · {countLabel(unresolvedPlannerInspectionCount, "operation")} deferred, unsupported, or retryable. Execution records what ran; it does not establish semantic completeness.</dd></div>}
               {analysis.coverage.summary.pagesWithoutSelectableText > 0 && <div><dt>OCR review</dt><dd>{countLabel(analysis.coverage.summary.pagesWithoutSelectableText, "page")} had no selectable text</dd></div>}
               {analysis.coverage.summary.ocrRecommendedPages > 0 && <div><dt>OCR outcomes</dt><dd>{countLabel(analysis.coverage.summary.ocrRecommendedPages, "page")} recommended · {countLabel(analysis.coverage.summary.ocrAttemptedPages, "OCR attempt")} · {countLabel(analysis.coverage.summary.ocrSkippedPages, "skip")} · {countLabel(analysis.coverage.summary.ocrFailedPages, "OCR failure")} · {countLabel(analysis.coverage.summary.ocrCompletedWithoutTextPages, "page completed without text", "pages completed without text")}</dd></div>}
               {analysis.coverage.summary.pagesProcessedWithOcr > 0 && <div><dt>Local OCR</dt><dd>{countLabel(analysis.coverage.summary.pagesProcessedWithOcr, "page")} transcribed locally; verify every OCR-grounded row against the page image</dd></div>}
@@ -1617,6 +1631,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
                         : item.ocrStatus === "not-attempted" ? `OCR recommended but not attempted${item.ocrSkipReason ? ` · ${item.ocrSkipReason.replaceAll("-", " ")}` : ""}`
                           : item.hasRasterImageContent ? "Raster image present · OCR not recommended" : item.selectedForExtraction ? "Selected for extraction" : "Not selected for extraction"}</span>
                   {item.imageRegions.length > 0 && <span>{countLabel(item.imageRegions.length, "raster image region")} detected · OCR: {Object.entries(imageOcrCounts).map(([state, count]) => `${count} ${state.replaceAll("-", " ")}`).join(", ")} · bounds are approximate; inspect regions not covered by OCR</span>}
+                  {(analysis.coverage?.plannedInspections ?? []).filter((inspection) => inspection.page === item.page).map((inspection) => <span key={`${inspection.sourceId}:${inspection.mode}`} className={inspection.state === "executed" ? "" : "is-warning"}>
+                    Planner {inspection.mode.replaceAll("_", " ")} · {inspection.state.replaceAll("_", " ")} · {inspection.reason}
+                  </span>)}
                   {item.ocrSkipReason && item.ocrStatus !== "not-attempted" && <span className="is-warning">Some image regions were not OCR processed ({item.ocrSkipReason.replaceAll("-", " ")}); inspect remaining regions.</span>}
                   {(item.ocrStatus === "not-attempted" || item.ocrStatus === "no-text-found" || item.ocrStatus === "failed") && <span className="is-warning">Check this source page visually; OCR state does not establish that the image contains no requirement.</span>}
                   {item.sourceTableRowsDetected !== null && <span>{countLabel(item.sourceTableRowsDetected, "source table row")} detected</span>}
