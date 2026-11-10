@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedTextBlockSpans, requestTaskPlan, validateTaskPlanEnvelope } from "./task-planner.ts";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedTextBlockSpans, requestTaskPlan, selectTaskPlanRegions, validateTaskPlanEnvelope } from "./task-planner.ts";
 
 const fingerprint = "f".repeat(64);
 const request = {
@@ -131,6 +131,32 @@ test("builds bounded page and region summaries with modality state and explicit 
   assert.equal(result.pages[0].clippedRegionCount, 2);
   assert.ok(result.pages[0].regions.every((region) => region.excerpt.length <= 120));
   assert.ok(result.pages[0].regions.some((region) => region.sourceId === "doc:page:1:text:1"));
+});
+
+test("bounded planner inventory keeps table, OCR, and image sources visible on dense text pages", () => {
+  const page = {
+    id: "doc:page:1",
+    physicalPdfPageNumber: 1,
+    hasRasterImageContent: true,
+    ocrStatus: "text-found",
+    imageRegions: [{ id: "doc:page:1:image:1" }],
+    ocrRegions: [{ id: "doc:page:1:ocr:1", text: "Scanned annotation", confidenceLevel: "medium" }],
+    textBlocks: Array.from({ length: 20 }, (_, index) => ({ id: `doc:page:1:text:${index + 1}`, text: `Text item ${index + 1}` })),
+    tables: [{ id: "doc:page:1:table:1", rows: [{ id: "doc:page:1:table:1:row:1", cells: [{ id: "doc:page:1:table:1:row:1:cell:1", sourceText: "Required value 1 mm" }] }] }],
+  };
+  const result = buildTaskPlanRequest({ document: { fingerprint, pages: [page] }, pageText: new Map([[1, "Tender page summary"]]), runId: "run_test" });
+  const selectedIds = result.pages[0].regions.map((region) => region.sourceId);
+  assert.equal(selectedIds.length, 6);
+  assert.ok(selectedIds.includes("doc:page:1:text:1"), "The planner retains an executable native-text source");
+  assert.ok(selectedIds.includes("doc:page:1:table:1"), "A dense text layer cannot hide a parser-owned table");
+  assert.ok(selectedIds.includes("doc:page:1:table:1:row:1"), "A source row remains available for a focused table action");
+  assert.ok(selectedIds.includes("doc:page:1:ocr:1"), "OCR-derived evidence remains visible beside native text");
+  assert.ok(selectedIds.includes("doc:page:1:image:1"), "Visual-only source regions remain visible beside native text");
+  assert.equal(result.pages[0].unrepresentedRegionCount, result.pages[0].regionCount - selectedIds.length);
+  assert.deepEqual(selectTaskPlanRegions([{ kind: "native_text_block" }, { kind: "table" }, { kind: "ocr_high" }], 2), [
+    { kind: "native_text_block" }, { kind: "table" },
+  ]);
+  assert.throws(() => selectTaskPlanRegions([], -1), /non-negative integer/);
 });
 
 test("removes only executed parser spans from the legacy fallback and preserves page offsets", () => {
