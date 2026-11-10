@@ -24,6 +24,7 @@ const recovery = 'Surface flatness shall be within 0.1 mm over 1 m square.';
 const outsideTable = 'Service support shall remain available for 10 years.';
 const selectedBlockOmission = 'Certificate shall be supplied.';
 let scenario = "prose";
+let failSixthBatchOnce = true;
 let extractionCalls = 0;
 let resumeGeneralRequestStarts = 0;
 let routeCalls = 0;
@@ -193,10 +194,12 @@ const provider = http.createServer(async (request, response) => {
         response.destroy();
         return;
       }
+      const failSixthBatch = scenario === 'partial-general-batch-six-of-six' && pages[0] === 16 && failSixthBatchOnce;
+      if (failSixthBatch) failSixthBatchOnce = false;
       if (['partial-general-batch', 'partial-general-batch-six-of-six', 'all-general-batches-fail'].includes(scenario)
         && (scenario === 'all-general-batches-fail'
           || (scenario === 'partial-general-batch' && pages[0] === 10)
-          || (scenario === 'partial-general-batch-six-of-six' && pages[0] === 16))) {
+          || failSixthBatch)) {
         response.destroy();
         return;
       }
@@ -477,12 +480,23 @@ try {
   assert.equal(extractionCalls-sixBatchCallsBefore,6,'The regression runs five extraction requests to completion before the sixth provider connection is dropped');
   assert.deepEqual(sixBatchPartial.analysis.requirements.map(row=>row.quote),quotes,'The five completed batches retain their source-grounded requirements after a final-batch connection failure');
   assert.deepEqual(sixBatchPartial.analysis.coverage.pages.filter(page=>page.extractionStatus==='incomplete').map(page=>page.page),[16,17,18],'Only pages in the failed sixth batch remain explicitly incomplete');
+  assert.equal(sixBatchPartial.resumable,true,'A partial draft with retryable work is returned as resumable instead of being finalized');
+  const sixBatchRunId=progressObservations.filter(event=>event.scenario===scenario&&event.runId).at(-1)?.runId;
+  assert.match(sixBatchRunId??'',/^run_[a-f0-9]{32}$/,'The partial draft retains its opaque run handle');
   const sixBatchMessages=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
   assert.ok(sixBatchMessages.includes('Received and parsed 5 of 6 technical extraction batches'),'The failing six-batch run reports all five completed batches before terminating with a partial result');
   assert.match(sixBatchPartial.analysis.reviewNote,/model-based extraction or page coverage calls could not complete/,'The five-of-six partial result keeps the existing incomplete-coverage warning');
   const sixBatchTiming=logs.slice(sixBatchLogStart).split('\n').filter(line=>line.startsWith('[TCE_MODEL_TIMING] ')).map(line=>JSON.parse(line.slice('[TCE_MODEL_TIMING] '.length))).filter(event=>event.requestKind==='general_requirement_extraction');
   assert.equal(sixBatchTiming.filter(event=>event.phase==='response_validated').length,5,'Timing distinguishes the five schema-valid responses from the dropped sixth request');
   assert.ok(sixBatchTiming.some(event=>event.phase==='request_failed'&&event.batchIndex===6&&event.failureKind==='provider_connection'),'The failed final batch is attributed to a provider connection error without logging tender or response content');
+  const sixBatchCallsAfterFailure=extractionCalls;
+  await restartApp();
+  const sixBatchResumed=await analyze(sixBatchPdf,{resumeRunId:sixBatchRunId});
+  assert.equal(sixBatchResumed.ok,true,sixBatchResumed.error);
+  assert.equal(sixBatchResumed.resumable,false,'A run becomes terminal only after retryable extraction work completes');
+  assert.equal(extractionCalls-sixBatchCallsAfterFailure,1,'Restarted partial analysis reruns only the failed sixth batch');
+  assert.deepEqual(sixBatchResumed.analysis.requirements.map(row=>row.quote),quotes,'Resumption reuses five completed source artifacts and returns the complete source-ordered result');
+  assert.ok(sixBatchResumed.analysis.coverage.pages.every(page=>page.extractionStatus==='complete'),'The retried pages become complete after successful recovery');
   scenario='invalid-extraction-shape';
   const invalidShapeLogStart=logs.length;
   const invalidShape=await analyze(short);
@@ -810,7 +824,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','planner-selected native-text unit retries after process restart and reuses its saved plan','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','planner-selected native-text unit retries after process restart and reuses its saved plan','partial provider failure pauses the run and restart retries only the failed extraction batch','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
