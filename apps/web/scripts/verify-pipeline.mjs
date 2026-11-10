@@ -14,6 +14,7 @@ import { buildResponseSections } from '../app/response-sections.ts';
 import { buildResponseSheet, updateResponseSheetCell, removeResponseSheetRow } from '../app/response-sheet.ts';
 import { consumeAnalysisStream } from '../app/analysis-events.ts';
 import { isPopplerAvailable, isTesseractAvailable } from '../app/local-ocr.ts';
+import { createLocalRunStoreFromEnvironment } from '../app/run-store.ts';
 
 const quotes = [
   'Cryostat shall retain helium for 90 days.',
@@ -170,7 +171,11 @@ const provider = http.createServer(async (request, response) => {
       const plannerTableScenario = scenario === 'planner-table-resume';
       const plannerOcrScenario = scenario === 'planner-ocr-resume';
       const plannerVisualScenario = scenario === 'planner-visual-region';
-      const actions = !adaptiveScenario && planInput.planningRound > 0
+      const actions = scenario === 'truthful-complete' || scenario === 'partial-general-batch-six-of-six'
+        ? []
+        : scenario === 'truthful-unsupported'
+          ? [{ mode: 'cross_page', sourceIds: [sourceIds[0]], rationale: 'Exercise truthful state for a registered operation without an execution handler.' }]
+          : !adaptiveScenario && planInput.planningRound > 0
         ? []
         : adaptiveScenario
             ? planInput.planningRound === 0
@@ -327,10 +332,14 @@ const provider = http.createServer(async (request, response) => {
 });
 provider.listen(0,'127.0.0.1'); await once(provider,'listening');
 const runStoreDirectory = await mkdtemp(path.join(tmpdir(), 'tce-pipeline-run-store-'));
+const runStorePath = path.join(runStoreDirectory,'runs.sqlite');
+const runStoreKey = 'ab'.repeat(32);
+process.env.TCE_RUN_STORE_KEY = runStoreKey;
+process.env.TCE_RUN_STORE_PATH = runStorePath;
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
 const base=`http://127.0.0.1:${appPort}`;
 const appOptions={
-  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1',TCE_MODEL_TIMING:'1',TCE_RUN_STORE_KEY:'ab'.repeat(32),TCE_RUN_STORE_PATH:path.join(runStoreDirectory,'runs.sqlite')},stdio:['ignore','pipe','pipe'],
+  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1',TCE_MODEL_TIMING:'1',TCE_RUN_STORE_KEY:runStoreKey,TCE_RUN_STORE_PATH:runStorePath},stdio:['ignore','pipe','pipe'],
 };
 let logs='';
 let child;
@@ -397,13 +406,46 @@ try {
     }});
   }
   const short=new jsPDF();short.text(quotes[0],20,30);
-  const one=await analyze(short);
+  scenario='truthful-complete';
+  let completeRunId=null;
+  const one=await analyze(short,{onProgress:progress=>{if(progress.resumable&&progress.runId)completeRunId=progress.runId;}});
   assert.equal(one.ok,true,one.error);
+  assert.equal(one.completionStatus,'complete','A run with every page inspected and no pending work reports complete in the response payload');
+  assert.equal(one.analysis.completionStatus,one.completionStatus,'The analysis payload and top-level completion state agree');
+  assert.deepEqual(one.analysis.pageTerminalStates.map(page=>page.state),['inspected'],'The complete run records a terminal state for every PDF page');
+  assert.match(completeRunId??'',/^run_[a-f0-9]{32}$/i);
+  const completeStore=createLocalRunStoreFromEnvironment();
+  try {
+    const completeSnapshot=completeStore.load(completeRunId);
+    assert.equal(completeSnapshot?.run.status,'completed','A fully inspected run persists as completed');
+    assert.equal(completeSnapshot?.finalResult?.completionStatus,'complete','The saved payload agrees with the completed run state');
+  } finally { completeStore.close(); }
   assert.equal(one.analysis.document.documentFingerprint,createHash('sha256').update(Buffer.from(short.output('arraybuffer'))).digest('hex'));
   assert.equal(one.analysis.document.inventoryIntegrity,'structurally-verified');
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
   assert.ok(providerRequestCount > providerCountBeforeMalformed, 'A valid upload continues into the scripted model analysis path');
+  scenario='truthful-unsupported';
+  let unsupportedRunId=null;
+  const unsupportedAction=await analyze(short,{onProgress:progress=>{if(progress.resumable&&progress.runId)unsupportedRunId=progress.runId;}});
+  assert.equal(unsupportedAction.ok,true,unsupportedAction.error);
+  assert.equal(unsupportedAction.completionStatus,'partial','A run with an unsupported planner action is not reported as complete');
+  assert.equal(unsupportedAction.analysis.completionStatus,unsupportedAction.completionStatus,'The persisted analysis payload agrees with the top-level partial state');
+  assert.equal(unsupportedAction.resumable,true,'The unsupported action leaves the run resumable');
+  assert.equal(unsupportedAction.analysis.coverage.plannedInspections.find(item=>item.mode==='cross_page')?.state,'unsupported');
+  assert.match(unsupportedRunId??'',/^run_[a-f0-9]{32}$/i);
+  const pausedStore=createLocalRunStoreFromEnvironment();
+  try {
+    const pausedSnapshot=pausedStore.load(unsupportedRunId);
+    assert.equal(pausedSnapshot?.run.status,'paused','The unsupported-action run is persisted paused rather than completed');
+    assert.equal(pausedSnapshot?.finalResult?.completionStatus,'partial','The partial result remains saved for review and resume');
+  } finally { pausedStore.close(); }
+  await restartApp();
+  const resumedUnsupported=await analyze(short,{resumeRunId:unsupportedRunId});
+  assert.equal(resumedUnsupported.ok,true,resumedUnsupported.error);
+  assert.equal(resumedUnsupported.completionStatus,'partial');
+  assert.equal(resumedUnsupported.analysis.completionStatus,resumedUnsupported.completionStatus);
+  assert.equal(resumedUnsupported.resumable,true,'The persisted unsupported-action run resumes and remains truthfully partial');
   scenario='planner-native-text';
   const plannerSlice = new jsPDF();
   plannerSlice.setFontSize(6);
@@ -623,7 +665,9 @@ try {
   await restartApp();
   const sixBatchResumed=await analyze(sixBatchPdf,{resumeRunId:sixBatchRunId});
   assert.equal(sixBatchResumed.ok,true,sixBatchResumed.error);
-  assert.equal(sixBatchResumed.resumable,false,'A run becomes terminal only after retryable extraction work completes');
+  assert.equal(sixBatchResumed.resumable,true,'Recovered extraction does not override unresolved page-routing uncertainty');
+  assert.equal(sixBatchResumed.completionStatus,'partial','The retried extraction remains partial while the planner context leaves pages uncertain');
+  assert.ok(sixBatchResumed.analysis.pageTerminalStates.every(page => page.state==='uncertain'),'The final state records each clipped-context page as uncertain rather than falsely complete');
   assert.equal(extractionCalls-sixBatchCallsAfterFailure,1,'Restarted partial analysis reruns only the failed sixth batch');
   assert.deepEqual(sixBatchResumed.analysis.requirements.map(row=>row.quote),quotes,'Resumption reuses five completed source artifacts and returns the complete source-ordered result');
   assert.ok(sixBatchResumed.analysis.coverage.pages.every(page=>page.extractionStatus==='complete'),'The retried pages become complete after successful recovery');
@@ -847,7 +891,8 @@ try {
   await restartApp();
   const plannerVisualResult = await analyze(imageOnlyPdf, { resumeRunId: plannerVisualRunId });
   assert.equal(plannerVisualResult.ok, true, `${plannerVisualResult.error}: ${JSON.stringify(plannerVisualResult).slice(0, 2200)}`);
-  assert.equal(plannerVisualResult.resumable, false, 'The visual run completes after the selected crop is retried');
+  assert.equal(plannerVisualResult.resumable, true, 'A successfully retried image crop does not hide the unresolved page-wide coverage state');
+  assert.equal(plannerVisualResult.completionStatus, 'partial');
   assert.equal(failPlannerVisualOnce, false, 'The scripted visual provider interruption was reached');
   assert.equal(plannerVisualExtractionAttempts, 2, 'The selected visual region is retried exactly once');
   assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0, plannerCallsBeforeVisualRun + 2, 'Restart reuses the first visual plan, then requests a bounded decision after crop inspection');
@@ -881,7 +926,8 @@ try {
   await restartApp();
   const resumedPlannerTable=await analyze(single,{resumeRunId:plannerTableRunId});
   assert.equal(resumedPlannerTable.ok,true,resumedPlannerTable.error);
-  assert.equal(resumedPlannerTable.resumable,false,'The table run is complete after its selected handler succeeds');
+  assert.equal(resumedPlannerTable.resumable,true,'A successfully retried table action does not hide the unresolved page-wide coverage state');
+  assert.equal(resumedPlannerTable.completionStatus,'partial');
   assert.equal(plannerTableClassificationCalls,2,'Restart retries the selected table classification exactly once');
   assert.equal(providerSchemaCounts.get('tender_task_plan')??0,planCallsBeforeTableRun+1,'Restart reuses the saved source-validated table plan');
   assert.ok(resumedPlannerTable.analysis.coverage.plannedInspections.some(item=>item.mode==='table'&&item.state==='executed'),'The parser-owned table operation is marked executed only after its handler succeeds');

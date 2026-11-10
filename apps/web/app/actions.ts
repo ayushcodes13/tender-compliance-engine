@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
+import { deriveAnalysisCompletion } from "./analysis-completion";
 import { buildResponseSheet } from "./response-sheet";
 import { runTieredValidation, matchesOcrQuote, locateOcrQuoteTolerant } from "./tiered-validation";
 import { locateQuoteSequenceAlignment, findUniqueTokenBoundedMatch } from "./token-sequence-alignment";
@@ -35,7 +36,7 @@ import { groupVisualPages, validateVisualPageBatchResponse } from "./visual-page
 import { buildRoutingBatches, expandRoutedSections, ROUTING_BATCH_CHARACTER_LIMIT, type RoutedSection } from "./page-routing";
 import { validatePageDispositions } from "./page-dispositions";
 import { buildRequirementSourceReference, buildSourcePageModel, createSourceDocumentModel, findUniqueSourceText, validateSourceDocumentInventory, type RequirementSourceReference, type SourceCellLocation, type SourcePageModel } from "./source-document";
-import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRequirements, resolveRoutingDisposition, resolveSourceRowClassification, type CoverageAuditStatus, type CoverageSourceRow, type ExtractionStatus, type PlannedInspectionCoverage, type RejectedSuggestion, type SourceRowClassification, type SourceRowClassificationReason } from "./coverage-ledger";
+import { buildCoverageReport, collectSourceTableCoverageRows, linkSourceRowsToRequirements, resolveRoutingDisposition, resolveSourceRowClassification, type CoverageAuditStatus, type CoverageReport, type CoverageSourceRow, type ExtractionStatus, type PlannedInspectionCoverage, type RejectedSuggestion, type SourceRowClassification, type SourceRowClassificationReason } from "./coverage-ledger";
 import { validatePossibleSourceConflicts } from "./section-consistency";
 import { batchSourceRowsForAudit, isSourceRowAuditBatchWithinLimits, SOURCE_ROW_AUDIT_MAX_BATCHES_PER_ANALYSIS, validateSourceRowAuditResult } from "./source-row-audit";
 import { batchTextPagesForAudit, TEXT_PAGE_AUDIT_CONCURRENCY } from "./text-page-audit";
@@ -724,14 +725,20 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       if (runSnapshot.run.status === "completed" && runSnapshot.finalResult) {
         activeRun = runSnapshot.run;
         report("completed saved analysis", { stage: "complete", message: "Restored the completed source-verified analysis.", resumable: false });
-        return { ok: true as const, analysis: runSnapshot.finalResult as never };
+        const savedAnalysis = runSnapshot.finalResult as { completionStatus?: "complete" | "partial" };
+        return {
+          ok: true as const,
+          analysis: runSnapshot.finalResult as never,
+          completionStatus: savedAnalysis.completionStatus === "complete" ? "complete" as const : "partial" as const,
+          resumable: false as const,
+        };
       }
       if (runSnapshot.run.status === "completed" || runSnapshot.run.status === "cancelled") {
         return { ok: false as const, error: "This saved run has no resumable output. Start a new analysis." };
       }
       const resumedAt = new Date().toISOString();
       activeRun = runSnapshot.run.status === "running" ? runSnapshot.run : transitionRun(runSnapshot.run, "running", resumedAt);
-      runSnapshot = updateRunState(runSnapshot, activeRun);
+      runSnapshot = updateRunState({ ...runSnapshot, finalResult: undefined }, activeRun);
       runSnapshot = {
         ...runSnapshot,
         workUnits: runSnapshot.workUnits.map((unit) => unit.status === "running" ? transitionWorkUnit(unit, "retryable", resumedAt) : unit),
@@ -751,6 +758,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       if (runStore) runStore.save(runSnapshot);
     }
     const analysisRun = activeRun;
+    let coverageCheckIncomplete = false;
+    let planningBudgetExhausted = false;
     const persistUnitState = (unit: WorkUnit) => {
       if (!runStore || !runSnapshot) return;
       runSnapshot = updateRunWorkUnit(runSnapshot, unit);
@@ -762,20 +771,41 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
       runStore.save(runSnapshot);
     };
     const completeAnalysis = (analysis: unknown) => {
+      const analysisRecord = analysis && typeof analysis === "object" && !Array.isArray(analysis)
+        ? analysis as Record<string, unknown>
+        : {};
+      const coverage = analysisRecord.coverage && typeof analysisRecord.coverage === "object"
+        ? analysisRecord.coverage as CoverageReport
+        : null;
+      const pendingWorkUnits = runSnapshot?.workUnits.some((unit) => ["pending", "running", "retryable", "blocked"].includes(unit.status)) ?? false;
+      const assessment = deriveAnalysisCompletion({
+        expectedPageCount: typeof analysisRecord.pageCount === "number" ? analysisRecord.pageCount : 0,
+        pages: coverage?.pages ?? [],
+        plannedInspectionStates: coverage?.plannedInspections.map((inspection) => inspection.state) ?? [],
+        hasPendingWork: pendingWorkUnits,
+        coverageAuditIncomplete: coverageCheckIncomplete || Boolean(coverage?.pages.some((page) => page.auditStatus === "incomplete")),
+        roundBudgetExhausted: planningBudgetExhausted,
+      });
+      const finalizedAnalysis = {
+        ...analysisRecord,
+        completionStatus: assessment.completionStatus,
+        pageTerminalStates: assessment.pageTerminalStates,
+        completionReasons: assessment.completionReasons,
+      };
       if (runStore && runSnapshot) {
-        if (runSnapshot.workUnits.some((unit) => unit.status === "retryable")) {
+        if (assessment.completionStatus === "partial") {
           const pausedRun = transitionRun(runSnapshot.run, "paused", new Date().toISOString());
-          runSnapshot = updateRunState(runSnapshot, pausedRun);
+          runSnapshot = updateRunFinalResult(runSnapshot, pausedRun, finalizedAnalysis);
           runStore.save(runSnapshot);
           activeRun = pausedRun;
-          return { ok: true as const, analysis, resumable: true as const };
+          return { ok: true as const, analysis: finalizedAnalysis, completionStatus: assessment.completionStatus, resumable: true as const };
         }
         const completedRun = transitionRun(runSnapshot.run, "completed", new Date().toISOString());
-        runSnapshot = updateRunFinalResult(runSnapshot, completedRun, analysis);
+        runSnapshot = updateRunFinalResult(runSnapshot, completedRun, finalizedAnalysis);
         runStore.save(runSnapshot);
         activeRun = completedRun;
       }
-      return { ok: true as const, analysis, resumable: false as const };
+      return { ok: true as const, analysis: finalizedAnalysis, completionStatus: assessment.completionStatus, resumable: false as const };
     };
     const taskPlanRequest = buildTaskPlanRequest({
       document: sourceDocument,
@@ -1466,7 +1496,6 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     };
     let parsedResponses: Array<{ parsed: ParsedExtraction; page?: number; origin?: CandidateOrigin; allowedPages?: number[]; allowedSourceElementIds?: string[]; selectedVisualRegion?: { id: string; page: number; bbox: Box }; trustedVectorRows?:boolean }> = [];
     let sourceColumns: SourceColumn[] = [];
-    let coverageCheckIncomplete = false;
     let normalizedTables = false;
     let sourceRowAuditBatchesUsed = 0;
     const pageExtractionState = new Map<number, {
@@ -1942,8 +1971,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     let latestAdaptiveOutcomes = adaptiveOutcomes;
     let adaptiveDecision = taskPlan.decision;
     const MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS = Math.min(3, MAX_PLANNING_ROUNDS);
+    let adaptiveRoundCount = 1;
     for (let planningRound = 1; planningRound < MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS
       && adaptiveDecision === "continue" && latestAdaptiveOutcomes.some((outcome) => outcome.status === "executed"); planningRound += 1) {
+      adaptiveRoundCount = planningRound + 1;
       const nextPlanRequest = buildTaskPlanRequest({
         document: sourceDocument,
         pageText: new Map(pages.map((page) => [page.page, page.text])),
@@ -2147,7 +2178,8 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         break;
       }
     }
-    if (adaptiveDecision === "continue" && plannedInspectionWorkUnits.length && (runSnapshot?.planningRounds?.length ?? 0) >= MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS) {
+    if (adaptiveDecision === "continue" && plannedInspectionWorkUnits.length && adaptiveRoundCount >= MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS) {
+      planningBudgetExhausted = true;
       coverageCheckIncomplete = true;
       routingWarnings.push(`Adaptive planning stopped at the ${MAX_ADAPTIVE_ROUNDS_PER_ANALYSIS}-round request budget; remaining inventory requires review.`);
     }

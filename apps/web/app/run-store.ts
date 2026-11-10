@@ -138,9 +138,15 @@ function validateSnapshot(snapshot: PersistedRunSnapshot): void {
     throw new Error("The latest planning round must match the compatibility plan alias.");
   }
   if (snapshot.finalResult !== undefined) {
-    const finalResult = snapshot.finalResult as { document?: { documentFingerprint?: unknown }; requirements?: unknown } | null;
+    const finalResult = snapshot.finalResult as { document?: { documentFingerprint?: unknown }; requirements?: unknown; completionStatus?: unknown } | null;
     if (!finalResult || finalResult.document?.documentFingerprint !== snapshot.run.sourceFingerprint
-      || !Array.isArray(finalResult.requirements)) throw new Error("The run snapshot contains an invalid final result.");
+      || !Array.isArray(finalResult.requirements)
+      || !["complete", "partial"].includes(finalResult.completionStatus as string)) throw new Error("The run snapshot contains an invalid final result.");
+    if ((snapshot.run.status === "completed" && finalResult.completionStatus !== "complete")
+      || (snapshot.run.status === "paused" && finalResult.completionStatus !== "partial")
+      || !["completed", "paused"].includes(snapshot.run.status)) {
+      throw new Error("The saved analysis state does not match its persisted completion result.");
+    }
   }
   const unitIds = new Set<string>();
   for (const unit of snapshot.workUnits) {
@@ -167,9 +173,6 @@ function validateSnapshot(snapshot: PersistedRunSnapshot): void {
       || unit.operation.startsWith("planned_visual_region_extraction:")) && !artifactIds.has(unit.id)) {
       throw new Error("A completed model work unit must have a persisted result artifact.");
     }
-  }
-  if (snapshot.finalResult !== undefined && snapshot.run.status !== "completed") {
-    throw new Error("A final analysis result requires a completed run state.");
   }
   let encoded: string;
   try { encoded = JSON.stringify(snapshot); } catch { throw new Error("The run snapshot contains a value that cannot be serialized."); }

@@ -1,6 +1,6 @@
 # TCE v1 finish line — Phase 1 only
 
-**Status: IN PROGRESS.** Gate 0 passed as the docs-only change in PR #459. Gate 1 is next and has not started. This document is the frozen v1 acceptance plan; do not expand or redesign it while executing the gates below.
+**Status: IN PROGRESS.** Gate 0 passed as the docs-only change in PR #459. Gate 1 passed locally on branch `fix/truthful-run-state`; Gate 2 is next but has not started. This document is the frozen v1 acceptance plan; do not expand or redesign it while executing the gates below.
 
 ## Compact scenario and intended outcome
 
@@ -35,15 +35,15 @@ The application owns source identity, valid operations, exact-copy checks, numer
 
 Evaluate on the locked set, never used for tuning:
 
-1. Expected specification-row recall is at least **[SET by owner; suggested 85%]**, or each missing row is on a page flagged `uncertain` or `unsure`.
+1. Expected specification-row recall is at least **85%**, or each missing row is on a page flagged `uncertain` or `unsure`.
 2. Fabricated quotes or wrong citations: **0**.
 3. Changed numbers, units, operators, or ranges: **0**.
-4. Extra non-technical rows: at most **[SET by owner; suggested 10%]** of output rows.
+4. Extra non-technical rows: at most **10%** of output rows.
 5. Every page has a terminal state; a run not fully inspected is never saved or presented as `completed`.
 6. A 40-page tender finishes, or pauses and resumes without redoing completed work.
 7. A reviewer can inspect results beside the source and export to Excel and Word.
 
-Report per document family (for example native table, native list, scanned, bilingual), with sample sizes and known limits. The owner must set the bracketed numeric values before implementation begins. Never imply that one run or family establishes universal performance.
+Report per document family (for example native table, native list, scanned, bilingual), with sample sizes and known limits. Paid live evaluation is capped at **6 analyses and $30 cumulative additional inference spend**; stop when either cap is reached. Never imply that one run or family establishes universal performance.
 
 ## Ordered gates
 
@@ -60,6 +60,8 @@ Rewrote this plan to this acceptance contract, fixed design, gate sequence, and 
 Derive a machine-readable `complete | partial` value from per-page terminal states and unresolved work. `completeAnalysis` must persist paused/partial and remain resumable when any page is `uncertain`, `failed`, or `unvisited`, any planner/handler action is unsupported or deferred, or a round budget is exhausted. UI and exports read this field.
 
 **Done when (tests):** one unsupported action prevents `completed` and can be resumed; all pages terminal with nothing pending can be `completed`; the payload field agrees with the state in every listed case.
+
+**Status: passed locally.** `apps/web/app/analysis-completion.test.mjs` covers complete, partial, excluded-without-reason, unresolved page inventory, unsupported/deferred work, pending work, incomplete audits, and budget exhaustion. The scripted pipeline verifies both complete and unsupported-action persistence, restarts and resumes the paused unsupported run, and confirms uncertain pages remain partial after extraction retries. Analysis-completion and run-store tests passed 18/18; the full scripted pipeline passed all reported cases. Typecheck, production build, and `git diff --check` passed. This is workflow evidence only, not a tender extraction-quality result. Gate 2 has not started.
 
 ### Gate 2 — Label every page
 
@@ -81,9 +83,9 @@ Compare system output to the client's expected outputs for `input 1-3` and `outp
 
 ### Gate 5 — Bake-off
 
-Run the fixed exhaustive design and current planner path on the same development set, with the same model and budget. Compare recall, extra rows, changed numbers, page coverage, latency, and cost per document. The owner must set the approved live-call/spend cap before any paid live calls; do not exceed it.
+Run the fixed exhaustive design and current planner path on the same development set, with the same model and budget. Compare recall, extra rows, changed numbers, page coverage, latency, and cost per document. The paid live-call/spend cap is 6 analyses / $30 cumulative additional inference spend; stop when either cap is reached.
 
-**Done when:** a short results file exists and the design with the better measured metric is kept; the other is removed or frozen. Do not decide by preference. No locked document is used for tuning or this bake-off.
+**Done when:** a short results file exists and the design with the better measured metric is kept; the other is removed or frozen. Do not decide by preference. No locked document is used for tuning or this bake-off. Paid live calls may not exceed 6 analyses or $30 cumulative additional inference spend; stop at either cap.
 
 ### Gate 6 — Review and export
 

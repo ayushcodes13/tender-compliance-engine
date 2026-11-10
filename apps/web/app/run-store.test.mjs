@@ -182,7 +182,7 @@ test("completed model work and final analysis are checkpointed as one resumable 
     });
     assert.equal(execution.unit.status, "completed");
     assert.deepEqual(store.load(run.id).artifacts[0].value, { sections: [{ title: "Technical requirements", pages: [1] }] });
-    const analysis = { document: { documentFingerprint: fingerprint }, requirements: [] };
+    const analysis = { document: { documentFingerprint: fingerprint }, requirements: [], completionStatus: "complete" };
     snapshot = updateRunFinalResult(snapshot, transitionRun(snapshot.run, "completed", createdAt), analysis);
     store.save(snapshot);
     store.close();
@@ -193,6 +193,33 @@ test("completed model work and final analysis are checkpointed as one resumable 
     assert.equal(restored.workUnits[0].status, "completed");
     assert.deepEqual(restored.finalResult, analysis);
     reopened.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("paused runs persist a partial result and clear it when work resumes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tce-run-store-partial-checkpoint-"));
+  const databasePath = join(directory, "runs.sqlite");
+  try {
+    const run = createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "partial-checkpoint-test" });
+    const store = createEncryptedSQLiteRunStore({ databasePath, keyHex });
+    const running = transitionRun(run, "running", createdAt);
+    const initial = { schemaVersion: 1, run: running, plan: null, workUnits: [], artifacts: [] };
+    store.save(initial);
+    const partial = { document: { documentFingerprint: fingerprint }, requirements: [], completionStatus: "partial" };
+    const paused = transitionRun(running, "paused", createdAt);
+    const snapshot = updateRunFinalResult(initial, paused, partial);
+    store.save(snapshot);
+    assert.equal(store.load(run.id).run.status, "paused");
+    assert.deepEqual(store.load(run.id).finalResult, partial);
+
+    const resumed = transitionRun(paused, "running", createdAt);
+    const resumedSnapshot = updateRunState({ ...snapshot, finalResult: undefined }, resumed);
+    store.save(resumedSnapshot);
+    assert.equal(store.load(run.id).run.status, "running");
+    assert.equal(store.load(run.id).finalResult, undefined, "The old partial result is cleared before work resumes");
+    store.close();
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

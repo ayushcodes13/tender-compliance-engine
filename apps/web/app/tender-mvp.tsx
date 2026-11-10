@@ -8,6 +8,7 @@ import { useGSAP } from "@gsap/react";
 import { PdfEvidenceViewer } from "@/components/mvp/pdf-evidence-viewer";
 import { PROCESSING_STEPS, formatElapsedSeconds, processingStepIndex, type ProcessingProgress } from "./processing-progress";
 import { consumeAnalysisStream } from "./analysis-events";
+import { analysisExportFilename, type AnalysisCompletionStatus, type PageTerminalStateRecord } from "./analysis-completion";
 import { visibleCitationEvidence, visibleCitationRequirement } from "./poc90-client-citation";
 import { createOperatorAddedRequirement, insertRequirementByPhysicalPage, recoverDocumentIdentity } from "./operator-recovery";
 import { prepareVisualComplianceRows } from "./visual-table";
@@ -105,6 +106,9 @@ type Analysis = {
   sheetHeading?: string;
   sheetProductTitle?: string;
   requirements: Requirement[];
+  completionStatus?: AnalysisCompletionStatus;
+  pageTerminalStates?: PageTerminalStateRecord[];
+  completionReasons?: string[];
   classificationReviewCandidates?: ClassificationReviewCandidate[];
   validationSummary?: {
     total: number;
@@ -477,7 +481,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const savedRunId = readLocalRunHandle(sourceFingerprint);
       if (savedRunId) body.set("resumeRunId", savedRunId);
       const response = await fetch("/api/analyze", { method: "POST", body, signal: requestController.signal });
-      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; error?: string; resumable?: boolean; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; classificationReviewCandidates?: ClassificationReviewCandidate[]; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
+      const result = await consumeAnalysisStream<{ ok: boolean; analysis?: Analysis; completionStatus?: AnalysisCompletionStatus; error?: string; resumable?: boolean; pageCount?: number; candidateSuggestions?: number; rejectedCandidates?: number; rejectedSuggestionDetails?: RejectedSuggestion[]; rejectedSuggestionsNotShown?: number; classificationReviewCandidates?: ClassificationReviewCandidate[]; coverageSummary?: CoverageReport["summary"]; reviewPageNumbers?: number[]; reviewPagesNotShown?: number }>(response, {
         signal: requestController.signal,
         onProgress: (progress) => {
           if (progress.runId && progress.sourceFingerprint === sourceFingerprint && progress.resumable === true) {
@@ -504,6 +508,9 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         throw new Error(result.error || "The tender could not be processed.");
       }
       const payload = result.analysis as Analysis;
+      if (result.completionStatus !== payload.completionStatus) {
+        throw new Error("The analysis completion state did not match its returned result. Resume or restart the analysis before exporting.");
+      }
       setProcessing({ stage: "preparing", message: "Preparing the editable response sheet" });
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       requestController.signal.throwIfAborted();
@@ -517,9 +524,11 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       if (result.resumable !== true) writeLocalRunHandle(sourceFingerprint, null);
       const elapsed = Math.floor((Date.now() - processingStartedAtRef.current) / 1000);
       setElapsedSeconds(elapsed);
-      setProcessing({ stage: "complete", message: result.resumable === true
-        ? `Partial draft ready after ${formatElapsedSeconds(elapsed)}. Some work could not finish; resume it to complete processing.`
-        : `Ready for review after ${formatElapsedSeconds(elapsed)}.` });
+      setProcessing({ stage: "complete", message: payload.completionStatus === "partial"
+        ? result.resumable === true
+          ? `Partial draft ready after ${formatElapsedSeconds(elapsed)}. Unresolved work remains; resume to retry it.`
+          : `Partial draft ready after ${formatElapsedSeconds(elapsed)}. Unresolved work remains; this run was not saved for resume.`
+        : `Processing finished after ${formatElapsedSeconds(elapsed)}. Review each extracted row against its source.` });
       keepTerminalState = true;
     } catch (cause) {
       if (activeRequestRef.current !== requestController) return;
@@ -849,7 +858,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       const exportSheet = addReviewerStatusColumn(responseSheet, new Map(analysis.requirements.map((item) => [item.id, item.reviewed === true])));
       if (exportSheet.layout === "sectioned" || exportSheet.rows.some(row => row.section)) {
         const { createSectionedDocxBlob } = await import("./sectioned-exports");
-        downloadBlob(await createSectionedDocxBlob(exportSheet), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
+        downloadBlob(await createSectionedDocxBlob(exportSheet), analysisExportFilename(analysis.filename, analysis.completionStatus === "complete" ? "complete" : "partial", "docx"));
         return;
       }
 
@@ -1061,7 +1070,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         sections: documentSections,
       });
       const blob = await Packer.toBlob(doc);
-      downloadBlob(blob, `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.docx`);
+      downloadBlob(blob, analysisExportFilename(analysis.filename, analysis.completionStatus === "complete" ? "complete" : "partial", "docx"));
     } catch {
       setError("The response sheet could not be created. Please try again.");
     } finally {
@@ -1078,7 +1087,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
       if (exportSheet.layout === "sectioned" || exportSheet.rows.some(row => row.section)) {
         const { createSectionedWorkbook } = await import("./sectioned-exports");
         const buffer = await createSectionedWorkbook(exportSheet).xlsx.writeBuffer();
-        downloadBlob(new Blob([buffer as BlobPart], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.xlsx`);
+        downloadBlob(new Blob([buffer as BlobPart], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), analysisExportFilename(analysis.filename, analysis.completionStatus === "complete" ? "complete" : "partial", "xlsx"));
         return;
       }
 
@@ -1111,7 +1120,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         });
       }
       const buffer = await workbook.xlsx.writeBuffer();
-      downloadBlob(new Blob([buffer as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.xlsx`);
+      downloadBlob(new Blob([buffer as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), analysisExportFilename(analysis.filename, analysis.completionStatus === "complete" ? "complete" : "partial", "xlsx"));
     } catch {
       setError("The Excel workbook could not be created. Please try again.");
     } finally {
@@ -1135,7 +1144,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         binary += String.fromCharCode(...fontBytes.subarray(offset, offset + 8_192));
       }
       const pdf = createResponsePdf(exportSheet, analysis.sheetTitle || "Tender Technical Requirements", analysis.filename, btoa(binary));
-      pdf.save(`${analysis.filename.replace(/\.pdf$/i, "")}-technical-response.pdf`);
+      pdf.save(analysisExportFilename(analysis.filename, analysis.completionStatus === "complete" ? "complete" : "partial", "pdf"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The PDF could not be created. Please try again.");
     } finally {
@@ -1341,7 +1350,7 @@ export default function TenderMvpPage({ startAtUpload = false }: { startAtUpload
         <div className="mvp-topbar-right"><span className="mvp-file-name"><FileText size={15} />{analysis.filename}</span></div>
       </header>
       <section className="mvp-review-summarybar">
-        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{processing?.stage === "complete" && <p role="status">{processing.message}</p>}{resumeAvailable && file && <button type="button" className="mvp-primary" onClick={() => { if (!window.confirm("Resume unfinished analysis? This replaces the current draft and any unsaved review edits.")) return; setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setProcessing(null); setError(null); }}>Resume unfinished analysis</button>}</div>
+        <div className="mvp-review-title"><div className="mvp-eyebrow">TENDER REVIEW</div><h1>Technical requirements</h1><p>Review each extracted quote against its original page before you export.</p>{analysis.completionStatus && <p role={analysis.completionStatus === "partial" ? "alert" : "status"} className={analysis.completionStatus === "partial" ? "is-warning" : undefined}>{analysis.completionStatus === "partial" ? `Processing status: Partial. ${analysis.pageTerminalStates?.filter((page) => ["uncertain", "failed", "unvisited"].includes(page.state)).length ?? 0} page(s) remain uncertain, failed, or unvisited. Exports are named as partial drafts.` : "Processing status: Complete. This means no tracked work remains; review each source row for correctness."}</p>}{processing?.stage === "complete" && <p role="status">{processing.message}</p>}{resumeAvailable && file && <button type="button" className="mvp-primary" onClick={() => { if (!window.confirm("Resume unfinished analysis? This replaces the current draft and any unsaved review edits.")) return; setAnalysis(null); setResponseSheet(null); setSheetEdited(false); setProcessing(null); setError(null); }}>Resume unfinished analysis</button>}</div>
         <div className="mvp-review-stats" aria-label="Tender review summary">
           <div><span className="mvp-stat-icon"><FileCheck2 size={15} /></span><span><strong>{reviewableRequirements.length}</strong><small>Source requirements</small></span></div>
           {analysis.validationSummary && (
