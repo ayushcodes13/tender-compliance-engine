@@ -92,7 +92,8 @@ function validateSnapshot(snapshot: PersistedRunSnapshot): void {
   }
   for (const unit of snapshot.workUnits) {
     if (unit.status === "completed" && (["page_routing", "visual_table_extraction", "general_requirement_extraction", "table"].includes(unit.operation)
-      || unit.operation.startsWith("planned_native_text_extraction:") || unit.operation.startsWith("planned_ocr_extraction:")) && !artifactIds.has(unit.id)) {
+      || unit.operation.startsWith("planned_native_text_extraction:") || unit.operation.startsWith("planned_ocr_extraction:")
+      || unit.operation.startsWith("planned_visual_region_extraction:")) && !artifactIds.has(unit.id)) {
       throw new Error("A completed model work unit must have a persisted result artifact.");
     }
   }

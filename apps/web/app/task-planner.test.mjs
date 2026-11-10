@@ -252,7 +252,8 @@ test("materializes validated actions as stable source-ordered work units", () =>
   assert.deepEqual(first.map(({ physicalPage }) => physicalPage), [1, 2]);
   assert.deepEqual(first.map(({ mode }) => mode), ["native_text", "visual"]);
   assert.match(first[0].unit.operation, /^planned_native_text_extraction:/);
-  assert.equal(first[1].unit.operation, "visual");
+  assert.equal(first[1].unit.kind, "extract");
+  assert.match(first[1].unit.operation, /^planned_visual_region_extraction:/);
   assert.throws(() => buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber: new Map(), sourceKinds, createdAt: "2026-11-10T10:00:00.000Z" }), /outside the validated inventory/);
 });
 
@@ -269,4 +270,19 @@ test("materializes selected OCR regions as persisted extraction work", () => {
   assert.equal(work[0].unit.kind, "extract");
   assert.match(work[0].unit.operation, /^planned_ocr_extraction:/);
   assert.deepEqual(work[0].unit.sourceIds, ["doc:page:2:ocr:1"]);
+});
+
+test("materializes selected image regions as persisted visual-extraction work", () => {
+  const proposal = { ...validPlan().proposal, actions: [{ mode: "visual", sourceIds: ["doc:page:2:image:1"], rationale: "Inspect the parser-bounded diagram." }] };
+  const work = buildPlannedInspectionWorkUnits({
+    runId: request.runId,
+    proposal,
+    sourceIdToNumber: new Map([["doc:page:2:image:1", 2]]),
+    sourceKinds: new Map([["doc:page:2:image:1", "image_not-attempted"]]),
+    createdAt: "2026-11-10T10:00:00.000Z",
+  });
+  assert.equal(work.length, 1);
+  assert.equal(work[0].unit.kind, "extract");
+  assert.match(work[0].unit.operation, /^planned_visual_region_extraction:/);
+  assert.deepEqual(work[0].unit.sourceIds, ["doc:page:2:image:1"]);
 });
