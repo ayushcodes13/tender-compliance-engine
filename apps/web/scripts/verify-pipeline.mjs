@@ -25,6 +25,8 @@ const outsideTable = 'Service support shall remain available for 10 years.';
 const selectedBlockOmission = 'Certificate shall be supplied.';
 let scenario = "prose";
 let failSixthBatchOnce = true;
+let failPlannerTableOnce = true;
+let plannerTableClassificationCalls = 0;
 let extractionCalls = 0;
 let resumeGeneralRequestStarts = 0;
 let routeCalls = 0;
@@ -63,6 +65,7 @@ const provider = http.createServer(async (request, response) => {
     const body = JSON.parse(raw);
     const schema = body.response_format?.json_schema?.name;
     providerSchemaCounts.set(schema, (providerSchemaCounts.get(schema) ?? 0) + 1);
+    if (schema === 'visual_table_row_labels' && scenario === 'planner-table-resume') plannerTableClassificationCalls += 1;
     if (scenario === 'route-batch-concurrency' && schema === 'technical_section_route') {
       trackedRoutingRequest = true;
       activeRoutingRequests += 1;
@@ -108,6 +111,11 @@ const provider = http.createServer(async (request, response) => {
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
+    if (schema === 'visual_table_row_labels' && scenario === 'planner-table-resume' && failPlannerTableOnce) {
+      failPlannerTableOnce = false;
+      response.destroy();
+      return;
+    }
     if (schema === 'tender_task_plan') {
       const planInput = JSON.parse(body.messages.at(-1)?.content ?? '{}');
       const sourceIds = planInput.pages.map(page => page.sourceId);
@@ -118,7 +126,9 @@ const provider = http.createServer(async (request, response) => {
       });
       const inScopeIds = planScope.filter(scope => scope.disposition !== 'outside_task').flatMap(scope => scope.sourceIds);
       const firstNativeTextId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'native_text_block').map(region => region.sourceId))[0];
+      const firstTableId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'table').map(region => region.sourceId))[0];
       const plannerNativeScenario = ['planner-native-text','planner-native-empty','planner-native-resume'].includes(scenario);
+      const plannerTableScenario = scenario === 'planner-table-resume';
       result = {
         schemaVersion: 1,
         runId: planInput.runId,
@@ -129,7 +139,9 @@ const provider = http.createServer(async (request, response) => {
           sections: plannerNativeScenario && firstNativeTextId
             ? [{ label: 'Technical source', sourceIds: [firstNativeTextId] }]
             : inScopeIds.length ? [{ label: 'Technical source', sourceIds: inScopeIds }] : [],
-          actions: plannerNativeScenario
+          actions: plannerTableScenario
+            ? (firstTableId ? [{ mode: 'table', sourceIds: [firstTableId], rationale: 'Inspect the parser-owned vector table.' }] : [])
+            : plannerNativeScenario
             ? (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first parser text block.' }] : [])
             : Array.from({ length: Math.ceil(inScopeIds.length / 12) }, (_, index) => ({
               mode: 'native_text', sourceIds: inScopeIds.slice(index * 12, (index + 1) * 12), rationale: 'Inspect the supplied source text.'
@@ -152,7 +164,7 @@ const provider = http.createServer(async (request, response) => {
           : page === 2 ? []
             : [{header:'S. No.',role:'serial'},{header:'Parameter',role:'heading'},{header:'Specification',role:'specification'}]
         : null;
-      const columns = independentVectorColumns ?? (['single-content','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
+      const columns = independentVectorColumns ?? (['single-content','planner-table-resume','mixed-native-heading','visual-completion'].includes(scenario) ? [{header:'Technical Parameters NIQ',role:'heading'},{header:'Remark',role:'remark'}] : [{header:'S. No.',role:'serial'},{header:'Specification',role:'heading'},{header:'Description',role:'specification'},
         ...(page===2&&scenario!=='vector-page-concurrency'?[{header:'Comply (Yes/No)',role:'compliance'},{header:'Remarks',role:'remark'}]:[])]);
       result = schema === 'tender_source_column_map' ? {columns} : {columns,rows:[...text.matchAll(/^(\d+)\. CELL 0: (.*)$/gm)].map(match=>{
         const row_type=match[2].includes('Description')||match[2].includes('S. No.')?'header':match[2].includes('A. Optical table')?'section':match[2].includes('Unclear source row')?'ambiguous':'requirement';
@@ -630,6 +642,23 @@ try {
   assert.equal(singleSections[0].columns[0].header,'Technical Parameters NIQ');
   assert.equal(singleSections[0].columnIndices[0],3,'No invented empty parameter column');
   assert.equal(singleSections[0].rows.length,3);
+  scenario='planner-table-resume';
+  const planCallsBeforeTableRun=providerSchemaCounts.get('tender_task_plan')??0;
+  let plannerTableRunId = null;
+  const interruptedPlannerTable=await analyze(single,{onProgress:progress=>{if(progress.resumable&&progress.runId)plannerTableRunId=progress.runId;}});
+  assert.equal(plannerTableClassificationCalls,1,'The planner-selected parser table reaches its row-classification handler');
+  assert.equal(interruptedPlannerTable.ok,true,interruptedPlannerTable.error);
+  assert.equal(interruptedPlannerTable.resumable,true,'A provider-failed planner table operation remains resumable');
+  assert.ok(interruptedPlannerTable.analysis.coverage.plannedInspections.some(item=>item.mode==='table'&&item.state==='retryable'),'A failed planner table operation stays explicitly retryable');
+  assert.match(plannerTableRunId??'',/^run_[a-f0-9]{32}$/,'The interrupted table analysis retains its opaque run handle');
+  await restartApp();
+  const resumedPlannerTable=await analyze(single,{resumeRunId:plannerTableRunId});
+  assert.equal(resumedPlannerTable.ok,true,resumedPlannerTable.error);
+  assert.equal(resumedPlannerTable.resumable,false,'The table run is complete after its selected handler succeeds');
+  assert.equal(plannerTableClassificationCalls,2,'Restart retries the selected table classification exactly once');
+  assert.equal(providerSchemaCounts.get('tender_task_plan')??0,planCallsBeforeTableRun+1,'Restart reuses the saved source-validated table plan');
+  assert.ok(resumedPlannerTable.analysis.coverage.plannedInspections.some(item=>item.mode==='table'&&item.state==='executed'),'The parser-owned table operation is marked executed only after its handler succeeds');
+  assert.ok(resumedPlannerTable.analysis.requirements.every(row=>row.sourceReference.sourceCell),'Planner table results retain exact table-cell citations');
   scenario='vector-page-concurrency';
   const vectorPagesPdf=new jsPDF({unit:'pt'});vectorPagesPdf.setFontSize(9);
   for(let page=1;page<=3;page++){
