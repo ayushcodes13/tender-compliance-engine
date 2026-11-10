@@ -798,11 +798,13 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     if (!runSnapshot?.plan) emitModelTiming({ phase: "response_parsed", requestKind: "task_planning", batchPageCount: pages.length, inputCharacters: taskPlanInputCharacters, requestElapsedMs: Math.round(performance.now() - taskPlanStartedAt) });
 
     const structuredPages = pages.filter((page) => page.structuredSection);
+    const plannerSelectedStructuredTable = plannedInspectionWorkUnits.some((work) => work.mode === "table"
+      && structuredPages.some((page) => page.sourceModel.tables.some((table) => table.id === work.unit.sourceIds[0])));
     if (shouldUseStructuredTableExtraction({
       hasStructuredPages: structuredPages.length > 0,
       hasVisualPages: pages.some((page) => Boolean(page.visualImage)),
       hasConfiguredModel: true,
-    })) {
+    }) && !plannerSelectedStructuredTable) {
       report("using detected technical table", { stage: "locating", message: "Using the technical section detected in the PDF layout" });
       report("mapping detected source columns", { stage: "mapping", message: "Reading the columns from the detected table structure" });
       report("extracting structured technical rows", { stage: "extracting", message: "Extracting rows from the detected technical table" });
@@ -1429,14 +1431,20 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
     const otherPages = visualPages.filter((page) => !vectorPages.includes(page));
     const plannerInspectionCoverage: PlannedInspectionCoverage[] = plannedInspectionWorkUnits.map((work) => {
       const executableNativeText = work.mode === "native_text" && boundTaskPlan.textBlocks.has(work.unit.sourceIds[0]);
+      const executableVectorTable = work.mode === "table" && boundTaskPlan.sourceKinds.get(work.unit.sourceIds[0]) === "table";
       return {
         sourceId: work.unit.sourceIds[0],
         page: work.physicalPage,
         mode: work.mode,
-        state: work.mode === "native_text" ? "deferred_to_legacy" : "unsupported",
-        reason: executableNativeText ? "The native-text region has not yet been executed by a planner-selected handler." : work.mode === "native_text" ? "The page-level native-text proposal remains on the legacy page route." : `No executable ${work.mode} region handler is available in this slice.`,
+        state: work.mode === "native_text" || executableVectorTable ? "deferred_to_legacy" : "unsupported",
+        reason: executableNativeText ? "The native-text region has not yet been executed by a planner-selected handler."
+          : executableVectorTable ? "The parser-owned vector table is available to the bounded table-row handler but has not yet been processed."
+            : work.mode === "native_text" ? "The page-level native-text proposal remains on the legacy page route." : `No executable ${work.mode} region handler is available in this slice.`,
       };
     });
+    const plannedTableWorkBySourceId = new Map(plannedInspectionWorkUnits
+      .filter((work) => work.mode === "table" && boundTaskPlan.sourceKinds.get(work.unit.sourceIds[0]) === "table")
+      .map((work) => [work.unit.sourceIds[0], work]));
     const successfullyExecutedNativeTextIds = new Set<string>();
     let plannedNativeTextCalls = 0;
     const MAX_PLANNED_NATIVE_TEXT_CALLS = 12;
@@ -1915,6 +1923,10 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
             sourceElementIds: sourceRow ? [sourceTable!.id, sourceRow.id, ...sourceRow.cells.map((cell) => cell.id)] : [],
           };
         });
+        const plannedTableWork = sourceTable ? plannedTableWorkBySourceId.get(sourceTable.id) : undefined;
+        let plannedTableUnit = plannedTableWork
+          ? runSnapshot?.workUnits.find((unit) => unit.id === plannedTableWork.unit.id) ?? plannedTableWork.unit
+          : null;
         const precedingPage = pages.find((candidatePage) => candidatePage.page === page.page - 1 && candidatePage.visualImage);
         let pageColumns = inheritedColumns;
         const sourceColumnCount = Math.max(...sourceRows.map((row) => row.cells.length));
@@ -1930,7 +1942,40 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         let rowClassificationComplete = true;
         const inputCharacters = sourceRows.reduce((total, row) => total + row.cells.reduce((rowTotal, cell) => rowTotal + cell.length, 0), 0);
         const requestStartedAt = performance.now();
-        try {
+        const savedTableArtifact = plannedTableUnit?.status === "completed"
+          ? runSnapshot?.artifacts.find((artifact) => artifact.workUnitId === plannedTableUnit!.id)
+          : undefined;
+        const restoredTableClassification = savedTableArtifact?.value as {
+          rowLabels?: typeof rowLabels;
+          rowSplits?: typeof rowSplits;
+          looseHeadings?: typeof looseHeadings;
+          visualCompletions?: typeof visualCompletions;
+          returnedColumns?: SourceColumn[];
+          invalidPageColumnMap?: boolean;
+          modelInspectionComplete?: boolean;
+          rowClassificationComplete?: boolean;
+        } | undefined;
+        if (restoredTableClassification?.modelInspectionComplete === true && Array.isArray(restoredTableClassification.rowLabels)
+          && Array.isArray(restoredTableClassification.rowSplits) && Array.isArray(restoredTableClassification.looseHeadings)
+          && Array.isArray(restoredTableClassification.visualCompletions) && Array.isArray(restoredTableClassification.returnedColumns)) {
+          rowLabels = restoredTableClassification.rowLabels;
+          rowSplits = restoredTableClassification.rowSplits;
+          looseHeadings = restoredTableClassification.looseHeadings;
+          visualCompletions = restoredTableClassification.visualCompletions;
+          returnedColumns = restoredTableClassification.returnedColumns;
+          invalidPageColumnMap = restoredTableClassification.invalidPageColumnMap === true;
+          modelInspectionComplete = true;
+          rowClassificationComplete = restoredTableClassification.rowClassificationComplete === true;
+        } else if (plannedTableUnit?.status === "completed") {
+          coverageCheckIncomplete = true;
+          plannedTableUnit = null;
+        }
+        const hasRestoredTableClassification = modelInspectionComplete;
+        if (plannedTableUnit && !hasRestoredTableClassification) {
+          plannedTableUnit = transitionWorkUnit(plannedTableUnit, "running", new Date().toISOString());
+          persistUnitState(plannedTableUnit);
+        }
+        if (!hasRestoredTableClassification) try {
           emitModelTiming({ phase: "request_started", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters });
           const response = await modelClient.fetch(`${baseUrl}/chat/completions`, {
             method: "POST",
@@ -2009,8 +2054,35 @@ Product names and model/capacity labels are headings, but serials, page furnitur
           }
         } catch (error) {
           emitModelTiming({ phase: "request_failed", requestKind: "vector_table_row_classification", pageNumber: page.page, batchPageCount: 1, inputCharacters, requestHeadersWaitMs: Math.round(performance.now() - requestStartedAt), failureKind: modelTimingFailureKind(error, signal) });
+          if (plannedTableUnit?.status === "running") {
+            plannedTableUnit = transitionWorkUnit(plannedTableUnit, signal?.aborted ? "cancelled" : "retryable", new Date().toISOString());
+            persistUnitState(plannedTableUnit);
+          }
           signal?.throwIfAborted();
           coverageCheckIncomplete = true;
+        }
+        if (plannedTableUnit?.status === "running") {
+          const classificationComplete = modelInspectionComplete && !invalidPageColumnMap
+            && pageColumns.length === sourceColumnCount && pageColumns.some((column) => column.role === "specification");
+          plannedTableUnit = transitionWorkUnit(plannedTableUnit, classificationComplete ? "completed" : "retryable", new Date().toISOString());
+          if (classificationComplete) {
+            persistUnitResult(plannedTableUnit, { rowLabels, rowSplits, looseHeadings, visualCompletions, returnedColumns, invalidPageColumnMap, modelInspectionComplete, rowClassificationComplete });
+          } else {
+            persistUnitState(plannedTableUnit);
+            coverageCheckIncomplete = true;
+          }
+        }
+        if (plannedTableWork) {
+          const actionCoverage = plannerInspectionCoverage.find((entry) => entry.sourceId === plannedTableWork.unit.sourceIds[0] && entry.mode === "table");
+          if (actionCoverage && plannedTableUnit?.status === "completed" && modelInspectionComplete && !invalidPageColumnMap
+            && pageColumns.length === sourceColumnCount && pageColumns.some((column) => column.role === "specification")) {
+            actionCoverage.state = "executed";
+            actionCoverage.reason = "The selected parser-owned vector table was classified by the bounded row handler; exact source-cell verification and human review still apply.";
+          } else if (actionCoverage) {
+            actionCoverage.state = "retryable";
+            actionCoverage.reason = "The selected table row-classification unit did not complete; the saved run remains resumable and table coverage is unresolved.";
+            coverageCheckIncomplete = true;
+          }
         }
         if (returnedColumns.length) pageColumns = returnedColumns;
         requirementColumnIndex = chooseRequirementColumn(pageColumns, sourceRows.map((row) => row.cells));
