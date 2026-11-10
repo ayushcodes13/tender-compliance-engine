@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun, transitionWorkUnit } from "./analysis-run.ts";
-import { createEncryptedSQLiteRunStore, createLocalRunStoreFromEnvironment, updateRunFinalResult, updateRunState, updateRunWorkUnit } from "./run-store.ts";
+import { appendPlanningRound, createEncryptedSQLiteRunStore, createLocalRunStoreFromEnvironment, latestPlanningRound, updateRunFinalResult, updateRunState, updateRunWorkUnit } from "./run-store.ts";
 
 const fingerprint = "c".repeat(64);
 const keyHex = "ab".repeat(32);
@@ -21,10 +21,91 @@ function makeSnapshot() {
     schemaVersion: 1,
     run,
     plan: null,
+    planningRounds: [],
     workUnits: [unit],
     artifacts: [{ workUnitId: unit.id, value: { text: "CONFIDENTIAL_TEST_REQUIREMENT_731" } }],
   };
 }
+
+function makePlan(run, decision = "continue") {
+  return {
+    schemaVersion: 1,
+    runId: run.id,
+    sourceFingerprint: run.sourceFingerprint,
+    proposal: {
+      decision,
+      decisionRationale: `The planner selected ${decision}.`,
+      task: "Prepare a technical response matrix.",
+      scope: [],
+      sections: [],
+      actions: [],
+      openQuestions: [],
+    },
+  };
+}
+
+test("planning rounds append in sequence and keep the compatibility alias at the latest decision", () => {
+  const run = createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "planning-rounds" });
+  let snapshot = { schemaVersion: 1, run, plan: null, planningRounds: [], workUnits: [], artifacts: [] };
+  const firstPlan = makePlan(run);
+  snapshot = appendPlanningRound(snapshot, {
+    inputFingerprint: "d".repeat(64), plan: firstPlan, outcomes: [], createdAt,
+  });
+  assert.equal(latestPlanningRound(snapshot).roundIndex, 0);
+  assert.equal(snapshot.plan, firstPlan);
+
+  const secondPlan = makePlan(run, "needs_review");
+  snapshot = appendPlanningRound(snapshot, {
+    inputFingerprint: "e".repeat(64), plan: secondPlan,
+    outcomes: [{ sourceId: "doc:page:1:image:1", status: "executed", summary: "Visual region inspected; wording needs review." }],
+    createdAt: "2026-11-10T10:01:00.000Z",
+  });
+  assert.deepEqual(snapshot.planningRounds.map((round) => round.roundIndex), [0, 1]);
+  assert.equal(latestPlanningRound(snapshot).decision, "needs_review");
+  assert.equal(snapshot.plan, secondPlan);
+});
+
+test("planning round validation rejects mismatched decision and duplicate outcome sources", () => {
+  const run = createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "invalid-round" });
+  const base = { schemaVersion: 1, run, plan: null, planningRounds: [], workUnits: [], artifacts: [] };
+  const plan = makePlan(run);
+  const validRound = appendPlanningRound(base, { inputFingerprint: "d".repeat(64), plan, outcomes: [], createdAt });
+  assert.throws(() => updateRunState({
+    ...validRound,
+    planningRounds: [{ ...validRound.planningRounds[0], decision: "stop" }],
+  }, run), /invalid planning round/);
+  assert.throws(() => appendPlanningRound(base, {
+    inputFingerprint: "d".repeat(64), plan, outcomes: [
+      { sourceId: "doc:page:1", status: "executed", summary: "Done." },
+      { sourceId: "doc:page:1", status: "failed", summary: "Failed." },
+    ], createdAt,
+  }), /invalid planning outcome/);
+});
+
+test("opening a legacy one-shot plan migrates it to a review-safe round zero", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tce-run-store-round-migration-"));
+  const databasePath = join(directory, "runs.sqlite");
+  try {
+    const run = createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "legacy-plan" });
+    const legacyPlan = {
+      schemaVersion: 1,
+      runId: run.id,
+      sourceFingerprint: run.sourceFingerprint,
+      proposal: { task: "Prepare a matrix", scope: [], sections: [], actions: [], openQuestions: [] },
+    };
+    const store = createEncryptedSQLiteRunStore({ databasePath, keyHex });
+    store.save({ schemaVersion: 1, run, plan: legacyPlan, workUnits: [], artifacts: [] });
+    const restored = store.load(run.id);
+    assert.equal(restored.planningRounds.length, 1);
+    assert.equal(restored.planningRounds[0].roundIndex, 0);
+    assert.equal(restored.planningRounds[0].decision, "needs_review");
+    assert.match(restored.plan.proposal.decisionRationale, /Legacy one-shot plan migrated/);
+    assert.equal(latestPlanningRound(restored), restored.planningRounds[0]);
+    store.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("encrypted SQLite snapshots survive reopening from a fresh Node process", async () => {
   const directory = await mkdtemp(join(tmpdir(), "tce-run-store-"));

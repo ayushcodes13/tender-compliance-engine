@@ -8,6 +8,8 @@ const request = {
   runId: "run_test",
   sourceFingerprint: fingerprint,
   task: "Prepare a technical response matrix from this tender.",
+  planningRound: 0,
+  priorOutcomes: [],
   pages: [
     { sourceId: "doc:page:1", physicalPage: 1, excerpt: "Technical requirements", excerptClipped: false, regions: [{ sourceId: "doc:page:1:text:1", kind: "native_text_block", excerpt: "Technical requirements", excerptClipped: false }], regionCount: 1, unrepresentedRegionCount: 0, clippedRegionCount: 0, hasRasterImageContent: false, ocrStatus: "not-recommended", tableCount: 1, tableRowCount: 2 },
     { sourceId: "doc:page:2", physicalPage: 2, excerpt: "Scanned page", excerptClipped: true, regions: [{ sourceId: "doc:page:2:image:1", kind: "image_failed", excerpt: "", excerptClipped: false }], regionCount: 1, unrepresentedRegionCount: 0, clippedRegionCount: 0, hasRasterImageContent: true, ocrStatus: "failed", tableCount: 0, tableRowCount: 0 },
@@ -18,6 +20,8 @@ const validPlan = () => ({
   runId: request.runId,
   sourceFingerprint: fingerprint,
   proposal: {
+    decision: "continue",
+    decisionRationale: "The unresolved scan and native text can be inspected with supported operations.",
     task: request.task,
     scope: [
       { sourceIds: ["doc:page:1"], disposition: "relevant", rationale: "Contains specifications." },
@@ -53,6 +57,28 @@ test("validates a source-bound plan that accounts for each supplied page", () =>
   assert.deepEqual(result.plan.proposal.actions.map(({ mode }) => mode), ["native_text", "visual"]);
 });
 
+test("later planning rounds carry bounded prior outcomes and cannot repeat completed source-mode pairs", () => {
+  const document = {
+    fingerprint,
+    pages: [{ id: "doc:page:1", physicalPdfPageNumber: 1, hasRasterImageContent: false, ocrStatus: "not-recommended", imageRegions: [], ocrRegions: [], textBlocks: [{ id: "doc:page:1:text:1", text: "A technical requirement." }], tables: [] }],
+  };
+  const nextRequest = buildTaskPlanRequest({
+    document,
+    pageText: new Map([[1, "A technical requirement."]]),
+    runId: "run_test",
+    planningRound: 1,
+    priorOutcomes: [{ mode: "native_text", sourceIds: ["doc:page:1:text:1"], status: "executed", summary: "One source-grounded requirement was extracted." }],
+  });
+  assert.equal(nextRequest.planningRound, 1);
+  assert.equal(nextRequest.priorOutcomes.length, 1);
+  const plan = validPlan();
+  plan.proposal.actions = [{ mode: "native_text", sourceIds: ["doc:page:1:text:1"], rationale: "Repeat the completed action." }];
+  request.priorOutcomes = nextRequest.priorOutcomes;
+  const result = validate(plan);
+  request.priorOutcomes = [];
+  assert.deepEqual(result, { ok: false, error: "invalid_action" });
+});
+
 test("rejects stale envelopes, invented IDs, missing scope, and duplicate page scope", () => {
   const stale = validPlan(); stale.sourceFingerprint = "0".repeat(64);
   assert.deepEqual(validate(stale), { ok: false, error: "invalid_envelope" });
@@ -76,6 +102,22 @@ test("rejects unsupported modes and plans exceeding bounded operation limits", (
   tooManySources.proposal.scope.push(...extraPages.map((sourceId) => ({ sourceIds: [sourceId], disposition: "relevant", rationale: "Included in the bounded-action test." })));
   tooManySources.proposal.actions[0].sourceIds = ["doc:page:1", ...extraPages];
   assert.deepEqual(validate(tooManySources, extraPages), { ok: false, error: "invalid_action" });
+});
+
+test("requires an explicit planner decision and forbids actions after a stop decision", () => {
+  const missingDecision = validPlan();
+  delete missingDecision.proposal.decision;
+  assert.deepEqual(validate(missingDecision), { ok: false, error: "invalid_envelope" });
+
+  const stopWithActions = validPlan();
+  stopWithActions.proposal.decision = "stop";
+  assert.deepEqual(validate(stopWithActions), { ok: false, error: "invalid_action" });
+
+  const stop = validPlan();
+  stop.proposal.decision = "stop";
+  stop.proposal.decisionRationale = "No additional supported inspection is useful in this round.";
+  stop.proposal.actions = [];
+  assert.equal(validate(stop).ok, true);
 });
 
 test("rejects inspection modes incompatible with parser-owned region kinds and duplicate work", () => {
@@ -216,6 +258,8 @@ test("requests and validates a plan through the injected model adapter", async (
       assert.equal(String(url), "https://model.invalid/chat/completions");
       const body = JSON.parse(init.body);
       assert.equal(body.response_format.json_schema.name, "tender_task_plan");
+      assert.equal(body.messages[0].content.includes("priorOutcomes"), true);
+      assert.deepEqual(JSON.parse(body.messages[1].content).priorOutcomes, []);
       assert.match(body.messages[0].content, /untrusted/);
       return Response.json({ choices: [{ message: { content: JSON.stringify(plan) } }] });
     },

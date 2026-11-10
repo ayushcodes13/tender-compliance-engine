@@ -744,7 +744,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         createdAt: new Date().toISOString(),
         runKey: randomUUID(),
       });
-      runSnapshot = { schemaVersion: 1, run: activeRun, plan: null, workUnits: [], artifacts: [] };
+      runSnapshot = { schemaVersion: 1, run: activeRun, plan: null, planningRounds: [], workUnits: [], artifacts: [] };
       if (runStore) runStore.save(runSnapshot);
       activeRun = transitionRun(activeRun, "running", new Date().toISOString());
       runSnapshot = updateRunState(runSnapshot, activeRun);
@@ -811,7 +811,7 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
         : "The configured model returned a plan with missing, unsupported, or unverifiable source references. No extraction was started." };
     }
     if (!runSnapshot?.plan && runStore && runSnapshot) {
-      runSnapshot = updateRunPlan(runSnapshot, planned.plan);
+      runSnapshot = updateRunPlan(runSnapshot, planned.plan, createHash("sha256").update(JSON.stringify(taskPlanRequest)).digest("hex"));
       runStore.save(runSnapshot);
     }
     const taskPlan = planned.plan.proposal;
