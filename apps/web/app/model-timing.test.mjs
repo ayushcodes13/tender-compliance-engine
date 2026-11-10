@@ -46,6 +46,33 @@ test('model timing is opt-in and emits only whitelisted aggregate fields', () =>
   });
 });
 
+test('model timing distinguishes valid structured extraction responses from parseable JSON', () => {
+  const lines = [];
+  emitModelTiming({
+    phase: 'response_validated',
+    requestKind: 'general_requirement_extraction',
+    batchIndex: 6,
+    totalBatches: 6,
+    pageNumbers: [16, 17, 18],
+    batchPageCount: 3,
+    inputCharacters: 2_675,
+    responseStatus: 200,
+    responseCharacters: 438,
+  }, (line) => lines.push(line), true);
+
+  assert.deepEqual(JSON.parse(lines[0].slice('[TCE_MODEL_TIMING] '.length)), {
+    phase: 'response_validated',
+    requestKind: 'general_requirement_extraction',
+    batchIndex: 6,
+    totalBatches: 6,
+    pageNumbers: [16, 17, 18],
+    batchPageCount: 3,
+    inputCharacters: 2_675,
+    responseStatus: 200,
+    responseCharacters: 438,
+  });
+});
+
 test('model timing emits nothing when disabled', () => {
   const lines = [];
   emitModelTiming({

@@ -62,7 +62,7 @@ Architecture agreement is complete enough to build. Do not schedule a separate a
 ### 2. Reproduce and fix the 42-page failure — active next implementation task
 
 - Start with both retained observations in `.local/client-review/current-main-audit-2026-11-09.json` and `.local/client-review/42page-throughput-four-2026-11-09.log`. The later log has five parsed general-extraction responses plus a page-17 provider connection failure; its final analysis error and subsequent dev-server error need separate causal attribution.
-- Use durable checkpoints to isolate the failing stage. First add a deterministic regression that recreates the observed failure sequence. Inspect batch-result accumulation, provider error propagation, checkpoint writes, terminal SSE behavior, and dev-server compilation/runtime state.
+- Use durable checkpoints to isolate the failing stage. A deterministic six-batch regression now covers five accepted responses followed by a provider connection failure and confirms partial results plus explicit page incompleteness. Opt-in telemetry now distinguishes parseable JSON from schema-valid extraction responses. Compare the historical live-run evidence against these signals; inspect checkpoint writes, terminal SSE behavior, and dev-server compilation/runtime state before changing failure policy.
 - Fix the general cause; do not add a tender-specific classifier or merely raise a timeout. Any partial result must retain explicit incomplete coverage and must not be exported as complete.
 - Acceptance: repeatable reproduction or trace replay identifies the failure; a corrected run completes or ends in an honest resumable/incomplete state; report latency, batches, retries, coverage, model/tokens and cost. A single run is not a quality score.
 

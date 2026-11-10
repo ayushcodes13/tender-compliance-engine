@@ -1448,7 +1448,32 @@ export async function analyzeTender(form: FormData, onProgress?: ProgressCallbac
           ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
           ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
         });
-        if (!Array.isArray(parsed.requirements)) return { ok: false as const, error: "The model response did not contain a requirements list." };
+        if (!Array.isArray(parsed.requirements)) {
+          emitModelTiming({
+            phase: "request_failed",
+            ...timingContext,
+            responseStatus: response.status,
+            responseBodyAndEnvelopeMs,
+            jsonParseMs: Math.round(performance.now() - jsonParseStartedAt),
+            responseCharacters: content.length,
+            failureKind: "other",
+            ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+            ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+            ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+          });
+          return { ok: false as const, error: "The model response did not contain a requirements list." };
+        }
+        emitModelTiming({
+          phase: "response_validated",
+          ...timingContext,
+          responseStatus: response.status,
+          responseBodyAndEnvelopeMs,
+          jsonParseMs: Math.round(performance.now() - jsonParseStartedAt),
+          responseCharacters: content.length,
+          ...(typeof usage.prompt_tokens === "number" && Number.isFinite(usage.prompt_tokens) ? { promptTokens: usage.prompt_tokens } : {}),
+          ...(typeof usage.completion_tokens === "number" && Number.isFinite(usage.completion_tokens) ? { completionTokens: usage.completion_tokens } : {}),
+          ...(typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens) ? { totalTokens: usage.total_tokens } : {}),
+        });
         parsed.requirements = parsed.requirements.map((candidate, candidateOrdinal) => ({
           ...candidate,
           traceCandidateId: registerTraceCandidate(candidate, "initial_extraction", batchIndex * 100_000 + candidateOrdinal),
