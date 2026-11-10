@@ -103,7 +103,7 @@ const provider = http.createServer(async (request, response) => {
     }
     const contents = body.messages.flatMap(message => typeof message.content === 'string' ? [{type:'text',text:message.content}] : message.content);
     const text = contents.filter(item=>item.type==='text').map(item=>item.text).join('\n');
-    if (['planner-native-text','planner-native-empty'].includes(scenario) && schema === 'tender_requirements') plannerNativeRequestInputs.push({ scenario, text, imageCount: contents.filter(item=>item.type==='image_url').length });
+    if (['planner-native-text','planner-native-empty','planner-native-resume'].includes(scenario) && schema === 'tender_requirements') plannerNativeRequestInputs.push({ scenario, text, imageCount: contents.filter(item=>item.type==='image_url').length });
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
@@ -117,7 +117,7 @@ const provider = http.createServer(async (request, response) => {
       });
       const inScopeIds = planScope.filter(scope => scope.disposition !== 'outside_task').flatMap(scope => scope.sourceIds);
       const firstNativeTextId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'native_text_block').map(region => region.sourceId))[0];
-      const plannerNativeScenario = ['planner-native-text','planner-native-empty'].includes(scenario);
+      const plannerNativeScenario = ['planner-native-text','planner-native-empty','planner-native-resume'].includes(scenario);
       result = {
         schemaVersion: 1,
         runId: planInput.runId,
@@ -189,6 +189,10 @@ const provider = http.createServer(async (request, response) => {
     } else if (schema === 'tender_requirements') {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
+      if (scenario === 'planner-native-resume' && plannerNativeRequestInputs.filter(item => item.scenario === scenario).length === 1) {
+        response.destroy();
+        return;
+      }
       if (['partial-general-batch', 'partial-general-batch-six-of-six', 'all-general-batches-fail'].includes(scenario)
         && (scenario === 'all-general-batches-fail'
           || (scenario === 'partial-general-batch' && pages[0] === 10)
@@ -335,6 +339,33 @@ try {
   const emptyPlannerInputs = plannerNativeRequestInputs.filter(item => item.scenario === 'planner-native-empty');
   assert.equal(emptyPlannerInputs.length,2,'The empty planned result is followed by the legacy fallback request');
   assert.ok(emptyPlannerInputs.every(item => item.text.includes(quotes[0])));
+  scenario='planner-native-resume';
+  const plannerResumePdf = new jsPDF();
+  plannerResumePdf.text(quotes[0],20,30);
+  plannerResumePdf.text(outsideTable,20,50);
+  let plannerResumeRunId = null;
+  const plannerCallsBeforeResumeFailure = providerSchemaCounts.get('tender_task_plan') ?? 0;
+  const routeCallsBeforeResumeFailure = providerSchemaCounts.get('technical_section_route') ?? 0;
+  const failedPlannerRun = await analyze(plannerResumePdf, {
+    onProgress: progress => { if (progress.resumable && progress.runId) plannerResumeRunId = progress.runId; },
+  });
+  assert.equal(failedPlannerRun.ok,false,'A provider interruption leaves the planner-selected source operation retryable');
+  assert.match(plannerResumeRunId ?? '', /^run_[a-f0-9]{32}$/i, 'The planner operation has a resumable run handle after its plan and unit state are checkpointed');
+  assert.equal(plannerNativeRequestInputs.filter(item => item.scenario === scenario).length,1,'The interrupted run stopped on its first planner-selected extraction request');
+  await restartApp();
+  const resumedPlannerRun = await analyze(plannerResumePdf,{resumeRunId:plannerResumeRunId});
+  assert.equal(resumedPlannerRun.ok,true,resumedPlannerRun.error);
+  assert.equal(providerSchemaCounts.get('tender_task_plan') ?? 0,plannerCallsBeforeResumeFailure + 1,'Planner resume reuses the source-validated saved plan');
+  assert.equal(providerSchemaCounts.get('technical_section_route') ?? 0,routeCallsBeforeResumeFailure + 1,'Planner resume reuses the completed page-routing artifact');
+  const plannerResumeInputs = plannerNativeRequestInputs.filter(item => item.scenario === scenario);
+  assert.equal(plannerResumeInputs.length,3,'Resume retries the failed planner unit, then runs the unselected legacy fallback once');
+  assert.ok(plannerResumeInputs[0].text.includes(quotes[0]) && !plannerResumeInputs[0].text.includes(outsideTable));
+  assert.ok(plannerResumeInputs[1].text.includes(quotes[0]) && !plannerResumeInputs[1].text.includes(outsideTable),'The failed planner-selected unit is retried with the same source-bound input');
+  assert.ok(plannerResumeInputs[2].text.includes(outsideTable) && !plannerResumeInputs[2].text.includes(quotes[0]),'The successfully resumed planner block is not duplicated in legacy fallback');
+  const resumedPlannerBlockId = resumedPlannerRun.analysis.coverage.plannedInspections.find(item => item.mode === 'native_text')?.sourceId;
+  assert.ok(resumedPlannerBlockId?.includes(':text:'));
+  assert.ok(resumedPlannerRun.analysis.coverage.plannedInspections.some(item => item.sourceId === resumedPlannerBlockId && item.state === 'executed'));
+  assert.ok(resumedPlannerRun.analysis.requirements.some(row => row.quote === quotes[0] && row.sourceReference.sourceElementIds.includes(resumedPlannerBlockId)),'A resumed planner result retains its exact selected parser source');
   scenario='resume-path';
   let interruptedRunId = null;
   const plannerCallsBeforeInterrupt = providerSchemaCounts.get('tender_task_plan') ?? 0;
@@ -779,7 +810,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','planner-selected native-text unit retries after process restart and reuses its saved plan','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
