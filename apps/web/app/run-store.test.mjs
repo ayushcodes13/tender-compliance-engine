@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun } from "./analysis-run.ts";
+import { createAnalysisRun, createWorkUnit, executeWorkUnit, transitionRun, transitionWorkUnit } from "./analysis-run.ts";
 import { createEncryptedSQLiteRunStore, createLocalRunStoreFromEnvironment, updateRunFinalResult, updateRunState, updateRunWorkUnit } from "./run-store.ts";
 
 const fingerprint = "c".repeat(64);
@@ -115,6 +115,19 @@ test("completed model work and final analysis are checkpointed as one resumable 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("completed native-text extraction work cannot be stored without its result artifact", () => {
+  const run = transitionRun(createAnalysisRun({ sourceFingerprint: fingerprint, createdAt, runKey: "native-text-artifact" }), "running", createdAt);
+  const snapshot = { schemaVersion: 1, run, plan: null, workUnits: [], artifacts: [] };
+  const pending = createWorkUnit({ runId: run.id, kind: "extract", sourceIds: ["doc:page:1"], ordinal: 0, createdAt, operationKey: "general_requirement_extraction" });
+  const running = transitionWorkUnit(pending, "running", createdAt);
+  const completed = transitionWorkUnit(running, "completed", createdAt);
+
+  assert.throws(() => updateRunWorkUnit(snapshot, completed), /must have a persisted result artifact/);
+  const persisted = updateRunWorkUnit(snapshot, completed, { ok: true, parsed: { requirements: [] }, allowedPages: [1] });
+  assert.equal(persisted.workUnits[0].status, "completed");
+  assert.deepEqual(persisted.artifacts[0], { workUnitId: completed.id, value: { ok: true, parsed: { requirements: [] }, allowedPages: [1] } });
 });
 
 test("local store configuration refuses ephemeral hosted filesystems and stays off without a key", () => {
