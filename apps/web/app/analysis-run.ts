@@ -35,7 +35,11 @@ export type PlanScopeDisposition = "relevant" | "possibly_relevant" | "unresolve
 export type InspectionMode = "native_text" | "table" | "ocr" | "visual" | "cross_page";
 
 /** Flexible semantic proposal inside a stable run/source envelope; never trusted without validation. */
+export type PlanDecision = "continue" | "stop" | "needs_review";
+
 export type TaskPlanProposal = {
+  decision: PlanDecision;
+  decisionRationale: string;
   task: string;
   scope: Array<{ sourceIds: string[]; disposition: PlanScopeDisposition; rationale: string }>;
   sections: Array<{ label: string; sourceIds: string[] }>;
@@ -48,6 +52,24 @@ export type ModelProposalEnvelope<T> = {
   runId: string;
   sourceFingerprint: string;
   proposal: T;
+};
+
+export type PlanningRoundOutcome = {
+  sourceId: string;
+  mode?: InspectionMode;
+  status: "executed" | "deferred" | "failed" | "unresolved";
+  /** Short operational summary only; document text belongs in encrypted work artifacts. */
+  summary: string;
+};
+
+/** Append-only record of one model decision against a bounded view of run state. */
+export type PersistedPlanningRound = {
+  roundIndex: number;
+  inputFingerprint: string;
+  plan: ModelProposalEnvelope<TaskPlanProposal>;
+  decision: PlanDecision;
+  outcomes: PlanningRoundOutcome[];
+  createdAt: string;
 };
 
 const RUN_TRANSITIONS: Record<AnalysisRunStatus, readonly AnalysisRunStatus[]> = {

@@ -161,27 +161,30 @@ const provider = http.createServer(async (request, response) => {
       const plannerTableScenario = scenario === 'planner-table-resume';
       const plannerOcrScenario = scenario === 'planner-ocr-resume';
       const plannerVisualScenario = scenario === 'planner-visual-region';
+      const actions = plannerTableScenario
+        ? (firstTableId ? [{ mode: 'table', sourceIds: [firstTableId], rationale: 'Inspect the parser-owned vector table.' }] : [])
+        : plannerOcrScenario
+        ? (firstOcrId ? [{ mode: 'ocr', sourceIds: [firstOcrId], rationale: 'Extract the selected parser-owned OCR transcript.' }] : [])
+        : plannerVisualScenario
+        ? (firstImageId ? [{ mode: 'visual', sourceIds: [firstImageId], rationale: 'Inspect the selected parser-owned visual crop.' }] : [])
+        : plannerNativeScenario
+        ? (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first parser text block.' }] : [])
+        : Array.from({ length: Math.ceil(inScopeIds.length / 12) }, (_, index) => ({
+          mode: 'native_text', sourceIds: inScopeIds.slice(index * 12, (index + 1) * 12), rationale: 'Inspect the supplied source text.'
+        }));
       result = {
         schemaVersion: 1,
         runId: planInput.runId,
         sourceFingerprint: planInput.sourceFingerprint,
         proposal: {
+          decision: actions.length ? 'continue' : 'stop',
+          decisionRationale: actions.length ? 'Parser-owned sources remain available for bounded inspection.' : 'No further supported inspection is available in this fixture.',
           task: planInput.task,
           scope: planScope,
           sections: plannerNativeScenario && firstNativeTextId
             ? [{ label: 'Technical source', sourceIds: [firstNativeTextId] }]
             : inScopeIds.length ? [{ label: 'Technical source', sourceIds: inScopeIds }] : [],
-          actions: plannerTableScenario
-            ? (firstTableId ? [{ mode: 'table', sourceIds: [firstTableId], rationale: 'Inspect the parser-owned vector table.' }] : [])
-            : plannerOcrScenario
-            ? (firstOcrId ? [{ mode: 'ocr', sourceIds: [firstOcrId], rationale: 'Extract the selected parser-owned OCR transcript.' }] : [])
-            : plannerVisualScenario
-            ? (firstImageId ? [{ mode: 'visual', sourceIds: [firstImageId], rationale: 'Inspect the selected parser-owned visual crop.' }] : [])
-            : plannerNativeScenario
-            ? (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first parser text block.' }] : [])
-            : Array.from({ length: Math.ceil(inScopeIds.length / 12) }, (_, index) => ({
-              mode: 'native_text', sourceIds: inScopeIds.slice(index * 12, (index + 1) * 12), rationale: 'Inspect the supplied source text.'
-            })),
+          actions,
           openQuestions: [],
         },
       };

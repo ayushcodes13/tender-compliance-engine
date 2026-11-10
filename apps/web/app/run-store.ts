@@ -1,8 +1,8 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { AnalysisRun, ModelProposalEnvelope, TaskPlanProposal, WorkUnit } from "./analysis-run";
+import type { AnalysisRun, ModelProposalEnvelope, PersistedPlanningRound, PlanningRoundOutcome, TaskPlanProposal, WorkUnit } from "./analysis-run";
 
 const STORE_VERSION = 1;
 const MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024;
@@ -14,10 +14,16 @@ export type PersistedRunSnapshot = {
   schemaVersion: 1;
   run: AnalysisRun;
   plan: ModelProposalEnvelope<TaskPlanProposal> | null;
+  /** Append-only planning history. `plan` remains an alias for the latest proposal for older callers. */
+  planningRounds?: PersistedPlanningRound[];
   workUnits: WorkUnit[];
   artifacts: RunArtifact[];
   finalResult?: unknown;
 };
+
+export const MAX_PLANNING_ROUNDS = 8;
+export const MAX_PLANNING_OUTCOMES = 240;
+export const MAX_PLANNING_OUTCOME_SUMMARY_CHARS = 300;
 
 export type AnalysisRunStore = {
   save(snapshot: PersistedRunSnapshot): void;
@@ -25,8 +31,39 @@ export type AnalysisRunStore = {
   close(): void;
 };
 
-export function updateRunPlan(snapshot: PersistedRunSnapshot, plan: ModelProposalEnvelope<TaskPlanProposal>): PersistedRunSnapshot {
-  const updated = { ...snapshot, plan };
+export function updateRunPlan(snapshot: PersistedRunSnapshot, plan: ModelProposalEnvelope<TaskPlanProposal>, requestFingerprint?: string): PersistedRunSnapshot {
+  const inputFingerprint = requestFingerprint ?? createHash("sha256").update(JSON.stringify(plan)).digest("hex");
+  return appendPlanningRound(snapshot, {
+    inputFingerprint,
+    plan,
+    outcomes: [],
+    createdAt: snapshot.run.updatedAt,
+  });
+}
+
+export function latestPlanningRound(snapshot: PersistedRunSnapshot): PersistedPlanningRound | null {
+  const rounds = snapshot.planningRounds ?? [];
+  return rounds.length ? rounds[rounds.length - 1] : null;
+}
+
+export function appendPlanningRound(snapshot: PersistedRunSnapshot, input: {
+  inputFingerprint: string;
+  plan: ModelProposalEnvelope<TaskPlanProposal>;
+  outcomes: PlanningRoundOutcome[];
+  createdAt: string;
+}): PersistedRunSnapshot {
+  const rounds = snapshot.planningRounds ?? [];
+  const latestIndex = rounds.at(-1)?.roundIndex ?? -1;
+  if (rounds.length >= MAX_PLANNING_ROUNDS) throw new Error("The planning round limit was reached.");
+  const round: PersistedPlanningRound = {
+    roundIndex: latestIndex + 1,
+    inputFingerprint: input.inputFingerprint,
+    plan: input.plan,
+    decision: input.plan.proposal.decision,
+    outcomes: input.outcomes.map((outcome) => ({ ...outcome })),
+    createdAt: input.createdAt,
+  };
+  const updated = { ...snapshot, plan: input.plan, planningRounds: [...rounds, round] };
   validateSnapshot(updated);
   return updated;
 }
@@ -64,8 +101,42 @@ function validateSnapshot(snapshot: PersistedRunSnapshot): void {
     || !Number.isSafeInteger(snapshot.run.revision) || snapshot.run.revision < 0
     || !Number.isFinite(Date.parse(snapshot.run.createdAt)) || !Number.isFinite(Date.parse(snapshot.run.updatedAt))
     || !Array.isArray(snapshot.workUnits) || !Array.isArray(snapshot.artifacts)
+    || (snapshot.planningRounds !== undefined && !Array.isArray(snapshot.planningRounds))
     || (snapshot.plan !== null && (snapshot.plan?.schemaVersion !== 1 || snapshot.plan.runId !== snapshot.run.id
       || snapshot.plan.sourceFingerprint !== snapshot.run.sourceFingerprint))) throw new Error("The run snapshot is malformed.");
+  const rounds = snapshot.planningRounds ?? [];
+  if (rounds.length > MAX_PLANNING_ROUNDS) throw new Error("The run snapshot exceeds the planning round limit.");
+  const roundIndexes = new Set<number>();
+  for (const round of rounds) {
+    if (!round || !Number.isSafeInteger(round.roundIndex) || round.roundIndex < 0
+      || round.roundIndex !== roundIndexes.size || roundIndexes.has(round.roundIndex)
+      || !/^[a-f0-9]{64}$/i.test(round.inputFingerprint)
+      || !Number.isFinite(Date.parse(round.createdAt))
+      || !["continue", "stop", "needs_review"].includes(round.decision)
+      || round.plan?.schemaVersion !== 1 || round.plan.runId !== snapshot.run.id
+      || round.plan.sourceFingerprint !== snapshot.run.sourceFingerprint
+      || !round.plan.proposal || typeof round.plan.proposal.decisionRationale !== "string"
+      || round.plan.proposal.decisionRationale.length > 500 || !round.plan.proposal.decisionRationale.trim()
+      || round.plan.proposal.decision !== round.decision
+      || !Array.isArray(round.outcomes) || round.outcomes.length > MAX_PLANNING_OUTCOMES) {
+      throw new Error("The run snapshot contains an invalid planning round.");
+    }
+    const outcomeSources = new Set<string>();
+    for (const outcome of round.outcomes) {
+      if (!outcome || typeof outcome.sourceId !== "string" || !outcome.sourceId.trim()
+        || (outcome.mode !== undefined && !["native_text", "table", "ocr", "visual", "cross_page"].includes(outcome.mode))
+        || outcomeSources.has(`${outcome.mode ?? "unknown"}:${outcome.sourceId}`)
+        || !["executed", "deferred", "failed", "unresolved"].includes(outcome.status)
+        || typeof outcome.summary !== "string" || outcome.summary.length > MAX_PLANNING_OUTCOME_SUMMARY_CHARS) {
+        throw new Error("The run snapshot contains an invalid planning outcome.");
+      }
+      outcomeSources.add(`${outcome.mode ?? "unknown"}:${outcome.sourceId}`);
+    }
+    roundIndexes.add(round.roundIndex);
+  }
+  if (rounds.length && (!snapshot.plan || JSON.stringify(snapshot.plan) !== JSON.stringify(rounds.at(-1)!.plan))) {
+    throw new Error("The latest planning round must match the compatibility plan alias.");
+  }
   if (snapshot.finalResult !== undefined) {
     const finalResult = snapshot.finalResult as { document?: { documentFingerprint?: unknown }; requirements?: unknown } | null;
     if (!finalResult || finalResult.document?.documentFingerprint !== snapshot.run.sourceFingerprint
@@ -132,15 +203,53 @@ function decrypt(runId: string, iv: Uint8Array, ciphertextAndTag: Uint8Array, ke
   } catch {
     throw new Error("The run snapshot could not be authenticated with this key.");
   }
-  let snapshot: PersistedRunSnapshot;
+  let parsedSnapshot: unknown;
   try {
-    snapshot = JSON.parse(plaintext.toString("utf8")) as PersistedRunSnapshot;
+    parsedSnapshot = JSON.parse(plaintext.toString("utf8")) as unknown;
   } catch {
     throw new Error("The decrypted run snapshot is not valid JSON.");
   }
+  const snapshot = migrateLegacyPlanningRounds(parsedSnapshot);
   validateSnapshot(snapshot);
   if (snapshot.run.id !== runId) throw new Error("The run snapshot identity does not match its storage key.");
   return snapshot;
+}
+
+/** Adds an explicit review-safe round record when opening a pre-round snapshot. */
+function migrateLegacyPlanningRounds(value: unknown): PersistedRunSnapshot {
+  if (!value || typeof value !== "object") throw new Error("The decrypted run snapshot is not valid JSON.");
+  const snapshot = value as PersistedRunSnapshot;
+  if (Array.isArray(snapshot.planningRounds)) return snapshot;
+  if (!snapshot.run || !Array.isArray(snapshot.workUnits) || !Array.isArray(snapshot.artifacts)) {
+    throw new Error("The decrypted run snapshot is malformed.");
+  }
+  if (!snapshot.plan) return { ...snapshot, planningRounds: [] };
+  if (!snapshot.plan.proposal || typeof snapshot.plan.proposal !== "object") {
+    throw new Error("The decrypted run snapshot contains an invalid legacy plan.");
+  }
+  const proposal = snapshot.plan.proposal as TaskPlanProposal & { decision?: unknown; decisionRationale?: unknown };
+  const decision = proposal.decision === "continue" || proposal.decision === "stop" || proposal.decision === "needs_review"
+    ? proposal.decision : "needs_review";
+  const migratedPlan: ModelProposalEnvelope<TaskPlanProposal> = {
+    ...snapshot.plan,
+    proposal: {
+      ...proposal,
+      decision,
+      decisionRationale: typeof proposal.decisionRationale === "string" && proposal.decisionRationale.trim()
+        ? proposal.decisionRationale.slice(0, 500)
+        : "Legacy one-shot plan migrated without a recorded adaptive decision; human review is required.",
+    },
+  };
+  const inputFingerprint = createHash("sha256").update(JSON.stringify(migratedPlan)).digest("hex");
+  const round: PersistedPlanningRound = {
+    roundIndex: 0,
+    inputFingerprint,
+    plan: migratedPlan,
+    decision,
+    outcomes: [],
+    createdAt: snapshot.run.updatedAt,
+  };
+  return { ...snapshot, plan: migratedPlan, planningRounds: [round] };
 }
 
 /** Encrypted SQLite adapter for a private/local Node runtime. No tender body is stored in plaintext. */
