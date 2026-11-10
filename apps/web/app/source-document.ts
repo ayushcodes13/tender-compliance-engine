@@ -329,6 +329,8 @@ export function buildRequirementSourceReference(input: {
   ocrConfidence?: "high" | "medium" | "low";
   selectableTextContext?: string;
   sourceCellLocation?: SourceCellLocation;
+  /** OCR regions explicitly selected by a validated planner action. */
+  selectedOcrRegionIds?: string[];
   /** Exact parser span identified by a source-bound planner unit when page-wide text is repeated. */
   selectedSourceSpan?: { sourceText: string; startOffset: number; endOffset: number; sourceElementIds: string[] };
 }): RequirementSourceReference {
@@ -387,14 +389,21 @@ export function buildRequirementSourceReference(input: {
     sourceElementIds.add(sourceCell.cellId);
   }
   if (transcription && input.transcriptionMethod === "tesseract-ocr") {
-    const ocrTranscript = input.page.ocrRegions.map((region) => region.text).join("\n");
-    const ocrMatch = findUniqueTokenBoundedMatch(ocrTranscript, transcription);
-    if (ocrMatch) {
-      let offset = 0;
-      for (const region of input.page.ocrRegions) {
-        const regionEnd = offset + region.text.length;
-        if (offset < ocrMatch.endOffset && regionEnd > ocrMatch.startOffset) sourceElementIds.add(region.id);
-        offset = regionEnd + 1;
+    if (input.selectedOcrRegionIds?.length) {
+      for (const id of input.selectedOcrRegionIds) {
+        const region = input.page.ocrRegions.find((candidate) => candidate.id === id);
+        if (region && findUniqueTokenBoundedMatch(region.text, transcription)) sourceElementIds.add(id);
+      }
+    } else {
+      const ocrTranscript = input.page.ocrRegions.map((region) => region.text).join("\n");
+      const ocrMatch = findUniqueTokenBoundedMatch(ocrTranscript, transcription);
+      if (ocrMatch) {
+        let offset = 0;
+        for (const region of input.page.ocrRegions) {
+          const regionEnd = offset + region.text.length;
+          if (offset < ocrMatch.endOffset && regionEnd > ocrMatch.startOffset) sourceElementIds.add(region.id);
+          offset = regionEnd + 1;
+        }
       }
     }
   }
