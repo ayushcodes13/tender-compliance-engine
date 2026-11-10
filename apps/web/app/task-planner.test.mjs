@@ -120,6 +120,15 @@ test("requires an explicit planner decision and forbids actions after a stop dec
   assert.equal(validate(stop).ok, true);
 });
 
+test("a planning round can restrict actions to currently executable capabilities", () => {
+  const plan = validPlan();
+  request.supportedModes = ["native_text"];
+  assert.deepEqual(validate(plan), { ok: false, error: "invalid_action" });
+  plan.proposal.actions = plan.proposal.actions.filter(action => action.mode === "native_text");
+  assert.equal(validate(plan).ok, true);
+  request.supportedModes = ["native_text", "table", "ocr", "visual", "cross_page"];
+});
+
 test("rejects inspection modes incompatible with parser-owned region kinds and duplicate work", () => {
   const incompatible = validPlan();
   incompatible.proposal.actions[0].mode = "visual";
