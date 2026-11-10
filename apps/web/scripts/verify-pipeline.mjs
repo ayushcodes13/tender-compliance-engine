@@ -22,12 +22,14 @@ const quotes = [
 ];
 const recovery = 'Surface flatness shall be within 0.1 mm over 1 m square.';
 const outsideTable = 'Service support shall remain available for 10 years.';
+const selectedBlockOmission = 'Certificate shall be supplied.';
 let scenario = "prose";
 let extractionCalls = 0;
 let resumeGeneralRequestStarts = 0;
 let routeCalls = 0;
 let providerRequestCount = 0;
 const providerSchemaCounts = new Map();
+const plannerNativeRequestInputs = [];
 let initialExtractionReturnedRecovery = false;
 let omissionAuditReturnedRecovery = false;
 let corruptedNumericClaimProposed = false;
@@ -101,6 +103,7 @@ const provider = http.createServer(async (request, response) => {
     }
     const contents = body.messages.flatMap(message => typeof message.content === 'string' ? [{type:'text',text:message.content}] : message.content);
     const text = contents.filter(item=>item.type==='text').map(item=>item.text).join('\n');
+    if (['planner-native-text','planner-native-empty'].includes(scenario) && schema === 'tender_requirements') plannerNativeRequestInputs.push({ scenario, text, imageCount: contents.filter(item=>item.type==='image_url').length });
     if (schema === 'technical_table_page_batch_rows' || schema === 'technical_table_missing_rows') visualBatchObservations.push({scenario,schema,imageCount:contents.filter(item=>item.type==='image_url').length});
     for (const item of contents.filter(item=>item.type==='image_url')) assert.match(item.image_url.url, /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/);
     let result;
@@ -113,6 +116,8 @@ const provider = http.createServer(async (request, response) => {
         return { sourceIds: [sourceId], disposition: proposedExclusion ? 'outside_task' : 'relevant', rationale: proposedExclusion ? 'Fixture proposes that this page is outside the task.' : 'Scripted fixture routes this source page for technical review.' };
       });
       const inScopeIds = planScope.filter(scope => scope.disposition !== 'outside_task').flatMap(scope => scope.sourceIds);
+      const firstNativeTextId = planInput.pages.flatMap(page => page.regions.filter(region => region.kind === 'native_text_block').map(region => region.sourceId))[0];
+      const plannerNativeScenario = ['planner-native-text','planner-native-empty'].includes(scenario);
       result = {
         schemaVersion: 1,
         runId: planInput.runId,
@@ -120,10 +125,14 @@ const provider = http.createServer(async (request, response) => {
         proposal: {
           task: planInput.task,
           scope: planScope,
-          sections: inScopeIds.length ? [{ label: 'Technical source', sourceIds: inScopeIds }] : [],
-          actions: Array.from({ length: Math.ceil(inScopeIds.length / 12) }, (_, index) => ({
-            mode: 'native_text', sourceIds: inScopeIds.slice(index * 12, (index + 1) * 12), rationale: 'Inspect the supplied source text.'
-          })),
+          sections: plannerNativeScenario && firstNativeTextId
+            ? [{ label: 'Technical source', sourceIds: [firstNativeTextId] }]
+            : inScopeIds.length ? [{ label: 'Technical source', sourceIds: inScopeIds }] : [],
+          actions: plannerNativeScenario
+            ? (firstNativeTextId ? [{ mode: 'native_text', sourceIds: [firstNativeTextId], rationale: 'Inspect the first parser text block.' }] : [])
+            : Array.from({ length: Math.ceil(inScopeIds.length / 12) }, (_, index) => ({
+              mode: 'native_text', sourceIds: inScopeIds.slice(index * 12, (index + 1) * 12), rationale: 'Inspect the supplied source text.'
+            })),
           openQuestions: [],
         },
       };
@@ -172,6 +181,7 @@ const provider = http.createServer(async (request, response) => {
     } else if (schema === 'technical_text_missing_requirements') {
       const requirements=[
         ...(text.includes(recovery)?[{page:5,quote:recovery,category:'Performance',row_type:'requirement',heading_prefix:''}]:[]),
+        ...(scenario==='planner-native-text'&&text.includes(selectedBlockOmission)?[{page:1,quote:selectedBlockOmission,category:'Documentation',row_type:'requirement',heading_prefix:''}]:[]),
         ...(text.includes(outsideTable)?[{page:1,quote:outsideTable,category:'Other',row_type:'requirement',heading_prefix:''},{page:1,quote:'Required value 1 mm',category:'Other',row_type:'requirement',heading_prefix:''},{page:1,quote:'A. Optical table',category:'Other',row_type:'section',heading_prefix:''}]:[]),
       ];
       if(scenario==='prose'&&requirements.some(item=>item.quote===recovery))omissionAuditReturnedRecovery=true;
@@ -188,6 +198,7 @@ const provider = http.createServer(async (request, response) => {
       }
       const requirements=quotes.flatMap((quote,index)=>text.includes(quote)&&pages.includes(index+1)?[{page:index+1,quote,category:'Other',row_type:'requirement',heading_prefix:''}]:[]);
       result={columns:[],requirements:[...requirements,...(scenario==='prose'&&pages.includes(2)?[{page:2,quote:'Vacuum shall remain below 999999 mbar.',row_type:'requirement',category:'Other',heading_prefix:''}]:[]),{page:pages[0],quote:'Invented limit of 999999 kN.',row_type:'requirement',category:'Other',heading_prefix:''},{page:999,quote:quotes[0],row_type:'requirement',category:'Other',heading_prefix:''}]};
+      if (scenario === 'planner-native-empty' && plannerNativeRequestInputs.filter(item => item.scenario === scenario).length === 1) result={columns:[],requirements:[]};
       if(scenario==='prose'&&result.requirements.some(item=>item.quote==='Vacuum shall remain below 999999 mbar.'))corruptedNumericClaimProposed=true;
       if(scenario==='prose'&&result.requirements.some(item=>item.quote===recovery))initialExtractionReturnedRecovery=true;
       if(scenario==='all-rejected')result={columns:[],requirements:Array.from({length:60},(_,index)=>({page:pages[0],quote:`Invented limit ${index} of 999999 kN.`,row_type:'requirement',category:'Other',heading_prefix:''}))};
@@ -293,6 +304,37 @@ try {
   assert.equal(one.analysis.requirements.length,1);
   assert.equal(one.analysis.requirements[0].quote,quotes[0]);
   assert.ok(providerRequestCount > providerCountBeforeMalformed, 'A valid upload continues into the scripted model analysis path');
+  scenario='planner-native-text';
+  const plannerSlice = new jsPDF();
+  plannerSlice.setFontSize(6);
+  plannerSlice.text(`${quotes[0]} ${selectedBlockOmission}`,20,30);
+  plannerSlice.text(outsideTable,20,50);
+  const plannedSliceResult = await analyze(plannerSlice);
+  assert.equal(plannedSliceResult.ok,true,plannedSliceResult.error);
+  const plannedBlockId = plannedSliceResult.analysis.coverage.plannedInspections.find(item => item.mode === 'native_text')?.sourceId;
+  assert.ok(plannedBlockId?.includes(':text:'),'The planner should identify a parser-owned native text block');
+  assert.ok(plannedSliceResult.analysis.coverage.plannedInspections.some(item => item.sourceId === plannedBlockId && item.state === 'executed'));
+  assert.ok(plannedSliceResult.analysis.requirements.some(row => row.quote === quotes[0] && row.sourceReference.sourceElementIds.includes(plannedBlockId)),'The selected block output retains its exact source-element link');
+  assert.ok(plannedSliceResult.analysis.requirements.some(row => row.quote === selectedBlockOmission && row.sourceReference.sourceText === selectedBlockOmission)
+    || plannedSliceResult.analysis.classificationReviewCandidates?.some(candidate => candidate.quote === selectedBlockOmission),
+    'A source-grounded omission from a planner-executed block remains visible in requirements or classification review');
+  assert.ok(plannedSliceResult.analysis.requirements.some(row => row.quote === outsideTable),'The unselected same-page block remains available to the legacy fallback');
+  assert.ok(plannerNativeRequestInputs.length >= 2,'The selected block and remaining fallback text use distinct extraction calls');
+  assert.ok(plannerNativeRequestInputs[0].text.includes(quotes[0]));
+  assert.ok(!plannerNativeRequestInputs[0].text.includes(outsideTable),'The planner handler receives only the selected native block');
+  assert.equal(plannerNativeRequestInputs[0].imageCount,0,'The native-text handler does not receive page images');
+  assert.ok(plannerNativeRequestInputs[1].text.includes(outsideTable));
+  assert.ok(!plannerNativeRequestInputs[1].text.includes(quotes[0]),'The fallback does not re-send successfully executed source text');
+  scenario='planner-native-empty';
+  const emptyPlannerSlice = new jsPDF();
+  emptyPlannerSlice.text(quotes[0],20,30);
+  const emptyPlannerResult = await analyze(emptyPlannerSlice);
+  assert.equal(emptyPlannerResult.ok,true,emptyPlannerResult.error);
+  assert.ok(emptyPlannerResult.analysis.requirements.some(row => row.quote === quotes[0]),'A valid but empty planner result does not suppress legacy fallback');
+  assert.ok(emptyPlannerResult.analysis.coverage.plannedInspections.some(item => item.mode === 'native_text' && item.state === 'deferred_to_legacy'));
+  const emptyPlannerInputs = plannerNativeRequestInputs.filter(item => item.scenario === 'planner-native-empty');
+  assert.equal(emptyPlannerInputs.length,2,'The empty planned result is followed by the legacy fallback request');
+  assert.ok(emptyPlannerInputs.every(item => item.text.includes(quotes[0])));
   scenario='resume-path';
   let interruptedRunId = null;
   const plannerCallsBeforeInterrupt = providerSchemaCounts.get('tender_task_plan') ?? 0;
@@ -737,7 +779,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','planner-selected native text executes against its exact parser block and leaves other blocks to fallback','empty planner output stays uncovered and remains eligible for fallback','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);

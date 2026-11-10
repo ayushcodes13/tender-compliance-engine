@@ -83,6 +83,15 @@ test("summarizes document and selected-page coverage without calling unrun audit
   assert.equal(report.summary.auditPagesNotRun, 1);
 });
 
+test("retains planner source dispositions without treating an executed call as verified completeness", () => {
+  const report = buildCoverageReport([record(2), record(1)], { candidateSuggestions: 0, rejectedSuggestions: 0 }, [
+    { sourceId: "doc:page:2:text:1", page: 2, mode: "native_text", state: "executed", reason: "Handler ran; review evidence." },
+    { sourceId: "doc:page:1:image:1", page: 1, mode: "visual", state: "unsupported", reason: "No handler." },
+  ]);
+  assert.deepEqual(report.plannedInspections.map((inspection) => [inspection.page, inspection.state]), [[1, "unsupported"], [2, "executed"]]);
+  assert.match(report.plannedInspections[1].reason, /review evidence/);
+});
+
 test("distinguishes OCR processed pages from pages that still need OCR", () => {
   const report = buildCoverageReport([
     record(1, { selectableTextAvailable: false, ocrNeeded: true, ocrPerformed: true }),

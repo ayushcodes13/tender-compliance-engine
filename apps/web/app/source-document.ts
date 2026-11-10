@@ -329,9 +329,22 @@ export function buildRequirementSourceReference(input: {
   ocrConfidence?: "high" | "medium" | "low";
   selectableTextContext?: string;
   sourceCellLocation?: SourceCellLocation;
+  /** Exact parser span identified by a source-bound planner unit when page-wide text is repeated. */
+  selectedSourceSpan?: { sourceText: string; startOffset: number; endOffset: number; sourceElementIds: string[] };
 }): RequirementSourceReference {
   const transcription = input.visualTranscription;
-  const match = transcription ? null : findUniqueSourceText(input.page.sourceText, input.quote);
+  const hintedSpan = input.selectedSourceSpan;
+  const hintedSpanValid = !transcription && hintedSpan
+    && Number.isInteger(hintedSpan.startOffset) && Number.isInteger(hintedSpan.endOffset)
+    && hintedSpan.startOffset >= 0 && hintedSpan.endOffset > hintedSpan.startOffset
+    && hintedSpan.endOffset <= input.page.sourceText.length
+    && input.page.sourceText.slice(hintedSpan.startOffset, hintedSpan.endOffset) === hintedSpan.sourceText
+    && hintedSpan.sourceElementIds.length > 0
+    && hintedSpan.sourceElementIds.every((id) => input.page.textBlocks.some((block) => block.id === id
+      && block.startOffset <= hintedSpan.startOffset && block.endOffset >= hintedSpan.endOffset));
+  const match = transcription ? null : hintedSpanValid
+    ? { startOffset: hintedSpan.startOffset, endOffset: hintedSpan.endOffset, sourceText: hintedSpan.sourceText }
+    : findUniqueSourceText(input.page.sourceText, input.quote);
   // A repeated native quote may be verified on this page without identifying
   // which occurrence supplied the candidate. Preserve literal page text, but
   // never invent a unique span, parser element IDs, or exact location for it.
@@ -367,6 +380,7 @@ export function buildRequirementSourceReference(input: {
       if (block.startOffset < match.endOffset && block.endOffset > match.startOffset) sourceElementIds.add(block.id);
     }
   }
+  if (hintedSpanValid) for (const id of hintedSpan.sourceElementIds) sourceElementIds.add(id);
   if (sourceCell) {
     sourceElementIds.add(sourceCell.tableId);
     sourceElementIds.add(sourceCell.rowId);

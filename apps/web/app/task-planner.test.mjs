@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, requestTaskPlan, validateTaskPlanEnvelope } from "./task-planner.ts";
+import { bindTaskPlanToInventory, buildPlannedInspectionWorkUnits, buildTaskPlanRequest, maskExecutedTextBlockSpans, requestTaskPlan, validateTaskPlanEnvelope } from "./task-planner.ts";
 
 const fingerprint = "f".repeat(64);
 const request = {
@@ -32,6 +32,7 @@ const validPlan = () => ({
 const validate = (plan, extraPageIds = []) => {
   const pageIds = [...request.pages.map(({ sourceId }) => sourceId), ...extraPageIds];
   const regionPageIds = new Map(request.pages.flatMap((page) => page.regions.map((region) => [region.sourceId, page.sourceId])));
+  const regionKinds = new Map(request.pages.flatMap((page) => page.regions.map((region) => [region.sourceId, region.kind])));
   return validateTaskPlanEnvelope(
     plan,
     request,
@@ -39,8 +40,9 @@ const validate = (plan, extraPageIds = []) => {
     [...regionPageIds.keys()],
     regionPageIds,
     new Set(request.pages.filter((page) => page.unrepresentedRegionCount > 0 || page.clippedRegionCount > 0 || page.excerptClipped
-      || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))
-        || page.regions.some((region) => region.kind.startsWith("image_") && region.kind !== "image_text-found")))).map((page) => page.sourceId)),
+        || (page.hasRasterImageContent && (!page.regions.some((region) => region.kind.startsWith("ocr_"))
+          || page.regions.some((region) => region.kind.startsWith("image_") && region.kind !== "image_text-found")))).map((page) => page.sourceId)),
+    regionKinds,
   );
 };
 
@@ -74,6 +76,16 @@ test("rejects unsupported modes and plans exceeding bounded operation limits", (
   tooManySources.proposal.scope.push(...extraPages.map((sourceId) => ({ sourceIds: [sourceId], disposition: "relevant", rationale: "Included in the bounded-action test." })));
   tooManySources.proposal.actions[0].sourceIds = ["doc:page:1", ...extraPages];
   assert.deepEqual(validate(tooManySources, extraPages), { ok: false, error: "invalid_action" });
+});
+
+test("rejects inspection modes incompatible with parser-owned region kinds and duplicate work", () => {
+  const incompatible = validPlan();
+  incompatible.proposal.actions[0].mode = "visual";
+  assert.deepEqual(validate(incompatible), { ok: false, error: "invalid_action" });
+
+  const overlapping = validPlan();
+  overlapping.proposal.actions.push({ mode: "native_text", sourceIds: ["doc:page:1:text:1"], rationale: "Repeat the source action." });
+  assert.deepEqual(validate(overlapping), { ok: false, error: "invalid_action" });
 });
 
 test("does not allow an excluded page to also receive an inspection action", () => {
@@ -115,16 +127,28 @@ test("builds bounded page and region summaries with modality state and explicit 
   assert.equal(result.pages[0].excerptClipped, true);
   assert.equal(result.pages[0].tableRowCount, 2);
   assert.equal(result.pages[0].regions.length, 6);
-  assert.equal(result.pages[0].unrepresentedRegionCount, 1);
-  assert.equal(result.pages[0].clippedRegionCount, 3);
+  assert.equal(result.pages[0].unrepresentedRegionCount, 3);
+  assert.equal(result.pages[0].clippedRegionCount, 2);
   assert.ok(result.pages[0].regions.every((region) => region.excerpt.length <= 120));
-  assert.ok(result.pages[0].regions.some((region) => region.sourceId.endsWith("cell:1")));
+  assert.ok(result.pages[0].regions.some((region) => region.sourceId === "doc:page:1:text:1"));
+});
+
+test("removes only executed parser spans from the legacy fallback and preserves page offsets", () => {
+  const source = "First obligation\nSelected block\nThird obligation";
+  const startOffset = source.indexOf("Selected block");
+  const endOffset = startOffset + "Selected block".length;
+  const fallback = maskExecutedTextBlockSpans(source, [{ startOffset, endOffset }]);
+  assert.equal(fallback.slice(0, "First obligation".length), "First obligation");
+  assert.equal(fallback.slice(startOffset, endOffset), " ".repeat("Selected block".length));
+  assert.equal(fallback.slice(fallback.indexOf("Third obligation")), "Third obligation");
+  assert.equal(fallback.length, source.length);
+  assert.throws(() => maskExecutedTextBlockSpans(source, [{ startOffset: -1, endOffset: 3 }]), /invalid source span/);
 });
 
 test("binds scope and inspection actions to parser-owned physical pages", () => {
   const document = { pages: [
-    { id: "doc:page:1", physicalPdfPageNumber: 1, imageRegions: [], ocrRegions: [], textBlocks: [{ id: "doc:page:1:text:1" }], tables: [] },
-    { id: "doc:page:2", physicalPdfPageNumber: 2, imageRegions: [{ id: "doc:page:2:image:1" }], ocrRegions: [], textBlocks: [], tables: [] },
+      { id: "doc:page:1", physicalPdfPageNumber: 1, imageRegions: [], ocrRegions: [], textBlocks: [{ id: "doc:page:1:text:1", text: "selected block", startOffset: 10, endOffset: 24 }], tables: [] },
+      { id: "doc:page:2", physicalPdfPageNumber: 2, imageRegions: [{ id: "doc:page:2:image:1", ocrDisposition: "failed" }], ocrRegions: [], textBlocks: [], tables: [] },
   ] };
   const plan = validPlan().proposal;
   const bound = bindTaskPlanToInventory(document, plan);
@@ -180,11 +204,13 @@ test("materializes validated actions as stable source-ordered work units", () =>
   const sourceIdToNumber = new Map([
     ["doc:page:1", 1], ["doc:page:1:text:1", 1], ["doc:page:2", 2], ["doc:page:2:image:1", 2],
   ]);
-  const first = buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber, createdAt: "2026-11-10T10:00:00.000Z" });
-  const second = buildPlannedInspectionWorkUnits({ runId: request.runId, proposal: { ...proposal, actions: [...proposal.actions].reverse() }, sourceIdToNumber, createdAt: "2026-11-10T10:00:00.000Z" });
+  const sourceKinds = new Map([["doc:page:1:text:1", "native_text_block"], ["doc:page:2:image:1", "image_failed"]]);
+  const first = buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber, sourceKinds, createdAt: "2026-11-10T10:00:00.000Z" });
+  const second = buildPlannedInspectionWorkUnits({ runId: request.runId, proposal: { ...proposal, actions: [...proposal.actions].reverse() }, sourceIdToNumber, sourceKinds, createdAt: "2026-11-10T10:00:00.000Z" });
   assert.deepEqual(first.map(({ unit }) => unit.idempotencyKey), second.map(({ unit }) => unit.idempotencyKey));
   assert.deepEqual(first.map(({ physicalPage }) => physicalPage), [1, 2]);
   assert.deepEqual(first.map(({ mode }) => mode), ["native_text", "visual"]);
-  assert.deepEqual(first.map(({ unit }) => unit.operation), ["native_text", "visual"]);
-  assert.throws(() => buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber: new Map(), createdAt: "2026-11-10T10:00:00.000Z" }), /outside the validated inventory/);
+  assert.match(first[0].unit.operation, /^planned_native_text_extraction:/);
+  assert.equal(first[1].unit.operation, "visual");
+  assert.throws(() => buildPlannedInspectionWorkUnits({ runId: request.runId, proposal, sourceIdToNumber: new Map(), sourceKinds, createdAt: "2026-11-10T10:00:00.000Z" }), /outside the validated inventory/);
 });
