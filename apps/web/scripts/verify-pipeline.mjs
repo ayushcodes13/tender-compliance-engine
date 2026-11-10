@@ -173,8 +173,10 @@ const provider = http.createServer(async (request, response) => {
     } else if (schema === 'tender_requirements') {
       extractionCalls++;
       const pages = [...new Set([...text.matchAll(/PDF PAGE (\d+)/g)].map(match=>Number(match[1])))];
-      if (['partial-general-batch', 'all-general-batches-fail'].includes(scenario)
-        && (scenario === 'all-general-batches-fail' || pages[0] === 10)) {
+      if (['partial-general-batch', 'partial-general-batch-six-of-six', 'all-general-batches-fail'].includes(scenario)
+        && (scenario === 'all-general-batches-fail'
+          || (scenario === 'partial-general-batch' && pages[0] === 10)
+          || (scenario === 'partial-general-batch-six-of-six' && pages[0] === 16))) {
         response.destroy();
         return;
       }
@@ -188,6 +190,7 @@ const provider = http.createServer(async (request, response) => {
       if(scenario==='case-sensitive')result={columns:[],requirements:[...text.matchAll(/Optical power shall be 1 (?:mW|MW)\./g)].map(match=>({page:1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
       if(scenario==='invalid-capacity')result.requirements.push(...Array.from({length:300},(_,index)=>({page:1,quote:`Invented unsupported parameter ${index}.`,row_type:'requirement',category:'Other',heading_prefix:''})));
       if(scenario==='verified-capacity')result={columns:[],requirements:[...text.matchAll(/Capacity parameter (\d+) shall be (\d+) mm\./g)].map(match=>({page:Math.floor((Number(match[1])-1)/50)+1,quote:match[0],category:'Other',row_type:'requirement',heading_prefix:''}))};
+      if(scenario==='invalid-extraction-shape')result={columns:[]};
     } else throw new Error(`Unexpected provider operation: ${schema}`);
     response.writeHead(200, {'content-type':'application/json'});
     response.end(JSON.stringify({choices:[{message:{content:JSON.stringify(result)}}]}));
@@ -210,7 +213,7 @@ const runStoreDirectory = await mkdtemp(path.join(tmpdir(), 'tce-pipeline-run-st
 const portProbe=http.createServer();portProbe.listen(0,'127.0.0.1');await once(portProbe,'listening');const appPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
 const base=`http://127.0.0.1:${appPort}`;
 const appOptions={
-  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1',TCE_RUN_STORE_KEY:'ab'.repeat(32),TCE_RUN_STORE_PATH:path.join(runStoreDirectory,'runs.sqlite')},stdio:['ignore','pipe','pipe'],
+  cwd:process.cwd(),env:{...process.env,OPENAI_API_KEY:'fixture-only-key',OPENAI_BASE_URL:`http://127.0.0.1:${provider.address().port}`,OPENAI_MODEL:'gpt-6-luna',APP_ACCESS_PASSWORD:'fixture-only-password',MAX_FILE_BYTES:String(1024 * 1024),TCE_FORENSIC_TRACE:'1',TCE_MODEL_TIMING:'1',TCE_RUN_STORE_KEY:'ab'.repeat(32),TCE_RUN_STORE_PATH:path.join(runStoreDirectory,'runs.sqlite')},stdio:['ignore','pipe','pipe'],
 };
 let logs='';
 let child;
@@ -350,6 +353,34 @@ try {
   assert.deepEqual(incompleteBatchPages,[10,11,12],'Every page in the failed extraction batch stays explicitly incomplete');
   assert.ok(partialBatch.analysis.coverage.pages.filter(page=>page.page<=9).every(page=>page.extractionStatus==='complete'),'Successfully completed pages remain distinct from the incomplete batch');
   assert.match(partialBatch.analysis.reviewNote,/model-based extraction or page coverage calls could not complete/,'The partial response warns reviewers that coverage is incomplete');
+  scenario='partial-general-batch-six-of-six';
+  const sixBatchPdf=new jsPDF();
+  for(let page=1;page<=18;page++) {
+    if(page>1)sixBatchPdf.addPage();
+    sixBatchPdf.setFontSize(8);
+    const pageQuote=quotes[page-1]??`Technical equipment page ${page} contains a specified test procedure.`;
+    sixBatchPdf.text([pageQuote,...Array.from({length:60},(_,line)=>`Technical context ${page}-${line} describes the equipment and its operating conditions.`)],20,30,{lineHeightFactor:1});
+  }
+  const sixBatchCallsBefore=extractionCalls;
+  const sixBatchLogStart=logs.length;
+  const sixBatchPartial=await analyze(sixBatchPdf);
+  assert.equal(sixBatchPartial.ok,true,sixBatchPartial.error);
+  assert.equal(extractionCalls-sixBatchCallsBefore,6,'The regression runs five extraction requests to completion before the sixth provider connection is dropped');
+  assert.deepEqual(sixBatchPartial.analysis.requirements.map(row=>row.quote),quotes,'The five completed batches retain their source-grounded requirements after a final-batch connection failure');
+  assert.deepEqual(sixBatchPartial.analysis.coverage.pages.filter(page=>page.extractionStatus==='incomplete').map(page=>page.page),[16,17,18],'Only pages in the failed sixth batch remain explicitly incomplete');
+  const sixBatchMessages=progressObservations.filter(event=>event.scenario===scenario&&event.stage==='extracting').map(event=>event.message);
+  assert.ok(sixBatchMessages.includes('Received and parsed 5 of 6 technical extraction batches'),'The failing six-batch run reports all five completed batches before terminating with a partial result');
+  assert.match(sixBatchPartial.analysis.reviewNote,/model-based extraction or page coverage calls could not complete/,'The five-of-six partial result keeps the existing incomplete-coverage warning');
+  const sixBatchTiming=logs.slice(sixBatchLogStart).split('\n').filter(line=>line.startsWith('[TCE_MODEL_TIMING] ')).map(line=>JSON.parse(line.slice('[TCE_MODEL_TIMING] '.length))).filter(event=>event.requestKind==='general_requirement_extraction');
+  assert.equal(sixBatchTiming.filter(event=>event.phase==='response_validated').length,5,'Timing distinguishes the five schema-valid responses from the dropped sixth request');
+  assert.ok(sixBatchTiming.some(event=>event.phase==='request_failed'&&event.batchIndex===6&&event.failureKind==='provider_connection'),'The failed final batch is attributed to a provider connection error without logging tender or response content');
+  scenario='invalid-extraction-shape';
+  const invalidShapeLogStart=logs.length;
+  const invalidShape=await analyze(short);
+  assert.equal(invalidShape.ok,false,'A parseable JSON object without a requirements array is rejected');
+  const invalidShapeTiming=logs.slice(invalidShapeLogStart).split('\n').filter(line=>line.startsWith('[TCE_MODEL_TIMING] ')).map(line=>JSON.parse(line.slice('[TCE_MODEL_TIMING] '.length))).filter(event=>event.requestKind==='general_requirement_extraction');
+  assert.ok(invalidShapeTiming.some(event=>event.phase==='request_failed'&&event.failureKind==='other'),'A JSON parse success that fails the extraction shape is recorded as a failed request');
+  assert.equal(invalidShapeTiming.some(event=>event.phase==='response_validated'),false,'A schema-invalid result is never logged as validated');
   scenario='route-batch-concurrency';
   const routingPdf=new jsPDF();
   for(let page=1;page<=30;page++) {
@@ -665,7 +696,7 @@ try {
   const visualAuditDuplicate=visualAuditTrace?.candidates.find(row=>row.origin==='visual_page_omission_audit'&&row.modelQuote==='The centrifuge shall accommodate 10 samples.');
   assert.equal(visualAuditDuplicate?.disposition,'duplicate','A visually audited proposal already covered by extraction is traced as a duplicate');
   assert.ok(visualAuditDuplicate.relatedCandidateId,'Duplicate audit candidates link to the corresponding existing candidate');
-  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
+  console.log(JSON.stringify({passed:true,cases:['fresh-process resume reuses the validated plan and completed routing artifact','zero-candidate extraction reports incompleteness without implying no requirements exist','zero-accepted run retains rejected-only diagnostics without creating requirements','model cannot assert source location or bypass technical filtering','verified cross-section conflict routes both cited pages and displays both source quotes','unsupported cross-section quote is rejected and leaves its pages uncertain','mixed bold heading retains assessable body','single-content source table preserved','independent vector tables run concurrently while headerless continuations inherit verified maps and audits remain source-ordered','bounded mixed-layout vector processing reports completed waves','text-page completeness audit announces its active stage','failed batches preserve successful cited work and mark failed pages incomplete','five parsed batches plus sixth-batch provider connection failure return an explicitly incomplete partial result','parseable JSON with invalid extraction shape is recorded as failed, not validated','all failed extraction batches do not return a partial sheet','high-confidence visual completions remain unverified and out of exports','case-sensitive units retained','equal recovery quotes not duplicated','unsupported suggestions do not consume review capacity','verified response limit rejects without partial output','short unfamiliar clause','mixed schedule and prose','bounded five-page extraction','checker recovers deliberately omitted requirement','source validator rejects deliberately corrupted numeric value','vector-row semantic gap is surfaced without mutating extraction','invalid page rejection','exact source evidence','editable sheet with locked citations','different table schemas plus narrative page','16-row equipment grouping'],checkerMutationContract:{kind:'scripted provider contract, not a real-tender score',deliberatelyOmittedRequirements:1,omissionAuditRecovered:omissionAuditReturnedRecovery,recoveredQuoteGrounded:recoveredRequirement?.sourceReference.sourceText.replace(/\s+/g,' ').trim()===recovery,corruptedNumericClaims:1,corruptedClaimProposed:corruptedNumericClaimProposed,corruptedClaimRejected:rejectedCorruption?.reason==='source_quote_or_location_not_verified',originalNumericRequirementPreserved:analysis.requirements.some(row=>row.quote===quotes[1]),semanticGapSignalRecorded:auditedSourceRow?.semanticCoverageStatus==='possible_gap',realTenderQualityScore:null},routeCalls,extractionCalls}));
 } finally {
   child.kill('SIGTERM');
   if(child.exitCode===null)await Promise.race([once(child,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);
