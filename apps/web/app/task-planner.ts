@@ -67,6 +67,28 @@ export const TASK_PLAN_MAX_ACTION_SOURCES = 12;
 export const TASK_PLAN_MAX_SECTIONS = 60;
 export const PLANNED_NATIVE_TEXT_MAX_BLOCK_CHARS = 12_000;
 
+/**
+ * Select a bounded but modality-aware sample for planner context. Dense native
+ * text must not hide parser-known tables, OCR regions, or images simply because
+ * those entries occur later in the inventory. Any omitted source remains
+ * counted as unrepresented by the caller.
+ */
+export function selectTaskPlanRegions<T extends { kind: string }>(regions: readonly T[], limit: number): T[] {
+  if (!Number.isInteger(limit) || limit < 0) throw new Error("The task planner region limit must be a non-negative integer.");
+  const selected = new Set<number>();
+  const selectFirst = (matches: (kind: string) => boolean) => {
+    const index = regions.findIndex((region, candidateIndex) => !selected.has(candidateIndex) && matches(region.kind));
+    if (index >= 0 && selected.size < limit) selected.add(index);
+  };
+  selectFirst((kind) => kind === "native_text_block");
+  selectFirst((kind) => kind === "table");
+  selectFirst((kind) => kind === "table_row");
+  selectFirst((kind) => kind.startsWith("ocr_"));
+  selectFirst((kind) => kind.startsWith("image_"));
+  for (let index = 0; index < regions.length && selected.size < limit; index += 1) selected.add(index);
+  return [...selected].sort((left, right) => left - right).map((index) => regions[index]);
+}
+
 /** Removes already-executed block spans from the legacy fallback transcript without shifting offsets. */
 export function maskExecutedTextBlockSpans(sourceText: string, blocks: readonly { startOffset: number; endOffset: number }[]): string {
   const characters = sourceText.split("");
@@ -103,7 +125,7 @@ export function buildTaskPlanRequest(input: {
         ...table.rows.flatMap((row) => row.cells.map((cell) => ({ sourceId: cell.id, kind: "table_cell", excerpt: cell.sourceText }))),
       ]),
     ];
-    const selectedRegions = regions.slice(0, TASK_PLAN_MAX_REGIONS_PER_PAGE).map((region) => ({
+    const selectedRegions = selectTaskPlanRegions(regions, TASK_PLAN_MAX_REGIONS_PER_PAGE).map((region) => ({
       ...region,
       excerptClipped: region.excerpt.length > TASK_PLAN_MAX_REGION_EXCERPT,
       excerpt: region.excerpt.slice(0, TASK_PLAN_MAX_REGION_EXCERPT),
