@@ -288,6 +288,35 @@ test("stores raster image regions with stable page-scoped identities and approxi
   assert.equal(page.ocrRegions[0].imageRegionId, page.imageRegions[0].id);
 });
 
+test("planner-selected visual citations link the approximate parser image region without inventing text evidence", () => {
+  const document = createSourceDocumentModel(new Uint8Array([21]), 1);
+  const page = buildSourcePageModel({
+    documentId: document.documentId,
+    physicalPdfPageNumber: 1,
+    width: 600,
+    height: 800,
+    sourceText: "Cover page",
+    positionedItems: [],
+    imageRegions: [{ bbox: { x: 80, y: 140, width: 420, height: 260 }, areaRatio: 0.2275, operator: "image" }],
+  });
+  const region = page.imageRegions[0];
+  const reference = buildRequirementSourceReference({
+    document, page, quote: "Pressure shall remain below 2 Pa.", bbox: region.bbox,
+    visualTranscription: "Pressure shall remain below 2 Pa.",
+    transcriptionMethod: "visual-transcription",
+    selectedImageRegionIds: [region.id, "forged:image:id"],
+  });
+
+  assert.deepEqual(reference.sourceElementIds, [region.id]);
+  assert.equal(reference.sourceText, "");
+  assert.equal(reference.transcribedText, "Pressure shall remain below 2 Pa.");
+  assert.equal(reference.extractionMethod, "visual-transcription");
+  assert.equal(reference.locationPrecision, "approximate");
+  assert.equal(reference.ocrConfidence, undefined, "VLM output has no fabricated OCR confidence");
+  assert.equal(reference.startOffset, undefined);
+  assert.equal(reference.endOffset, undefined);
+});
+
 test("records native and OCR evidence together on a mixed-content page", () => {
   const document = createSourceDocumentModel(new Uint8Array([10]), 1);
   const page = buildSourcePageModel({

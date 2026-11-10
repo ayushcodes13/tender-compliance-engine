@@ -331,6 +331,8 @@ export function buildRequirementSourceReference(input: {
   sourceCellLocation?: SourceCellLocation;
   /** OCR regions explicitly selected by a validated planner action. */
   selectedOcrRegionIds?: string[];
+  /** Approximate parser image regions explicitly inspected through a selected visual action. */
+  selectedImageRegionIds?: string[];
   /** Exact parser span identified by a source-bound planner unit when page-wide text is repeated. */
   selectedSourceSpan?: { sourceText: string; startOffset: number; endOffset: number; sourceElementIds: string[] };
 }): RequirementSourceReference {
@@ -405,6 +407,11 @@ export function buildRequirementSourceReference(input: {
           offset = regionEnd + 1;
         }
       }
+    }
+  }
+  if (transcription && input.transcriptionMethod === "visual-transcription") {
+    for (const id of input.selectedImageRegionIds ?? []) {
+      if (input.page.imageRegions.some((region) => region.id === id)) sourceElementIds.add(id);
     }
   }
 

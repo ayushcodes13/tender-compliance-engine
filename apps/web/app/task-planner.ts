@@ -339,7 +339,8 @@ export function buildPlannedInspectionWorkUnits(input: {
     unit: createWorkUnit({
       runId: input.runId,
       kind: (candidate.mode === "native_text" && input.sourceKinds?.get(candidate.sourceId) === "native_text_block")
-        || (candidate.mode === "ocr" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("ocr_") === true) ? "extract" : "inspect",
+        || (candidate.mode === "ocr" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("ocr_") === true)
+        || (candidate.mode === "visual" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("image_") === true) ? "extract" : "inspect",
       sourceIds: [candidate.sourceId],
       ordinal: sourceOrdinals.get(candidate.sourceId) ?? ordinal,
       createdAt: input.createdAt,
@@ -347,6 +348,8 @@ export function buildPlannedInspectionWorkUnits(input: {
         ? `planned_native_text_extraction:${candidate.actionKey}`
         : candidate.mode === "ocr" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("ocr_") === true
           ? `planned_ocr_extraction:${candidate.actionKey}`
+          : candidate.mode === "visual" && input.sourceKinds?.get(candidate.sourceId)?.startsWith("image_") === true
+            ? `planned_visual_region_extraction:${candidate.actionKey}`
           : candidate.mode,
     }),
   }));
